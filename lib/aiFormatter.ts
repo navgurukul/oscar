@@ -258,8 +258,8 @@ function formatBasic(text: string): string {
 }
 
 // Gemini API integration - SHORTENED PROMPT
-export async function formatWithOpenAI(rawText: string, apiKey?: string): Promise<string> {
-  const GEMINI_API_KEY = "AIzaSyDSWKJJyFjqkc65OSUiPIs8nvBcqMOFu-g"
+export async function formatWithOpenAI(rawText: string): Promise<string> {
+  const GEMINI_API_KEY = "AIzaSyAZjqVRti0SrYnVFN_mUmo30qnP-JZMvTw"
   
   // Retry function with exponential backoff
   const retryWithBackoff = async (attempt: number = 0): Promise<string> => {
@@ -268,7 +268,7 @@ export async function formatWithOpenAI(rawText: string, apiKey?: string): Promis
     
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
           headers: {
@@ -279,16 +279,11 @@ export async function formatWithOpenAI(rawText: string, apiKey?: string): Promis
               {
                 parts: [
                   {
-                    text: `Format this voice transcript into clean notes:
+                      text: `You are a helpful assistant that formats and improves transcribed speech-to-text. Clean up the text by removing filler words (um, uh, like, etc.), fixing grammar, adding proper punctuation, and making it more readable. Keep the original meaning and language (Hindi or English). Return ONLY the formatted text without any explanations, quotes, or additional text.
 
-- Fix grammar, punctuation, remove filler words (um, uh, like)
-- For meetings: use sections (Key Points, Action Items, Questions, Next Steps)
-- For lists: use bullet points
-- For general notes: natural paragraphs (3-4 sentences each)
-- Keep dates, names, numbers exact
-- Return ONLY formatted text
+Format and improve this transcribed speech-to-text. Remove filler words, fix grammar, add punctuation. Keep the original language and meaning. Return only the cleaned text:
 
-Transcript:
+
 ${rawText}`
                   }
                 ]
@@ -298,17 +293,14 @@ ${rawText}`
               temperature: 0.3,
               topK: 40,
               topP: 0.95,
-              maxOutputTokens: 2048,
+              maxOutputTokens: 1048,
             },
           }),
         }
       )
       
       // Handle rate limiting (429) - immediately fallback, no retry
-      if (response.status === 429) {
-        // Silently fallback to AudioPen formatting
-        throw new Error('RATE_LIMIT')
-      }
+      
       
       if (!response.ok) {
         const errorText = await response.text()
