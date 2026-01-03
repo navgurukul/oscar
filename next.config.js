@@ -27,6 +27,15 @@ const nextConfig = {
         fs: false,
         path: false,
       };
+
+      // Ensure .mjs in certain packages are treated as ESM so minification handles import.meta
+      config.module = config.module || { rules: [] };
+      config.module.rules = config.module.rules || [];
+      config.module.rules.push({
+        test: /\.mjs$/,
+        include: [/node_modules\/onnxruntime-web/, /node_modules\/stt-tts-lib/],
+        type: 'javascript/esm',
+      });
     }
     return config;
   },

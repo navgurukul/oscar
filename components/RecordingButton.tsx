@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createSTTInstance, getTranscriptFromSTT } from '@/lib/audioToText'
+import { Button } from '@/components/ui/button'
+import { getTranscriptFromSTT } from '@/lib/audioToText'
 import { formatWithAI } from '@/lib/aiFormatter'
 import type { STTLogic } from 'stt-tts-lib'
 
@@ -142,20 +143,10 @@ export default function RecordingButton() {
         </div>
       )}
 
-      <button
+      <Button
         onClick={isRecording ? stopRecording : startRecording}
         disabled={isProcessing || isInitializing}
-        className={`
-          flex items-center gap-3 px-8 py-4 rounded-lg text-white font-semibold text-lg
-          transition-all duration-200
-          ${isRecording 
-            ? 'bg-red-500 hover:bg-red-600' 
-            : isProcessing || isInitializing
-            ? 'bg-purple-300 cursor-not-allowed'
-            : 'bg-purple-500 hover:bg-purple-600'
-          }
-          shadow-lg hover:shadow-xl
-        `}
+        className={`${isRecording ? 'bg-red-500 hover:bg-red-600' : ''} gap-3 text-lg shadow-lg hover:shadow-xl`}
       >
         {isInitializing ? (
           <>
@@ -188,7 +179,7 @@ export default function RecordingButton() {
             <span>Start Recording</span>
           </>
         )}
-      </button>
+      </Button>
     </div>
   )
 }

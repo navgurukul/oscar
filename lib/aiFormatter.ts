@@ -259,7 +259,7 @@ function formatBasic(text: string): string {
 
 // Gemini API integration - SHORTENED PROMPT
 export async function formatWithOpenAI(rawText: string): Promise<string> {
-  const GEMINI_API_KEY = "AIzaSyAZjqVRti0SrYnVFN_mUmo30qnP-JZMvTw"
+  const GEMINI_API_KEY = "AIzaSyBbdV3U8UiVCaJj5MK8kd1nOuKV40BPvhQ"
   
   // Retry function with exponential backoff
   const retryWithBackoff = async (attempt: number = 0): Promise<string> => {

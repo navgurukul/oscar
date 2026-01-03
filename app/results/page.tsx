@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import RecordingButton from '@/components/RecordingButton'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 
 export default function ResultsPage() {
   const [formattedNote, setFormattedNote] = useState('')
@@ -45,6 +47,19 @@ export default function ResultsPage() {
     setFormattedNote(editedNote)
     setIsEditing(false)
     sessionStorage.setItem('formattedNote', editedNote)
+    try {
+      const entry = {
+        id: Date.now(),
+        text: editedNote,
+        createdAt: new Date().toISOString(),
+      }
+      const raw = localStorage.getItem('oscar_notes')
+      const list = raw ? JSON.parse(raw) : []
+      list.unshift(entry)
+      localStorage.setItem('oscar_notes', JSON.stringify(list))
+    } catch (e) {
+      console.error('Failed to save history:', e)
+    }
   }
 
   const handleCancel = () => {
@@ -135,8 +150,11 @@ export default function ResultsPage() {
         </div>
 
         {/* Record Again Button */}
-        <div className="flex justify-center">
+        <div className="flex justify-center gap-4">
           <RecordingButton />
+          <Link href="/notes">
+            <Button variant="outline">View Saved Notes</Button>
+          </Link>
         </div>
       </div>
     </main>
