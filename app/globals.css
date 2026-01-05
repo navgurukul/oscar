@@ -16,3 +16,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  h1, h2, h3 {
+    letter-spacing: -0.01em;
+  }
+  ::selection {
+    background-color: #e9d5ff; /* purple-200 */
+    color: #111827; /* gray-900 */
+  }
+}
+

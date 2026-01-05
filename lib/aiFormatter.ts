@@ -3,8 +3,8 @@
 
 export async function formatWithAI(rawText: string): Promise<string> {
   try {
-    // Try Gemini API first, fallback to AudioPen-style formatting
-    const formatted = await formatWithOpenAI(rawText)
+    // Try Deepseek API first, fallback to AudioPen-style formatting
+    const formatted = await formatWithDeepseek(rawText)
     return formatted
   } catch (error) {
     console.error('Error in AI formatting:', error)
@@ -14,6 +14,89 @@ export async function formatWithAI(rawText: string): Promise<string> {
     } catch (fallbackError) {
       return formatBasic(rawText)
     }
+  }
+}
+
+// Deepseek API integration - BETTER PROMPT, NO LIMITS
+export async function formatWithDeepseek(rawText: string): Promise<string> {
+  const DEEPSEEK_API_KEY = "sk-4a59b3ee436944f5b3d1ef4e49b7ddc4" // Apni API key yahan dalein
+  
+  try {
+    const response = await fetch(
+      'https://api.deepseek.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [
+            {
+              role: "system",
+              content: `You are an expert transcription formatter. Your job is to transform raw speech-to-text into polished, professional notes.
+
+FORMATTING RULES:
+1. Remove ALL filler words (um, uh, like, you know, basically, actually, etc.)
+2. Fix grammar errors and sentence structure
+3. Add proper punctuation (periods, commas, question marks)
+4. Capitalize properly (names, start of sentences, acronyms)
+5. Break into clear paragraphs (3-4 sentences each)
+6. Preserve the original language (Hindi/Hinglish/English as spoken)
+7. Keep the exact meaning - don't add or remove information
+8. For meeting notes: organize into sections (Discussion Points, Action Items, Questions)
+9. For lists or steps: use bullet points with • symbol
+10. Make it natural and readable - like professional notes
+
+OUTPUT FORMAT:
+- Return ONLY the formatted text
+- No explanations, no quotes, no metadata
+- Clean, professional, ready-to-use notes
+- Natural flow and easy to read`
+            },
+            {
+              role: "user",
+              content: `Format this transcribed speech into clean, professional notes. Remove filler words, fix grammar, add punctuation, and make it readable. Keep the original language and meaning intact.
+
+TRANSCRIPTION:
+${rawText}
+
+FORMATTED NOTES:`
+            }
+          ],
+          temperature: 0.3,
+          top_p: 0.95,
+          max_tokens: 4096, // Paid API - koi limit nahi
+          stream: false
+        }),
+      }
+    )
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`Deepseek API error: ${response.status}`, errorText)
+      throw new Error(`Deepseek API request failed: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    
+    if (data.choices && data.choices[0] && data.choices[0].message) {
+      const formattedText = data.choices[0].message.content.trim()
+      
+      // Remove any markdown code blocks if present
+      const cleaned = formattedText
+        .replace(/^```[\w]*\n/, '')
+        .replace(/\n```$/, '')
+        .trim()
+      
+      return cleaned
+    } else {
+      throw new Error('Invalid response format from Deepseek API')
+    }
+  } catch (error: any) {
+    console.warn('Deepseek API error, using fallback formatting:', error.message)
+    throw error
   }
 }
 
@@ -42,9 +125,9 @@ async function formatAudioPenStyle(text: string): Promise<string> {
 
   // Detect content type
   const isMeeting = /meeting|discuss|agenda|action|follow-up|team|project/i.test(cleaned)
-  const isList = /first|second|third|then|next|also|additionally|finally/i.test(cleaned)
+  const isList = /first|second|third|then|next|also|additionally|finally|pehle|phir|baad|uske/i.test(cleaned)
   const hasQuestions = /\?/g.test(cleaned)
-  const hasActionItems = /need to|should|must|will|going to|plan to/i.test(cleaned)
+  const hasActionItems = /need to|should|must|will|going to|plan to|karna|hoga|chahiye/i.test(cleaned)
 
   // Format based on content type
   if (isMeeting && (hasActionItems || isList)) {
@@ -104,9 +187,9 @@ function formatMeetingStyle(sentences: string[]): string {
     const lower = sentence.toLowerCase()
     if (/\?/.test(sentence)) {
       questions.push(sentence)
-    } else if (/need to|should|must|will|going to|plan to|action|task|todo/i.test(lower)) {
-      actionItems.push(sentence.replace(/^(I|we|they|you)\s+/i, ''))
-    } else if (/discuss|talk|review|decide|decided|agreed/i.test(lower)) {
+    } else if (/need to|should|must|will|going to|plan to|action|task|todo|karna|hoga|chahiye/i.test(lower)) {
+      actionItems.push(sentence.replace(/^(I|we|they|you|main|hum)\s+/i, ''))
+    } else if (/discuss|talk|review|decide|decided|agreed|baat|charcha/i.test(lower)) {
       discussion.push(sentence)
     } else {
       other.push(sentence)
@@ -149,103 +232,9 @@ function formatMeetingStyle(sentences: string[]): string {
 
 // Check if there's a topic change between sentences
 function isTopicChange(sentence1: string, sentence2: string): boolean {
-  const transitionWords = ['however', 'but', 'also', 'additionally', 'furthermore', 'meanwhile', 'next', 'then', 'now']
+  const transitionWords = ['however', 'but', 'also', 'additionally', 'furthermore', 'meanwhile', 'next', 'then', 'now', 'lekin', 'par', 'aur', 'phir']
   const lower2 = sentence2.toLowerCase()
   return transitionWords.some(word => lower2.startsWith(word))
-}
-
-// Rule-based formatting (placeholder - replace with actual AI)
-async function formatTextWithRules(text: string): Promise<string> {
-  // Detect if it's a meeting or general notes
-  const isMeeting = /meeting|discuss|agenda|action|follow-up/i.test(text)
-  
-  if (isMeeting) {
-    return formatMeetingNotes(text)
-  } else {
-    return formatGeneralNotes(text)
-  }
-}
-
-function formatMeetingNotes(text: string): string {
-  let formatted = 'Meeting Notes Summary\n\n'
-  
-  // Extract key discussion points
-  const discussionKeywords = ['discuss', 'talk about', 'review', 'decide', 'plan']
-  const hasDiscussion = discussionKeywords.some(keyword => text.toLowerCase().includes(keyword))
-  
-  if (hasDiscussion) {
-    formatted += 'Key Discussion Points:\n'
-    // Simple extraction - in production, use AI to identify actual points
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 20)
-    sentences.slice(0, 3).forEach(sentence => {
-      formatted += `• ${sentence.trim()}\n`
-    })
-    formatted += '\n'
-  }
-  
-  // Extract action items
-  const actionKeywords = ['need to', 'should', 'must', 'action', 'task', 'todo']
-  const actionSentences = text.split(/[.!?]+/).filter(s => 
-    actionKeywords.some(keyword => s.toLowerCase().includes(keyword))
-  )
-  
-  if (actionSentences.length > 0) {
-    formatted += 'Action Items:\n'
-    actionSentences.slice(0, 5).forEach(sentence => {
-      formatted += `• ${sentence.trim()}\n`
-    })
-    formatted += '\n'
-  }
-  
-  // Next steps
-  const nextStepsKeywords = ['next', 'follow up', 'later', 'tomorrow', 'next week']
-  const nextStepsSentences = text.split(/[.!?]+/).filter(s =>
-    nextStepsKeywords.some(keyword => s.toLowerCase().includes(keyword))
-  )
-  
-  if (nextStepsSentences.length > 0) {
-    formatted += 'Next Steps:\n'
-    formatted += `${nextStepsSentences[0].trim()}\n\n`
-  }
-  
-  // Important notes
-  const importantKeywords = ['important', 'remember', 'note', 'critical']
-  const importantSentences = text.split(/[.!?]+/).filter(s =>
-    importantKeywords.some(keyword => s.toLowerCase().includes(keyword))
-  )
-  
-  if (importantSentences.length > 0) {
-    formatted += 'Important:\n'
-    formatted += `${importantSentences[0].trim()}\n`
-  }
-  
-  return formatted || text
-}
-
-function formatGeneralNotes(text: string): string {
-  // For general notes, add basic structure
-  let formatted = 'Notes\n\n'
-  
-  // Split into paragraphs if there are natural breaks
-  const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 0)
-  
-  if (paragraphs.length > 1) {
-    paragraphs.forEach((para, index) => {
-      formatted += `${para.trim()}\n\n`
-    })
-  } else {
-    // Single paragraph - add bullet points for long sentences
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10)
-    if (sentences.length > 3) {
-      sentences.forEach(sentence => {
-        formatted += `• ${sentence.trim()}\n`
-      })
-    } else {
-      formatted = text
-    }
-  }
-  
-  return formatted
 }
 
 function formatBasic(text: string): string {
@@ -255,107 +244,4 @@ function formatBasic(text: string): string {
     .filter(s => s.trim().length > 0)
     .map(s => `• ${s.trim()}`)
     .join('\n')
-}
-
-// Gemini API integration - SHORTENED PROMPT
-export async function formatWithOpenAI(rawText: string): Promise<string> {
-  const GEMINI_API_KEY = "AIzaSyBbdV3U8UiVCaJj5MK8kd1nOuKV40BPvhQ"
-  
-  // Retry function with exponential backoff
-  const retryWithBackoff = async (attempt: number = 0): Promise<string> => {
-    const maxRetries = 2
-    const baseDelay = 1000 // 1 second
-    
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                      text: `You are a helpful assistant that formats and improves transcribed speech-to-text. Clean up the text by removing filler words (um, uh, like, etc.), fixing grammar, adding proper punctuation, and making it more readable. Keep the original meaning and language (Hindi or English). Return ONLY the formatted text without any explanations, quotes, or additional text.
-
-Format and improve this transcribed speech-to-text. Remove filler words, fix grammar, add punctuation. Keep the original language and meaning. Return only the cleaned text:
-
-
-${rawText}`
-                  }
-                ]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.3,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 1048,
-            },
-          }),
-        }
-      )
-      
-      // Handle rate limiting (429) - immediately fallback, no retry
-      
-      
-      if (!response.ok) {
-        const errorText = await response.text()
-        
-        // If it's a client error (4xx) that's not rate limiting, don't retry
-        if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-          console.warn(`Gemini API client error (${response.status}), using fallback`)
-          throw new Error(`API_ERROR_${response.status}`)
-        }
-        
-        // For server errors (5xx), retry
-        if (response.status >= 500 && attempt < maxRetries) {
-          const delay = baseDelay * Math.pow(2, attempt)
-          console.log(`Server error, retrying after ${delay}ms (attempt ${attempt + 1}/${maxRetries})`)
-          await new Promise(resolve => setTimeout(resolve, delay))
-          return retryWithBackoff(attempt + 1)
-        }
-        
-        throw new Error(`Gemini API request failed: ${response.status}`)
-      }
-      
-      const data = await response.json()
-      
-      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-        const formattedText = data.candidates[0].content.parts[0].text
-        return formattedText
-      } else {
-        throw new Error('Invalid response format from Gemini API')
-      }
-    } catch (error: any) {
-      // If rate limited or max retries reached, use fallback immediately
-      if (error.message === 'RATE_LIMIT' || attempt >= maxRetries) {
-        throw error
-      }
-      
-      // Retry on network errors or server errors
-      if (attempt < maxRetries) {
-        const delay = baseDelay * Math.pow(2, attempt)
-        console.log(`Retrying after ${delay}ms (attempt ${attempt + 1}/${maxRetries})`)
-        await new Promise(resolve => setTimeout(resolve, delay))
-        return retryWithBackoff(attempt + 1)
-      }
-      
-      throw error
-    }
-  }
-  
-  try {
-    return await retryWithBackoff()
-  } catch (error: any) {
-    // Silently fallback to AudioPen-style formatting
-    // No need to log errors for rate limits - fallback works perfectly
-    if (error.message !== 'RATE_LIMIT') {
-      console.warn('Gemini API unavailable, using fallback formatting')
-    }
-    return formatAudioPenStyle(rawText)
-  }
 }

@@ -7,10 +7,10 @@ import FeatureCard from '@/components/FeatureCard'
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-white flex flex-col items-center justify-center px-4 py-12">
-      <div className="max-w-4xl w-full flex flex-col items-center">
+    <main className="min-h-screen flex flex-col items-center px-6 py-16">
+      <div className="max-w-6xl w-full flex flex-col items-center text-center">
         {/* AI-Powered Badge */}
-        <div className="mb-6 flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-600">
+        <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 bg-white/60 text-sm text-gray-700 shadow-sm">
           <svg className="w-4 h-4 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
           </svg>
@@ -20,7 +20,7 @@ export default function Home() {
         {/* Main Headline */}
         <h1 className="text-5xl md:text-6xl font-bold text-center mb-4">
           Speak your thoughts.{' '}
-          <span className="text-purple-500">Let AI write.</span>
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-indigo-500">Let AI write.</span>
         </h1>
 
         {/* Description */}
@@ -32,7 +32,7 @@ export default function Home() {
         <RecordingButton />
 
         {/* Feature Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16 w-full max-w-4xl">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-20 w-full">
           <FeatureCard
             icon={
               <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
