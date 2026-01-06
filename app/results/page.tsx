@@ -74,6 +74,18 @@ export default function ResultsPage() {
 
   return (
     <main className=" bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+      {/* Back to Home button */}
+      <div className="fixed top-3 right-4 z-50">
+        <button
+          onClick={() => router.push('/')}
+          className="flex items-center gap-2 px-4 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
+        >
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
+          <span className="font-medium">Back to Home</span>
+        </button>
+      </div>
       <div className="max-w-7xl mx-auto space-y-6">
         <div>
         {/* Header */}
