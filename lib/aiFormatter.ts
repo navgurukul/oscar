@@ -17,6 +17,23 @@ export async function formatWithAI(rawText: string): Promise<string> {
   }
 }
 
+// Generate a concise, descriptive title from the transcript
+export async function generateTitle(text: string): Promise<string> {
+  const source = (text || '').trim()
+  if (!source) return ''
+
+  try {
+    const title = await generateTitleWithDeepseek(source)
+    return sanitizeTitle(title)
+  } catch (e) {
+    // Fallback heuristic: use first meaningful sentence trimmed to ~60 chars
+    const cleaned = source.replace(/\s+/g, ' ').trim()
+    const firstSentence = (cleaned.match(/[^.!?]+[.!?]?/) || [''])[0].trim()
+    const truncated = firstSentence.length > 60 ? firstSentence.slice(0, 57).trim() + '…' : firstSentence
+    return sanitizeTitle(truncated || cleaned.slice(0, 60))
+  }
+}
+
 // Deepseek API integration - BETTER PROMPT, NO LIMITS
 export async function formatWithDeepseek(rawText: string): Promise<string> {
   const DEEPSEEK_API_KEY = "sk-4a59b3ee436944f5b3d1ef4e49b7ddc4" // Apni API key yahan dalein
@@ -37,23 +54,34 @@ export async function formatWithDeepseek(rawText: string): Promise<string> {
               role: "system",
               content: `You are an expert transcription formatter. Your job is to transform raw speech-to-text into polished, professional notes.
 
-FORMATTING RULES:
-1. Remove ALL filler words (um, uh, like, you know, basically, actually, etc.)
-2. Fix grammar errors and sentence structure
-3. Add proper punctuation (periods, commas, question marks)
-4. Capitalize properly (names, start of sentences, acronyms)
-5. Break into clear paragraphs (3-4 sentences each)
-6. Preserve the original language (Hindi/Hinglish/English as spoken)
-7. Keep the exact meaning - don't add or remove information
-8. For meeting notes: organize into sections (Discussion Points, Action Items, Questions)
-9. For lists or steps: use bullet points with • symbol
-10. Make it natural and readable - like professional notes
+CRITICAL RULES:
+1. PRESERVE ALL CONTENT - Never remove or skip any part of the transcript, even if it seems like rambling at the start
+2. Keep the complete meaning - every sentence must be included in some form
+3. Only remove filler words (um, uh, like, you know, basically, actually) - NOT complete sentences
+4. Fix grammar errors and improve sentence structure
+5. Add proper punctuation (periods, commas, question marks)
+6. Capitalize properly (names, start of sentences, acronyms)
+7. Break into clear paragraphs (3-4 sentences each)
+8. Preserve the original language (Hindi/Hinglish/English as spoken)
+9. For meeting notes: organize into sections (Discussion Points, Action Items, Questions)
+10. For lists or steps: use bullet points with • symbol
+11. Make it natural and readable - like professional notes
+
+IMPORTANT: Transform the ENTIRE transcript from start to finish. Don't skip the beginning or ending.
+
+EXAMPLE:
+Raw: "um so like I'm testing this okay so the main point is we need to uh finish the project by Friday"
+Formatted: "I'm testing this. The main point is we need to finish the project by Friday."
+❌ WRONG: "The main point is we need to finish the project by Friday." (deleted the testing part)
+✅ CORRECT: "I'm testing this. The main point is we need to finish the project by Friday." (kept everything)
+
 
 OUTPUT FORMAT:
 - Return ONLY the formatted text
 - No explanations, no quotes, no metadata
 - Clean, professional, ready-to-use notes
-- Natural flow and easy to read`
+- Natural flow and easy to read
+- Include ALL content from the original transcript`
             },
             {
               role: "user",
@@ -98,6 +126,54 @@ FORMATTED NOTES:`
     console.warn('Deepseek API error, using fallback formatting:', error.message)
     throw error
   }
+}
+
+// Deepseek title generation
+async function generateTitleWithDeepseek(text: string): Promise<string> {
+  const DEEPSEEK_API_KEY = "sk-4a59b3ee436944f5b3d1ef4e49b7ddc4"
+  const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You generate short, descriptive titles for transcripts. Keep the original language. Use plain text, no quotes. Prefer 4–10 words. Title Case if English; natural casing for Hindi/Hinglish. Summarize the core topic succinctly.',
+        },
+        {
+          role: 'user',
+          content:
+            `Create a concise title (max ~60 chars) for this content. Return ONLY the title.\n\nContent:\n${text}`,
+        },
+      ],
+      temperature: 0.3,
+      top_p: 0.9,
+      max_tokens: 64,
+      stream: false,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Deepseek title error: ${response.status} ${errorText}`)
+  }
+
+  const data = await response.json()
+  const content = data?.choices?.[0]?.message?.content?.trim() || ''
+  if (!content) throw new Error('Empty title from Deepseek')
+  return content.replace(/^```[\w]*\n/, '').replace(/\n```$/, '').trim()
+}
+
+function sanitizeTitle(title: string): string {
+  return (title || '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/^["'\s]+|["'\s]+$/g, '')
+    .trim()
 }
 
 // AudioPen-style formatting - clean and natural

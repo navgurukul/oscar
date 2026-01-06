@@ -14,6 +14,10 @@ export default function RecordingPage() {
   const [recordingTime, setRecordingTime] = useState(0)
   const sttRef = useRef<STTLogic | null>(null)
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  // Accumulate transcript robustly across STT internal restarts
+  const accumulatedTranscriptRef = useRef<string>('')
+  // iOS-specific preemptive restart timer to reduce 30–60s gap losses
+  const restartIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const router = useRouter()
 
   // Initialize STT on component mount
@@ -37,16 +41,19 @@ export default function RecordingPage() {
             console.log(`[STT ${level || 'info'}]`, message)
           },
           (transcript) => {
-            // Always update transcript, even if empty (to track state)
-            setCurrentTranscript(transcript || '')
-            if (transcript && transcript.trim()) {
-              console.log('Transcript updated:', transcript)
+            const incoming = transcript || ''
+            const merged = mergeTranscripts(accumulatedTranscriptRef.current, incoming)
+            accumulatedTranscriptRef.current = merged
+            setCurrentTranscript(merged)
+            if (incoming.trim()) {
+              console.log('Transcript updated:', incoming)
             }
           },
           {
             sessionDurationMs: 60000,
-            interimSaveIntervalMs: 2000, // More frequent updates
-            preserveTranscriptOnStart: false,
+            interimSaveIntervalMs: 1000, // Tighter interim updates reduce perceived drops
+            // Preserve text across internal restarts (common on mobile Safari)
+            preserveTranscriptOnStart: true,
           }
         )
         
@@ -93,10 +100,36 @@ export default function RecordingPage() {
 
       // Start STT
       try {
+        // Start a fresh session, but preserve text across internal restarts
+        accumulatedTranscriptRef.current = ''
         setCurrentTranscript('')
-        sttRef.current.clearTranscript()
         sttRef.current.start()
         console.log('STT started, waiting for speech...')
+
+        // On iOS Safari, preemptively restart before engine's 30–60s cutoff to
+        // minimize the brief gap where speech may be missed.
+        if (isIOSSafari()) {
+          if (restartIntervalRef.current) {
+            clearInterval(restartIntervalRef.current)
+            restartIntervalRef.current = null
+          }
+          // Restart cycle slightly before typical 30s limit
+          restartIntervalRef.current = setInterval(() => {
+            try {
+              // Quick stop-start; our merge + preservation avoids content loss/duplication
+              sttRef.current?.stop()
+              setTimeout(() => {
+                try {
+                  sttRef.current?.start()
+                } catch (e) {
+                  console.warn('Preemptive restart start() failed:', e)
+                }
+              }, 150)
+            } catch (e) {
+              console.warn('Preemptive restart stop() failed:', e)
+            }
+          }, 25000)
+        }
       } catch (error) {
         console.error('Error starting recording:', error)
         setIsRecording(false)
@@ -107,6 +140,11 @@ export default function RecordingPage() {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current)
         timerIntervalRef.current = null
+      }
+      // Clear iOS preemptive restart timer
+      if (restartIntervalRef.current) {
+        clearInterval(restartIntervalRef.current)
+        restartIntervalRef.current = null
       }
     }
   }, [isRecording])
@@ -310,5 +348,39 @@ export default function RecordingPage() {
       </div>
     </main>
   )
+}
+
+// Merge incoming transcript updates with previously accumulated text.
+// Handles restarts that reset the incoming text and avoids repeating sentences.
+function mergeTranscripts(previous: string, incoming: string): string {
+  if (!incoming) return previous
+  if (!previous) return incoming
+
+  // If incoming is a superset (common when recognition continues), prefer it.
+  if (incoming.startsWith(previous)) return incoming
+  if (incoming.includes(previous)) return incoming
+
+  // If incoming is wholly contained in previous, ignore to avoid repeats.
+  if (previous.includes(incoming)) return previous
+
+  // Compute maximal overlap where previous suffix equals incoming prefix.
+  const max = Math.min(previous.length, incoming.length)
+  for (let i = max; i > 0; i--) {
+    if (previous.slice(-i) === incoming.slice(0, i)) {
+      return previous + incoming.slice(i)
+    }
+  }
+
+  // Fallback: append with a separating space.
+  return previous + (previous.endsWith(' ') ? '' : ' ') + incoming
+}
+
+// Basic detection for iOS Safari to apply preemptive restart strategy
+function isIOSSafari(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  const isIOS = /iPhone|iPad|iPod/i.test(ua)
+  const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua)
+  return isIOS && isSafari
 }
 

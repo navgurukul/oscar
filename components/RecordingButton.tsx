@@ -13,6 +13,7 @@ export default function RecordingButton() {
   const [isInitializing, setIsInitializing] = useState(false)
   const [currentTranscript, setCurrentTranscript] = useState('')
   const sttRef = useRef<STTLogic | null>(null)
+  const accumulatedTranscriptRef = useRef<string>('')
   const router = useRouter()
 
   // Initialize STT on component mount
@@ -29,22 +30,24 @@ export default function RecordingButton() {
         setIsInitializing(true)
         const { STTLogic } = await import('stt-tts-lib')
         
-        // Create STT instance with transcript callback that updates state
+        // Create STT instance with transcript callback that merges updates
         const stt = new STTLogic(
           (message, level) => {
             console.log(`[STT ${level || 'info'}]`, message)
           },
           (transcript) => {
-            // Update transcript in real-time
-            if (transcript && transcript.trim()) {
-              setCurrentTranscript(transcript)
-              console.log('Transcript updated:', transcript)
+            const incoming = transcript || ''
+            const merged = mergeTranscripts(accumulatedTranscriptRef.current, incoming)
+            accumulatedTranscriptRef.current = merged
+            setCurrentTranscript(merged)
+            if (incoming.trim()) {
+              console.log('Transcript updated:', incoming)
             }
           },
           {
             sessionDurationMs: 60000, // 60 seconds
             interimSaveIntervalMs: 5000,
-            preserveTranscriptOnStart: false,
+            preserveTranscriptOnStart: true,
           }
         )
         
@@ -182,5 +185,22 @@ export default function RecordingButton() {
       </Button>
     </div>
   )
+}
+
+function mergeTranscripts(previous: string, incoming: string): string {
+  if (!incoming) return previous
+  if (!previous) return incoming
+
+  if (incoming.startsWith(previous)) return incoming
+  if (incoming.includes(previous)) return incoming
+  if (previous.includes(incoming)) return previous
+
+  const max = Math.min(previous.length, incoming.length)
+  for (let i = max; i > 0; i--) {
+    if (previous.slice(-i) === incoming.slice(0, i)) {
+      return previous + incoming.slice(i)
+    }
+  }
+  return previous + (previous.endsWith(' ') ? '' : ' ') + incoming
 }
 

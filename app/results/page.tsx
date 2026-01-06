@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import RecordingButton from '@/components/RecordingButton'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { generateTitle } from '@/lib/aiFormatter'
 
 export default function ResultsPage() {
   const [formattedNote, setFormattedNote] = useState('')
@@ -12,6 +13,8 @@ export default function ResultsPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [editedNote, setEditedNote] = useState('')
   const [showRawTranscript, setShowRawTranscript] = useState(false)
+  const [aiTitle, setAiTitle] = useState('')
+  const [isTitleLoading, setIsTitleLoading] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -25,6 +28,17 @@ export default function ResultsPage() {
     }
     if (raw) {
       setRawText(raw)
+    }
+    // Generate a concise AI title based on formatted note (fallback to raw)
+    const source = note || raw || ''
+    if (source.trim()) {
+      setIsTitleLoading(true)
+      generateTitle(source)
+        .then((title) => setAiTitle(title))
+        .catch(() => setAiTitle(''))
+        .finally(() => setIsTitleLoading(false))
+    } else {
+      setAiTitle('')
     }
   }, [router])
 
@@ -85,8 +99,19 @@ export default function ResultsPage() {
           
         </div>
 
-        {/* AI Formatted - Full Width */}
+        {/* AI Formatted - Full Width with AI Title */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mt-8">
+            {/* AI Title */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {isTitleLoading ? 'Generating title…' : aiTitle || 'Untitled Note'}
+                </h2>
+                {aiTitle && (
+                  <span className="text-xs text-gray-400">AI Title</span>
+                )}
+              </div>
+            </div>
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">AI Formatted</h2>
               {!isEditing ? (
