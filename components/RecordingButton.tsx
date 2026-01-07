@@ -8,9 +8,10 @@ import type { STTLogic } from 'stt-tts-lib'
 
 interface RecordingButtonProps {
   variant?: 'icon' | 'button'
+  autoStart?: boolean
 }
 
-export default function RecordingButton({ variant = 'icon' }: RecordingButtonProps) {
+export default function RecordingButton({ variant = 'icon', autoStart = false }: RecordingButtonProps) {
   const [isRecording, setIsRecording] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isInitializing, setIsInitializing] = useState(false)
@@ -18,6 +19,7 @@ export default function RecordingButton({ variant = 'icon' }: RecordingButtonPro
   const sttRef = useRef<STTLogic | null>(null)
   const accumulatedTranscriptRef = useRef<string>('')
   const router = useRouter()
+  const autoStartRef = useRef(autoStart)
 
   // Initialize STT on component mount
   useEffect(() => {
@@ -76,8 +78,17 @@ export default function RecordingButton({ variant = 'icon' }: RecordingButtonPro
   }, [])
 
   const startRecording = async () => {
-    // Navigate to recording page
-    router.push('/recording')
+    if (autoStart) {
+      // If autoStart is enabled, we're being called from recording page
+      // Start recording immediately
+      setIsRecording(true)
+    } else {
+      // Clear previous session data before navigating to recording page
+      sessionStorage.removeItem('formattedNote')
+      sessionStorage.removeItem('rawText')
+      // Navigate to recording page with autoStart flag
+      router.push('/recording?autoStart=true')
+    }
   }
 
   const stopRecording = async () => {
@@ -124,9 +135,19 @@ export default function RecordingButton({ variant = 'icon' }: RecordingButtonPro
 
   if (variant === 'button') {
     // Text button variant for Results page - Simple button without complex states
+    const handleRecordAgainClick = async () => {
+      console.log('Record Again button clicked')
+      // Clear previous session data
+      sessionStorage.removeItem('formattedNote')
+      sessionStorage.removeItem('rawText')
+      // Navigate to recording page with autoStart flag
+      console.log('Navigating to /recording?autoStart=true')
+      await router.push('/recording?autoStart=true')
+    }
+
     return (
       <button
-        onClick={startRecording}
+        onClick={handleRecordAgainClick}
         className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl bg-purple-500 hover:bg-purple-600"
       >
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">

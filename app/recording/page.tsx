@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { getTranscriptFromSTT } from '@/lib/audioToText'
 import { formatWithAI } from '@/lib/aiFormatter'
 import type { STTLogic } from 'stt-tts-lib'
@@ -14,11 +14,11 @@ export default function RecordingPage() {
   const [recordingTime, setRecordingTime] = useState(0)
   const sttRef = useRef<STTLogic | null>(null)
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  // Accumulate transcript robustly across STT internal restarts
   const accumulatedTranscriptRef = useRef<string>('')
-  // iOS-specific preemptive restart timer to reduce 30–60s gap losses
   const restartIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const autoStartRef = useRef(searchParams.get('autoStart') === 'true')
 
   // Initialize STT on component mount
   useEffect(() => {
@@ -64,6 +64,11 @@ export default function RecordingPage() {
         
         sttRef.current = stt
         console.log('STT initialized successfully')
+        
+        // Auto-start recording if query param is set
+        if (autoStartRef.current) {
+          setIsRecording(true)
+        }
       } catch (error) {
         console.error('Error initializing STT:', error)
         alert('Failed to initialize speech recognition. Please check browser compatibility and microphone permissions.')
@@ -85,7 +90,7 @@ export default function RecordingPage() {
         clearInterval(timerIntervalRef.current)
       }
     }
-  }, [router])
+  }, [])
 
   // Start recording
   useEffect(() => {
@@ -155,11 +160,50 @@ export default function RecordingPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
+  const [processingStep, setProcessingStep] = useState(0)
+  const [processingProgress, setProcessingProgress] = useState(0)
+
+  const processingSteps = [
+    { title: 'Analyzing Audio', description: 'Processing sound waves...' },
+    { title: 'AI Recognition', description: 'Understanding speech patterns...' },
+    { title: 'Formatting', description: 'Structuring your text...' },
+  ]
+
+  // Reset states when coming back to recording page
+  useEffect(() => {
+    accumulatedTranscriptRef.current = ''
+    setCurrentTranscript('')
+    setRecordingTime(0)
+  }, [])
+
   const handleStop = async () => {
     if (sttRef.current && isRecording) {
       try {
         setIsProcessing(true)
         setIsRecording(false)
+        setProcessingStep(0)
+        setProcessingProgress(0)
+
+        // Simulate progress updates
+        const progressInterval = setInterval(() => {
+          setProcessingProgress(prev => {
+            if (prev >= 100) {
+              clearInterval(progressInterval)
+              return 100
+            }
+            return prev + Math.random() * 30
+          })
+        }, 300)
+
+        const stepInterval = setInterval(() => {
+          setProcessingStep(prev => {
+            if (prev >= processingSteps.length - 1) {
+              clearInterval(stepInterval)
+              return prev
+            }
+            return prev + 1
+          })
+        }, 1500)
         
         // Stop STT first
         sttRef.current.stop()
@@ -200,6 +244,9 @@ export default function RecordingPage() {
           // Store and navigate
           sessionStorage.setItem('formattedNote', formattedText)
           sessionStorage.setItem('rawText', transcribedText)
+          
+          // Wait for processing to complete visually
+          await new Promise(resolve => setTimeout(resolve, 1000))
           router.push('/results')
         } else {
           // Check if recording was too short
@@ -219,11 +266,15 @@ export default function RecordingPage() {
           
           alert(errorMessage)
           setIsProcessing(false)
+          setProcessingStep(0)
+          setProcessingProgress(0)
         }
       } catch (error) {
         console.error('Error processing recording:', error)
         alert('Failed to process recording. Please try again.')
         setIsProcessing(false)
+        setProcessingStep(0)
+        setProcessingProgress(0)
       }
     }
   }
@@ -235,6 +286,126 @@ export default function RecordingPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
           <p className="text-gray-600">Initializing...</p>
         </div>
+      </main>
+    )
+  }
+
+  if (isProcessing) {
+    return (
+      <main className="min-h-screen bg-gradient-to-b from-purple-50 via-white to-blue-50 flex items-center justify-center px-4 pt-8">
+        <div className="w-full max-w-2xl">
+          {/* Back to Home button */}
+          <div className="fixed top-3 right-4 z-50">
+            <button
+              onClick={() => router.push('/')}
+              className="flex items-center gap-2 px-4 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
+            >
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              <span className="font-medium">Back to Home</span>
+            </button>
+          </div>
+
+          {/* Processing Card */}
+          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-8 md:p-12 text-center relative overflow-hidden">
+            {/* Decorative gradients */}
+            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-100 to-transparent rounded-bl-3xl opacity-40"></div>
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-purple-50 to-transparent rounded-tr-3xl opacity-30"></div>
+
+            <div className="relative z-10">
+              {/* Header */}
+              <h1 className="text-4xl md:text-5xl font-bold mb-2">
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-indigo-500">
+                  Processing
+                </span>
+              </h1>
+              <p className="text-gray-600 text-lg mb-12">Oscar's AI is working its magic... ✨</p>
+
+              {/* Central Animation */}
+              <div className="w-40 h-40 mx-auto mb-8 flex items-center justify-center relative">
+                {/* Outer rotating ring */}
+                <div className="absolute inset-0 rounded-full border-4 border-gray-200"></div>
+                <div 
+                  className="absolute inset-0 rounded-full border-4 border-transparent border-t-purple-600 border-r-purple-400 animate-spin"
+                  style={{ animationDuration: '2s' }}
+                />
+                
+                {/* Middle pulse ring */}
+                <div className="absolute inset-4 rounded-full border-2 border-purple-300 animate-pulse opacity-50"></div>
+                
+                {/* Center icon */}
+                <div className="relative z-10 text-purple-600 text-5xl">
+                  {processingStep === 0 && '🎙️'}
+                  {processingStep === 1 && '🧠'}
+                  {processingStep === 2 && '📝'}
+                </div>
+              </div>
+
+              {/* Current Step Info */}
+              <div className="mb-8 min-h-20">
+                <h2 className="text-2xl font-bold mb-2 text-gray-900 transition-all duration-300">
+                  {processingSteps[processingStep].title}
+                </h2>
+                <p className="text-gray-600 text-base">
+                  {processingSteps[processingStep].description}
+                </p>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full max-w-lg mx-auto mb-8">
+                <div className="h-3 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+                  <div
+                    className="h-full bg-gradient-to-r from-purple-600 to-indigo-500 transition-all duration-300 ease-out rounded-full"
+                    style={{ width: `${Math.min(processingProgress, 100)}%` }}
+                  />
+                </div>
+                <p className="text-sm text-gray-600 mt-3 font-medium">{Math.min(Math.round(processingProgress), 100)}% Complete</p>
+              </div>
+
+              {/* Steps Indicator */}
+              <div className="flex justify-center gap-2 mb-8">
+                {processingSteps.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`transition-all duration-300 ${
+                      i <= processingStep
+                        ? 'w-4 h-4 bg-purple-600 rounded-full scale-100'
+                        : 'w-3 h-3 bg-gray-300 rounded-full scale-75'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              {/* Animated bouncing dots */}
+              <div className="flex justify-center gap-3">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="w-3 h-3 bg-gradient-to-r from-purple-600 to-indigo-500 rounded-full"
+                    style={{
+                      animation: `bounce 1.4s ease-in-out infinite`,
+                      animationDelay: `${i * 0.2}s`,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <style jsx>{`
+          @keyframes bounce {
+            0%, 80%, 100% {
+              transform: scale(0.8);
+              opacity: 0.5;
+            }
+            40% {
+              transform: scale(1);
+              opacity: 1;
+            }
+          }
+        `}</style>
       </main>
     )
   }

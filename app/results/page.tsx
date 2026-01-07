@@ -331,7 +331,7 @@ export default function ResultsPage() {
 
         {/* Record Again Button */}
         <div className="flex justify-center gap-4 mt-6">
-          <RecordingButton variant="button" />
+          <RecordingButton variant="button" autoStart={true} />
         </div>
       </div>
     </main>
