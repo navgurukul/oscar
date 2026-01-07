@@ -86,7 +86,7 @@ export default function ResultsPage() {
           <span className="font-medium">Back to Home</span>
         </button>
       </div>
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-3xl mx-auto space-y-6">
         <div>
         {/* Header */}
         <div className="text-center space-y-2 mt-8">
@@ -115,7 +115,8 @@ export default function ResultsPage() {
                   <div className="flex gap-3">
                     <button
                       onClick={() => setIsEditing(true)}
-                      className="flex items-center gap-2 text-gray-600 hover:text-purple-500 transition-colors"
+                      className="text-gray-600 hover:text-purple-500 transition-colors"
+                      title="Edit"
                     >
                       <svg
                         className="w-5 h-5"
@@ -130,11 +131,11 @@ export default function ResultsPage() {
                           d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                         />
                       </svg>
-                      <span>Edit</span>
                     </button>
                     <button
                       onClick={handleCopy}
-                      className="flex items-center gap-2 text-gray-600 hover:text-purple-500 transition-colors"
+                      className="text-gray-600 hover:text-purple-500 transition-colors"
+                      title="Copy"
                     >
                       <svg
                         className="w-5 h-5"
@@ -149,11 +150,11 @@ export default function ResultsPage() {
                           d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                         />
                       </svg>
-                      <span>Copy</span>
                     </button>
                     <button
                       onClick={handleDownload}
-                      className="flex items-center gap-2 text-gray-600 hover:text-purple-500 transition-colors"
+                      className="text-gray-600 hover:text-purple-500 transition-colors"
+                      title="Download"
                     >
                       <svg
                         className="w-5 h-5"
@@ -168,7 +169,6 @@ export default function ResultsPage() {
                           d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                         />
                       </svg>
-                      <span>Download</span>
                     </button>
                   </div>
                 </>
@@ -177,7 +177,8 @@ export default function ResultsPage() {
                   <div className="flex gap-3">
                     <button
                       onClick={handleSave}
-                      className="flex items-center gap-2 text-green-600 hover:text-green-700 transition-colors"
+                      className="text-green-600 hover:text-green-700 transition-colors"
+                      title="Save"
                     >
                       <svg
                         className="w-5 h-5"
@@ -192,11 +193,11 @@ export default function ResultsPage() {
                           d="M5 13l4 4L19 7"
                         />
                       </svg>
-                      <span>Save</span>
                     </button>
                     <button
                       onClick={handleCancel}
-                      className="flex items-center gap-2 text-red-600 hover:text-red-700 transition-colors"
+                      className="text-red-600 hover:text-red-700 transition-colors"
+                      title="Cancel"
                     >
                       <svg
                         className="w-5 h-5"
@@ -211,7 +212,6 @@ export default function ResultsPage() {
                           d="M6 18L18 6M6 6l12 12"
                         />
                       </svg>
-                      <span>Cancel</span>
                     </button>
                   </div>
                 </>
@@ -262,7 +262,7 @@ export default function ResultsPage() {
 
         {/* Raw Transcript - Expandable Section */}
         {showRawTranscript && (
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 animate-fadeIn mt-5 max-w-7xl mx-auto space-y-6">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 animate-fadeIn mt-5 space-y-6">
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">Raw Transcript</h2>
               <div className="flex gap-3">
@@ -275,7 +275,8 @@ export default function ResultsPage() {
                       console.error('Copy failed', e)
                     }
                   }}
-                  className="flex items-center gap-2 text-gray-600 hover:text-purple-500 transition-colors"
+                  className="text-gray-600 hover:text-purple-500 transition-colors"
+                  title="Copy"
                 >
                   <svg
                     className="w-5 h-5"
@@ -290,7 +291,6 @@ export default function ResultsPage() {
                       d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
                     />
                   </svg>
-                  <span>Copy</span>
                 </button>
                 <button
                   onClick={() => {
@@ -304,7 +304,8 @@ export default function ResultsPage() {
                     document.body.removeChild(a)
                     URL.revokeObjectURL(url)
                   }}
-                  className="flex items-center gap-2 text-gray-600 hover:text-purple-500 transition-colors"
+                  className="text-gray-600 hover:text-purple-500 transition-colors"
+                  title="Download"
                 >
                   <svg
                     className="w-5 h-5"
@@ -319,7 +320,6 @@ export default function ResultsPage() {
                       d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                     />
                   </svg>
-                  <span>Download</span>
                 </button>
               </div>
             </div>
