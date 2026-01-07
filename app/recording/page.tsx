@@ -240,7 +240,7 @@ export default function RecordingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-white flex flex-col items-center justify-center px-4 pt-20">
+    <main className="min-h-screen bg-white flex flex-col items-center px-4 pt-8">
       {/* Back to Home button */}
       <div className="fixed top-3 right-4 z-50">
         <button
@@ -254,90 +254,96 @@ export default function RecordingPage() {
         </button>
       </div>
 
-      <div className="flex flex-col items-center gap-8">
-        {/* Tap to start / Timer */}
-        {!isRecording ? (
-          <p className="text-gray-500 text-lg">Tap to start speaking</p>
-        ) : (
+      <div className="w-full max-w-2xl flex flex-col items-center gap-8">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <h1 className="text-5xl font-bold">
+            Record Your <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-indigo-500">Voice</span>
+          </h1>
+          <p className="text-gray-600 text-lg">
+            Press the microphone button and start speaking. Oscar will do the rest.
+          </p>
+        </div>
+
+        {/* Main Recording Container */}
+        <div className="w-full bg-white rounded-3xl shadow-xl border border-gray-100 p-8 md:p-12 space-y-8">
+          
+          {/* Animated dots indicator */}
+          {isRecording && (
+            <div className="flex justify-center gap-2">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <div
+                  key={i}
+                  className="w-2 h-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full"
+                  style={{
+                    animation: `pulse 1.5s ease-in-out infinite`,
+                    animationDelay: `${i * 0.15}s`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Timer Display */}
           <div className="text-center">
-            <div className="text-4xl font-mono font-bold text-gray-900 mb-2">
+            <div className="text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-indigo-500 font-mono tracking-wider">
               {formatTime(recordingTime)}
             </div>
           </div>
-        )}
 
-        {/* Purple circles visualizer */}
-        {isRecording && (
-          <div className="flex gap-2 items-center">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"
-                style={{
-                  animationDelay: `${i * 0.1}s`,
-                  animationDuration: '1s',
-                }}
-              />
-            ))}
+          {/* Microphone Button */}
+          <div className="flex justify-center pt-4">
+            <button
+              onClick={isRecording ? handleStop : () => setIsRecording(true)}
+              disabled={isProcessing}
+              className={`
+                w-32 h-32 rounded-full flex items-center justify-center
+                transition-all duration-300 shadow-2xl transform
+                ${isRecording 
+                  ? 'bg-red-500 hover:bg-red-600 scale-100 animate-pulse ring-8 ring-red-200' 
+                  : isProcessing
+                  ? 'bg-gray-300 cursor-not-allowed scale-100'
+                  : 'bg-gradient-to-br from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 hover:scale-110 hover:shadow-2xl active:scale-95'
+                }
+              `}
+            >
+              {isProcessing ? (
+                <svg className="animate-spin h-14 w-14 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg className="w-16 h-16 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+                </svg>
+              )}
+            </button>
           </div>
-        )}
 
-        {/* Microphone button */}
-        <button
-          onClick={isRecording ? handleStop : () => setIsRecording(true)}
-          disabled={isProcessing}
-          className={`
-            w-24 h-24 rounded-full flex items-center justify-center
-            transition-all duration-200 shadow-lg
-            ${isRecording 
-              ? 'bg-red-500 hover:bg-red-600 animate-pulse' 
-              : isProcessing
-              ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-purple-500 hover:bg-purple-600 hover:scale-105'
-            }
-          `}
-        >
-          {isProcessing ? (
-            <svg className="animate-spin h-10 w-10 text-white" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          ) : (
-            <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-            </svg>
-          )}
-        </button>
-
-        {/* Instruction text */}
-        <p className="text-gray-500 text-center max-w-md">
-          {isRecording 
-            ? 'Speak naturally and we\'ll transcribe everything' 
-            : 'Speak naturally and we\'ll transcribe everything'
-          }
-        </p>
-
-        {/* Live transcript preview */}
-        {isRecording && (
-          <div className="w-full max-w-2xl mt-8 bg-gray-50 rounded-lg p-4 border border-gray-200 max-h-48 overflow-y-auto min-h-[100px]">
-            <p className="text-sm text-gray-500 mb-2">
-              {currentTranscript ? 'Live transcription:' : 'Listening... (speak now)'}
+          {/* Instruction Text */}
+          <div className="text-center pt-4">
+            <p className="text-gray-600 text-lg flex items-center justify-center gap-2">
+              <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4.293 15.707a1 1 0 010-1.414l5-5a1 1 0 011.414 0l5 5a1 1 0 11-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414 0z" clipRule="evenodd" transform="rotate(180)" />
+              </svg>
+              {isRecording ? 'Listening... Speak clearly!' : 'Click the microphone to start recording'}
             </p>
-            {currentTranscript ? (
-              <p className="text-gray-800 text-sm whitespace-pre-wrap">{currentTranscript}</p>
-            ) : (
-              <p className="text-gray-400 italic text-sm">Waiting for speech...</p>
-            )}
           </div>
-        )}
-        
-        {/* Recording time warning */}
-        {isRecording && recordingTime < 3 && (
-          <p className="text-xs text-orange-500 mt-2">
-            Please speak for at least 3 seconds for best results
-          </p>
-        )}
+
+        </div>
+
       </div>
+
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 0.3;
+          }
+          50% {
+            opacity: 1;
+          }
+        }
+      `}</style>
     </main>
   )
 }
