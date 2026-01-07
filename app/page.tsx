@@ -29,10 +29,12 @@ export default function Home() {
         </p>
 
         {/* Start Recording Button */}
-        <RecordingButton />
+        <div className="mt-8">
+          <RecordingButton />
+        </div>
 
         {/* Feature Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-20 w-full">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-32 w-full">
           <FeatureCard
             icon={
               <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">

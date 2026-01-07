@@ -439,16 +439,17 @@ export default function RecordingPage() {
         {/* Main Recording Container */}
         <div className="w-full bg-white rounded-3xl shadow-xl border border-gray-100 p-8 md:p-12 space-y-8">
           
-          {/* Animated dots indicator */}
+          {/* Animated waveform indicator */}
           {isRecording && (
-            <div className="flex justify-center gap-2">
-              {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div className="flex justify-center items-center gap-1 h-16">
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
                 <div
                   key={i}
-                  className="w-2 h-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full"
+                  className="w-1 bg-gradient-to-t from-purple-600 to-indigo-500 rounded-full"
                   style={{
-                    animation: `pulse 1.5s ease-in-out infinite`,
-                    animationDelay: `${i * 0.15}s`,
+                    height: `${24 + Math.sin(i * 0.4) * 18}px`,
+                    animation: `waveform 0.6s ease-in-out infinite`,
+                    animationDelay: `${i * 0.06}s`,
                   }}
                 />
               ))}
@@ -471,7 +472,7 @@ export default function RecordingPage() {
                 w-32 h-32 rounded-full flex items-center justify-center
                 transition-all duration-300 shadow-2xl transform
                 ${isRecording 
-                  ? 'bg-red-500 hover:bg-red-600 scale-100 animate-pulse ring-8 ring-red-200' 
+                  ? 'bg-red-500 hover:bg-red-600 scale-100 ring-8 ring-red-200' 
                   : isProcessing
                   ? 'bg-gray-300 cursor-not-allowed scale-100'
                   : 'bg-gradient-to-br from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 hover:scale-110 hover:shadow-2xl active:scale-95'
@@ -511,6 +512,16 @@ export default function RecordingPage() {
             opacity: 0.3;
           }
           50% {
+            opacity: 1;
+          }
+        }
+        @keyframes waveform {
+          0%, 100% {
+            height: 24px;
+            opacity: 0.6;
+          }
+          50% {
+            height: 48px;
             opacity: 1;
           }
         }

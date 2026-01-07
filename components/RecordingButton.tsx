@@ -192,7 +192,7 @@ export default function RecordingButton({ variant = 'icon', autoStart = false }:
         disabled={isProcessing || isInitializing}
         className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 ${
           isRecording 
-            ? 'bg-red-500 hover:bg-red-600 shadow-lg hover:shadow-xl ring-4 ring-red-200 animate-pulse' 
+            ? 'bg-red-500 hover:bg-red-600 shadow-lg hover:shadow-xl ring-4 ring-red-200' 
             : 'bg-gradient-to-br from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 shadow-lg hover:shadow-xl'
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
