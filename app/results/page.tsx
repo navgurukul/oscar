@@ -73,12 +73,12 @@ export default function ResultsPage() {
   }
 
   return (
-    <main className=" bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+    <main className=" bg-gradient-to-br from-teal-50 via-white to-teal-50 p-6">
       {/* Back to Home button */}
       <div className="fixed top-3 right-4 z-50">
         <button
           onClick={() => router.push('/')}
-          className="flex items-center gap-2 px-4 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
+          className="flex items-center gap-2 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
         >
           <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -115,7 +115,7 @@ export default function ResultsPage() {
                   <div className="flex gap-3">
                     <button
                       onClick={() => setIsEditing(true)}
-                      className="text-gray-600 hover:text-purple-500 transition-colors"
+                      className="text-gray-600 hover:text-teal-500 transition-colors"
                       title="Edit"
                     >
                       <svg
@@ -134,7 +134,7 @@ export default function ResultsPage() {
                     </button>
                     <button
                       onClick={handleCopy}
-                      className="text-gray-600 hover:text-purple-500 transition-colors"
+                      className="text-gray-600 hover:text-teal-500 transition-colors"
                       title="Copy"
                     >
                       <svg
@@ -153,7 +153,7 @@ export default function ResultsPage() {
                     </button>
                     <button
                       onClick={handleDownload}
-                      className="text-gray-600 hover:text-purple-500 transition-colors"
+                      className="text-gray-600 hover:text-teal-500 transition-colors"
                       title="Download"
                     >
                       <svg
@@ -222,7 +222,7 @@ export default function ResultsPage() {
               <textarea
                 value={editedNote}
                 onChange={(e) => setEditedNote(e.target.value)}
-                className="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                className="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900"
               />
             ) : (
               <div className="prose prose-lg max-w-none text-gray-900 whitespace-pre-wrap">
@@ -236,7 +236,7 @@ export default function ResultsPage() {
         <div className="flex mt-5 mx-auto ">
           <button
             onClick={() => setShowRawTranscript(!showRawTranscript)}
-            className="flex items-center gap-2 px-6 py-3   rounded-lg   text-purple-600 hover:bg-purple-50 hover:border-purple-300 transition-all"
+            className="flex items-center gap-2 px-6 py-3   rounded-lg   text-teal-600 hover:bg-teal-50 hover:border-teal-300 transition-all"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -275,7 +275,7 @@ export default function ResultsPage() {
                       console.error('Copy failed', e)
                     }
                   }}
-                  className="text-gray-600 hover:text-purple-500 transition-colors"
+                  className="text-gray-600 hover:text-teal-500 transition-colors"
                   title="Copy"
                 >
                   <svg
@@ -304,7 +304,7 @@ export default function ResultsPage() {
                     document.body.removeChild(a)
                     URL.revokeObjectURL(url)
                   }}
-                  className="text-gray-600 hover:text-purple-500 transition-colors"
+                  className="text-gray-600 hover:text-teal-500 transition-colors"
                   title="Download"
                 >
                   <svg

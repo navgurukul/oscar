@@ -24,8 +24,34 @@ body {
     letter-spacing: -0.01em;
   }
   ::selection {
-    background-color: #e9d5ff; /* purple-200 */
+    background-color: #99f6e0; /* teal-200 */
     color: #111827; /* gray-900 */
   }
+}
+
+/* Typewriter animation */
+@keyframes typewriter {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes blinkCursor {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+.typewriter {
+  overflow: hidden;
+  border-right: 3px solid #14b8a6;
+  white-space: nowrap;
+  animation: blinkCursor 0.7s infinite;
 }
 

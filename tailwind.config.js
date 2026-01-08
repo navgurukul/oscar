@@ -8,10 +8,11 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        purple: {
-          500: '#9333ea',
-          600: '#7e22ce',
-          700: '#6b21a8',
+        teal: {
+          400: '#2dd4bf',
+          500: '#14b8a6',
+          600: '#0d9488',
+          700: '#0f766e',
         },
       },
     },
