@@ -2,12 +2,16 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { getTranscriptFromSTT } from '@/lib/audioToText'
 import { formatWithAI } from '@/lib/aiFormatter'
 import type { STTLogic } from 'stt-tts-lib'
 
-export default function RecordingButton() {
+interface RecordingButtonProps {
+  variant?: 'icon' | 'button'
+  autoStart?: boolean
+}
+
+export default function RecordingButton({ variant = 'icon', autoStart = false }: RecordingButtonProps) {
   const [isRecording, setIsRecording] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isInitializing, setIsInitializing] = useState(false)
@@ -15,6 +19,7 @@ export default function RecordingButton() {
   const sttRef = useRef<STTLogic | null>(null)
   const accumulatedTranscriptRef = useRef<string>('')
   const router = useRouter()
+  const autoStartRef = useRef(autoStart)
 
   // Initialize STT on component mount
   useEffect(() => {
@@ -73,8 +78,17 @@ export default function RecordingButton() {
   }, [])
 
   const startRecording = async () => {
-    // Navigate to recording page
-    router.push('/recording')
+    if (autoStart) {
+      // If autoStart is enabled, we're being called from recording page
+      // Start recording immediately
+      setIsRecording(true)
+    } else {
+      // Clear previous session data before navigating to recording page
+      sessionStorage.removeItem('formattedNote')
+      sessionStorage.removeItem('rawText')
+      // Navigate to recording page with autoStart flag
+      router.push('/recording?autoStart=true')
+    }
   }
 
   const stopRecording = async () => {
@@ -119,6 +133,32 @@ export default function RecordingButton() {
     }
   }
 
+  if (variant === 'button') {
+    // Text button variant for Results page - Simple button without complex states
+    const handleRecordAgainClick = async () => {
+      console.log('Record Again button clicked')
+      // Clear previous session data
+      sessionStorage.removeItem('formattedNote')
+      sessionStorage.removeItem('rawText')
+      // Navigate to recording page with autoStart flag
+      console.log('Navigating to /recording?autoStart=true')
+      await router.push('/recording?autoStart=true')
+    }
+
+    return (
+      <button
+        onClick={handleRecordAgainClick}
+        className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl bg-purple-500 hover:bg-purple-600"
+      >
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+        </svg>
+        <span>Record Again</span>
+      </button>
+    )
+  }
+
+  // Icon button variant for Home page (default)
   return (
     <div className="w-full max-w-4xl flex flex-col items-center gap-6">
       {/* Live transcript display while recording - AudioPen style */}
@@ -146,43 +186,31 @@ export default function RecordingButton() {
         </div>
       )}
 
-      <Button
+      {/* Mic Icon Button */}
+      <button
         onClick={isRecording ? stopRecording : startRecording}
         disabled={isProcessing || isInitializing}
-        className={`${isRecording ? 'bg-red-500 hover:bg-red-600' : ''} gap-3 text-lg shadow-lg hover:shadow-xl`}
+        className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 ${
+          isRecording 
+            ? 'bg-red-500 hover:bg-red-600 shadow-lg hover:shadow-xl ring-4 ring-red-200' 
+            : 'bg-gradient-to-br from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 shadow-lg hover:shadow-xl'
+        } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
-        {isInitializing ? (
-          <>
-            <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>Initializing...</span>
-          </>
-        ) : isProcessing ? (
-          <>
-            <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span>Processing...</span>
-          </>
+        {isInitializing || isProcessing ? (
+          <svg className="animate-spin h-8 w-8 text-white" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
         ) : isRecording ? (
-          <>
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 012 0v4a1 1 0 11-2 0V7zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V7a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            <span>Stop Recording</span>
-          </>
+          <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 012 0v4a1 1 0 11-2 0V7zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V7a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
         ) : (
-          <>
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-            </svg>
-            <span>Start Recording</span>
-          </>
+          <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+          </svg>
         )}
-      </Button>
+      </button>
     </div>
   )
 }
