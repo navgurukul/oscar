@@ -16,7 +16,7 @@
     "next": "^14.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "stt-tts-lib": "file:stt-tts-lib-0.1.0.tgz",
+    "speech-to-speech": "^0.1.1",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7"
   },

@@ -36,128 +36,37 @@ export async function generateTitle(text: string): Promise<string> {
 
 // Deepseek API integration - BETTER PROMPT, NO LIMITS
 export async function formatWithDeepseek(rawText: string): Promise<string> {
-  const DEEPSEEK_API_KEY =
-    process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY || ''
-  
   try {
-    const response = await fetch(
-      'https://api.deepseek.com/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          messages: [
-            {
-              role: "system",
-              content: `You are an expert transcription formatter. Your job is to transform raw speech-to-text into polished, professional notes.
+    const response = await fetch('/api/deepseek/format', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rawText }),
+    })
 
-CRITICAL RULES:
-1. PRESERVE ALL CONTENT - Never remove or skip any part of the transcript, even if it seems like rambling at the start
-2. Keep the complete meaning - every sentence must be included in some form
-3. Only remove filler words (um, uh, like, you know, basically, actually) - NOT complete sentences
-4. Fix grammar errors and improve sentence structure
-5. Add proper punctuation (periods, commas, question marks)
-6. Capitalize properly (names, start of sentences, acronyms)
-7. Break into clear paragraphs (3-4 sentences each)
-8. Preserve the original language (Hindi/Hinglish/English as spoken)
-9. For meeting notes: organize into sections (Discussion Points, Action Items, Questions)
-10. For lists or steps: use bullet points with • symbol
-11. Make it natural and readable - like professional notes
-
-IMPORTANT: Transform the ENTIRE transcript from start to finish. Don't skip the beginning or ending.
-
-EXAMPLE:
-Raw: "um so like I'm testing this okay so the main point is we need to uh finish the project by Friday"
-Formatted: "I'm testing this. The main point is we need to finish the project by Friday."
-❌ WRONG: "The main point is we need to finish the project by Friday." (deleted the testing part)
-✅ CORRECT: "I'm testing this. The main point is we need to finish the project by Friday." (kept everything)
-
-
-OUTPUT FORMAT:
-- Return ONLY the formatted text
-- No explanations, no quotes, no metadata
-- Clean, professional, ready-to-use notes
-- Natural flow and easy to read
-- Include ALL content from the original transcript`
-            },
-            {
-              role: "user",
-              content: `Format this transcribed speech into clean, professional notes. Remove filler words, fix grammar, add punctuation, and make it readable. Keep the original language and meaning intact.
-
-TRANSCRIPTION:
-${rawText}
-
-FORMATTED NOTES:`
-            }
-          ],
-          temperature: 0.3,
-          top_p: 0.95,
-          max_tokens: 4096, // Paid API - koi limit nahi
-          stream: false
-        }),
-      }
-    )
-    
     if (!response.ok) {
       const errorText = await response.text()
-      console.error(`Deepseek API error: ${response.status}`, errorText)
-      throw new Error(`Deepseek API request failed: ${response.status}`)
+      console.error(`Deepseek format error: ${response.status}`, errorText)
+      throw new Error(`Deepseek format failed: ${response.status}`)
     }
-    
+
     const data = await response.json()
-    
-    if (data.choices && data.choices[0] && data.choices[0].message) {
-      const formattedText = data.choices[0].message.content.trim()
-      
-      // Remove any markdown code blocks if present
-      const cleaned = formattedText
-        .replace(/^```[\w]*\n/, '')
-        .replace(/\n```$/, '')
-        .trim()
-      
-      return cleaned
-    } else {
-      throw new Error('Invalid response format from Deepseek API')
-    }
+    const formattedText = (data?.formattedText || '').trim()
+    if (!formattedText) throw new Error('Empty formatted text from server')
+
+    // Remove any markdown code blocks if present
+    return formattedText.replace(/^```[\w]*\n/, '').replace(/\n```$/, '').trim()
   } catch (error: any) {
-    console.warn('Deepseek API error, using fallback formatting:', error.message)
+    console.warn('Deepseek format via server failed:', error?.message || error)
     throw error
   }
 }
 
 // Deepseek title generation
 async function generateTitleWithDeepseek(text: string): Promise<string> {
-  const DEEPSEEK_API_KEY =
-    process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY || ''
-  const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+  const response = await fetch('/api/deepseek/title', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'deepseek-chat',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You generate short, descriptive titles for transcripts. Keep the original language. Use plain text, no quotes. Prefer 4–10 words. Title Case if English; natural casing for Hindi/Hinglish. Summarize the core topic succinctly.',
-        },
-        {
-          role: 'user',
-          content:
-            `Create a concise title (max ~60 chars) for this content. Return ONLY the title.\n\nContent:\n${text}`,
-        },
-      ],
-      temperature: 0.3,
-      top_p: 0.9,
-      max_tokens: 64,
-      stream: false,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
   })
 
   if (!response.ok) {
@@ -166,8 +75,8 @@ async function generateTitleWithDeepseek(text: string): Promise<string> {
   }
 
   const data = await response.json()
-  const content = data?.choices?.[0]?.message?.content?.trim() || ''
-  if (!content) throw new Error('Empty title from Deepseek')
+  const content = data?.title?.trim() || ''
+  if (!content) throw new Error('Empty title from server')
   return content.replace(/^```[\w]*\n/, '').replace(/\n```$/, '').trim()
 }
 

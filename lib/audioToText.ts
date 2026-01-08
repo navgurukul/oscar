@@ -1,7 +1,7 @@
 // Audio to Text conversion using stt-tts-lib
 // This package uses browser's Web Speech API which works with live microphone input
 
-import type { STTLogic } from 'stt-tts-lib'
+import type { STTLogic } from 'speech-to-speech'
 
 // Helper to get transcript from STT instance
 export function getTranscriptFromSTT(stt: STTLogic): string {
