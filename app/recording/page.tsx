@@ -184,16 +184,32 @@ export default function RecordingPage() {
         setProcessingStep(0)
         setProcessingProgress(0)
 
-        // Simulate progress updates
+        // Gradual progress updates - takes longer to reach 100%
+        let currentProgress = 0
         const progressInterval = setInterval(() => {
           setProcessingProgress(prev => {
-            if (prev >= 100) {
-              clearInterval(progressInterval)
-              return 100
+            let nextProgress = prev
+            
+            // Slow progression to ~70% in first part
+            if (prev < 70) {
+              nextProgress = prev + Math.random() * 8 + 3 // 3-11% increments
             }
-            return prev + Math.random() * 30
+            // Slower progression from 70-85%
+            else if (prev < 85) {
+              nextProgress = prev + Math.random() * 4 + 1 // 1-5% increments
+            }
+            // Very slow from 85-95%
+            else if (prev < 95) {
+              nextProgress = prev + Math.random() * 2 + 0.5 // 0.5-2.5% increments
+            }
+            // Don't reach 100% until processing actually completes
+            else if (prev < 99) {
+              nextProgress = prev + 0.3 // Tiny increments toward 100%
+            }
+            
+            return Math.min(nextProgress, 99) // Cap at 99%, will reach 100 only at the end
           })
-        }, 300)
+        }, 400) // Slower update interval
 
         const stepInterval = setInterval(() => {
           setProcessingStep(prev => {
@@ -203,7 +219,7 @@ export default function RecordingPage() {
             }
             return prev + 1
           })
-        }, 1500)
+        }, 1200) // Slightly slower step transitions
         
         // Stop STT first
         sttRef.current.stop()
@@ -245,8 +261,11 @@ export default function RecordingPage() {
           sessionStorage.setItem('formattedNote', formattedText)
           sessionStorage.setItem('rawText', transcribedText)
           
-          // Wait for processing to complete visually
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          // Set progress to 100% when truly done
+          setProcessingProgress(100)
+          
+          // Wait a brief moment for visual completion, then navigate
+          await new Promise(resolve => setTimeout(resolve, 600))
           router.push('/results')
         } else {
           // Check if recording was too short
@@ -377,35 +396,12 @@ export default function RecordingPage() {
                 ))}
               </div>
 
-              {/* Animated bouncing dots */}
-              <div className="flex justify-center gap-3">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="w-3 h-3 bg-gradient-to-r from-teal-600 to-teal-500 rounded-full"
-                    style={{
-                      animation: `bounce 1.4s ease-in-out infinite`,
-                      animationDelay: `${i * 0.2}s`,
-                    }}
-                  />
-                ))}
-              </div>
+
             </div>
           </div>
         </div>
 
-        <style jsx>{`
-          @keyframes bounce {
-            0%, 80%, 100% {
-              transform: scale(0.8);
-              opacity: 0.5;
-            }
-            40% {
-              transform: scale(1);
-              opacity: 1;
-            }
-          }
-        `}</style>
+        <style jsx>{``}</style>
       </main>
     )
   }
