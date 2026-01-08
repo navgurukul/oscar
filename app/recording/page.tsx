@@ -246,10 +246,15 @@ function RecordingPageInner() {
         const maxAttempts = 3
         
         while (!transcribedText && attempts < maxAttempts) {
-          // Try from state first
-          transcribedText = currentTranscript.trim()
+          // Try from accumulated ref first, as it holds the combined text
+          transcribedText = accumulatedTranscriptRef.current.trim()
+
+          // If empty, try from state
+          if (!transcribedText) {
+            transcribedText = currentTranscript.trim()
+          }
           
-          // If empty, try from STT instance
+          // If still empty, try from STT instance
           if (!transcribedText) {
             transcribedText = getTranscriptFromSTT(sttRef.current).trim()
           }
