@@ -39,7 +39,7 @@ const nextConfig = {
       config.module.rules = config.module.rules || [];
       config.module.rules.push({
         test: /\.mjs$/,
-        include: [/node_modules\/onnxruntime-web/, /node_modules\/stt-tts-lib/],
+        include: [/node_modules\/onnxruntime-web/, /node_modules\/speech-to-speech/],
         type: 'javascript/esm',
       });
     }

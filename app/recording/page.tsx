@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getTranscriptFromSTT } from '@/lib/audioToText'
 import { formatWithAI } from '@/lib/aiFormatter'
-import type { STTLogic } from 'stt-tts-lib'
+import type { STTLogic } from 'speech-to-speech'
 
 function RecordingPageInner() {
   const [isRecording, setIsRecording] = useState(false)
@@ -19,6 +19,8 @@ function RecordingPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const autoStartRef = useRef(searchParams.get('autoStart') === 'true')
+  const continueModeRef = useRef(searchParams.get('mode') === 'continue' ||
+    (typeof window !== 'undefined' && sessionStorage.getItem('continueRecording') === 'true'))
 
   // Initialize STT on component mount
   useEffect(() => {
@@ -33,7 +35,7 @@ function RecordingPageInner() {
         }
 
         setIsInitializing(true)
-        const { STTLogic } = await import('stt-tts-lib')
+        const { STTLogic } = await import('speech-to-speech')
         
         // Create STT instance with transcript callback
         const stt = new STTLogic(
@@ -103,11 +105,20 @@ function RecordingPageInner() {
         setRecordingTime(prev => prev + 1)
       }, 1000)
 
-      // Start STT
+      // Seed transcript if continuing, otherwise start fresh
       try {
-        // Start a fresh session, but preserve text across internal restarts
-        accumulatedTranscriptRef.current = ''
-        setCurrentTranscript('')
+        if (continueModeRef.current) {
+          const existing = sessionStorage.getItem('rawText') || ''
+          accumulatedTranscriptRef.current = existing
+          setCurrentTranscript(existing)
+          // Clear the one-time flag so subsequent fresh starts are clean
+          sessionStorage.removeItem('continueRecording')
+        } else {
+          // Start a fresh session, but preserve text across internal restarts
+          accumulatedTranscriptRef.current = ''
+          setCurrentTranscript('')
+        }
+        // Start STT
         sttRef.current.start()
         console.log('STT started, waiting for speech...')
 
@@ -169,11 +180,13 @@ function RecordingPageInner() {
     { title: 'Formatting', description: 'Structuring your text...' },
   ]
 
-  // Reset states when coming back to recording page
+  // Reset states when coming back to recording page, unless continuing
   useEffect(() => {
-    accumulatedTranscriptRef.current = ''
-    setCurrentTranscript('')
-    setRecordingTime(0)
+    if (!continueModeRef.current) {
+      accumulatedTranscriptRef.current = ''
+      setCurrentTranscript('')
+      setRecordingTime(0)
+    }
   }, [])
 
   const handleStop = async () => {

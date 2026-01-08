@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getTranscriptFromSTT } from '@/lib/audioToText'
 import { formatWithAI } from '@/lib/aiFormatter'
-import type { STTLogic } from 'stt-tts-lib'
+import type { STTLogic } from 'speech-to-speech'
 
 interface RecordingButtonProps {
   variant?: 'icon' | 'button'
@@ -33,7 +33,7 @@ export default function RecordingButton({ variant = 'icon', autoStart = false }:
         }
 
         setIsInitializing(true)
-        const { STTLogic } = await import('stt-tts-lib')
+        const { STTLogic } = await import('speech-to-speech')
         
         // Create STT instance with transcript callback that merges updates
         const stt = new STTLogic(
@@ -145,16 +145,36 @@ export default function RecordingButton({ variant = 'icon', autoStart = false }:
       await router.push('/recording')
     }
 
+    const handleContinueRecordingClick = async () => {
+      console.log('Continue Recording button clicked')
+      // Do NOT clear existing rawText or formattedNote
+      // Mark continue mode for recording page
+      sessionStorage.setItem('continueRecording', 'true')
+      console.log('Navigating to /recording?autoStart=true&mode=continue')
+      await router.push('/recording?autoStart=true&mode=continue')
+    }
+
     return (
-      <button
-        onClick={handleRecordAgainClick}
-        className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl bg-teal-700 hover:bg-teal-700"
-      >
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-        </svg>
-        <span>Record Again</span>
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleContinueRecordingClick}
+          className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl bg-indigo-500 hover:bg-indigo-600"
+        >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-9a1 1 0 012 0v2a1 1 0 11-2 0V9zm3 0a1 1 0 00-1 1v2a1 1 0 102 0V10a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+          <span>Continue Recording</span>
+        </button>
+        <button
+          onClick={handleRecordAgainClick}
+          className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl bg-teal-500 hover:bg-teal-600"
+        >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+          </svg>
+          <span>Record Again</span>
+        </button>
+      </div>
     )
   }
 
