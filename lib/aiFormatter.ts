@@ -36,7 +36,8 @@ export async function generateTitle(text: string): Promise<string> {
 
 // Deepseek API integration - BETTER PROMPT, NO LIMITS
 export async function formatWithDeepseek(rawText: string): Promise<string> {
-  const DEEPSEEK_API_KEY = "sk-4a59b3ee436944f5b3d1ef4e49b7ddc4" // Apni API key yahan dalein
+  const DEEPSEEK_API_KEY =
+    process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY || ''
   
   try {
     const response = await fetch(
@@ -130,7 +131,8 @@ FORMATTED NOTES:`
 
 // Deepseek title generation
 async function generateTitleWithDeepseek(text: string): Promise<string> {
-  const DEEPSEEK_API_KEY = "sk-4a59b3ee436944f5b3d1ef4e49b7ddc4"
+  const DEEPSEEK_API_KEY =
+    process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY || ''
   const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
     method: 'POST',
     headers: {
