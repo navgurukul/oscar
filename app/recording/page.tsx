@@ -184,16 +184,32 @@ export default function RecordingPage() {
         setProcessingStep(0)
         setProcessingProgress(0)
 
-        // Simulate progress updates
+        // Gradual progress updates - takes longer to reach 100%
+        let currentProgress = 0
         const progressInterval = setInterval(() => {
           setProcessingProgress(prev => {
-            if (prev >= 100) {
-              clearInterval(progressInterval)
-              return 100
+            let nextProgress = prev
+            
+            // Slow progression to ~70% in first part
+            if (prev < 70) {
+              nextProgress = prev + Math.random() * 8 + 3 // 3-11% increments
             }
-            return prev + Math.random() * 30
+            // Slower progression from 70-85%
+            else if (prev < 85) {
+              nextProgress = prev + Math.random() * 4 + 1 // 1-5% increments
+            }
+            // Very slow from 85-95%
+            else if (prev < 95) {
+              nextProgress = prev + Math.random() * 2 + 0.5 // 0.5-2.5% increments
+            }
+            // Don't reach 100% until processing actually completes
+            else if (prev < 99) {
+              nextProgress = prev + 0.3 // Tiny increments toward 100%
+            }
+            
+            return Math.min(nextProgress, 99) // Cap at 99%, will reach 100 only at the end
           })
-        }, 300)
+        }, 400) // Slower update interval
 
         const stepInterval = setInterval(() => {
           setProcessingStep(prev => {
@@ -203,7 +219,7 @@ export default function RecordingPage() {
             }
             return prev + 1
           })
-        }, 1500)
+        }, 1200) // Slightly slower step transitions
         
         // Stop STT first
         sttRef.current.stop()
@@ -245,8 +261,11 @@ export default function RecordingPage() {
           sessionStorage.setItem('formattedNote', formattedText)
           sessionStorage.setItem('rawText', transcribedText)
           
-          // Wait for processing to complete visually
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          // Set progress to 100% when truly done
+          setProcessingProgress(100)
+          
+          // Wait a brief moment for visual completion, then navigate
+          await new Promise(resolve => setTimeout(resolve, 600))
           router.push('/results')
         } else {
           // Check if recording was too short
@@ -283,7 +302,7 @@ export default function RecordingPage() {
     return (
       <main className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4"></div>
           <p className="text-gray-600">Initializing...</p>
         </div>
       </main>
@@ -292,13 +311,13 @@ export default function RecordingPage() {
 
   if (isProcessing) {
     return (
-      <main className="min-h-screen bg-gradient-to-b from-purple-50 via-white to-blue-50 flex items-center justify-center px-4 pt-8">
+      <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-teal-50 flex items-center justify-center px-4 pt-8">
         <div className="w-full max-w-2xl">
           {/* Back to Home button */}
           <div className="fixed top-3 right-4 z-50">
             <button
               onClick={() => router.push('/')}
-              className="flex items-center gap-2 px-4 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
+              className="flex items-center gap-2 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
             >
               <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -311,12 +330,12 @@ export default function RecordingPage() {
           <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-8 md:p-12 text-center relative overflow-hidden">
             {/* Decorative gradients */}
             <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-100 to-transparent rounded-bl-3xl opacity-40"></div>
-            <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-purple-50 to-transparent rounded-tr-3xl opacity-30"></div>
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-teal-50 to-transparent rounded-tr-3xl opacity-30"></div>
 
             <div className="relative z-10">
               {/* Header */}
               <h1 className="text-4xl md:text-5xl font-bold mb-2">
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-indigo-500">
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-teal-500 to-teal-600">
                   Processing
                 </span>
               </h1>
@@ -327,15 +346,15 @@ export default function RecordingPage() {
                 {/* Outer rotating ring */}
                 <div className="absolute inset-0 rounded-full border-4 border-gray-200"></div>
                 <div 
-                  className="absolute inset-0 rounded-full border-4 border-transparent border-t-purple-600 border-r-purple-400 animate-spin"
+                  className="absolute inset-0 rounded-full border-4 border-transparent border-t-teal-600 border-r-teal-400 animate-spin"
                   style={{ animationDuration: '2s' }}
                 />
                 
                 {/* Middle pulse ring */}
-                <div className="absolute inset-4 rounded-full border-2 border-purple-300 animate-pulse opacity-50"></div>
+                <div className="absolute inset-4 rounded-full border-2 border-teal-300 animate-pulse opacity-50"></div>
                 
                 {/* Center icon */}
-                <div className="relative z-10 text-purple-600 text-5xl">
+                <div className="relative z-10 text-teal-600 text-5xl">
                   {processingStep === 0 && '🎙️'}
                   {processingStep === 1 && '🧠'}
                   {processingStep === 2 && '📝'}
@@ -356,7 +375,7 @@ export default function RecordingPage() {
               <div className="w-full max-w-lg mx-auto mb-8">
                 <div className="h-3 bg-gray-200 rounded-full overflow-hidden shadow-inner">
                   <div
-                    className="h-full bg-gradient-to-r from-purple-600 to-indigo-500 transition-all duration-300 ease-out rounded-full"
+                    className="h-full bg-gradient-to-r from-teal-600 to-teal-500 transition-all duration-300 ease-out rounded-full"
                     style={{ width: `${Math.min(processingProgress, 100)}%` }}
                   />
                 </div>
@@ -370,42 +389,19 @@ export default function RecordingPage() {
                     key={i}
                     className={`transition-all duration-300 ${
                       i <= processingStep
-                        ? 'w-4 h-4 bg-purple-600 rounded-full scale-100'
+                        ? 'w-4 h-4 bg-teal-600 rounded-full scale-100'
                         : 'w-3 h-3 bg-gray-300 rounded-full scale-75'
                     }`}
                   />
                 ))}
               </div>
 
-              {/* Animated bouncing dots */}
-              <div className="flex justify-center gap-3">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="w-3 h-3 bg-gradient-to-r from-purple-600 to-indigo-500 rounded-full"
-                    style={{
-                      animation: `bounce 1.4s ease-in-out infinite`,
-                      animationDelay: `${i * 0.2}s`,
-                    }}
-                  />
-                ))}
-              </div>
+
             </div>
           </div>
         </div>
 
-        <style jsx>{`
-          @keyframes bounce {
-            0%, 80%, 100% {
-              transform: scale(0.8);
-              opacity: 0.5;
-            }
-            40% {
-              transform: scale(1);
-              opacity: 1;
-            }
-          }
-        `}</style>
+        <style jsx>{``}</style>
       </main>
     )
   }
@@ -416,7 +412,7 @@ export default function RecordingPage() {
       <div className="fixed top-3 right-4 z-50">
         <button
           onClick={() => router.push('/')}
-          className="flex items-center gap-2 px-4 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
+          className="flex items-center gap-2 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
         >
           <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -429,7 +425,7 @@ export default function RecordingPage() {
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-5xl font-bold">
-            Record Your <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-indigo-500">Voice</span>
+            Record Your <span className="bg-clip-text text-transparent bg-gradient-to-r from-teal-500 to-teal-600">Voice</span>
           </h1>
           <p className="text-gray-600 text-lg">
             Press the microphone button and start speaking. Oscar will do the rest.
@@ -445,7 +441,7 @@ export default function RecordingPage() {
               {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
                 <div
                   key={i}
-                  className="w-1 bg-gradient-to-t from-purple-600 to-indigo-500 rounded-full"
+                  className="w-1 bg-gradient-to-t from-teal-600 to-teal-500 rounded-full"
                   style={{
                     height: `${24 + Math.sin(i * 0.4) * 18}px`,
                     animation: `waveform 0.6s ease-in-out infinite`,
@@ -458,7 +454,7 @@ export default function RecordingPage() {
 
           {/* Timer Display */}
           <div className="text-center">
-            <div className="text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-indigo-500 font-mono tracking-wider">
+            <div className="text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-500 to-teal-600 font-mono tracking-wider">
               {formatTime(recordingTime)}
             </div>
           </div>
@@ -475,7 +471,7 @@ export default function RecordingPage() {
                   ? 'bg-red-500 hover:bg-red-600 scale-100 ring-8 ring-red-200' 
                   : isProcessing
                   ? 'bg-gray-300 cursor-not-allowed scale-100'
-                  : 'bg-gradient-to-br from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 hover:scale-110 hover:shadow-2xl active:scale-95'
+                  : 'bg-gradient-to-br from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 hover:scale-110 hover:shadow-2xl active:scale-95'
                 }
               `}
             >

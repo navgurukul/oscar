@@ -17,7 +17,7 @@ export default function RootLayout({
         <header className="w-full border-b bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60">
           <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2 font-semibold text-gray-900">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-purple-500 to-indigo-500 text-white">O</span>
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-teal-500 to-teal-600 text-white">O</span>
               <span>OSCAR</span>
             </div>
           </div>
