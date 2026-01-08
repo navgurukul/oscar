@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getTranscriptFromSTT } from '@/lib/audioToText'
 import { formatWithAI } from '@/lib/aiFormatter'
 import type { STTLogic } from 'stt-tts-lib'
 
-export default function RecordingPage() {
+function RecordingPageInner() {
   const [isRecording, setIsRecording] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isInitializing, setIsInitializing] = useState(false)
@@ -523,6 +523,14 @@ export default function RecordingPage() {
         }
       `}</style>
     </main>
+  )
+}
+
+export default function RecordingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-600">Loading recording page…</div>}>
+      <RecordingPageInner />
+    </Suspense>
   )
 }
 
