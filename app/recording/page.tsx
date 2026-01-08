@@ -240,29 +240,21 @@ export default function RecordingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
-      {/* Back button */}
-      <div className="absolute top-6 left-6">
+    <main className="min-h-screen bg-white flex flex-col items-center justify-center px-4 pt-20">
+      {/* Back to Home button */}
+      <div className="fixed top-3 right-4 z-50">
         <button
           onClick={() => router.push('/')}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+          className="flex items-center gap-2 px-4 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
           </svg>
-          <span>Back</span>
+          <span className="font-medium">Back to Home</span>
         </button>
       </div>
 
-      {/* Header */}
-      <div className="absolute top-6 flex items-center gap-2">
-        <svg className="w-6 h-6 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-        </svg>
-        <h1 className="text-2xl font-bold text-purple-500">OSCAR</h1>
-      </div>
-
-      <div className="flex flex-col items-center gap-8 mt-20">
+      <div className="flex flex-col items-center gap-8">
         {/* Tap to start / Timer */}
         {!isRecording ? (
           <p className="text-gray-500 text-lg">Tap to start speaking</p>
