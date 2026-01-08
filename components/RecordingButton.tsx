@@ -86,8 +86,8 @@ export default function RecordingButton({ variant = 'icon', autoStart = false }:
       // Clear previous session data before navigating to recording page
       sessionStorage.removeItem('formattedNote')
       sessionStorage.removeItem('rawText')
-      // Navigate to recording page with autoStart flag
-      router.push('/recording?autoStart=true')
+      // Navigate to recording page WITHOUT autoStart flag
+      router.push('/recording')
     }
   }
 
@@ -140,9 +140,9 @@ export default function RecordingButton({ variant = 'icon', autoStart = false }:
       // Clear previous session data
       sessionStorage.removeItem('formattedNote')
       sessionStorage.removeItem('rawText')
-      // Navigate to recording page with autoStart flag
-      console.log('Navigating to /recording?autoStart=true')
-      await router.push('/recording?autoStart=true')
+      // Navigate to recording page WITHOUT autoStart flag
+      console.log('Navigating to /recording')
+      await router.push('/recording')
     }
 
     const handleContinueRecordingClick = async () => {
@@ -192,7 +192,7 @@ export default function RecordingButton({ variant = 'icon', autoStart = false }:
             <div className="prose prose-lg max-w-none">
               <p className="text-gray-900 text-lg leading-relaxed whitespace-pre-wrap font-normal">
                 {currentTranscript}
-                <span className="inline-block w-2 h-5 bg-teal-500 ml-1 animate-pulse"></span>
+                <span className="inline-block w-2 h-5 bg-teal-700 ml-1 animate-pulse"></span>
               </p>
             </div>
           ) : (
@@ -213,7 +213,7 @@ export default function RecordingButton({ variant = 'icon', autoStart = false }:
         className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 ${
           isRecording 
             ? 'bg-red-500 hover:bg-red-600 shadow-lg hover:shadow-xl ring-4 ring-red-200' 
-            : 'bg-gradient-to-br from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 shadow-lg hover:shadow-xl'
+            : 'bg-teal-700 hover:bg-teal-700 shadow-lg hover:shadow-xl'
         } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         {isInitializing || isProcessing ? (

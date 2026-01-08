@@ -180,11 +180,13 @@ function RecordingPageInner() {
     { title: 'Formatting', description: 'Structuring your text...' },
   ]
 
-  // Reset states when coming back to recording page
+  // Reset states when coming back to recording page, unless continuing
   useEffect(() => {
-    accumulatedTranscriptRef.current = ''
-    setCurrentTranscript('')
-    setRecordingTime(0)
+    if (!continueModeRef.current) {
+      accumulatedTranscriptRef.current = ''
+      setCurrentTranscript('')
+      setRecordingTime(0)
+    }
   }, [])
 
   const handleStop = async () => {
@@ -322,13 +324,13 @@ function RecordingPageInner() {
 
   if (isProcessing) {
     return (
-      <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-teal-50 flex items-center justify-center px-4 pt-8">
+      <main className="min-h-screen bg-white flex items-center justify-center px-4 pt-8">
         <div className="w-full max-w-2xl">
           {/* Back to Home button */}
-          <div className="fixed top-3 right-4 z-50">
+          <div className="fixed top-4 right-6 z-50">
             <button
               onClick={() => router.push('/')}
-              className="flex items-center gap-2 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
+              className="flex items-center gap-2 px-6 py-2.5 bg-teal-700 hover:bg-teal-700 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-base font-medium"
             >
               <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -346,7 +348,7 @@ function RecordingPageInner() {
             <div className="relative z-10">
               {/* Header */}
               <h1 className="text-4xl md:text-5xl font-bold mb-2">
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-teal-500 to-teal-600">
+                <span className="text-teal-700">
                   Processing
                 </span>
               </h1>
@@ -357,15 +359,15 @@ function RecordingPageInner() {
                 {/* Outer rotating ring */}
                 <div className="absolute inset-0 rounded-full border-4 border-gray-200"></div>
                 <div 
-                  className="absolute inset-0 rounded-full border-4 border-transparent border-t-teal-600 border-r-teal-400 animate-spin"
+                  className="absolute inset-0 rounded-full border-4 border-transparent border-t-teal-700 border-r-teal-700 animate-spin"
                   style={{ animationDuration: '2s' }}
                 />
                 
                 {/* Middle pulse ring */}
-                <div className="absolute inset-4 rounded-full border-2 border-teal-300 animate-pulse opacity-50"></div>
+                <div className="absolute inset-4 rounded-full border-2 border-teal-700 animate-pulse opacity-50"></div>
                 
                 {/* Center icon */}
-                <div className="relative z-10 text-teal-600 text-5xl">
+                <div className="relative z-10 text-teal-700 text-5xl">
                   {processingStep === 0 && '🎙️'}
                   {processingStep === 1 && '🧠'}
                   {processingStep === 2 && '📝'}
@@ -386,7 +388,7 @@ function RecordingPageInner() {
               <div className="w-full max-w-lg mx-auto mb-8">
                 <div className="h-3 bg-gray-200 rounded-full overflow-hidden shadow-inner">
                   <div
-                    className="h-full bg-gradient-to-r from-teal-600 to-teal-500 transition-all duration-300 ease-out rounded-full"
+                    className="h-full bg-teal-700 transition-all duration-300 ease-out rounded-full"
                     style={{ width: `${Math.min(processingProgress, 100)}%` }}
                   />
                 </div>
@@ -400,7 +402,7 @@ function RecordingPageInner() {
                     key={i}
                     className={`transition-all duration-300 ${
                       i <= processingStep
-                        ? 'w-4 h-4 bg-teal-600 rounded-full scale-100'
+                        ? 'w-4 h-4 bg-teal-700 rounded-full scale-100'
                         : 'w-3 h-3 bg-gray-300 rounded-full scale-75'
                     }`}
                   />
@@ -420,10 +422,10 @@ function RecordingPageInner() {
   return (
     <main className="min-h-screen bg-white flex flex-col items-center px-4 pt-8">
       {/* Back to Home button */}
-      <div className="fixed top-3 right-4 z-50">
+      <div className="fixed top-4 right-6 z-50">
         <button
           onClick={() => router.push('/')}
-          className="flex items-center gap-2 px-4 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-sm"
+          className="flex items-center gap-2 px-6 py-2.5 bg-teal-700 hover:bg-teal-700 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-base font-medium"
         >
           <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -436,7 +438,7 @@ function RecordingPageInner() {
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-5xl font-bold">
-            Record Your <span className="bg-clip-text text-transparent bg-gradient-to-r from-teal-500 to-teal-600">Voice</span>
+            Record Your <span className="text-teal-700">Voice</span>
           </h1>
           <p className="text-gray-600 text-lg">
             Press the microphone button and start speaking. Oscar will do the rest.
@@ -452,7 +454,7 @@ function RecordingPageInner() {
               {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
                 <div
                   key={i}
-                  className="w-1 bg-gradient-to-t from-teal-600 to-teal-500 rounded-full"
+                  className="w-1 bg-teal-700 rounded-full"
                   style={{
                     height: `${24 + Math.sin(i * 0.4) * 18}px`,
                     animation: `waveform 0.6s ease-in-out infinite`,
@@ -465,7 +467,7 @@ function RecordingPageInner() {
 
           {/* Timer Display */}
           <div className="text-center">
-            <div className="text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-500 to-teal-600 font-mono tracking-wider">
+            <div className="text-6xl font-bold text-teal-700 font-mono tracking-wider">
               {formatTime(recordingTime)}
             </div>
           </div>
@@ -482,7 +484,7 @@ function RecordingPageInner() {
                   ? 'bg-red-500 hover:bg-red-600 scale-100 ring-8 ring-red-200' 
                   : isProcessing
                   ? 'bg-gray-300 cursor-not-allowed scale-100'
-                  : 'bg-gradient-to-br from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 hover:scale-110 hover:shadow-2xl active:scale-95'
+                  : 'bg-teal-700 hover:bg-teal-700 hover:scale-110 hover:shadow-2xl active:scale-95'
                 }
               `}
             >
