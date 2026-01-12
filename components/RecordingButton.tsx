@@ -158,7 +158,7 @@ export default function RecordingButton({ variant = 'icon', autoStart = false }:
       <div className="flex items-center gap-3">
         <button
           onClick={handleContinueRecordingClick}
-          className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl bg-indigo-500 hover:bg-indigo-600"
+          className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl bg-teal-700 hover:bg-teal-800"
         >
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-9a1 1 0 012 0v2a1 1 0 11-2 0V9zm3 0a1 1 0 00-1 1v2a1 1 0 102 0V10a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -167,7 +167,7 @@ export default function RecordingButton({ variant = 'icon', autoStart = false }:
         </button>
         <button
           onClick={handleRecordAgainClick}
-          className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl bg-teal-500 hover:bg-teal-600"
+          className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl bg-teal-700 hover:bg-teal-800"
         >
           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
@@ -210,7 +210,7 @@ export default function RecordingButton({ variant = 'icon', autoStart = false }:
       <button
         onClick={isRecording ? stopRecording : startRecording}
         disabled={isProcessing || isInitializing}
-        className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 ${
+        className={`relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 ${
           isRecording 
             ? 'bg-red-500 hover:bg-red-600 shadow-lg hover:shadow-xl ring-4 ring-red-200' 
             : 'bg-teal-700 hover:bg-teal-700 shadow-lg hover:shadow-xl'
