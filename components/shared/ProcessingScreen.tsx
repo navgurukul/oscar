@@ -1,54 +1,58 @@
-'use client'
+"use client";
 
-import React from 'react'
+import React from "react";
+import { DottedGlowBackground } from "../ui/dotted-glow-background";
 
 interface ProcessingScreenProps {
-  isProcessing: boolean
-  progress: number
-  currentStep: number
+  isProcessing: boolean;
+  progress: number;
+  currentStep: number;
 }
 
 const processingSteps = [
-  { title: 'Analyzing Audio', description: 'Processing sound waves...', icon: '🎙️' },
-  { title: 'AI Recognition', description: 'Understanding speech patterns...', icon: '🧠' },
-  { title: 'Formatting', description: 'Structuring your text...', icon: '📝' },
-]
+  {
+    title: "Analyzing Audio",
+    description: "Processing sound waves...",
+    icon: "🎙️",
+  },
+  {
+    title: "AI Recognition",
+    description: "Understanding speech patterns...",
+    icon: "🧠",
+  },
+  { title: "Formatting", description: "Structuring your text...", icon: "📝" },
+];
 
-export function ProcessingScreen({ isProcessing, progress, currentStep }: ProcessingScreenProps) {
-  if (!isProcessing) return null
+export function ProcessingScreen({
+  isProcessing,
+  progress,
+  currentStep,
+}: ProcessingScreenProps) {
+  if (!isProcessing) return null;
 
   return (
-    <main className="min-h-screen bg-black flex items-center justify-center px-4 pt-8">
-      <div className="w-full max-w-2xl">
-        <div className="bg-slate-900 rounded-3xl shadow-2xl border border-cyan-700/30 p-8 md:p-12 text-center relative overflow-hidden">
-          {/* Decorative gradients */}
-          <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-cyan-900/40 to-transparent rounded-bl-3xl opacity-40"></div>
-          <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-cyan-900/30 to-transparent rounded-tr-3xl opacity-30"></div>
-
+    <main className="flex flex-col items-center px-4 pt-8">
+      <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
+        <div className="text-center space-y-2">
+          <h1 className="text-4xl font-bold">
+            Processing Your <span className="text-cyan-500">Speech</span>
+          </h1>
+        </div>
+        <div className="bg-slate-900 size-[500px] rounded-3xl shadow-xl border border-cyan-700/30 p-8 md:p-12  space-y-12 relative overflow-hidden">
+          <DottedGlowBackground
+            gap={20}
+            radius={1.3}
+            color="rgba(6, 182, 212, 0.4)"
+            glowColor="rgba(6, 182, 212, 0.7)"
+            opacity={0.6}
+            speedMin={0.6}
+            speedMax={1.4}
+            speedScale={1.2}
+          />
           <div className="relative z-10">
-            {/* Header */}
-            <h1 className="text-4xl md:text-5xl font-bold mb-2">
-              <span className="text-cyan-500">Processing</span>
-            </h1>
-            <p className="text-gray-300 text-lg mb-12">Oscar's AI is working its magic... ✨</p>
-
-            {/* Central Animation */}
-            <div className="w-40 h-40 mx-auto mb-8 flex items-center justify-center relative">
-              {/* Outer rotating ring */}
-              <div className="absolute inset-0 rounded-full border-4 border-gray-700"></div>
-              <div 
-                className="absolute inset-0 rounded-full border-4 border-transparent border-t-cyan-600 border-r-cyan-600 animate-spin"
-                style={{ animationDuration: '2s' }}
-              />
-              
-              {/* Middle pulse ring */}
-              <div className="absolute inset-4 rounded-full border-2 border-teal-600 animate-pulse opacity-50"></div>
-              
-              {/* Center icon */}
-              <div className="relative z-10 text-teal-500 text-5xl">
-                {processingSteps[currentStep]?.icon}
-              </div>
-            </div>
+            <p className="text-gray-300 text-lg mb-12">
+              Oscar's AI is working its magic...
+            </p>
 
             {/* Current Step Info */}
             <div className="mb-8 min-h-20">
@@ -64,7 +68,7 @@ export function ProcessingScreen({ isProcessing, progress, currentStep }: Proces
             <div className="w-full max-w-lg mx-auto mb-8">
               <div className="h-3 bg-gray-700 rounded-full overflow-hidden shadow-inner">
                 <div
-                  className="h-full bg-teal-600 transition-all duration-300 ease-out rounded-full"
+                  className="h-full bg-cyan-600 transition-all duration-300 ease-out rounded-full"
                   style={{ width: `${Math.min(progress, 100)}%` }}
                 />
               </div>
@@ -80,8 +84,8 @@ export function ProcessingScreen({ isProcessing, progress, currentStep }: Proces
                   key={i}
                   className={`transition-all duration-300 ${
                     i <= currentStep
-                      ? 'w-4 h-4 bg-teal-600 rounded-full scale-100'
-                      : 'w-3 h-3 bg-gray-600 rounded-full scale-75'
+                      ? "w-4 h-4 bg-cyan-600 rounded-full scale-100"
+                      : "w-3 h-3 bg-gray-600 rounded-full scale-75"
                   }`}
                 />
               ))}
@@ -90,5 +94,5 @@ export function ProcessingScreen({ isProcessing, progress, currentStep }: Proces
         </div>
       </div>
     </main>
-  )
+  );
 }

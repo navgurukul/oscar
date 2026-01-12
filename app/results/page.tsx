@@ -99,7 +99,7 @@ export default function ResultsPage() {
   // Show loading state while data is being loaded
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-black flex items-center justify-center">
+      <main className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-600 mx-auto mb-4"></div>
           <p className="text-gray-300">Loading your note...</p>
@@ -109,14 +109,14 @@ export default function ResultsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-black p-6">
-      <div className="max-w-3xl mx-auto space-y-6">
+    <main className="flex flex-col items-center px-4 pt-8">
+      <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
         {/* Header */}
         <div className="text-center space-y-2 mt-8">
           <h1 className="text-4xl font-bold text-white">Here's your note</h1>
-          <p className="text-gray-400">
+          {/* <p className="text-gray-400">
             AI formatted your thoughts into clean text
-          </p>
+          </p> */}
         </div>
 
         {/* Note Editor */}
@@ -152,7 +152,7 @@ export default function ResultsPage() {
 
         {/* Raw Transcript - Expandable Section */}
         {showRawTranscript && (
-          <Card className="bg-slate-900 border-cyan-700/30 animate-fadeIn">
+          <Card className="bg-slate-900 border-cyan-700/30 animate-fadeIn rounded-2xl shadow-xl w-[650px]">
             <CardHeader>
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold text-white">

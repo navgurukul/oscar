@@ -146,7 +146,7 @@ function RecordingPageInner() {
   }
 
   return (
-    <main className="min-h-screen bg-black flex flex-col items-center px-4 pt-8">
+    <main className="flex flex-col items-center px-4 pt-8">
       {/* Error Alert */}
       {recordingError && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-[90%] max-w-md">
@@ -157,46 +157,31 @@ function RecordingPageInner() {
         </div>
       )}
 
-      <div className="w-full max-w-2xl flex flex-col items-center gap-8">
+      <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-5xl font-bold">
+          <h1 className="text-4xl font-bold">
             Record Your <span className="text-cyan-500">Voice</span>
           </h1>
         </div>
 
         {/* Main Recording Container */}
-        <div className="w-full bg-slate-900 rounded-3xl shadow-xl border border-cyan-700/30 p-8 md:p-12 space-y-8 relative overflow-hidden">
+        <div className="bg-slate-900 size-[500px] rounded-3xl shadow-xl border border-cyan-700/30 p-8 md:p-12  space-y-12 relative overflow-hidden">
           <DottedGlowBackground
             gap={20}
-            radius={1.5}
-            color="rgba(20, 184, 166, 0.4)"
-            glowColor="rgba(20, 184, 166, 0.7)"
+            radius={1.3}
+            color="rgba(6, 182, 212, 0.4)"
+            glowColor="rgba(6, 182, 212, 0.7)"
             opacity={0.6}
             speedMin={0.6}
             speedMax={1.4}
             speedScale={1.2}
           />
 
-          {/* Animated waveform when recording */}
-          {isRecording && (
-            <div className="flex justify-center items-center gap-1 h-16">
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
-                <div
-                  key={i}
-                  className="w-1 bg-cyan-700 rounded-full"
-                  style={{
-                    height: `${24 + Math.sin(i * 0.4) * 18}px`,
-                    animation: `waveform 0.6s ease-in-out infinite`,
-                    animationDelay: `${i * 0.06}s`,
-                  }}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Timer - only show when recording */}
-          {isRecording && <RecordingTimer seconds={recordingTime} />}
+          {/* Timer - always reserve space */}
+          <div className="h-8">
+            {isRecording && <RecordingTimer seconds={recordingTime} />}
+          </div>
 
           {/* Recording Controls */}
           <RecordingControls
@@ -208,14 +193,14 @@ function RecordingPageInner() {
           />
 
           {/* Instruction Text - only when NOT recording */}
-          {!isRecording && (
-            <div className="text-center pt-4">
+          <div className="text-center pt-4 h-16 flex items-center justify-center">
+            {!isRecording && (
               <p className="text-gray-400 text-lg">
                 Press the microphone button and start speaking. Oscar will do
                 the rest.
               </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
