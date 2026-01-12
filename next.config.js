@@ -3,9 +3,13 @@ const nextConfig = {
   reactStrictMode: true,
   // Explicitly use SWC minifier and treat externals as ESM when possible
   swcMinify: true,
+  // Expose environment variables for API routes
+  env: {
+    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+  },
   experimental: {
     // Helps with packages that use `import.meta` and ESM-only distribution
-    esmExternals: 'loose',
+    esmExternals: "loose",
   },
   // Required for SharedArrayBuffer (WASM multi-threading)
   async headers() {
@@ -39,13 +43,15 @@ const nextConfig = {
       config.module.rules = config.module.rules || [];
       config.module.rules.push({
         test: /\.mjs$/,
-        include: [/node_modules\/onnxruntime-web/, /node_modules\/speech-to-speech/],
-        type: 'javascript/esm',
+        include: [
+          /node_modules\/onnxruntime-web/,
+          /node_modules\/speech-to-speech/,
+        ],
+        type: "javascript/esm",
       });
     }
     return config;
   },
-}
+};
 
-module.exports = nextConfig
-
+module.exports = nextConfig;
