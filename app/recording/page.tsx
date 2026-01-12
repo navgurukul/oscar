@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getTranscriptFromSTT } from '@/lib/audioToText'
 import { formatWithAI } from '@/lib/aiFormatter'
+import { DottedGlowBackground } from '@/components/ui/dotted-glow-background'
 import type { STTLogic } from 'speech-to-speech'
 
 function RecordingPageInner() {
@@ -12,6 +13,8 @@ function RecordingPageInner() {
   const [isInitializing, setIsInitializing] = useState(false)
   const [currentTranscript, setCurrentTranscript] = useState('')
   const [recordingTime, setRecordingTime] = useState(0)
+  const [micPermissionGranted, setMicPermissionGranted] = useState<boolean | null>(null)
+  const [permissionError, setPermissionError] = useState<string | null>(null)
   const sttRef = useRef<STTLogic | null>(null)
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const accumulatedTranscriptRef = useRef<string>('')
@@ -22,7 +25,32 @@ function RecordingPageInner() {
   const continueModeRef = useRef(searchParams.get('mode') === 'continue' ||
     (typeof window !== 'undefined' && sessionStorage.getItem('continueRecording') === 'true'))
 
-  // Initialize STT on component mount
+  // Check microphone permission
+  const checkMicrophonePermission = async () => {
+    try {
+      const result = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // If we got here, permission was granted
+      result.getTracks().forEach(track => track.stop()) // Stop the stream immediately
+      setMicPermissionGranted(true)
+      setPermissionError(null)
+      return true
+    } catch (error: any) {
+      console.error('Microphone permission error:', error)
+      let errorMsg = 'Microphone access denied'
+      
+      if (error.name === 'NotAllowedError') {
+        errorMsg = 'Microphone permission required. Enable it from browser settings and reload'
+      } else if (error.name === 'NotFoundError') {
+        errorMsg = 'No microphone found. Check your device and try again'
+      } else if (error.name === 'NotReadableError') {
+        errorMsg = 'Microphone in use. Close other apps and try again'
+      }
+      
+      setMicPermissionGranted(false)
+      setPermissionError(errorMsg)
+      return false
+    }
+  }
   useEffect(() => {
     async function initSTT() {
       try {
@@ -67,10 +95,8 @@ function RecordingPageInner() {
         sttRef.current = stt
         console.log('STT initialized successfully')
         
-        // Auto-start recording if query param is set
-        if (autoStartRef.current) {
-          setIsRecording(true)
-        }
+        // Check microphone permission immediately on init
+        await checkMicrophonePermission()
       } catch (error) {
         console.error('Error initializing STT:', error)
         alert('Failed to initialize speech recognition. Please check browser compatibility and microphone permissions.')
@@ -97,10 +123,17 @@ function RecordingPageInner() {
   // Start recording
   useEffect(() => {
     if (isRecording && sttRef.current) {
+      // Only proceed if microphone permission is granted
+      if (!micPermissionGranted) {
+        console.warn('Recording requested but microphone permission not granted')
+        setIsRecording(false)
+        return
+      }
+
       // Reset timer
       setRecordingTime(0)
       
-      // Start timer
+      // Start timer ONLY if permission is confirmed
       timerIntervalRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1)
       }, 1000)
@@ -164,6 +197,22 @@ function RecordingPageInner() {
       }
     }
   }, [isRecording])
+
+  const handleStartRecording = async () => {
+    // Check permission first if not already checked
+    if (micPermissionGranted === null) {
+      const permitted = await checkMicrophonePermission()
+      if (!permitted) {
+        return // Permission was denied, don't start recording
+      }
+    } else if (!micPermissionGranted) {
+      // Permission was already denied
+      return
+    }
+    
+    // Permission granted, start recording
+    setIsRecording(true)
+  }
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -318,10 +367,10 @@ function RecordingPageInner() {
 
   if (isInitializing) {
     return (
-      <main className="min-h-screen bg-white flex items-center justify-center">
+      <main className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Initializing...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+          <p className="text-gray-300">Initializing...</p>
         </div>
       </main>
     )
@@ -329,50 +378,37 @@ function RecordingPageInner() {
 
   if (isProcessing) {
     return (
-      <main className="min-h-screen bg-white flex items-center justify-center px-4 pt-8">
+      <main className="min-h-screen bg-black flex items-center justify-center px-4 pt-8">
         <div className="w-full max-w-2xl">
-          {/* Back to Home button */}
-          <div className="fixed top-4 right-6 z-50">
-            <button
-              onClick={() => router.push('/')}
-              className="flex items-center gap-2 px-6 py-2.5 bg-teal-700 hover:bg-teal-700 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-base font-medium"
-            >
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-              <span className="font-medium">Back to Home</span>
-            </button>
-          </div>
-
           {/* Processing Card */}
-          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-8 md:p-12 text-center relative overflow-hidden">
+          <div className="bg-slate-900 rounded-3xl shadow-2xl border border-teal-700/30 p-8 md:p-12 text-center relative overflow-hidden">
             {/* Decorative gradients */}
-            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-blue-100 to-transparent rounded-bl-3xl opacity-40"></div>
-            <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-teal-50 to-transparent rounded-tr-3xl opacity-30"></div>
+            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-teal-900/40 to-transparent rounded-bl-3xl opacity-40"></div>
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-teal-900/30 to-transparent rounded-tr-3xl opacity-30"></div>
 
             <div className="relative z-10">
               {/* Header */}
               <h1 className="text-4xl md:text-5xl font-bold mb-2">
-                <span className="text-teal-700">
+                <span className="text-teal-500">
                   Processing
                 </span>
               </h1>
-              <p className="text-gray-600 text-lg mb-12">Oscar's AI is working its magic... ✨</p>
+              <p className="text-gray-300 text-lg mb-12">Oscar's AI is working its magic... ✨</p>
 
               {/* Central Animation */}
               <div className="w-40 h-40 mx-auto mb-8 flex items-center justify-center relative">
                 {/* Outer rotating ring */}
-                <div className="absolute inset-0 rounded-full border-4 border-gray-200"></div>
+                <div className="absolute inset-0 rounded-full border-4 border-gray-700"></div>
                 <div 
-                  className="absolute inset-0 rounded-full border-4 border-transparent border-t-teal-700 border-r-teal-700 animate-spin"
+                  className="absolute inset-0 rounded-full border-4 border-transparent border-t-teal-600 border-r-teal-600 animate-spin"
                   style={{ animationDuration: '2s' }}
                 />
                 
                 {/* Middle pulse ring */}
-                <div className="absolute inset-4 rounded-full border-2 border-teal-700 animate-pulse opacity-50"></div>
+                <div className="absolute inset-4 rounded-full border-2 border-teal-600 animate-pulse opacity-50"></div>
                 
                 {/* Center icon */}
-                <div className="relative z-10 text-teal-700 text-5xl">
+                <div className="relative z-10 text-teal-500 text-5xl">
                   {processingStep === 0 && '🎙️'}
                   {processingStep === 1 && '🧠'}
                   {processingStep === 2 && '📝'}
@@ -381,23 +417,23 @@ function RecordingPageInner() {
 
               {/* Current Step Info */}
               <div className="mb-8 min-h-20">
-                <h2 className="text-2xl font-bold mb-2 text-gray-900 transition-all duration-300">
+                <h2 className="text-2xl font-bold mb-2 text-white transition-all duration-300">
                   {processingSteps[processingStep].title}
                 </h2>
-                <p className="text-gray-600 text-base">
+                <p className="text-gray-400 text-base">
                   {processingSteps[processingStep].description}
                 </p>
               </div>
 
               {/* Progress Bar */}
               <div className="w-full max-w-lg mx-auto mb-8">
-                <div className="h-3 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+                <div className="h-3 bg-gray-700 rounded-full overflow-hidden shadow-inner">
                   <div
-                    className="h-full bg-teal-700 transition-all duration-300 ease-out rounded-full"
+                    className="h-full bg-teal-600 transition-all duration-300 ease-out rounded-full"
                     style={{ width: `${Math.min(processingProgress, 100)}%` }}
                   />
                 </div>
-                <p className="text-sm text-gray-600 mt-3 font-medium">{Math.min(Math.round(processingProgress), 100)}% Complete</p>
+                <p className="text-sm text-gray-400 mt-3 font-medium">{Math.min(Math.round(processingProgress), 100)}% Complete</p>
               </div>
 
               {/* Steps Indicator */}
@@ -407,8 +443,8 @@ function RecordingPageInner() {
                     key={i}
                     className={`transition-all duration-300 ${
                       i <= processingStep
-                        ? 'w-4 h-4 bg-teal-700 rounded-full scale-100'
-                        : 'w-3 h-3 bg-gray-300 rounded-full scale-75'
+                        ? 'w-4 h-4 bg-teal-600 rounded-full scale-100'
+                        : 'w-3 h-3 bg-gray-600 rounded-full scale-75'
                     }`}
                   />
                 ))}
@@ -425,33 +461,45 @@ function RecordingPageInner() {
   }
 
   return (
-    <main className="min-h-screen bg-white flex flex-col items-center px-4 pt-8">
-      {/* Back to Home button */}
-      <div className="fixed top-4 right-6 z-50">
-        <button
-          onClick={() => router.push('/')}
-          className="flex items-center gap-2 px-6 py-2.5 bg-teal-700 hover:bg-teal-700 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md whitespace-nowrap text-base font-medium"
-        >
-          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-          </svg>
-          <span className="font-medium">Back to Home</span>
-        </button>
-      </div>
+    <main className="min-h-screen bg-black flex flex-col items-center px-4 pt-8">
+      {/* Permission Error - Shown as browser alert (non-blocking) - Outside main container */}
+      {permissionError && (
+        <div className="fixed top-0 left-1/2 transform -translate-x-1/2 z-[9999] w-[90%] max-w-md pt-1">
+          <div className="bg-slate-900 border border-red-600/50 rounded-lg shadow-2xl p-3 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-gray-200 flex-1">Microphone permission required. Enable it from browser settings and reload</p>
+              <button
+                onClick={() => setPermissionError(null)}
+                className="flex-shrink-0 px-4 py-2 text-sm font-bold bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors whitespace-nowrap"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="w-full max-w-2xl flex flex-col items-center gap-8">
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-5xl font-bold">
-            Record Your <span className="text-teal-700">Voice</span>
+            Record Your <span className="text-teal-500">Voice</span>
           </h1>
-          <p className="text-gray-600 text-lg">
-            Press the microphone button and start speaking. Oscar will do the rest.
-          </p>
         </div>
 
         {/* Main Recording Container */}
-        <div className="w-full bg-white rounded-3xl shadow-xl border border-gray-100 p-8 md:p-12 space-y-8">
+        <div className="w-full bg-slate-900 rounded-3xl shadow-xl border border-teal-700/30 p-8 md:p-12 space-y-8 relative overflow-hidden">
+          {/* Dotted Glow Background Effect */}
+          <DottedGlowBackground
+            gap={20}
+            radius={1.5}
+            color="rgba(20, 184, 166, 0.4)"
+            glowColor="rgba(20, 184, 166, 0.7)"
+            opacity={0.6}
+            speedMin={0.6}
+            speedMax={1.4}
+            speedScale={1.2}
+          />
           
           {/* Animated waveform indicator */}
           {isRecording && (
@@ -470,26 +518,28 @@ function RecordingPageInner() {
             </div>
           )}
 
-          {/* Timer Display */}
-          <div className="text-center">
-            <div className="text-6xl font-bold text-teal-700 font-mono tracking-wider">
-              {formatTime(recordingTime)}
+          {/* Timer Display - Only show when recording */}
+          {isRecording && (
+            <div className="text-center">
+              <div className="text-6xl font-bold text-teal-500 font-mono tracking-wider">
+                {formatTime(recordingTime)}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Microphone Button */}
           <div className="flex justify-center pt-4">
             <button
-              onClick={isRecording ? handleStop : () => setIsRecording(true)}
+              onClick={isRecording ? handleStop : handleStartRecording}
               disabled={isProcessing}
               className={`
                 w-32 h-32 rounded-full flex items-center justify-center
                 transition-all duration-300 shadow-2xl transform
                 ${isRecording 
-                  ? 'bg-red-500 hover:bg-red-600 scale-100 ring-8 ring-red-200' 
+                  ? 'bg-red-600 hover:bg-red-700 scale-100 ring-8 ring-red-900' 
                   : isProcessing
-                  ? 'bg-gray-300 cursor-not-allowed scale-100'
-                  : 'bg-teal-700 hover:bg-teal-700 hover:scale-110 hover:shadow-2xl active:scale-95'
+                  ? 'bg-gray-600 cursor-not-allowed scale-100'
+                  : 'bg-teal-600 hover:bg-teal-700 hover:scale-110 hover:shadow-2xl active:scale-95'
                 }
               `}
             >
@@ -506,15 +556,17 @@ function RecordingPageInner() {
             </button>
           </div>
 
-          {/* Instruction Text */}
-          <div className="text-center pt-4">
-            <p className="text-gray-600 text-lg flex items-center justify-center gap-2">
-              <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4.293 15.707a1 1 0 010-1.414l5-5a1 1 0 011.414 0l5 5a1 1 0 11-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414 0z" clipRule="evenodd" transform="rotate(180)" />
-              </svg>
-              {isRecording ? 'Listening... Speak clearly!' : 'Click the microphone to start recording'}
-            </p>
-          </div>
+          {/* Instruction Text - Only show when NOT recording */}
+          {!isRecording && (
+            <div className="text-center pt-4">
+              <p className="text-gray-400 text-lg flex items-center justify-center gap-2">
+                <svg className="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 15.707a1 1 0 010-1.414l5-5a1 1 0 011.414 0l5 5a1 1 0 11-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414 0z" clipRule="evenodd" transform="rotate(180)" />
+                </svg>
+                Press the microphone button and start speaking. Oscar will do the rest.
+              </p>
+            </div>
+          )}
 
         </div>
 
