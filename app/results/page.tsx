@@ -101,7 +101,7 @@ export default function ResultsPage() {
     return (
       <main className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-600 mx-auto mb-4"></div>
           <p className="text-gray-300">Loading your note...</p>
         </div>
       </main>
@@ -134,7 +134,7 @@ export default function ResultsPage() {
           <Button
             onClick={() => setShowRawTranscript(!showRawTranscript)}
             variant="outline"
-            className="flex items-center gap-2 text-teal-500 border-teal-700/30 hover:bg-slate-800"
+            className="flex items-center gap-2 text-cyan-500 border-cyan-700/30 hover:bg-slate-800"
           >
             <FileText className="w-5 h-5" />
             <span className="font-medium">
@@ -152,7 +152,7 @@ export default function ResultsPage() {
 
         {/* Raw Transcript - Expandable Section */}
         {showRawTranscript && (
-          <Card className="bg-slate-900 border-teal-700/30 animate-fadeIn">
+          <Card className="bg-slate-900 border-cyan-700/30 animate-fadeIn">
             <CardHeader>
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold text-white">
@@ -163,7 +163,7 @@ export default function ResultsPage() {
                     variant="ghost"
                     size="sm"
                     onClick={handleCopyRaw}
-                    className="text-gray-400 hover:text-teal-500"
+                    className="text-gray-400 hover:text-cyan-500"
                   >
                     <Copy className="w-5 h-5" />
                   </Button>
@@ -171,7 +171,7 @@ export default function ResultsPage() {
                     variant="ghost"
                     size="sm"
                     onClick={handleDownloadRaw}
-                    className="text-gray-400 hover:text-teal-500"
+                    className="text-gray-400 hover:text-cyan-500"
                   >
                     <Download className="w-5 h-5" />
                   </Button>

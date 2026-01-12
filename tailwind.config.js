@@ -9,11 +9,11 @@ module.exports = {
   theme: {
   	extend: {
   		colors: {
-  			teal: {
-  				'400': '#2dd4bf',
-  				'500': '#14b8a6',
-  				'600': '#0d9488',
-  				'700': '#0f766e'
+  			cyan: {
+  				'400': '#22d3ee',
+  				'500': '#06b6d4',
+  				'600': '#0891b2',
+  				'700': '#0e7490'
   			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',

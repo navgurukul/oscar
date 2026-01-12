@@ -12,7 +12,7 @@ export function RecordingTranscript({ transcript, isRecording }: RecordingTransc
   if (!isRecording) return null
 
   return (
-    <Card className="w-full bg-white rounded-xl shadow-lg border-2 border-teal-200 p-6 min-h-[300px] max-h-[500px] overflow-y-auto">
+    <Card className="w-full bg-white rounded-xl shadow-lg border-2 border-cyan-200 p-6 min-h-[300px] max-h-[500px] overflow-y-auto">
       <div className="flex items-center gap-2 mb-4">
         <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
         <p className="text-sm font-semibold text-gray-600">Live Transcription</p>
@@ -21,7 +21,7 @@ export function RecordingTranscript({ transcript, isRecording }: RecordingTransc
         <div className="prose prose-lg max-w-none">
           <p className="text-gray-900 text-lg leading-relaxed whitespace-pre-wrap font-normal">
             {transcript}
-            <span className="inline-block w-2 h-5 bg-teal-700 ml-1 animate-pulse"></span>
+            <span className="inline-block w-2 h-5 bg-cyan-700 ml-1 animate-pulse"></span>
           </p>
         </div>
       ) : (

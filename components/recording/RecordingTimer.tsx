@@ -15,7 +15,7 @@ export function RecordingTimer({ seconds }: RecordingTimerProps) {
 
   return (
     <div className="text-center">
-      <div className="text-6xl font-bold text-teal-500 font-mono tracking-wider">
+      <div className="text-6xl font-bold text-cyan-500 font-mono tracking-wider">
         {formatTime(seconds)}
       </div>
     </div>

@@ -61,7 +61,7 @@ export function NoteEditor({
   }
 
   return (
-    <Card className="bg-slate-900 border-teal-700/30">
+    <Card className="bg-slate-900 border-cyan-700/30">
       <CardHeader>
         {/* AI Title */}
         <div className="mb-4">
@@ -88,7 +88,7 @@ export function NoteEditor({
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsEditing(true)}
-                className="text-gray-400 hover:text-teal-500"
+                className="text-gray-400 hover:text-cyan-500"
               >
                 <Edit className="w-5 h-5" />
               </Button>
@@ -96,7 +96,7 @@ export function NoteEditor({
                 variant="ghost"
                 size="sm"
                 onClick={handleCopy}
-                className="text-gray-400 hover:text-teal-500"
+                className="text-gray-400 hover:text-cyan-500"
               >
                 <Copy className="w-5 h-5" />
               </Button>
@@ -104,7 +104,7 @@ export function NoteEditor({
                 variant="ghost"
                 size="sm"
                 onClick={handleDownload}
-                className="text-gray-400 hover:text-teal-500"
+                className="text-gray-400 hover:text-cyan-500"
               >
                 <Download className="w-5 h-5" />
               </Button>
@@ -138,7 +138,7 @@ export function NoteEditor({
           <Textarea
             value={editedNote}
             onChange={(e) => setEditedNote(e.target.value)}
-            className="w-full min-h-[300px] bg-slate-800 text-white border-teal-700/30 focus:ring-2 focus:ring-teal-600"
+            className="w-full min-h-[300px] bg-slate-800 text-white border-cyan-700/30 focus:ring-2 focus:ring-cyan-600"
           />
         ) : (
           <div className="prose prose-lg max-w-none text-gray-300 whitespace-pre-wrap">

@@ -24,7 +24,7 @@ body {
     letter-spacing: -0.01em;
   }
   ::selection {
-    background-color: #99f6e0; /* teal-200 */
+    background-color: #a5f3fc; /* cyan-200 */
     color: #111827; /* gray-900 */
   }
   :root {
@@ -103,7 +103,7 @@ body {
 
 .typewriter {
   overflow: hidden;
-  border-right: 3px solid #14b8a6;
+  border-right: 3px solid #06b6d4;
   white-space: nowrap;
   animation: blinkCursor 0.7s infinite;
 }

@@ -32,7 +32,7 @@ export function RecordingControls({
             ? 'bg-red-600 hover:bg-red-700 scale-100 ring-8 ring-red-900'
             : disabled
             ? 'bg-gray-600 cursor-not-allowed scale-100'
-            : 'bg-teal-600 hover:bg-teal-700 hover:scale-110 hover:shadow-2xl active:scale-95'
+            : 'bg-cyan-600 hover:bg-cyan-700 hover:scale-110 hover:shadow-2xl active:scale-95'
         }`}
       >
         {disabled ? (

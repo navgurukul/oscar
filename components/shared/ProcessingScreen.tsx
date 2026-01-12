@@ -20,15 +20,15 @@ export function ProcessingScreen({ isProcessing, progress, currentStep }: Proces
   return (
     <main className="min-h-screen bg-black flex items-center justify-center px-4 pt-8">
       <div className="w-full max-w-2xl">
-        <div className="bg-slate-900 rounded-3xl shadow-2xl border border-teal-700/30 p-8 md:p-12 text-center relative overflow-hidden">
+        <div className="bg-slate-900 rounded-3xl shadow-2xl border border-cyan-700/30 p-8 md:p-12 text-center relative overflow-hidden">
           {/* Decorative gradients */}
-          <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-teal-900/40 to-transparent rounded-bl-3xl opacity-40"></div>
-          <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-teal-900/30 to-transparent rounded-tr-3xl opacity-30"></div>
+          <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-cyan-900/40 to-transparent rounded-bl-3xl opacity-40"></div>
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-cyan-900/30 to-transparent rounded-tr-3xl opacity-30"></div>
 
           <div className="relative z-10">
             {/* Header */}
             <h1 className="text-4xl md:text-5xl font-bold mb-2">
-              <span className="text-teal-500">Processing</span>
+              <span className="text-cyan-500">Processing</span>
             </h1>
             <p className="text-gray-300 text-lg mb-12">Oscar's AI is working its magic... ✨</p>
 
@@ -37,7 +37,7 @@ export function ProcessingScreen({ isProcessing, progress, currentStep }: Proces
               {/* Outer rotating ring */}
               <div className="absolute inset-0 rounded-full border-4 border-gray-700"></div>
               <div 
-                className="absolute inset-0 rounded-full border-4 border-transparent border-t-teal-600 border-r-teal-600 animate-spin"
+                className="absolute inset-0 rounded-full border-4 border-transparent border-t-cyan-600 border-r-cyan-600 animate-spin"
                 style={{ animationDuration: '2s' }}
               />
               
