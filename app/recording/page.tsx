@@ -8,6 +8,7 @@ import { storageService } from "@/lib/services/storage.service";
 import { aiService } from "@/lib/services/ai.service";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { RecordingTimer } from "@/components/recording/RecordingTimer";
+import { RecordingTranscript } from "@/components/recording/RecordingTranscript";
 import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -22,6 +23,7 @@ function RecordingPageInner() {
 
   const {
     isInitializing,
+    isReady,
     isRecording,
     isProcessing,
     currentTranscript,
@@ -38,9 +40,9 @@ function RecordingPageInner() {
   const [processingProgress, setProcessingProgress] = useState(0);
   const [showProcessing, setShowProcessing] = useState(false);
 
-  // Auto-start if URL param is set
+  // Auto-start only when STT is ready to avoid race conditions
   useEffect(() => {
-    if (autoStart && !isRecording && !isInitializing) {
+    if (autoStart && isReady && !isRecording) {
       const seedTranscript = continueMode
         ? storageService.getRawText() || ""
         : "";
@@ -49,7 +51,7 @@ function RecordingPageInner() {
       }
       startRecording(seedTranscript);
     }
-  }, [autoStart, continueMode, isRecording, isInitializing]);
+  }, [autoStart, continueMode, isRecording, isReady]);
 
   const handleStartRecording = async () => {
     await startRecording();
@@ -84,6 +86,9 @@ function RecordingPageInner() {
     try {
       // Stop recording and get transcript
       const transcript = await stopRecording();
+
+      // Persist raw transcript immediately to support continue mode
+      storageService.updateRawText(transcript);
 
       if (!transcript || transcript.length === 0) {
         clearInterval(progressInterval);
@@ -212,6 +217,16 @@ function RecordingPageInner() {
               </p>
             )}
           </div>
+
+          {/* Continue Mode Hint */}
+          {!isRecording && continueMode && (
+            <div className="text-center -mt-6 mb-4">
+              <p className="text-cyan-400 text-sm">Continuing from previous recording…</p>
+            </div>
+          )}
+
+          {/* Live Transcript - shows existing and new speech while recording */}
+          <RecordingTranscript transcript={currentTranscript} isRecording={isRecording} />
         </div>
       </div>
 
