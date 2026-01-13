@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
-import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
 import { NoteEditor } from "@/components/results/NoteEditor";
 import { NoteActions } from "@/components/results/NoteActions";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -15,11 +14,9 @@ import { useToast } from "@/hooks/use-toast";
 export default function ResultsPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { isLoading, formattedNote, rawText, updateFormattedNote } =
+  const { isLoading, formattedNote, rawText, title, updateFormattedNote } =
     useNoteStorage();
-  const { generateTitle, isTitleGenerating } = useAIFormatting();
 
-  const [aiTitle, setAiTitle] = useState("");
   const [showRawTranscript, setShowRawTranscript] = useState(false);
 
   // Redirect if no note - only after loading completes
@@ -28,20 +25,6 @@ export default function ResultsPage() {
       router.push("/");
     }
   }, [isLoading, formattedNote, rawText, router]);
-
-  // Generate title on mount
-  useEffect(() => {
-    if (!isLoading) {
-      const source = formattedNote || rawText;
-      if (source.trim()) {
-        generateTitle(source).then((result) => {
-          if (result.success && result.title) {
-            setAiTitle(result.title);
-          }
-        });
-      }
-    }
-  }, [isLoading]);
 
   const handleSaveNote = (editedNote: string) => {
     updateFormattedNote(editedNote);
@@ -122,8 +105,7 @@ export default function ResultsPage() {
         {/* Note Editor */}
         <NoteEditor
           formattedNote={formattedNote}
-          title={aiTitle}
-          isTitleLoading={isTitleGenerating}
+          title={title || "Untitled Note"}
           onSave={handleSaveNote}
           onCopy={handleCopyNote}
           onDownload={handleDownloadNote}

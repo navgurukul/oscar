@@ -12,7 +12,6 @@ import { useToast } from "@/hooks/use-toast";
 interface NoteEditorProps {
   formattedNote: string;
   title: string;
-  isTitleLoading: boolean;
   onSave: (note: string) => void;
   onCopy: () => void;
   onDownload: () => void;
@@ -21,7 +20,6 @@ interface NoteEditorProps {
 export function NoteEditor({
   formattedNote,
   title,
-  isTitleLoading,
   onSave,
   onCopy,
   onDownload,
@@ -65,16 +63,11 @@ export function NoteEditor({
       <CardHeader>
         {/* AI Title */}
         <div className="mb-4 flex gap-6 justify-between">
-          {isTitleLoading ? (
-            <Skeleton className="h-8 w-64 bg-slate-700" />
-          ) : (
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">
-                {title || "Untitled Note"}
-              </h2>
-              {/* {title && <span className="text-xs text-gray-400">AI Title</span>} */}
-            </div>
-          )}
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-white">
+              {title || "Untitled Note"}
+            </h2>
+          </div>
 
           <div className="flex items-center">
             <div className="flex">

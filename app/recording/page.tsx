@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
 import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
 import { storageService } from "@/lib/services/storage.service";
+import { aiService } from "@/lib/services/ai.service";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { RecordingTimer } from "@/components/recording/RecordingTimer";
 import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
@@ -106,8 +107,18 @@ function RecordingPageInner() {
       clearInterval(stepInterval);
 
       if (result.success && result.formattedText) {
-        // Store and navigate
-        storageService.saveNote(result.formattedText, transcript);
+        // Generate title before saving
+        const titleResult = await aiService.generateTitle(result.formattedText);
+        const generatedTitle = titleResult.success
+          ? titleResult.title
+          : undefined;
+
+        // Store with title and navigate
+        storageService.saveNote(
+          result.formattedText,
+          transcript,
+          generatedTitle
+        );
         setProcessingProgress(100);
 
         await new Promise((resolve) => setTimeout(resolve, 600));
