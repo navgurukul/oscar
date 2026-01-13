@@ -1,327 +1,197 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import RecordingButton from '@/components/RecordingButton'
-import { generateTitle } from '@/lib/aiFormatter'
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
+import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
+import { NoteEditor } from "@/components/results/NoteEditor";
+import { NoteActions } from "@/components/results/NoteActions";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { FileText, Copy, Download, ChevronDown, ChevronUp } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ResultsPage() {
-  const [formattedNote, setFormattedNote] = useState('')
-  const [rawText, setRawText] = useState('')
-  const [isEditing, setIsEditing] = useState(false)
-  const [editedNote, setEditedNote] = useState('')
-  const [showRawTranscript, setShowRawTranscript] = useState(false)
-  const [aiTitle, setAiTitle] = useState('')
-  const [isTitleLoading, setIsTitleLoading] = useState(false)
-  const router = useRouter()
+  const router = useRouter();
+  const { toast } = useToast();
+  const { isLoading, formattedNote, rawText, updateFormattedNote } =
+    useNoteStorage();
+  const { generateTitle, isTitleGenerating } = useAIFormatting();
 
+  const [aiTitle, setAiTitle] = useState("");
+  const [showRawTranscript, setShowRawTranscript] = useState(false);
+
+  // Redirect if no note - only after loading completes
   useEffect(() => {
-    const note = sessionStorage.getItem('formattedNote')
-    const raw = sessionStorage.getItem('rawText')
-    if (note) {
-      setFormattedNote(note)
-      setEditedNote(note)
-    } else {
-      router.push('/')
+    if (!isLoading && !formattedNote && !rawText) {
+      router.push("/");
     }
-    if (raw) {
-      setRawText(raw)
-    }
-    // Generate a concise AI title based on formatted note (fallback to raw)
-    const source = note || raw || ''
-    if (source.trim()) {
-      setIsTitleLoading(true)
-      generateTitle(source)
-        .then((title) => setAiTitle(title))
-        .catch(() => setAiTitle(''))
-        .finally(() => setIsTitleLoading(false))
-    } else {
-      setAiTitle('')
-    }
-  }, [router])
+  }, [isLoading, formattedNote, rawText, router]);
 
-  const handleCopy = async () => {
+  // Generate title on mount
+  useEffect(() => {
+    if (!isLoading) {
+      const source = formattedNote || rawText;
+      if (source.trim()) {
+        generateTitle(source).then((result) => {
+          if (result.success && result.title) {
+            setAiTitle(result.title);
+          }
+        });
+      }
+    }
+  }, [isLoading]);
+
+  const handleSaveNote = (editedNote: string) => {
+    updateFormattedNote(editedNote);
+  };
+
+  const handleCopyNote = async () => {
     try {
-      await navigator.clipboard.writeText(editedNote)
-      alert('Copied to clipboard!')
+      await navigator.clipboard.writeText(formattedNote);
     } catch (error) {
-      console.error('Failed to copy:', error)
+      console.error("Failed to copy:", error);
     }
-  }
+  };
 
-  const handleDownload = () => {
-    const blob = new Blob([editedNote], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'oscar-note.txt'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
+  const handleDownloadNote = () => {
+    const blob = new Blob([formattedNote], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "oscar-note.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
-  const handleSave = () => {
-    setFormattedNote(editedNote)
-    setIsEditing(false)
-    sessionStorage.setItem('formattedNote', editedNote)
-  }
+  const handleCopyRaw = async () => {
+    try {
+      await navigator.clipboard.writeText(rawText);
+      toast({
+        title: "Copied!",
+        description: "Raw transcript copied to clipboard.",
+      });
+    } catch (error) {
+      console.error("Failed to copy:", error);
+    }
+  };
 
-  const handleCancel = () => {
-    setEditedNote(formattedNote)
-    setIsEditing(false)
+  const handleDownloadRaw = () => {
+    const blob = new Blob([rawText], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "oscar-raw.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Downloaded!",
+      description: "Raw transcript saved to your device.",
+    });
+  };
+
+  // Show loading state while data is being loaded
+  if (isLoading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-600 mx-auto mb-4"></div>
+          <p className="text-gray-300">Loading your note...</p>
+        </div>
+      </main>
+    );
   }
 
   return (
-    <main className="min-h-screen bg-black p-6">
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div>
+    <main className="flex flex-col items-center px-4 pt-8">
+      <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
         {/* Header */}
         <div className="text-center space-y-2 mt-8">
           <h1 className="text-4xl font-bold text-white">Here's your note</h1>
-          <p className='mb-8 text-gray-400'>AI formatted your thoughts into clean text</p>
-          
+          {/* <p className="text-gray-400">
+            AI formatted your thoughts into clean text
+          </p> */}
         </div>
 
-        {/* AI Formatted - Full Width with AI Title */}
-        <div className="bg-slate-900 rounded-xl shadow-lg border border-teal-700/30 p-6 mt-8">
-            {/* AI Title */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-white">
-                  {isTitleLoading ? 'Generating title…' : aiTitle || 'Untitled Note'}
-                </h2>
-                {aiTitle && (
-                  <span className="text-xs text-gray-400">AI Title</span>
-                )}
-              </div>
-            </div>
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-700">
-              <h2 className="text-lg font-semibold text-white">AI Formatted</h2>
-              {!isEditing ? (
-                <>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="text-gray-400 hover:text-teal-500 transition-colors"
-                      title="Edit"
-                    >
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={handleCopy}
-                      className="text-gray-400 hover:text-teal-500 transition-colors"
-                      title="Copy"
-                    >
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={handleDownload}
-                      className="text-gray-400 hover:text-teal-500 transition-colors"
-                      title="Download"
-                    >
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleSave}
-                      className="text-green-500 hover:text-green-400 transition-colors"
-                      title="Save"
-                    >
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={handleCancel}
-                      className="text-red-500 hover:text-red-400 transition-colors"
-                      title="Cancel"
-                    >
-                      <svg
-                        className="w-5 h-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {isEditing ? (
-              <textarea
-                value={editedNote}
-                onChange={(e) => setEditedNote(e.target.value)}
-                className="w-full min-h-[300px] p-4 border border-teal-700/30 rounded-lg bg-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-teal-600"
-              />
-            ) : (
-              <div className="prose prose-lg max-w-none text-gray-300 whitespace-pre-wrap">
-                {formattedNote}
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Note Editor */}
+        <NoteEditor
+          formattedNote={formattedNote}
+          title={aiTitle}
+          isTitleLoading={isTitleGenerating}
+          onSave={handleSaveNote}
+          onCopy={handleCopyNote}
+          onDownload={handleDownloadNote}
+        />
 
         {/* Raw Transcript Toggle Button */}
-        <div className="flex mt-5 mx-auto ">
-          <button
+        <div className="flex justify-center">
+          <Button
             onClick={() => setShowRawTranscript(!showRawTranscript)}
-            className="flex items-center gap-2 px-6 py-3 rounded-lg text-teal-500 hover:bg-slate-800 transition-all border border-teal-700/30"
+            variant="outline"
+            className="flex items-center gap-2 text-cyan-500 border-cyan-700/30 hover:bg-slate-800"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
+            <FileText className="w-5 h-5" />
             <span className="font-medium">
-              {showRawTranscript ? 'Hide Raw Transcript' : 'Show Raw Transcript'}
+              {showRawTranscript
+                ? "Hide Raw Transcript"
+                : "Show Raw Transcript"}
             </span>
-            <svg
-              className={`w-4 h-4 transition-transform ${showRawTranscript ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+            {showRawTranscript ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </Button>
         </div>
 
         {/* Raw Transcript - Expandable Section */}
         {showRawTranscript && (
-          <div className="bg-slate-900 rounded-xl shadow-lg border border-teal-700/30 p-6 animate-fadeIn mt-5 space-y-6">
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-700">
-              <h2 className="text-lg font-semibold text-white">Raw Transcript</h2>
-              <div className="flex gap-3">
-                <button
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(rawText)
-                      alert('Raw copied!')
-                    } catch (e) {
-                      console.error('Copy failed', e)
-                    }
-                  }}
-                  className="text-gray-400 hover:text-teal-500 transition-colors"
-                  title="Copy"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+          <Card className="bg-slate-900 border-cyan-700/30 animate-fadeIn rounded-2xl shadow-xl w-[650px]">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-white">
+                  Raw Transcript
+                </h3>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopyRaw}
+                    className="text-gray-400 hover:text-cyan-500"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                    />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => {
-                    const blob = new Blob([rawText], { type: 'text/plain' })
-                    const url = URL.createObjectURL(blob)
-                    const a = document.createElement('a')
-                    a.href = url
-                    a.download = 'oscar-raw.txt'
-                    document.body.appendChild(a)
-                    a.click()
-                    document.body.removeChild(a)
-                    URL.revokeObjectURL(url)
-                  }}
-                  className="text-gray-400 hover:text-teal-500 transition-colors"
-                  title="Download"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                    <Copy className="w-5 h-5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDownloadRaw}
+                    className="text-gray-400 hover:text-cyan-500"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                    />
-                  </svg>
-                </button>
+                    <Download className="w-5 h-5" />
+                  </Button>
+                </div>
               </div>
-            </div>
-            <div className="prose prose-lg max-w-none text-gray-300 whitespace-pre-wrap">
-              {rawText || 'Raw transcript nahi mila.'}
-            </div>
-          </div>
+              <Separator className="mt-3 bg-gray-700" />
+            </CardHeader>
+            <CardContent>
+              <div className="prose prose-lg max-w-none text-gray-300 whitespace-pre-wrap">
+                {rawText || "No raw transcript available."}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Record Again Button */}
+        {/* Action Buttons */}
         <div className="flex justify-center gap-4 mt-6 pb-12">
-          <RecordingButton variant="button" autoStart={true} />
+          <NoteActions />
         </div>
       </div>
     </main>
-  )
+  );
 }
