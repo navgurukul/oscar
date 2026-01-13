@@ -13,6 +13,7 @@ import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants/errors";
+import { Spinner } from "@/components/ui/spinner";
 
 function RecordingPageInner() {
   const router = useRouter();
@@ -139,7 +140,9 @@ function RecordingPageInner() {
     return (
       <main className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+          <div className="flex items-center justify-center mb-4">
+            <Spinner className="text-cyan-500" />
+          </div>
           <p className="text-gray-300">Initializing...</p>
         </div>
       </main>
@@ -236,8 +239,8 @@ export default function RecordingPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center text-gray-600">
-          Loading recording page…
+        <div className="min-h-screen flex items-center justify-center">
+          <Spinner className="text-cyan-500" />
         </div>
       }
     >
