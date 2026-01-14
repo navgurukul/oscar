@@ -37,7 +37,7 @@ function RecordingPageInner() {
 
   const [processingStep, setProcessingStep] = useState(0);
   const [processingProgress, setProcessingProgress] = useState(0);
-  const [showProcessing, setShowProcessing] = useState(false);
+  const [showProcessing, setShowProcessing] = useState(true);
 
   // Auto-start if URL param is set
   useEffect(() => {
