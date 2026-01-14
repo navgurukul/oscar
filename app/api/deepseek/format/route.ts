@@ -82,11 +82,12 @@ ${rawText}`,
     }
 
     return NextResponse.json({ formattedText });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as Error;
     return NextResponse.json(
       {
         error: ERROR_MESSAGES.DEEPSEEK_REQUEST_FAILED,
-        details: err?.message || String(err),
+        details: error?.message || String(err),
       },
       { status: 500 }
     );

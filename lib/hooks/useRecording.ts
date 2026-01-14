@@ -28,9 +28,10 @@ export function useRecording() {
 
         sttServiceRef.current = service;
         setState(RecordingState.READY);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const err = error as Error;
         console.error("[useRecording] Initialization error:", error);
-        setError(error?.message || ERROR_MESSAGES.STT_INIT_FAILED);
+        setError(err?.message || ERROR_MESSAGES.STT_INIT_FAILED);
         setState(RecordingState.ERROR);
       }
     };
@@ -80,9 +81,10 @@ export function useRecording() {
 
       try {
         await sttServiceRef.current.startRecording(seedTranscript);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const err = error as Error;
         console.error("[useRecording] Start error:", error);
-        setError(error?.message || ERROR_MESSAGES.RECORDING_FAILED);
+        setError(err?.message || ERROR_MESSAGES.RECORDING_FAILED);
         setState(RecordingState.ERROR);
       }
     },
@@ -101,22 +103,14 @@ export function useRecording() {
       const finalTranscript = await sttServiceRef.current.stopRecording();
       setState(RecordingState.READY);
       return finalTranscript;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as Error;
       console.error("[useRecording] Stop error:", error);
-      setError(error?.message || ERROR_MESSAGES.PROCESSING_FAILED);
+      setError(err?.message || ERROR_MESSAGES.PROCESSING_FAILED);
       setState(RecordingState.ERROR);
       return currentTranscript;
     }
   }, [state, currentTranscript]);
-
-  const resetRecording = useCallback(() => {
-    setCurrentTranscript("");
-    setRecordingTime(0);
-    setError(null);
-    if (state !== RecordingState.RECORDING) {
-      setState(RecordingState.READY);
-    }
-  }, [state]);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -142,7 +136,6 @@ export function useRecording() {
     // Actions
     startRecording,
     stopRecording,
-    resetRecording,
     clearError,
   };
 }

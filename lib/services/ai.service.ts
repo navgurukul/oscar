@@ -5,7 +5,6 @@ import type {
   TitleGenerationResult,
 } from "../types/note.types";
 import type {
-  APIResult,
   DeepseekFormatResponse,
   DeepseekTitleResponse,
 } from "../types/api.types";
@@ -61,11 +60,12 @@ export const aiService = {
         success: true,
         formattedText: cleanedText,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as Error;
       console.error("Format text error:", error);
       return {
         success: false,
-        error: error?.message || "Failed to format text",
+        error: err?.message || "Failed to format text",
       };
     }
   },
@@ -113,7 +113,7 @@ export const aiService = {
         success: true,
         title: sanitized,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Title generation error:", error);
       return this.generateFallbackTitle(source);
     }
@@ -141,7 +141,7 @@ export const aiService = {
         success: true,
         title,
       };
-    } catch (error) {
+    } catch {
       return {
         success: true,
         title: UI_STRINGS.UNTITLED_NOTE,

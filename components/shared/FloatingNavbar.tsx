@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Mic, Settings, FileText, Home } from "lucide-react";
+import { Mic } from "lucide-react";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 
 export function FloatingNavbar() {
@@ -13,7 +13,9 @@ export function FloatingNavbar() {
           className="flex items-center gap-3 font-bold text-white text-xl hover:opacity-80 transition-opacity group"
         >
           <Mic className="text-cyan-400  transition-all duration-300" />
-          <span className="text-white transition-all duration-300">{UI_STRINGS.APP_NAME}</span>
+          <span className="text-white transition-all duration-300">
+            {UI_STRINGS.APP_NAME}
+          </span>
         </Link>
       </div>
     </nav>
