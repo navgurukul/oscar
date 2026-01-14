@@ -53,7 +53,7 @@ export function ProcessingScreen({
               <div className="h-1 bg-gray-800/50 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-cyan-500 transition-all duration-300 ease-out"
-                  style={{ width: `${Math.min(30, 100)}%` }}
+                  style={{ width: `${Math.min(progress, 100)}%` }}
                 />
               </div>
             </div>

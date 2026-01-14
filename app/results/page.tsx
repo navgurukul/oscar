@@ -96,7 +96,7 @@ export default function ResultsPage() {
   }
 
   return (
-    <main className="flex flex-col items-center px-4 pt-8">
+    <main className="flex flex-col items-center px-4 pt-8 pb-24">
       <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
         {/* Header */}
         <div className="text-center space-y-2 mt-8">
@@ -174,12 +174,10 @@ export default function ResultsPage() {
             </CardContent>
           </Card>
         )}
-
-        {/* Action Buttons */}
-        <div className="flex justify-center gap-4 mt-6 pb-12">
-          <NoteActions />
-        </div>
       </div>
+
+      {/* Fixed Action Buttons */}
+      <NoteActions />
     </main>
   );
 }

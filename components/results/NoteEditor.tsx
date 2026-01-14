@@ -64,9 +64,13 @@ export function NoteEditor({
         {/* AI Title */}
         <div className="mb-4 flex gap-6 justify-between">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-white">
-              {title || "Untitled Note"}
-            </h2>
+            <div className="flex flex-col gap-2">
+              <h2 className="text-xl font-semibold text-white truncate">
+                {title || "Untitled Note"}
+              </h2>
+              {/* Cyan Separator */}
+              <div className="w-16 h-0.5 bg-cyan-500"></div>
+            </div>
           </div>
 
           <div className="flex items-center">
@@ -90,8 +94,6 @@ export function NoteEditor({
             </div>
           </div>
         </div>
-
-        <Separator className="mt-3 bg-gray-700" />
       </CardHeader>
 
       <CardContent>
