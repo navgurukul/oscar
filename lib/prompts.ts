@@ -61,8 +61,9 @@ Return ONLY the formatted text. No explanations. No introductions. Just the clea
    * Title generation system prompt
    * Used to generate short, descriptive titles for notes
    */
-  TITLE: 'You generate short, descriptive titles. Keep original language. Plain text, no quotes. Prefer 4–10 words. Title Case if English; natural casing for Hindi/Hinglish.',
-} as const
+  TITLE:
+    "You generate short, descriptive titles. Keep original language. Plain text, no quotes. Prefer 4–10 words. Title Case if English; natural casing for Hindi/Hinglish.",
+} as const;
 
 /**
  * User prompt templates for AI services
@@ -72,5 +73,6 @@ export const USER_PROMPTS = {
    * Title generation user prompt template
    * Append the content after this template
    */
-  TITLE_TEMPLATE: 'Create a concise title (max ~60 chars) for this content. Return ONLY the title.\n\nContent:\n',
-} as const
+  TITLE_TEMPLATE:
+    "Create a concise title (max ~60 chars) for this content. Return ONLY the title.\n\nContent:\n",
+} as const;

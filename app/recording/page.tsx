@@ -227,12 +227,11 @@ function RecordingPageInner() {
           {/* Continue Mode Hint */}
           {!isRecording && continueMode && (
             <div className="text-center -mt-6 mb-4">
-              <p className="text-cyan-400 text-sm">Continuing from previous recording…</p>
+              <p className="text-cyan-400 text-sm">
+                Continuing from previous recording…
+              </p>
             </div>
           )}
-
-          {/* Live Transcript - shows existing and new speech while recording */}
-          <RecordingTranscript transcript={currentTranscript} isRecording={isRecording} />
         </div>
       </div>
 
