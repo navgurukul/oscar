@@ -40,7 +40,7 @@ const nextConfig = {
 
       // Externalize onnxruntime-node to prevent webpack from bundling it
       config.externals = config.externals || [];
-      config.externals.push('onnxruntime-node', 'onnxruntime-common');
+      config.externals.push("onnxruntime-node", "onnxruntime-common");
 
       // Ensure .mjs in certain packages are treated as ESM so minification handles import.meta
       config.module = config.module || { rules: [] };
@@ -57,7 +57,11 @@ const nextConfig = {
       // On server side, completely externalize onnxruntime packages
       config.externals = config.externals || [];
       if (Array.isArray(config.externals)) {
-        config.externals.push('onnxruntime-node', 'onnxruntime-common', 'onnxruntime-web');
+        config.externals.push(
+          "onnxruntime-node",
+          "onnxruntime-common",
+          "onnxruntime-web"
+        );
       }
     }
     return config;
