@@ -3,12 +3,12 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
-import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
 import { storageService } from "@/lib/services/storage.service";
 import { aiService } from "@/lib/services/ai.service";
+import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { RecordingTimer } from "@/components/recording/RecordingTimer";
-import { RecordingTranscript } from "@/components/recording/RecordingTranscript";
+
 import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -28,15 +28,13 @@ function RecordingPageInner() {
     isReady,
     isRecording,
     isProcessing,
-    currentTranscript,
     recordingTime,
     error: recordingError,
     startRecording,
     stopRecording,
-    clearError,
   } = useRecording();
 
-  const { formatText, isFormatting } = useAIFormatting();
+  const { formatText } = useAIFormatting();
 
   const [processingStep, setProcessingStep] = useState(0);
   const [processingProgress, setProcessingProgress] = useState(0);
@@ -136,7 +134,7 @@ function RecordingPageInner() {
         setShowProcessing(false);
         alert(ERROR_MESSAGES.FORMATTING_FAILED);
       }
-    } catch (error) {
+    } catch {
       clearInterval(progressInterval);
       clearInterval(stepInterval);
       setShowProcessing(false);

@@ -45,24 +45,10 @@ export const storageService = {
   },
 
   /**
-   * Get formatted note text
-   */
-  getFormattedNote(): string | null {
-    return sessionStorage.getItem(STORAGE_KEYS.FORMATTED_NOTE);
-  },
-
-  /**
    * Get raw transcript text
    */
   getRawText(): string | null {
     return sessionStorage.getItem(STORAGE_KEYS.RAW_TEXT);
-  },
-
-  /**
-   * Get note title
-   */
-  getTitle(): string | null {
-    return sessionStorage.getItem(STORAGE_KEYS.TITLE);
   },
 
   /**
@@ -76,14 +62,7 @@ export const storageService = {
    * Update raw transcript text
    */
   updateRawText(text: string): void {
-    sessionStorage.setItem(STORAGE_KEYS.RAW_TEXT, text)
-  },
-
-  /**
-   * Update note title
-   */
-  updateTitle(title: string): void {
-    sessionStorage.setItem(STORAGE_KEYS.TITLE, title);
+    sessionStorage.setItem(STORAGE_KEYS.RAW_TEXT, text);
   },
 
   /**

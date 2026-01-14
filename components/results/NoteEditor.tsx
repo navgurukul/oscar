@@ -1,57 +1,33 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Edit, Copy, Download, Check, X } from "lucide-react";
+import { Copy, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface NoteEditorProps {
   formattedNote: string;
   title: string;
-  onSave: (note: string) => void;
   onCopy: () => void;
   onDownload: () => void;
   showRawTranscript: boolean;
   onToggleTranscript: () => void;
   rawText: string;
-  onCopyRaw: () => void;
-  onDownloadRaw: () => void;
 }
 
 export function NoteEditor({
   formattedNote,
   title,
-  onSave,
   onCopy,
   onDownload,
   showRawTranscript,
   onToggleTranscript,
   rawText,
-  onCopyRaw,
-  onDownloadRaw,
 }: NoteEditorProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedNote, setEditedNote] = useState(formattedNote);
   const { toast } = useToast();
-
-  const handleSave = () => {
-    onSave(editedNote);
-    setIsEditing(false);
-    toast({
-      title: "Saved",
-      description: "Your changes have been saved.",
-    });
-  };
-
-  const handleCancel = () => {
-    setEditedNote(formattedNote);
-    setIsEditing(false);
-  };
 
   const handleCopy = () => {
     onCopy();
@@ -109,17 +85,9 @@ export function NoteEditor({
         </CardHeader>
 
         <CardContent>
-          {isEditing ? (
-            <Textarea
-              value={editedNote}
-              onChange={(e) => setEditedNote(e.target.value)}
-              className="w-full min-h-[300px] bg-slate-800 text-white border-cyan-700/30 focus:ring-2 focus:ring-cyan-600"
-            />
-          ) : (
-            <div className="text-md text-start text-gray-300 whitespace-pre-wrap">
-              {formattedNote}
-            </div>
-          )}
+          <div className="text-md text-start text-gray-300 whitespace-pre-wrap">
+            {formattedNote}
+          </div>
         </CardContent>
       </Card>
 

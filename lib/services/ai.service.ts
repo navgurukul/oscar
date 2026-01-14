@@ -5,7 +5,6 @@ import type {
   TitleGenerationResult,
 } from "../types/note.types";
 import type {
-  APIResult,
   DeepseekFormatResponse,
   DeepseekTitleResponse,
 } from "../types/api.types";
@@ -141,7 +140,7 @@ export const aiService = {
         success: true,
         title,
       };
-    } catch (error) {
+    } catch {
       return {
         success: true,
         title: UI_STRINGS.UNTITLED_NOTE,

@@ -109,15 +109,6 @@ export function useRecording() {
     }
   }, [state, currentTranscript]);
 
-  const resetRecording = useCallback(() => {
-    setCurrentTranscript("");
-    setRecordingTime(0);
-    setError(null);
-    if (state !== RecordingState.RECORDING) {
-      setState(RecordingState.READY);
-    }
-  }, [state]);
-
   const clearError = useCallback(() => {
     setError(null);
     if (state === RecordingState.ERROR) {
@@ -142,7 +133,6 @@ export function useRecording() {
     // Actions
     startRecording,
     stopRecording,
-    resetRecording,
     clearError,
   };
 }
