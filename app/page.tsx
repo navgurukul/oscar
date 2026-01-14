@@ -42,7 +42,7 @@ export default function Home() {
         </motion.h1>
       </LampContainer>
 
-      <div className="fixed bottom-10 left-1/2 -translate-x-1/2">
+      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 ">
         <HomeRecordingButton />
       </div>
     </main>

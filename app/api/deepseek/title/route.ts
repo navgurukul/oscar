@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { API_CONFIG, ERROR_MESSAGES } from '@/lib/constants'
+import { SYSTEM_PROMPTS, USER_PROMPTS } from '@/lib/prompts'
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.DEEPSEEK_API_KEY
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'Server missing DEEPSEEK_API_KEY' },
+      { error: ERROR_MESSAGES.SERVER_MISSING_API_KEY },
       { status: 500 }
     )
   }
@@ -14,7 +16,7 @@ export async function POST(req: NextRequest) {
     body = await req.json()
   } catch {
     return NextResponse.json(
-      { error: 'Invalid JSON body' },
+      { error: ERROR_MESSAGES.INVALID_JSON_BODY },
       { status: 400 }
     )
   }
@@ -22,35 +24,33 @@ export async function POST(req: NextRequest) {
   const text = (body.text || '').trim()
   if (!text) {
     return NextResponse.json(
-      { error: 'text is required' },
+      { error: ERROR_MESSAGES.TEXT_REQUIRED },
       { status: 400 }
     )
   }
 
   try {
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    const response = await fetch(API_CONFIG.DEEPSEEK_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: API_CONFIG.DEEPSEEK_MODEL,
         messages: [
           {
             role: 'system',
-            content:
-              'You generate short, descriptive titles. Keep original language. Plain text, no quotes. Prefer 4–10 words. Title Case if English; natural casing for Hindi/Hinglish.',
+            content: SYSTEM_PROMPTS.TITLE,
           },
           {
             role: 'user',
-            content:
-              `Create a concise title (max ~60 chars) for this content. Return ONLY the title.\n\nContent:\n${text}`,
+            content: `${USER_PROMPTS.TITLE_TEMPLATE}${text}`,
           },
         ],
-        temperature: 0.3,
-        top_p: 0.9,
-        max_tokens: 64,
+        temperature: API_CONFIG.TITLE_TEMPERATURE,
+        top_p: API_CONFIG.TITLE_TOP_P,
+        max_tokens: API_CONFIG.TITLE_MAX_TOKENS,
         stream: false,
       }),
     })
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text()
       return NextResponse.json(
-        { error: 'Deepseek API error', details: errorText, status: response.status },
+        { error: ERROR_MESSAGES.DEEPSEEK_API_ERROR, details: errorText, status: response.status },
         { status: response.status }
       )
     }
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     const content = data?.choices?.[0]?.message?.content?.trim() || ''
     if (!content) {
       return NextResponse.json(
-        { error: 'Invalid Deepseek response' },
+        { error: ERROR_MESSAGES.INVALID_DEEPSEEK_RESPONSE },
         { status: 502 }
       )
     }
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ title })
   } catch (err: any) {
     return NextResponse.json(
-      { error: 'Deepseek request failed', details: err?.message || String(err) },
+      { error: ERROR_MESSAGES.DEEPSEEK_REQUEST_FAILED, details: err?.message || String(err) },
       { status: 500 }
     )
   }

@@ -1,7 +1,15 @@
 import type { Metadata } from "next";
+import { Roboto } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import { FloatingNavbar } from "@/components/shared/FloatingNavbar";
 import "./globals.css";
+
+const roboto = Roboto({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-roboto",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "OSCAR - AI Voice Notes",
@@ -17,8 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="bg-slate-950 text-white antialiased">
+    <html lang="en" className={roboto.variable}>
+      <body className="bg-slate-950 text-white antialiased font-sans">
         <FloatingNavbar />
         {children}
         <Toaster />

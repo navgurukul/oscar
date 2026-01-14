@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation";
 import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
 import { NoteEditor } from "@/components/results/NoteEditor";
 import { NoteActions } from "@/components/results/NoteActions";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { FileText, Copy, Download, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Spinner } from "@/components/ui/spinner";
+import { ROUTES, UI_STRINGS } from "@/lib/constants";
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -22,7 +20,7 @@ export default function ResultsPage() {
   // Redirect if no note - only after loading completes
   useEffect(() => {
     if (!isLoading && !formattedNote && !rawText) {
-      router.push("/");
+      router.push(ROUTES.HOME);
     }
   }, [isLoading, formattedNote, rawText, router]);
 
@@ -43,7 +41,7 @@ export default function ResultsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "oscar-note.txt";
+    a.download = UI_STRINGS.NOTE_FILENAME;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -54,8 +52,8 @@ export default function ResultsPage() {
     try {
       await navigator.clipboard.writeText(rawText);
       toast({
-        title: "Copied!",
-        description: "Raw transcript copied to clipboard.",
+        title: UI_STRINGS.COPIED_TOAST_TITLE,
+        description: UI_STRINGS.COPIED_TOAST_DESCRIPTION,
       });
     } catch (error) {
       console.error("Failed to copy:", error);
@@ -67,15 +65,15 @@ export default function ResultsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "oscar-raw.txt";
+    a.download = UI_STRINGS.RAW_FILENAME;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
     toast({
-      title: "Downloaded!",
-      description: "Raw transcript saved to your device.",
+      title: UI_STRINGS.DOWNLOADED_TOAST_TITLE,
+      description: UI_STRINGS.DOWNLOADED_TOAST_DESCRIPTION,
     });
   };
 
@@ -84,96 +82,45 @@ export default function ResultsPage() {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-600 mx-auto mb-4"></div>
-          <p className="text-gray-300">Loading your note...</p>
+          <div className="flex items-center justify-center mb-4">
+            <Spinner className="text-cyan-500" />
+          </div>
+          <p className="text-gray-300">{UI_STRINGS.LOADING_NOTE}</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="flex flex-col items-center px-4 pt-8">
+    <main className="flex flex-col items-center px-4 pt-8 pb-24">
       <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
         {/* Header */}
         <div className="text-center space-y-2 mt-8">
-          <h1 className="text-4xl font-bold text-white">Here's your note</h1>
+          <h1 className="text-4xl font-bold text-white">
+            {UI_STRINGS.RESULTS_TITLE}
+          </h1>
           {/* <p className="text-gray-400">
             AI formatted your thoughts into clean text
           </p> */}
         </div>
 
-        {/* Note Editor */}
+        {/* Note Editor with Integrated Raw Transcript */}
         <NoteEditor
           formattedNote={formattedNote}
-          title={title || "Untitled Note"}
+          title={title || UI_STRINGS.UNTITLED_NOTE}
           onSave={handleSaveNote}
           onCopy={handleCopyNote}
           onDownload={handleDownloadNote}
+          showRawTranscript={showRawTranscript}
+          onToggleTranscript={() => setShowRawTranscript(!showRawTranscript)}
+          rawText={rawText}
+          onCopyRaw={handleCopyRaw}
+          onDownloadRaw={handleDownloadRaw}
         />
-
-        {/* Raw Transcript Toggle Button */}
-        <div className="flex justify-center">
-          <Button
-            onClick={() => setShowRawTranscript(!showRawTranscript)}
-            variant="outline"
-            className="flex items-center gap-2 text-cyan-500 border-cyan-700/30 hover:bg-slate-800"
-          >
-            <FileText className="w-5 h-5" />
-            <span className="font-medium">
-              {showRawTranscript
-                ? "Hide Raw Transcript"
-                : "Show Raw Transcript"}
-            </span>
-            {showRawTranscript ? (
-              <ChevronUp className="w-4 h-4" />
-            ) : (
-              <ChevronDown className="w-4 h-4" />
-            )}
-          </Button>
-        </div>
-
-        {/* Raw Transcript - Expandable Section */}
-        {showRawTranscript && (
-          <Card className="bg-slate-900 border-cyan-700/30 animate-fadeIn rounded-2xl shadow-xl w-[650px]">
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-white">
-                  Raw Transcript
-                </h3>
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCopyRaw}
-                    className="text-gray-400 hover:text-cyan-500"
-                  >
-                    <Copy className="w-5 h-5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleDownloadRaw}
-                    className="text-gray-400 hover:text-cyan-500"
-                  >
-                    <Download className="w-5 h-5" />
-                  </Button>
-                </div>
-              </div>
-              <Separator className="mt-3 bg-gray-700" />
-            </CardHeader>
-            <CardContent>
-              <div className="prose prose-lg max-w-none text-gray-300 whitespace-pre-wrap">
-                {rawText || "No raw transcript available."}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex justify-center gap-4 mt-6 pb-12">
-          <NoteActions />
-        </div>
       </div>
+
+      {/* Fixed Action Buttons */}
+      <NoteActions />
     </main>
   );
 }

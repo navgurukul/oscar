@@ -2,7 +2,8 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, Square, Loader2 } from "lucide-react";
+import { Mic, Square } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
 
 interface RecordingControlsProps {
   isRecording: boolean;
@@ -36,7 +37,7 @@ export function RecordingControls({
         }`}
       >
         {disabled ? (
-          <Loader2 className="w-14 h-14 text-white animate-spin" />
+          <Spinner className="size-14 text-white" />
         ) : isRecording ? (
           <Square className="w-14 h-14 text-white" fill="currentColor" />
         ) : (

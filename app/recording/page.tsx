@@ -13,7 +13,9 @@ import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
-import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants/errors";
+import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants";
+import { ROUTES, UI_STRINGS, RECORDING_CONFIG } from "@/lib/constants";
+import { Spinner } from "@/components/ui/spinner";
 
 function RecordingPageInner() {
   const router = useRouter();
@@ -96,7 +98,7 @@ function RecordingPageInner() {
         setShowProcessing(false);
 
         let errorMessage = ERROR_MESSAGES.NO_SPEECH_DETECTED + "\n\n";
-        if (recordingTime < 2) {
+        if (recordingTime < RECORDING_CONFIG.MIN_RECORDING_TIME) {
           errorMessage += "⚠️ " + ERROR_MESSAGES.RECORDING_TOO_SHORT + "\n\n";
         }
         errorMessage +=
@@ -126,8 +128,10 @@ function RecordingPageInner() {
         );
         setProcessingProgress(100);
 
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        router.push("/results");
+        await new Promise((resolve) =>
+          setTimeout(resolve, RECORDING_CONFIG.COMPLETION_DELAY_MS)
+        );
+        router.push(ROUTES.RESULTS);
       } else {
         setShowProcessing(false);
         alert(ERROR_MESSAGES.FORMATTING_FAILED);
@@ -144,8 +148,10 @@ function RecordingPageInner() {
     return (
       <main className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-          <p className="text-gray-300">Initializing...</p>
+          <div className="flex items-center justify-center mb-4">
+            <Spinner className="text-cyan-500" />
+          </div>
+          <p className="text-gray-300">{UI_STRINGS.INITIALIZING}</p>
         </div>
       </main>
     );
@@ -221,12 +227,11 @@ function RecordingPageInner() {
           {/* Continue Mode Hint */}
           {!isRecording && continueMode && (
             <div className="text-center -mt-6 mb-4">
-              <p className="text-cyan-400 text-sm">Continuing from previous recording…</p>
+              <p className="text-cyan-400 text-sm">
+                Continuing from previous recording…
+              </p>
             </div>
           )}
-
-          {/* Live Transcript - shows existing and new speech while recording */}
-          <RecordingTranscript transcript={currentTranscript} isRecording={isRecording} />
         </div>
       </div>
 
@@ -251,8 +256,8 @@ export default function RecordingPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center text-gray-600">
-          Loading recording page…
+        <div className="min-h-screen flex items-center justify-center">
+          <Spinner className="text-cyan-500" />
         </div>
       }
     >
