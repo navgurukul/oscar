@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Mic } from "lucide-react";
 import { storageService } from "@/lib/services/storage.service";
 import { motion } from "motion/react";
+import { ROUTES } from "@/lib/constants";
 
 export function HomeRecordingButton() {
   const router = useRouter();
@@ -13,7 +14,7 @@ export function HomeRecordingButton() {
     // Clear previous session data
     storageService.clearNote();
     // Navigate to recording page
-    router.push("/recording");
+    router.push(ROUTES.RECORDING);
   };
 
   return (

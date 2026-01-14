@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Mic, Play } from "lucide-react";
 import { storageService } from "@/lib/services/storage.service";
+import { ROUTES, UI_STRINGS } from "@/lib/constants";
 
 export function NoteActions() {
   const router = useRouter();
@@ -13,14 +14,14 @@ export function NoteActions() {
     // Clear previous session data
     storageService.clearNote();
     // Navigate to recording page
-    router.push("/recording");
+    router.push(ROUTES.RECORDING);
   };
 
   const handleContinueRecording = () => {
     // Mark continue mode for recording page
     storageService.setContinueMode(true);
     // Navigate to recording page with auto-start
-    router.push("/recording?autoStart=true&mode=continue");
+    router.push(ROUTES.RECORDING_CONTINUE);
   };
 
   return (
@@ -30,14 +31,14 @@ export function NoteActions() {
         className="flex items-center gap-2 bg-cyan-700 hover:bg-cyan-800"
       >
         <Play className="w-5 h-5" />
-        <span>Continue Recording</span>
+        <span>{UI_STRINGS.CONTINUE_RECORDING}</span>
       </Button>
       <Button
         onClick={handleRecordAgain}
         className="flex items-center gap-2 bg-cyan-700 hover:bg-cyan-800"
       >
         <Mic className="w-5 h-5" />
-        <span>Record Again</span>
+        <span>{UI_STRINGS.RECORD_AGAIN}</span>
       </Button>
     </div>
   );

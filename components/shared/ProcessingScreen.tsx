@@ -2,24 +2,13 @@
 
 import React from "react";
 import { DottedGlowBackground } from "../ui/dotted-glow-background";
+import { PROCESSING_STEPS } from "@/lib/constants";
 
 interface ProcessingScreenProps {
   isProcessing: boolean;
   progress: number;
   currentStep: number;
 }
-
-const processingSteps = [
-  {
-    title: "Analyzing Audio",
-    description: "Processing sound waves",
-  },
-  {
-    title: "AI Recognition",
-    description: "Understanding speech patterns",
-  },
-  { title: "Formatting", description: "Structuring your text" },
-];
 
 export function ProcessingScreen({
   isProcessing,
@@ -52,10 +41,10 @@ export function ProcessingScreen({
             {/* Step Title - Clean and Prominent */}
             <div className="text-center">
               <h2 className="text-2xl font-medium text-white transition-all duration-300">
-                {processingSteps[currentStep]?.title}
+                {PROCESSING_STEPS[currentStep]?.title}
               </h2>
               {/* <h6 className="text-white mt-2">
-                {processingSteps[currentStep]?.description}
+                {PROCESSING_STEPS[currentStep]?.description}
               </h6> */}
             </div>
 
@@ -71,7 +60,7 @@ export function ProcessingScreen({
           </div>
           {/* Simplified Step Dots */}
           <div className="flex justify-center gap-1.5">
-            {processingSteps.map((_, i) => (
+            {PROCESSING_STEPS.map((_, i) => (
               <div
                 key={i}
                 className={`transition-all duration-300 rounded-full ${

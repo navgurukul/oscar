@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { FileText, Copy, Download, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Spinner } from "@/components/ui/spinner";
+import { ROUTES, UI_STRINGS } from "@/lib/constants";
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -23,7 +24,7 @@ export default function ResultsPage() {
   // Redirect if no note - only after loading completes
   useEffect(() => {
     if (!isLoading && !formattedNote && !rawText) {
-      router.push("/");
+      router.push(ROUTES.HOME);
     }
   }, [isLoading, formattedNote, rawText, router]);
 
@@ -44,7 +45,7 @@ export default function ResultsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "oscar-note.txt";
+    a.download = UI_STRINGS.NOTE_FILENAME;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -55,8 +56,8 @@ export default function ResultsPage() {
     try {
       await navigator.clipboard.writeText(rawText);
       toast({
-        title: "Copied!",
-        description: "Raw transcript copied to clipboard.",
+        title: UI_STRINGS.COPIED_TOAST_TITLE,
+        description: UI_STRINGS.COPIED_TOAST_DESCRIPTION,
       });
     } catch (error) {
       console.error("Failed to copy:", error);
@@ -68,15 +69,15 @@ export default function ResultsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "oscar-raw.txt";
+    a.download = UI_STRINGS.RAW_FILENAME;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
     toast({
-      title: "Downloaded!",
-      description: "Raw transcript saved to your device.",
+      title: UI_STRINGS.DOWNLOADED_TOAST_TITLE,
+      description: UI_STRINGS.DOWNLOADED_TOAST_DESCRIPTION,
     });
   };
 
@@ -88,7 +89,7 @@ export default function ResultsPage() {
           <div className="flex items-center justify-center mb-4">
             <Spinner className="text-cyan-500" />
           </div>
-          <p className="text-gray-300">Loading your note...</p>
+          <p className="text-gray-300">{UI_STRINGS.LOADING_NOTE}</p>
         </div>
       </main>
     );
@@ -99,7 +100,9 @@ export default function ResultsPage() {
       <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
         {/* Header */}
         <div className="text-center space-y-2 mt-8">
-          <h1 className="text-4xl font-bold text-white">Here's your note</h1>
+          <h1 className="text-4xl font-bold text-white">
+            {UI_STRINGS.RESULTS_TITLE}
+          </h1>
           {/* <p className="text-gray-400">
             AI formatted your thoughts into clean text
           </p> */}
@@ -108,7 +111,7 @@ export default function ResultsPage() {
         {/* Note Editor */}
         <NoteEditor
           formattedNote={formattedNote}
-          title={title || "Untitled Note"}
+          title={title || UI_STRINGS.UNTITLED_NOTE}
           onSave={handleSaveNote}
           onCopy={handleCopyNote}
           onDownload={handleDownloadNote}
@@ -124,8 +127,8 @@ export default function ResultsPage() {
             <FileText className="w-5 h-5" />
             <span className="font-medium">
               {showRawTranscript
-                ? "Hide Raw Transcript"
-                : "Show Raw Transcript"}
+                ? UI_STRINGS.HIDE_RAW_TRANSCRIPT
+                : UI_STRINGS.SHOW_RAW_TRANSCRIPT}
             </span>
             {showRawTranscript ? (
               <ChevronUp className="w-4 h-4" />
@@ -141,7 +144,7 @@ export default function ResultsPage() {
             <CardHeader>
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold text-white">
-                  Raw Transcript
+                  {UI_STRINGS.RAW_TRANSCRIPT}
                 </h3>
                 <div className="flex gap-2">
                   <Button
@@ -166,7 +169,7 @@ export default function ResultsPage() {
             </CardHeader>
             <CardContent>
               <div className="prose prose-lg max-w-none text-gray-300 whitespace-pre-wrap">
-                {rawText || "No raw transcript available."}
+                {rawText || UI_STRINGS.NO_RAW_TRANSCRIPT}
               </div>
             </CardContent>
           </Card>

@@ -12,7 +12,8 @@ import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
-import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants/errors";
+import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants";
+import { ROUTES, UI_STRINGS, RECORDING_CONFIG } from "@/lib/constants";
 import { Spinner } from "@/components/ui/spinner";
 
 function RecordingPageInner() {
@@ -37,7 +38,7 @@ function RecordingPageInner() {
 
   const [processingStep, setProcessingStep] = useState(0);
   const [processingProgress, setProcessingProgress] = useState(0);
-  const [showProcessing, setShowProcessing] = useState(true);
+  const [showProcessing, setShowProcessing] = useState(false);
 
   // Auto-start if URL param is set
   useEffect(() => {
@@ -92,7 +93,7 @@ function RecordingPageInner() {
         setShowProcessing(false);
 
         let errorMessage = ERROR_MESSAGES.NO_SPEECH_DETECTED + "\n\n";
-        if (recordingTime < 2) {
+        if (recordingTime < RECORDING_CONFIG.MIN_RECORDING_TIME) {
           errorMessage += "⚠️ " + ERROR_MESSAGES.RECORDING_TOO_SHORT + "\n\n";
         }
         errorMessage +=
@@ -122,8 +123,10 @@ function RecordingPageInner() {
         );
         setProcessingProgress(100);
 
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        router.push("/results");
+        await new Promise((resolve) =>
+          setTimeout(resolve, RECORDING_CONFIG.COMPLETION_DELAY_MS)
+        );
+        router.push(ROUTES.RESULTS);
       } else {
         setShowProcessing(false);
         alert(ERROR_MESSAGES.FORMATTING_FAILED);
@@ -143,7 +146,7 @@ function RecordingPageInner() {
           <div className="flex items-center justify-center mb-4">
             <Spinner className="text-cyan-500" />
           </div>
-          <p className="text-gray-300">Initializing...</p>
+          <p className="text-gray-300">{UI_STRINGS.INITIALIZING}</p>
         </div>
       </main>
     );
