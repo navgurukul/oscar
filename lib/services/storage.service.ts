@@ -73,6 +73,13 @@ export const storageService = {
   },
 
   /**
+   * Update raw transcript text
+   */
+  updateRawText(text: string): void {
+    sessionStorage.setItem(STORAGE_KEYS.RAW_TEXT, text)
+  },
+
+  /**
    * Update note title
    */
   updateTitle(title: string): void {
