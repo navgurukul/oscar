@@ -75,9 +75,10 @@ export async function POST(req: NextRequest) {
     // Strip potential markdown code fences
     const title = content.replace(/^```[\w]*\n/, '').replace(/\n```$/, '').trim()
     return NextResponse.json({ title })
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const error = err as Error;
     return NextResponse.json(
-      { error: ERROR_MESSAGES.DEEPSEEK_REQUEST_FAILED, details: err?.message || String(err) },
+      { error: ERROR_MESSAGES.DEEPSEEK_REQUEST_FAILED, details: error?.message || String(err) },
       { status: 500 }
     )
   }

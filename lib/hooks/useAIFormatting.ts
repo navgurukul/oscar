@@ -20,8 +20,9 @@ export function useAIFormatting() {
       }
 
       return result;
-    } catch (error: any) {
-      const errorMsg = error?.message || "Failed to format text";
+    } catch (error: unknown) {
+      const err = error as Error;
+      const errorMsg = err?.message || "Failed to format text";
       setFormattingError(errorMsg);
       return {
         success: false,

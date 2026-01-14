@@ -51,7 +51,7 @@ function RecordingPageInner() {
       }
       startRecording(seedTranscript);
     }
-  }, [autoStart, continueMode, isRecording, isReady]);
+  }, [autoStart, continueMode, isRecording, isReady, startRecording]);
 
   const handleStartRecording = async () => {
     await startRecording();

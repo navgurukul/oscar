@@ -7,10 +7,11 @@ export const browserService = {
   isSpeechRecognitionSupported(): boolean {
     if (typeof window === "undefined") return false;
 
-    const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-    return !!SpeechRecognition;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const win = window as any;
+    const SpeechRecognitionAPI =
+      win.SpeechRecognition || win.webkitSpeechRecognition;
+    return !!SpeechRecognitionAPI;
   },
 
   /**
@@ -40,15 +41,16 @@ export const browserService = {
       // Permission granted, stop the stream immediately
       result.getTracks().forEach((track) => track.stop());
       return { granted: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as Error & { name?: string };
       let errorMsg = "Microphone access denied";
 
-      if (error.name === "NotAllowedError") {
+      if (err.name === "NotAllowedError") {
         errorMsg =
           "Microphone permission required. Enable it from browser settings and reload";
-      } else if (error.name === "NotFoundError") {
+      } else if (err.name === "NotFoundError") {
         errorMsg = "No microphone found. Check your device and try again";
-      } else if (error.name === "NotReadableError") {
+      } else if (err.name === "NotReadableError") {
         errorMsg = "Microphone in use. Close other apps and try again";
       }
 
