@@ -74,14 +74,13 @@ export function NoteEditor({
       <Card className="bg-slate-900 border-cyan-700/30 rounded-t-2xl shadow-xl overflow-hidden">
         <CardHeader>
           {/* AI Title */}
-          <div className="mb-4 flex gap-6 justify-between">
+          <div className="flex gap-6 justify-between items-center">
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-2">
                 <h2 className="text-xl font-semibold text-white truncate">
                   {title || "Untitled Note"}
                 </h2>
                 {/* Cyan Separator */}
-                <div className="w-16 h-0.5 bg-cyan-500"></div>
               </div>
             </div>
 
@@ -93,7 +92,7 @@ export function NoteEditor({
                   onClick={handleCopy}
                   className="text-gray-400 hover:text-cyan-500"
                 >
-                  <Copy className="w-5 h-5" />
+                  <Copy className="w-4 h-4" />
                 </Button>
                 <Button
                   variant="ghost"
@@ -101,11 +100,12 @@ export function NoteEditor({
                   onClick={handleDownload}
                   className="text-gray-400 hover:text-cyan-500"
                 >
-                  <Download className="w-5 h-5" />
+                  <Download className="w-4 h-4" />
                 </Button>
               </div>
             </div>
           </div>
+          <Separator className="w-24 h-0.5 bg-cyan-500" />
         </CardHeader>
 
         <CardContent>
@@ -116,7 +116,7 @@ export function NoteEditor({
               className="w-full min-h-[300px] bg-slate-800 text-white border-cyan-700/30 focus:ring-2 focus:ring-cyan-600"
             />
           ) : (
-            <div className="text-start text-gray-300 whitespace-pre-wrap">
+            <div className="text-md text-start text-gray-300 whitespace-pre-wrap">
               {formattedNote}
             </div>
           )}
@@ -142,7 +142,7 @@ export function NoteEditor({
                 <CardContent className="pt-6">
                   <div className="space-y-4">
                     {/* Raw Transcript Text */}
-                    <div className="text-gray-800 text-lg whitespace-pre-wrap leading-relaxed">
+                    <div className="text-gray-800 text-md whitespace-pre-wrap leading-relaxed">
                       {rawText || "No transcript available."}
                     </div>
 
