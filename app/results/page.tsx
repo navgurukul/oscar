@@ -3,16 +3,38 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
+import { notesService } from "@/lib/services/notes.service";
 import { NoteEditor } from "@/components/results/NoteEditor";
 import { NoteActions } from "@/components/results/NoteActions";
 import { Spinner } from "@/components/ui/spinner";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ResultsPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const { isLoading, formattedNote, rawText, title } = useNoteStorage();
 
   const [showRawTranscript, setShowRawTranscript] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [noteId, setNoteId] = useState<string | null>(null);
+
+  // Get the note ID from session storage (set by recording page)
+  useEffect(() => {
+    const storedNoteId = sessionStorage.getItem("currentNoteId");
+    if (storedNoteId) {
+      setNoteId(storedNoteId);
+    }
+  }, []);
+
+  // Initialize edited text when formatted note loads
+  useEffect(() => {
+    if (formattedNote) {
+      setEditedText(formattedNote);
+    }
+  }, [formattedNote]);
 
   // Redirect if no note - only after loading completes
   useEffect(() => {
@@ -23,14 +45,16 @@ export default function ResultsPage() {
 
   const handleCopyNote = async () => {
     try {
-      await navigator.clipboard.writeText(formattedNote);
+      const textToCopy = isEditing ? editedText : formattedNote;
+      await navigator.clipboard.writeText(textToCopy);
     } catch (error) {
       console.error("Failed to copy:", error);
     }
   };
 
   const handleDownloadNote = () => {
-    const blob = new Blob([formattedNote], { type: "text/plain" });
+    const textToDownload = isEditing ? editedText : formattedNote;
+    const blob = new Blob([textToDownload], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -39,6 +63,46 @@ export default function ResultsPage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleStartEditing = () => {
+    setIsEditing(true);
+  };
+
+  const handleCancelEditing = () => {
+    setEditedText(formattedNote);
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!noteId) {
+      toast({
+        title: "Error",
+        description: "Could not save changes - note not found in database.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    const { error } = await notesService.updateNote(noteId, {
+      edited_text: editedText,
+    });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save changes. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Saved!",
+        description: "Your changes have been saved.",
+      });
+      setIsEditing(false);
+    }
+    setIsSaving(false);
   };
 
   // Show loading state while data is being loaded
@@ -63,20 +127,24 @@ export default function ResultsPage() {
           <h1 className="text-4xl font-bold text-white">
             {UI_STRINGS.RESULTS_TITLE}
           </h1>
-          {/* <p className="text-gray-400">
-            AI formatted your thoughts into clean text
-          </p> */}
         </div>
 
         {/* Note Editor with Integrated Raw Transcript */}
         <NoteEditor
-          formattedNote={formattedNote}
+          formattedNote={isEditing ? editedText : formattedNote}
           title={title || UI_STRINGS.UNTITLED_NOTE}
           onCopy={handleCopyNote}
           onDownload={handleDownloadNote}
           showRawTranscript={showRawTranscript}
           onToggleTranscript={() => setShowRawTranscript(!showRawTranscript)}
           rawText={rawText}
+          isEditing={isEditing}
+          onStartEditing={handleStartEditing}
+          onCancelEditing={handleCancelEditing}
+          onSaveEdit={handleSaveEdit}
+          onTextChange={setEditedText}
+          isSaving={isSaving}
+          canEdit={!!noteId}
         />
       </div>
 

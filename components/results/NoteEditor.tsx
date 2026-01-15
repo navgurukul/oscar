@@ -5,8 +5,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Copy, Download } from "lucide-react";
+import { Copy, Download, Edit3, Save, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Spinner } from "@/components/ui/spinner";
 
 interface NoteEditorProps {
   formattedNote: string;
@@ -16,6 +17,13 @@ interface NoteEditorProps {
   showRawTranscript: boolean;
   onToggleTranscript: () => void;
   rawText: string;
+  isEditing?: boolean;
+  onStartEditing?: () => void;
+  onCancelEditing?: () => void;
+  onSaveEdit?: () => void;
+  onTextChange?: (text: string) => void;
+  isSaving?: boolean;
+  canEdit?: boolean;
 }
 
 export function NoteEditor({
@@ -26,6 +34,13 @@ export function NoteEditor({
   showRawTranscript,
   onToggleTranscript,
   rawText,
+  isEditing = false,
+  onStartEditing,
+  onCancelEditing,
+  onSaveEdit,
+  onTextChange,
+  isSaving = false,
+  canEdit = false,
 }: NoteEditorProps) {
   const { toast } = useToast();
 
@@ -56,28 +71,66 @@ export function NoteEditor({
                 <h2 className="text-xl font-semibold text-white truncate">
                   {title || "Untitled Note"}
                 </h2>
-                {/* Cyan Separator */}
               </div>
             </div>
 
             <div className="flex items-center">
               <div className="flex">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCopy}
-                  className="text-gray-400 hover:text-cyan-500"
-                >
-                  <Copy className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDownload}
-                  className="text-gray-400 hover:text-cyan-500"
-                >
-                  <Download className="w-4 h-4" />
-                </Button>
+                {isEditing ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onSaveEdit}
+                      disabled={isSaving}
+                      className="text-green-400 hover:text-green-300"
+                    >
+                      {isSaving ? (
+                        <Spinner className="w-4 h-4" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onCancelEditing}
+                      disabled={isSaving}
+                      className="text-gray-400 hover:text-red-400"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {canEdit && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onStartEditing}
+                        className="text-gray-400 hover:text-cyan-500"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopy}
+                      className="text-gray-400 hover:text-cyan-500"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleDownload}
+                      className="text-gray-400 hover:text-cyan-500"
+                    >
+                      <Download className="w-4 h-4" />
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -85,9 +138,18 @@ export function NoteEditor({
         </CardHeader>
 
         <CardContent>
-          <div className="text-md text-start text-gray-300 whitespace-pre-wrap">
-            {formattedNote}
-          </div>
+          {isEditing ? (
+            <textarea
+              value={formattedNote}
+              onChange={(e) => onTextChange?.(e.target.value)}
+              className="w-full min-h-[300px] bg-slate-800 text-gray-300 rounded-lg p-4 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 border border-slate-700"
+              autoFocus
+            />
+          ) : (
+            <div className="text-md text-start text-gray-300 whitespace-pre-wrap">
+              {formattedNote}
+            </div>
+          )}
         </CardContent>
       </Card>
 

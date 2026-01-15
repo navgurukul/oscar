@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import { FloatingNavbar } from "@/components/shared/FloatingNavbar";
+import { AuthProvider } from "@/lib/contexts/AuthContext";
 import "./globals.css";
 
 const roboto = Roboto({
@@ -27,9 +28,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={roboto.variable}>
       <body className="bg-slate-950 text-white antialiased font-sans">
-        <FloatingNavbar />
-        {children}
-        <Toaster />
+        <AuthProvider>
+          <FloatingNavbar />
+          {children}
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );

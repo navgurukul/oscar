@@ -4,8 +4,10 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
 import { storageService } from "@/lib/services/storage.service";
+import { notesService } from "@/lib/services/notes.service";
 import { aiService } from "@/lib/services/ai.service";
 import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
+import { useAuth } from "@/lib/contexts/AuthContext";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { RecordingTimer } from "@/components/recording/RecordingTimer";
 
@@ -22,6 +24,7 @@ function RecordingPageInner() {
   const searchParams = useSearchParams();
   const autoStart = searchParams.get("autoStart") === "true";
   const continueMode = searchParams.get("mode") === "continue";
+  const { user } = useAuth();
 
   const {
     isInitializing,
@@ -117,14 +120,33 @@ function RecordingPageInner() {
         const titleResult = await aiService.generateTitle(result.formattedText);
         const generatedTitle = titleResult.success
           ? titleResult.title
-          : undefined;
+          : "Untitled Note";
 
-        // Store with title and navigate
+        // Store in session storage for immediate display
         storageService.saveNote(
           result.formattedText,
           transcript,
           generatedTitle
         );
+
+        // Save to Supabase if user is authenticated
+        if (user) {
+          const { data: savedNote, error: saveError } =
+            await notesService.createNote({
+              user_id: user.id,
+              title: generatedTitle || "Untitled Note",
+              raw_text: transcript,
+              original_formatted_text: result.formattedText,
+            });
+
+          if (saveError) {
+            console.error("Failed to save note to database:", saveError);
+          } else if (savedNote) {
+            // Store the note ID for the results page
+            sessionStorage.setItem("currentNoteId", savedNote.id);
+          }
+        }
+
         setProcessingProgress(100);
 
         await new Promise((resolve) =>
