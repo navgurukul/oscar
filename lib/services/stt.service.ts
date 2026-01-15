@@ -29,6 +29,15 @@ export class STTService {
       throw new Error(ERROR_MESSAGES.BROWSER_NOT_SUPPORTED);
     }
 
+    // Request microphone permission BEFORE initializing STT
+    // This prevents race conditions where recording starts before permission is granted
+    const permissionResult = await browserService.checkMicrophonePermission();
+    if (!permissionResult.granted) {
+      throw new Error(
+        permissionResult.error || ERROR_MESSAGES.MIC_PERMISSION_DENIED
+      );
+    }
+
     try {
       const { STTLogic } = await import("speech-to-speech");
 
@@ -64,14 +73,6 @@ export class STTService {
   async startRecording(seedTranscript?: string): Promise<void> {
     if (!this.sttInstance) {
       throw new Error(ERROR_MESSAGES.STT_NOT_INITIALIZED);
-    }
-
-    // Check microphone permission
-    const permissionResult = await browserService.checkMicrophonePermission();
-    if (!permissionResult.granted) {
-      throw new Error(
-        permissionResult.error || ERROR_MESSAGES.MIC_PERMISSION_DENIED
-      );
     }
 
     try {

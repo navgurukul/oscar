@@ -9,6 +9,7 @@ interface RecordingControlsProps {
   isRecording: boolean;
   isProcessing: boolean;
   isInitializing: boolean;
+  isRequestingPermission?: boolean;
   onStart: () => void;
   onStop: () => void;
 }
@@ -17,10 +18,11 @@ export function RecordingControls({
   isRecording,
   isProcessing,
   isInitializing,
+  isRequestingPermission = false,
   onStart,
   onStop,
 }: RecordingControlsProps) {
-  const disabled = isProcessing || isInitializing;
+  const disabled = isProcessing || isInitializing || isRequestingPermission;
 
   return (
     <div className="flex justify-center pt-4">

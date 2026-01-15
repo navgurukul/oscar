@@ -25,6 +25,7 @@ function RecordingPageInner() {
 
   const {
     isInitializing,
+    isRequestingPermission,
     isReady,
     isRecording,
     isProcessing,
@@ -142,14 +143,23 @@ function RecordingPageInner() {
     }
   };
 
-  if (isInitializing) {
+  if (isInitializing || isRequestingPermission) {
     return (
       <main className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
           <div className="flex items-center justify-center mb-4">
             <Spinner className="text-cyan-500" />
           </div>
-          <p className="text-gray-300">{UI_STRINGS.INITIALIZING}</p>
+          <p className="text-gray-300">
+            {isRequestingPermission
+              ? UI_STRINGS.REQUESTING_PERMISSION
+              : UI_STRINGS.INITIALIZING}
+          </p>
+          {isRequestingPermission && (
+            <p className="text-gray-500 text-sm mt-2">
+              Please allow microphone access to continue
+            </p>
+          )}
         </div>
       </main>
     );
@@ -208,6 +218,7 @@ function RecordingPageInner() {
             isRecording={isRecording}
             isProcessing={isProcessing}
             isInitializing={isInitializing}
+            isRequestingPermission={isRequestingPermission}
             onStart={handleStartRecording}
             onStop={handleStopRecording}
           />

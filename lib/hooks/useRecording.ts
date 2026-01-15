@@ -22,6 +22,11 @@ export function useRecording() {
 
       try {
         const service = new STTService();
+
+        // Update state to indicate we're requesting permission
+        setState(RecordingState.REQUESTING_PERMISSION);
+
+        // This will now prompt for permission during initialization
         await service.initialize((transcript) => {
           setCurrentTranscript(transcript);
         });
@@ -123,6 +128,7 @@ export function useRecording() {
     // State
     state,
     isInitializing: state === RecordingState.INITIALIZING,
+    isRequestingPermission: state === RecordingState.REQUESTING_PERMISSION,
     isReady: state === RecordingState.READY,
     isRecording: state === RecordingState.RECORDING,
     isProcessing: state === RecordingState.PROCESSING,

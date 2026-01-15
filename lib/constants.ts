@@ -98,6 +98,7 @@ export const UI_STRINGS = {
 
   // Loading states
   INITIALIZING: "Initializing...",
+  REQUESTING_PERMISSION: "Requesting microphone permission...",
   LOADING_NOTE: "Loading your note...",
 
   // Note defaults
