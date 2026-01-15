@@ -5,13 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
 import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
 import { storageService } from "@/lib/services/storage.service";
+import { browserService } from "@/lib/services/browser.service";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { RecordingTimer } from "@/components/recording/RecordingTimer";
 import { RecordingTranscript } from "@/components/recording/RecordingTranscript";
 import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants/errors";
 
 function RecordingPageInner() {
@@ -38,19 +39,52 @@ function RecordingPageInner() {
   const [processingStep, setProcessingStep] = useState(0);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [showProcessing, setShowProcessing] = useState(false);
+  const [isErrorOpen, setIsErrorOpen] = useState(false);
+  const [errorTitle, setErrorTitle] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isPermissionOpen, setIsPermissionOpen] = useState(false);
+  const [micGranted, setMicGranted] = useState(false);
 
   // Auto-start only when STT is ready to avoid race conditions
   useEffect(() => {
     if (autoStart && isReady && !isRecording) {
-      const seedTranscript = continueMode
-        ? storageService.getRawText() || ""
-        : "";
+      if (!micGranted) {
+        setIsPermissionOpen(true);
+        return;
+      }
+      const seedTranscript = continueMode ? storageService.getRawText() || "" : "";
       if (continueMode) {
         storageService.clearContinueMode();
       }
       startRecording(seedTranscript);
     }
-  }, [autoStart, continueMode, isRecording, isReady]);
+  }, [autoStart, continueMode, isRecording, isReady, micGranted]);
+
+  useEffect(() => {
+    if (recordingError) {
+      setErrorTitle("Recording Error");
+      setErrorMessage(recordingError);
+      setIsErrorOpen(true);
+    }
+  }, [recordingError]);
+
+  const promptMicAccess = async () => {
+    const result = await browserService.checkMicrophonePermission();
+    if (result.granted) {
+      setMicGranted(true);
+      setIsPermissionOpen(false);
+      // If autoStart was requested, kick off recording now
+      if (autoStart && isReady && !isRecording) {
+        const seedTranscript = continueMode ? storageService.getRawText() || "" : "";
+        if (continueMode) storageService.clearContinueMode();
+        await startRecording(seedTranscript);
+      }
+    } else {
+      setErrorTitle("Microphone Permission Required");
+      setErrorMessage(result.error || "Please enable microphone access to record.");
+      setIsErrorOpen(true);
+    }
+  };
 
   const handleStartRecording = async () => {
     await startRecording();
@@ -94,13 +128,15 @@ function RecordingPageInner() {
         clearInterval(stepInterval);
         setShowProcessing(false);
 
-        let errorMessage = ERROR_MESSAGES.NO_SPEECH_DETECTED + "\n\n";
+        let msg = ERROR_MESSAGES.NO_SPEECH_DETECTED + "\n\n";
         if (recordingTime < 2) {
-          errorMessage += "⚠️ " + ERROR_MESSAGES.RECORDING_TOO_SHORT + "\n\n";
+          msg += "⚠️ " + ERROR_MESSAGES.RECORDING_TOO_SHORT + "\n\n";
         }
-        errorMessage +=
+        msg +=
           "Tips:\n" + ERROR_TIPS.MIC_TIPS.map((tip) => `• ${tip}`).join("\n");
-        alert(errorMessage);
+        setErrorTitle("No Speech Detected");
+        setErrorMessage(msg);
+        setIsErrorOpen(true);
         return;
       }
 
@@ -119,13 +155,17 @@ function RecordingPageInner() {
         router.push("/results");
       } else {
         setShowProcessing(false);
-        alert(ERROR_MESSAGES.FORMATTING_FAILED);
+        setErrorTitle("Formatting Failed");
+        setErrorMessage(ERROR_MESSAGES.FORMATTING_FAILED);
+        setIsErrorOpen(true);
       }
     } catch (error) {
       clearInterval(progressInterval);
       clearInterval(stepInterval);
       setShowProcessing(false);
-      alert(ERROR_MESSAGES.PROCESSING_FAILED);
+      setErrorTitle("Processing Error");
+      setErrorMessage(ERROR_MESSAGES.PROCESSING_FAILED);
+      setIsErrorOpen(true);
     }
   };
 
@@ -152,15 +192,26 @@ function RecordingPageInner() {
 
   return (
     <main className="flex flex-col items-center px-4 pt-8">
-      {/* Error Alert */}
-      {recordingError && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-[90%] max-w-md">
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{recordingError}</AlertDescription>
-          </Alert>
-        </div>
-      )}
+      <Dialog open={isErrorOpen} onOpenChange={(open) => {
+        setIsErrorOpen(open);
+        if (!open) clearError();
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-black">{errorTitle}</DialogTitle>
+            <DialogDescription>
+              Please review the details below.
+            </DialogDescription>
+          </DialogHeader >
+          <div className="text-sm text-gray-400 whitespace-pre-wrap">{errorMessage}</div>
+          <DialogFooter className="mt-4 ">
+            <Button onClick={() => {
+              setIsErrorOpen(false);
+              clearError();
+            }} className="bg-cyan-700 hover:bg-cyan-800">OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
         {/* Header */}
@@ -218,6 +269,27 @@ function RecordingPageInner() {
           <RecordingTranscript transcript={currentTranscript} isRecording={isRecording} />
         </div>
       </div>
+
+      {/* Microphone Permission Dialog */}
+      <Dialog open={isPermissionOpen} onOpenChange={setIsPermissionOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enable Microphone</DialogTitle>
+            <DialogDescription>
+              To continue recording, please allow microphone access.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-sm text-gray-200">
+            We’ll prompt your browser for permission. If denied, enable it from
+            browser settings and reload the page.
+          </div>
+          <DialogFooter>
+            <Button onClick={promptMicAccess} className="bg-cyan-700 hover:bg-cyan-800">
+              Enable Microphone
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <style jsx>{`
         @keyframes waveform {
