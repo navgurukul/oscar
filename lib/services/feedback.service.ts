@@ -1,8 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import type {
-  FeedbackReason,
-  FeedbackSubmission,
-} from "@/lib/types/note.types";
+import type { FeedbackReason } from "@/lib/types/note.types";
 
 /**
  * Feedback Service

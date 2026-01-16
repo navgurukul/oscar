@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
 import { SYSTEM_PROMPTS } from "@/lib/prompts";
 
@@ -32,6 +33,16 @@ async function fetchWithTimeout(
 }
 
 export async function POST(req: NextRequest) {
+  // Check authentication
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
+  }
+
   const apiKey = process.env.DEEPSEEK_API_KEY;
 
   if (!apiKey) {
