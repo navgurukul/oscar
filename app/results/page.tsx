@@ -9,11 +9,13 @@ import { NoteActions } from "@/components/results/NoteActions";
 import { Spinner } from "@/components/ui/spinner";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/contexts/AuthContext";
 
 export default function ResultsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { isLoading, formattedNote, rawText, title } = useNoteStorage();
+  const { user } = useAuth();
 
   const [showRawTranscript, setShowRawTranscript] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -105,6 +107,51 @@ export default function ResultsPage() {
     setIsSaving(false);
   };
 
+  const handleSaveNew = async () => {
+    if (!user) {
+      toast({
+        title: "Login required",
+        description: "Please sign in to save your note.",
+        variant: "destructive",
+      });
+      router.push(ROUTES.AUTH + "?redirectTo=" + ROUTES.RESULTS);
+      return;
+    }
+
+    if (!formattedNote || !rawText) {
+      toast({
+        title: "Nothing to save",
+        description: "No note data available.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    const { data: savedNote, error } = await notesService.createNote({
+      user_id: user.id,
+      title: title || UI_STRINGS.UNTITLED_NOTE,
+      raw_text: rawText,
+      original_formatted_text: formattedNote,
+    });
+
+    if (error) {
+      toast({
+        title: "Save failed",
+        description: "Could not save your note. Please try again.",
+        variant: "destructive",
+      });
+    } else if (savedNote) {
+      sessionStorage.setItem("currentNoteId", savedNote.id);
+      setNoteId(savedNote.id);
+      toast({
+        title: "Saved!",
+        description: "Your note has been saved to your account.",
+      });
+    }
+    setIsSaving(false);
+  };
+
   // Show loading state while data is being loaded
   if (isLoading) {
     return (
@@ -149,7 +196,11 @@ export default function ResultsPage() {
       </div>
 
       {/* Fixed Action Buttons */}
-      <NoteActions />
+      <NoteActions
+        canSaveNew={!noteId && !!formattedNote}
+        onSaveNew={handleSaveNew}
+        isSavingNew={isSaving}
+      />
     </main>
   );
 }

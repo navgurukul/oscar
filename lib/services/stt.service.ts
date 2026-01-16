@@ -61,6 +61,21 @@ export class STTService {
       this.sttInstance.setWordsUpdateCallback((words) => {
         console.log("[STT] Words update:", words);
       });
+
+      // Pre-warm recognition to reduce first-start latency
+      // This starts and stops quickly so the WASM/runtime loads upfront
+      try {
+        this.sttInstance.start();
+        setTimeout(() => {
+          try {
+            this.sttInstance?.stop();
+          } catch (e) {
+            console.debug("[STT] Warm-up stop failed:", e);
+          }
+        }, 300);
+      } catch (e) {
+        console.debug("[STT] Warm-up start failed:", e);
+      }
     } catch (error) {
       console.error("[STT] Initialization error:", error);
       throw new Error(ERROR_MESSAGES.STT_INIT_FAILED);

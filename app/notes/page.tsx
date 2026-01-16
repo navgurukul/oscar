@@ -9,6 +9,7 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { FileText, Mic, Plus, Trash2 } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
+import { Dialog } from "@/components/ui/dialog";
 
 export default function NotesPage() {
   const router = useRouter();
@@ -16,6 +17,12 @@ export default function NotesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteErrorOpen, setDeleteErrorOpen] = useState(false);
+  const [deleteErrorMessage, setDeleteErrorMessage] = useState<string>("");
+  const [deleteSuccessOpen, setDeleteSuccessOpen] = useState(false);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string>("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
     loadNotes();
@@ -32,18 +39,28 @@ export default function NotesPage() {
     setIsLoading(false);
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this note?")) return;
+    setDeleteConfirmId(id);
+    setDeleteConfirmOpen(true);
+  };
 
+  const performDelete = async () => {
+    if (!deleteConfirmId) return;
+    const id = deleteConfirmId;
+    setDeleteConfirmOpen(false);
     setDeletingId(id);
     const { error } = await notesService.deleteNote(id);
     if (error) {
-      alert("Failed to delete note. Please try again.");
+      setDeleteErrorMessage("Failed to delete note. Please try again.");
+      setDeleteErrorOpen(true);
     } else {
       setNotes(notes.filter((note) => note.id !== id));
+      setDeleteSuccessMessage("Note deleted successfully.");
+      setDeleteSuccessOpen(true);
     }
     setDeletingId(null);
+    setDeleteConfirmId(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -72,6 +89,32 @@ export default function NotesPage() {
 
   return (
     <main className="flex flex-col items-center px-4 pt-8 pb-24">
+      <Dialog
+        open={deleteErrorOpen}
+        title="Delete Failed"
+        description={deleteErrorMessage}
+        onClose={() => setDeleteErrorOpen(false)}
+        primaryActionLabel="Close"
+        onPrimaryAction={() => setDeleteErrorOpen(false)}
+      />
+      <Dialog
+        open={deleteSuccessOpen}
+        title="Deleted"
+        description={deleteSuccessMessage}
+        onClose={() => setDeleteSuccessOpen(false)}
+        primaryActionLabel="Close"
+        onPrimaryAction={() => setDeleteSuccessOpen(false)}
+      />
+      <Dialog
+        open={deleteConfirmOpen}
+        title="Delete Note"
+        description="Are you sure you want to delete this note?"
+        onClose={() => setDeleteConfirmOpen(false)}
+        primaryActionLabel="Delete"
+        onPrimaryAction={performDelete}
+        secondaryActionLabel="Cancel"
+        onSecondaryAction={() => setDeleteConfirmOpen(false)}
+      />
       <div className="w-full max-w-2xl mt-16">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-white">Your Notes</h1>
@@ -128,7 +171,7 @@ export default function NotesPage() {
                       </div>
                     </div>
                     <button
-                      onClick={(e) => handleDelete(note.id, e)}
+                      onClick={(e) => handleDeleteClick(note.id, e)}
                       disabled={deletingId === note.id}
                       className="p-2 text-gray-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
                       title="Delete note"

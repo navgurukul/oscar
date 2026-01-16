@@ -13,8 +13,7 @@ import { RecordingTimer } from "@/components/recording/RecordingTimer";
 
 import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { Dialog } from "@/components/ui/dialog";
 import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants";
 import { ROUTES, UI_STRINGS, RECORDING_CONFIG } from "@/lib/constants";
 import { Spinner } from "@/components/ui/spinner";
@@ -43,6 +42,9 @@ function RecordingPageInner() {
   const [processingStep, setProcessingStep] = useState(0);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [showProcessing, setShowProcessing] = useState(false);
+  const [errorOpen, setErrorOpen] = useState(false);
+  const [errorTitle, setErrorTitle] = useState<string>("");
+  const [errorDescription, setErrorDescription] = useState<string>("");
 
   // Auto-start only when STT is ready to avoid race conditions
   useEffect(() => {
@@ -53,11 +55,14 @@ function RecordingPageInner() {
       if (continueMode) {
         storageService.clearContinueMode();
       }
+      // Auto-start: attempt recording directly (permission already requested in init)
       startRecording(seedTranscript);
     }
   }, [autoStart, continueMode, isRecording, isReady, startRecording]);
 
   const handleStartRecording = async () => {
+    // Revert to earlier behavior: start recording directly
+    // (Permission is requested during STT initialization)
     await startRecording();
   };
 
@@ -99,13 +104,18 @@ function RecordingPageInner() {
         clearInterval(stepInterval);
         setShowProcessing(false);
 
-        let errorMessage = ERROR_MESSAGES.NO_SPEECH_DETECTED + "\n\n";
-        if (recordingTime < RECORDING_CONFIG.MIN_RECORDING_TIME) {
-          errorMessage += "⚠️ " + ERROR_MESSAGES.RECORDING_TOO_SHORT + "\n\n";
-        }
-        errorMessage +=
-          "Tips:\n" + ERROR_TIPS.MIC_TIPS.map((tip) => `• ${tip}`).join("\n");
-        alert(errorMessage);
+        const message = [
+          ERROR_MESSAGES.NO_SPEECH_DETECTED,
+          recordingTime < RECORDING_CONFIG.MIN_RECORDING_TIME
+            ? `\n⚠️ ${ERROR_MESSAGES.RECORDING_TOO_SHORT}`
+            : "",
+          "\n\nTips:\n" + ERROR_TIPS.MIC_TIPS.map((tip) => `• ${tip}`).join("\n"),
+        ]
+          .filter(Boolean)
+          .join("");
+        setErrorTitle("Recording Issue");
+        setErrorDescription(message);
+        setErrorOpen(true);
         return;
       }
 
@@ -155,13 +165,17 @@ function RecordingPageInner() {
         router.push(ROUTES.RESULTS);
       } else {
         setShowProcessing(false);
-        alert(ERROR_MESSAGES.FORMATTING_FAILED);
+        setErrorTitle("Formatting Failed");
+        setErrorDescription(ERROR_MESSAGES.FORMATTING_FAILED);
+        setErrorOpen(true);
       }
     } catch {
       clearInterval(progressInterval);
       clearInterval(stepInterval);
       setShowProcessing(false);
-      alert(ERROR_MESSAGES.PROCESSING_FAILED);
+      setErrorTitle("Processing Failed");
+      setErrorDescription(ERROR_MESSAGES.PROCESSING_FAILED);
+      setErrorOpen(true);
     }
   };
 
@@ -199,15 +213,25 @@ function RecordingPageInner() {
 
   return (
     <main className="flex flex-col items-center px-4 pt-8">
-      {/* Error Alert */}
-      {recordingError && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-[90%] max-w-md">
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{recordingError}</AlertDescription>
-          </Alert>
-        </div>
-      )}
+      {/* Error Dialog */}
+      <Dialog
+        open={errorOpen || !!recordingError}
+        title={errorTitle || "Error"}
+        description={errorDescription || recordingError || "An error occurred."}
+        onClose={() => {
+          setErrorOpen(false);
+          setErrorTitle("");
+          setErrorDescription("");
+        }}
+        primaryActionLabel="Close"
+        onPrimaryAction={() => {
+          setErrorOpen(false);
+          setErrorTitle("");
+          setErrorDescription("");
+        }}
+      />
+
+      {/* Permission flow uses native browser prompt during initialization */}
 
       <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
         {/* Header */}
