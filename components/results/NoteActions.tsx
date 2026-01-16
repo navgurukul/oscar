@@ -24,10 +24,8 @@ export function NoteActions() {
   };
 
   const handleContinueRecording = () => {
-    // Mark continue mode for recording page
-    storageService.setContinueMode(true);
-    // Navigate to recording page with auto-start
-    router.push(ROUTES.RECORDING_CONTINUE);
+    // Navigate to recording page
+    router.push(ROUTES.RECORDING);
   };
 
   return (

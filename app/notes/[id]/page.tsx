@@ -8,13 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import {
-  Copy,
-  Download,
-  Edit3,
-  Save,
-  X,
-} from "lucide-react";
+import { Copy, Download, Edit3, Save, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { DBNote } from "@/lib/types/note.types";
 

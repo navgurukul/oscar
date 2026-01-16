@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
 import { storageService } from "@/lib/services/storage.service";
 import { notesService } from "@/lib/services/notes.service";
@@ -21,15 +21,11 @@ import { Spinner } from "@/components/ui/spinner";
 
 function RecordingPageInner() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const autoStart = searchParams.get("autoStart") === "true";
-  const continueMode = searchParams.get("mode") === "continue";
   const { user } = useAuth();
 
   const {
     isInitializing,
     isRequestingPermission,
-    isReady,
     isRecording,
     isProcessing,
     recordingTime,
@@ -43,19 +39,6 @@ function RecordingPageInner() {
   const [processingStep, setProcessingStep] = useState(0);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [showProcessing, setShowProcessing] = useState(false);
-
-  // Auto-start only when STT is ready to avoid race conditions
-  useEffect(() => {
-    if (autoStart && isReady && !isRecording) {
-      const seedTranscript = continueMode
-        ? storageService.getRawText() || ""
-        : "";
-      if (continueMode) {
-        storageService.clearContinueMode();
-      }
-      startRecording(seedTranscript);
-    }
-  }, [autoStart, continueMode, isRecording, isReady, startRecording]);
 
   const handleStartRecording = async () => {
     await startRecording();
@@ -254,15 +237,6 @@ function RecordingPageInner() {
               </p>
             )}
           </div>
-
-          {/* Continue Mode Hint */}
-          {!isRecording && continueMode && (
-            <div className="text-center -mt-6 mb-4">
-              <p className="text-cyan-400 text-sm">
-                Continuing from previous recording…
-              </p>
-            </div>
-          )}
         </div>
       </div>
 

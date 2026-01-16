@@ -76,7 +76,7 @@ export default function NotesPage() {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-white">Your Notes</h1>
           <Button
-            onClick={() => router.push("/recording?autoStart=true")}
+            onClick={() => router.push("/recording")}
             className="bg-cyan-600 hover:bg-cyan-700 text-white"
           >
             <Mic className="w-4 h-4 mr-2" />
@@ -100,7 +100,7 @@ export default function NotesPage() {
               Start recording to create your first voice note
             </p>
             <Button
-              onClick={() => router.push("/recording?autoStart=true")}
+              onClick={() => router.push("/recording")}
               className="bg-cyan-600 hover:bg-cyan-700 text-white"
             >
               <Plus className="w-4 h-4 mr-2" />
