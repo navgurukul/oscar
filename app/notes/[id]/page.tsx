@@ -56,7 +56,7 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
     };
 
     loadNote();
-  }, [id, router]);
+  }, [id, router, user]);
 
   const handleSaveEdit = async () => {
     if (!note) return;

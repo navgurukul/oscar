@@ -3,11 +3,8 @@
 import Link from "next/link";
 import { Mic } from "lucide-react";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
-import { useAuth } from "@/lib/contexts/AuthContext";
 
 export function FloatingNavbar() {
-  const { user, isLoading } = useAuth();
-
   return (
     <nav className="fixed m-6 rounded-xl top-0 left-0 right-0 z-50">
       <div className="px-6 py-3 flex items-center justify-between">
