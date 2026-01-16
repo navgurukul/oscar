@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import { FloatingNavbar } from "@/components/shared/FloatingNavbar";
+import { AuthEdgeButton } from "@/components/shared/AuthEdgeButton";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
 import "./globals.css";
 
@@ -30,6 +31,7 @@ export default function RootLayout({
       <body className="bg-slate-950 text-white antialiased font-sans">
         <AuthProvider>
           <FloatingNavbar />
+          <AuthEdgeButton />
           {children}
           <Toaster />
         </AuthProvider>

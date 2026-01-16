@@ -12,11 +12,13 @@ import { Separator } from "@/components/ui/separator";
 import { Copy, Download, Edit3, Save, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { FeedbackWidget } from "@/components/results/FeedbackWidget";
+import { useAuth } from "@/lib/contexts/AuthContext";
 import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
 
 export default function NoteDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const router = useRouter();
+  const { user } = useAuth();
   const { toast } = useToast();
 
   const [note, setNote] = useState<DBNote | null>(null);
@@ -37,6 +39,9 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
       setIsLoading(true);
       const { data, error } = await notesService.getNoteById(id);
       if (error || !data) {
+        router.push("/notes");
+      } else if (user && data.user_id !== user.id) {
+        // Ownership check
         router.push("/notes");
       } else {
         setNote(data);
