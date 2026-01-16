@@ -17,13 +17,16 @@ export function NoteActions() {
   const router = useRouter();
 
   const handleRecordAgain = () => {
-    // Clear previous session data
+    // Clear previous session data and continue mode
     storageService.clearNote();
+    storageService.clearContinueMode();
     // Navigate to recording page
     router.push(ROUTES.RECORDING);
   };
 
   const handleContinueRecording = () => {
+    // Set continue mode flag so recording page knows to seed the transcript
+    storageService.setContinueMode(true);
     // Navigate to recording page
     router.push(ROUTES.RECORDING);
   };

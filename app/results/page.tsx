@@ -20,12 +20,16 @@ export default function ResultsPage() {
   const [editedText, setEditedText] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [noteId, setNoteId] = useState<string | null>(null);
+  const [isCopying, setIsCopying] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Get the note ID from session storage (set by recording page)
   useEffect(() => {
-    const storedNoteId = sessionStorage.getItem("currentNoteId");
-    if (storedNoteId) {
-      setNoteId(storedNoteId);
+    if (typeof window !== "undefined") {
+      const storedNoteId = sessionStorage.getItem("currentNoteId");
+      if (storedNoteId) {
+        setNoteId(storedNoteId);
+      }
     }
   }, []);
 
@@ -44,25 +48,58 @@ export default function ResultsPage() {
   }, [isLoading, formattedNote, rawText, router]);
 
   const handleCopyNote = async () => {
+    if (isCopying) return; // Prevent double-clicks
+    
+    setIsCopying(true);
     try {
       const textToCopy = isEditing ? editedText : formattedNote;
       await navigator.clipboard.writeText(textToCopy);
+      toast({
+        title: "Copied!",
+        description: "Note copied to clipboard.",
+      });
     } catch (error) {
       console.error("Failed to copy:", error);
+      toast({
+        title: "Copy Failed",
+        description: "Could not copy to clipboard.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCopying(false);
     }
   };
 
   const handleDownloadNote = () => {
-    const textToDownload = isEditing ? editedText : formattedNote;
-    const blob = new Blob([textToDownload], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = UI_STRINGS.NOTE_FILENAME;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (isDownloading) return; // Prevent double-clicks
+    
+    setIsDownloading(true);
+    try {
+      const textToDownload = isEditing ? editedText : formattedNote;
+      const blob = new Blob([textToDownload], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = UI_STRINGS.NOTE_FILENAME;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Downloaded!",
+        description: "Note saved to your device.",
+      });
+    } catch (error) {
+      console.error("Failed to download:", error);
+      toast({
+        title: "Download Failed",
+        description: "Could not download the file.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleStartEditing = () => {
@@ -145,6 +182,8 @@ export default function ResultsPage() {
           onTextChange={setEditedText}
           isSaving={isSaving}
           canEdit={!!noteId}
+          isCopying={isCopying}
+          isDownloading={isDownloading}
         />
       </div>
 

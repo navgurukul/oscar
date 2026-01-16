@@ -6,7 +6,6 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Copy, Download, Edit3, Save, X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { Spinner } from "@/components/ui/spinner";
 
 interface NoteEditorProps {
@@ -24,6 +23,8 @@ interface NoteEditorProps {
   onTextChange?: (text: string) => void;
   isSaving?: boolean;
   canEdit?: boolean;
+  isCopying?: boolean;
+  isDownloading?: boolean;
 }
 
 export function NoteEditor({
@@ -41,23 +42,17 @@ export function NoteEditor({
   onTextChange,
   isSaving = false,
   canEdit = false,
+  isCopying = false,
+  isDownloading = false,
 }: NoteEditorProps) {
-  const { toast } = useToast();
-
   const handleCopy = () => {
     onCopy();
-    toast({
-      title: "Copied!",
-      description: "Note copied to clipboard.",
-    });
+    // Toast is now handled in the parent component
   };
 
   const handleDownload = () => {
     onDownload();
-    toast({
-      title: "Downloaded!",
-      description: "Note saved to your device.",
-    });
+    // Toast is now handled in the parent component
   };
 
   return (
@@ -83,7 +78,7 @@ export function NoteEditor({
                       size="sm"
                       onClick={onSaveEdit}
                       disabled={isSaving}
-                      className="text-green-400 hover:text-green-300"
+                      className="text-cyan-500 hover:text-cyan-400"
                     >
                       {isSaving ? (
                         <Spinner className="w-4 h-4" />
@@ -96,7 +91,7 @@ export function NoteEditor({
                       size="sm"
                       onClick={onCancelEditing}
                       disabled={isSaving}
-                      className="text-gray-400 hover:text-red-400"
+                      className="text-gray-400 hover:text-white"
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -117,17 +112,27 @@ export function NoteEditor({
                       variant="ghost"
                       size="sm"
                       onClick={handleCopy}
-                      className="text-gray-400 hover:text-cyan-500"
+                      disabled={isCopying}
+                      className="text-gray-400 hover:text-cyan-500 disabled:opacity-50"
                     >
-                      <Copy className="w-4 h-4" />
+                      {isCopying ? (
+                        <Spinner className="w-4 h-4" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={handleDownload}
-                      className="text-gray-400 hover:text-cyan-500"
+                      disabled={isDownloading}
+                      className="text-gray-400 hover:text-cyan-500 disabled:opacity-50"
                     >
-                      <Download className="w-4 h-4" />
+                      {isDownloading ? (
+                        <Spinner className="w-4 h-4" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
                     </Button>
                   </>
                 )}

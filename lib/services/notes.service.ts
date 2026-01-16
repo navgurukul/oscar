@@ -5,7 +5,13 @@ import type {
   DBNoteUpdate,
 } from "@/lib/types/note.types";
 
-const supabase = createClient();
+/**
+ * Get Supabase client instance
+ * Uses singleton pattern to ensure consistent auth state
+ */
+function getSupabase() {
+  return createClient();
+}
 
 export const notesService = {
   /**
@@ -14,6 +20,7 @@ export const notesService = {
   async createNote(
     note: DBNoteInsert
   ): Promise<{ data: DBNote | null; error: Error | null }> {
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from("notes")
       .insert(note)
@@ -27,6 +34,7 @@ export const notesService = {
    * Get all notes for the current user
    */
   async getNotes(): Promise<{ data: DBNote[] | null; error: Error | null }> {
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from("notes")
       .select("*")
@@ -41,6 +49,7 @@ export const notesService = {
   async getNoteById(
     id: string
   ): Promise<{ data: DBNote | null; error: Error | null }> {
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from("notes")
       .select("*")
@@ -57,6 +66,7 @@ export const notesService = {
     id: string,
     updates: DBNoteUpdate
   ): Promise<{ data: DBNote | null; error: Error | null }> {
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from("notes")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -71,6 +81,7 @@ export const notesService = {
    * Delete a note
    */
   async deleteNote(id: string): Promise<{ error: Error | null }> {
+    const supabase = getSupabase();
     const { error } = await supabase.from("notes").delete().eq("id", id);
 
     return { error: error as Error | null };

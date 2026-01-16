@@ -2,6 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
 import { SYSTEM_PROMPTS } from "@/lib/prompts";
 
+const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
+
+/**
+ * Fetch with timeout using AbortController
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = REQUEST_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Request to AI service timed out");
+    }
+    throw error;
+  }
+}
+
 export async function POST(req: NextRequest) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
 
@@ -32,7 +61,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const response = await fetch(API_CONFIG.DEEPSEEK_API_URL, {
+    const response = await fetchWithTimeout(API_CONFIG.DEEPSEEK_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

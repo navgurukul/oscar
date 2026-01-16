@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
 import { storageService } from "@/lib/services/storage.service";
@@ -18,10 +18,12 @@ import { AlertCircle } from "lucide-react";
 import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants";
 import { ROUTES, UI_STRINGS, RECORDING_CONFIG } from "@/lib/constants";
 import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/hooks/use-toast";
 
 function RecordingPageInner() {
   const router = useRouter();
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const {
     isInitializing,
@@ -40,6 +42,67 @@ function RecordingPageInner() {
   const [processingProgress, setProcessingProgress] = useState(0);
   const [showProcessing, setShowProcessing] = useState(false);
 
+  // Refs to track intervals for cleanup
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const stepIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup intervals on unmount
+  useEffect(() => {
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+      if (stepIntervalRef.current) {
+        clearInterval(stepIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Check for continue mode and auto-start with seed transcript
+  useEffect(() => {
+    // Only run once when component mounts and recording is ready
+    if (!isInitializing && !isRequestingPermission && !isRecording) {
+      const shouldContinue = storageService.getContinueMode();
+      if (shouldContinue) {
+        const rawText = storageService.getRawText();
+        if (rawText) {
+          // Clear continue mode flag
+          storageService.clearContinueMode();
+          // Start recording with existing transcript as seed
+          toast({
+            title: "Continuing Recording",
+            description: "Adding to your existing note...",
+          });
+          // Small delay to show toast
+          setTimeout(() => {
+            startRecording(rawText);
+          }, 500);
+        } else {
+          // No raw text to continue with, clear flag
+          storageService.clearContinueMode();
+        }
+      }
+    }
+  }, [
+    isInitializing,
+    isRequestingPermission,
+    isRecording,
+    startRecording,
+    toast,
+  ]);
+
+  // Helper to clear all intervals
+  const clearAllIntervals = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    if (stepIntervalRef.current) {
+      clearInterval(stepIntervalRef.current);
+      stepIntervalRef.current = null;
+    }
+  };
+
   const handleStartRecording = async () => {
     await startRecording();
   };
@@ -49,8 +112,11 @@ function RecordingPageInner() {
     setProcessingStep(0);
     setProcessingProgress(0);
 
+    // Clear any existing intervals before starting new ones
+    clearAllIntervals();
+
     // Simulate progress
-    const progressInterval = setInterval(() => {
+    progressIntervalRef.current = setInterval(() => {
       setProcessingProgress((prev) => {
         if (prev < 70) return prev + Math.random() * 8 + 3;
         if (prev < 85) return prev + Math.random() * 4 + 1;
@@ -60,10 +126,9 @@ function RecordingPageInner() {
       });
     }, 400);
 
-    const stepInterval = setInterval(() => {
+    stepIntervalRef.current = setInterval(() => {
       setProcessingStep((prev) => {
         if (prev >= 2) {
-          clearInterval(stepInterval);
           return prev;
         }
         return prev + 1;
@@ -78,25 +143,35 @@ function RecordingPageInner() {
       storageService.updateRawText(transcript);
 
       if (!transcript || transcript.length === 0) {
-        clearInterval(progressInterval);
-        clearInterval(stepInterval);
+        clearAllIntervals();
         setShowProcessing(false);
 
-        let errorMessage = ERROR_MESSAGES.NO_SPEECH_DETECTED + "\n\n";
+        // Build error message
+        let errorDescription = ERROR_MESSAGES.NO_SPEECH_DETECTED;
         if (recordingTime < RECORDING_CONFIG.MIN_RECORDING_TIME) {
-          errorMessage += "⚠️ " + ERROR_MESSAGES.RECORDING_TOO_SHORT + "\n\n";
+          errorDescription += " " + ERROR_MESSAGES.RECORDING_TOO_SHORT;
         }
-        errorMessage +=
-          "Tips:\n" + ERROR_TIPS.MIC_TIPS.map((tip) => `• ${tip}`).join("\n");
-        alert(errorMessage);
+
+        toast({
+          title: "Recording Failed",
+          description: errorDescription,
+          variant: "destructive",
+        });
+
+        // Show tips in a second toast
+        setTimeout(() => {
+          toast({
+            title: "Tips for Better Recording",
+            description: ERROR_TIPS.MIC_TIPS.join(" • "),
+          });
+        }, 500);
         return;
       }
 
       // Format with AI
       const result = await formatText(transcript);
 
-      clearInterval(progressInterval);
-      clearInterval(stepInterval);
+      clearAllIntervals();
 
       if (result.success && result.formattedText) {
         // Generate title before saving
@@ -124,9 +199,18 @@ function RecordingPageInner() {
 
           if (saveError) {
             console.error("Failed to save note to database:", saveError);
+            // Show non-blocking warning toast
+            toast({
+              title: "Note Saved Locally",
+              description:
+                "Could not sync to cloud, but your note is safe in this session.",
+              variant: "default",
+            });
           } else if (savedNote) {
             // Store the note ID for the results page
-            sessionStorage.setItem("currentNoteId", savedNote.id);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("currentNoteId", savedNote.id);
+            }
           }
         }
 
@@ -138,13 +222,22 @@ function RecordingPageInner() {
         router.push(ROUTES.RESULTS);
       } else {
         setShowProcessing(false);
-        alert(ERROR_MESSAGES.FORMATTING_FAILED);
+        toast({
+          title: "Formatting Failed",
+          description: ERROR_MESSAGES.FORMATTING_FAILED + " Please try again.",
+          variant: "destructive",
+        });
       }
-    } catch {
-      clearInterval(progressInterval);
-      clearInterval(stepInterval);
+    } catch (error) {
+      clearAllIntervals();
       setShowProcessing(false);
-      alert(ERROR_MESSAGES.PROCESSING_FAILED);
+      console.error("Processing error:", error);
+      toast({
+        title: "Processing Failed",
+        description:
+          ERROR_MESSAGES.PROCESSING_FAILED + " Please try recording again.",
+        variant: "destructive",
+      });
     }
   };
 
