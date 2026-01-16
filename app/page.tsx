@@ -4,15 +4,8 @@ import { motion } from "motion/react";
 import { HomeRecordingButton } from "@/components/recording/HomeRecordingButton";
 import { LampContainer } from "@/components/ui/lamp";
 import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
-import { useEffect, useRef } from "react";
 
 export default function Home() {
-  const pathRef = useRef<SVGPathElement>(null);
-
-  useEffect(() => {
-    // Motion handles the animation, no manual strokeDashoffset needed
-  }, []);
-
   return (
     <main className="h-screen flex flex-col overflow-hidden">
       {/* AI-Powered Badge at Top */}
@@ -42,7 +35,7 @@ export default function Home() {
         </motion.h1>
       </LampContainer>
 
-      <div className="fixed bottom-10 left-1/2 -translate-x-1/2">
+      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 ">
         <HomeRecordingButton />
       </div>
     </main>

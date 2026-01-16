@@ -3,17 +3,32 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
-import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
 import { storageService } from "@/lib/services/storage.service";
-import { browserService } from "@/lib/services/browser.service";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { RecordingTimer } from "@/components/recording/RecordingTimer";
-import { RecordingTranscript } from "@/components/recording/RecordingTranscript";
+
 import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants/errors";
+import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
+import { aiService } from "@/lib/services/ai.service";
+import {
+  UI_STRINGS,
+  ROUTES,
+  RECORDING_CONFIG,
+  ERROR_MESSAGES,
+  ERROR_TIPS,
+} from "@/lib/constants";
+import { browserService } from "@/lib/services/browser.service";
 
 function RecordingPageInner() {
   const router = useRouter();
@@ -26,7 +41,6 @@ function RecordingPageInner() {
     isReady,
     isRecording,
     isProcessing,
-    currentTranscript,
     recordingTime,
     error: recordingError,
     startRecording,
@@ -34,7 +48,7 @@ function RecordingPageInner() {
     clearError,
   } = useRecording();
 
-  const { formatText, isFormatting } = useAIFormatting();
+  const { formatText } = useAIFormatting();
 
   const [processingStep, setProcessingStep] = useState(0);
   const [processingProgress, setProcessingProgress] = useState(0);
@@ -60,28 +74,22 @@ function RecordingPageInner() {
     }
   }, [autoStart, continueMode, isRecording, isReady, micGranted]);
 
-  useEffect(() => {
-    if (recordingError) {
-      setErrorTitle("Recording Error");
-      setErrorMessage(recordingError);
-      setIsErrorOpen(true);
-    }
-  }, [recordingError]);
-
   const promptMicAccess = async () => {
-    const result = await browserService.checkMicrophonePermission();
-    if (result.granted) {
+    const res = await browserService.checkMicrophonePermission();
+    if (res.granted) {
       setMicGranted(true);
       setIsPermissionOpen(false);
-      // If autoStart was requested, kick off recording now
+      // If we were auto-starting, start now with any seed transcript
       if (autoStart && isReady && !isRecording) {
         const seedTranscript = continueMode ? storageService.getRawText() || "" : "";
-        if (continueMode) storageService.clearContinueMode();
-        await startRecording(seedTranscript);
+        if (continueMode) {
+          storageService.clearContinueMode();
+        }
+        startRecording(seedTranscript);
       }
     } else {
       setErrorTitle("Microphone Permission Required");
-      setErrorMessage(result.error || "Please enable microphone access to record.");
+      setErrorMessage(res.error || ERROR_MESSAGES.MIC_PERMISSION_DENIED);
       setIsErrorOpen(true);
     }
   };
@@ -132,8 +140,7 @@ function RecordingPageInner() {
         if (recordingTime < 2) {
           msg += "⚠️ " + ERROR_MESSAGES.RECORDING_TOO_SHORT + "\n\n";
         }
-        msg +=
-          "Tips:\n" + ERROR_TIPS.MIC_TIPS.map((tip) => `• ${tip}`).join("\n");
+        msg += "Tips:\n" + ERROR_TIPS.MIC_TIPS.map((tip) => `• ${tip}`).join("\n");
         setErrorTitle("No Speech Detected");
         setErrorMessage(msg);
         setIsErrorOpen(true);
@@ -147,19 +154,31 @@ function RecordingPageInner() {
       clearInterval(stepInterval);
 
       if (result.success && result.formattedText) {
-        // Store and navigate
-        storageService.saveNote(result.formattedText, transcript);
+        // Generate title before saving
+        const titleResult = await aiService.generateTitle(result.formattedText);
+        const generatedTitle = titleResult.success
+          ? titleResult.title
+          : undefined;
+
+        // Store with title and navigate
+        storageService.saveNote(
+          result.formattedText,
+          transcript,
+          generatedTitle
+        );
         setProcessingProgress(100);
 
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        router.push("/results");
+        await new Promise((resolve) =>
+          setTimeout(resolve, RECORDING_CONFIG.COMPLETION_DELAY_MS)
+        );
+        router.push(ROUTES.RESULTS);
       } else {
         setShowProcessing(false);
         setErrorTitle("Formatting Failed");
         setErrorMessage(ERROR_MESSAGES.FORMATTING_FAILED);
         setIsErrorOpen(true);
       }
-    } catch (error) {
+    } catch {
       clearInterval(progressInterval);
       clearInterval(stepInterval);
       setShowProcessing(false);
@@ -173,8 +192,10 @@ function RecordingPageInner() {
     return (
       <main className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-          <p className="text-gray-300">Initializing...</p>
+          <div className="flex items-center justify-center mb-4">
+            <Spinner className="text-cyan-500" />
+          </div>
+          <p className="text-gray-300">{UI_STRINGS.INITIALIZING}</p>
         </div>
       </main>
     );
@@ -252,8 +273,7 @@ function RecordingPageInner() {
           <div className="text-center pt-4 h-16 flex items-center justify-center">
             {!isRecording && (
               <p className="text-gray-400 text-lg">
-                Press the microphone button and start speaking. Oscar will do
-                the rest.
+                {UI_STRINGS.RECORDING_INSTRUCTION}
               </p>
             )}
           </div>
@@ -261,12 +281,11 @@ function RecordingPageInner() {
           {/* Continue Mode Hint */}
           {!isRecording && continueMode && (
             <div className="text-center -mt-6 mb-4">
-              <p className="text-cyan-400 text-sm">Continuing from previous recording…</p>
+              <p className="text-cyan-400 text-sm">
+                Continuing from previous recording…
+              </p>
             </div>
           )}
-
-          {/* Live Transcript - shows existing and new speech while recording */}
-          <RecordingTranscript transcript={currentTranscript} isRecording={isRecording} />
         </div>
       </div>
 
@@ -312,8 +331,8 @@ export default function RecordingPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center text-gray-600">
-          Loading recording page…
+        <div className="min-h-screen flex items-center justify-center">
+          <Spinner className="text-cyan-500" />
         </div>
       }
     >

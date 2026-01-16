@@ -1,7 +1,14 @@
 // AI service for text formatting and title generation
 
-import type { FormattingResult, TitleGenerationResult } from '../types/note.types'
-import type { APIResult, DeepseekFormatResponse, DeepseekTitleResponse } from '../types/api.types'
+import type {
+  FormattingResult,
+  TitleGenerationResult,
+} from "../types/note.types";
+import type {
+  DeepseekFormatResponse,
+  DeepseekTitleResponse,
+} from "../types/api.types";
+import { API_CONFIG, ERROR_MESSAGES, UI_STRINGS } from "../constants";
 
 export const aiService = {
   /**
@@ -13,52 +20,53 @@ export const aiService = {
     if (!rawText || !rawText.trim()) {
       return {
         success: false,
-        error: 'No text provided for formatting',
-      }
+        error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_FORMATTING,
+      };
     }
 
     try {
-      const response = await fetch('/api/deepseek/format', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(API_CONFIG.FORMAT_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rawText }),
-      })
+      });
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`Format API error: ${response.status}`, errorText)
+        const errorText = await response.text();
+        console.error(`Format API error: ${response.status}`, errorText);
         return {
           success: false,
           error: `Formatting failed: ${response.status}`,
-        }
+        };
       }
 
-      const data = await response.json() as DeepseekFormatResponse
-      const formattedText = data?.formattedText?.trim()
-      
+      const data = (await response.json()) as DeepseekFormatResponse;
+      const formattedText = data?.formattedText?.trim();
+
       if (!formattedText) {
         return {
           success: false,
-          error: 'Empty response from formatting service',
-        }
+          error: ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING,
+        };
       }
 
       // Remove markdown code blocks if present
       const cleanedText = formattedText
-        .replace(/^```[\w]*\n/, '')
-        .replace(/\n```$/, '')
-        .trim()
+        .replace(/^```[\w]*\n/, "")
+        .replace(/\n```$/, "")
+        .trim();
 
       return {
         success: true,
         formattedText: cleanedText,
-      }
-    } catch (error: any) {
-      console.error('Format text error:', error)
+      };
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Format text error:", error);
       return {
         success: false,
-        error: error?.message || 'Failed to format text',
-      }
+        error: err?.message || "Failed to format text",
+      };
     }
   },
 
@@ -68,46 +76,46 @@ export const aiService = {
    * @returns Title generation result
    */
   async generateTitle(text: string): Promise<TitleGenerationResult> {
-    const source = (text || '').trim()
-    
+    const source = (text || "").trim();
+
     if (!source) {
       return {
         success: false,
-        error: 'No text provided for title generation',
-      }
+        error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_TITLE,
+      };
     }
 
     try {
-      const response = await fetch('/api/deepseek/title', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(API_CONFIG.TITLE_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: source }),
-      })
+      });
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`Title API error: ${response.status}`, errorText)
-        
+        const errorText = await response.text();
+        console.error(`Title API error: ${response.status}`, errorText);
+
         // Fallback to heuristic title
-        return this.generateFallbackTitle(source)
+        return this.generateFallbackTitle(source);
       }
 
-      const data = await response.json() as DeepseekTitleResponse
-      const title = data?.title?.trim()
-      
+      const data = (await response.json()) as DeepseekTitleResponse;
+      const title = data?.title?.trim();
+
       if (!title) {
-        return this.generateFallbackTitle(source)
+        return this.generateFallbackTitle(source);
       }
 
-      const sanitized = this.sanitizeTitle(title)
-      
+      const sanitized = this.sanitizeTitle(title);
+
       return {
         success: true,
         title: sanitized,
-      }
-    } catch (error: any) {
-      console.error('Title generation error:', error)
-      return this.generateFallbackTitle(source)
+      };
+    } catch (error: unknown) {
+      console.error("Title generation error:", error);
+      return this.generateFallbackTitle(source);
     }
   },
 
@@ -118,23 +126,26 @@ export const aiService = {
    */
   generateFallbackTitle(text: string): TitleGenerationResult {
     try {
-      const cleaned = text.replace(/\s+/g, ' ').trim()
-      const firstSentence = (cleaned.match(/[^.!?]+[.!?]?/) || [''])[0].trim()
-      const truncated = firstSentence.length > 60 
-        ? firstSentence.slice(0, 57).trim() + '…' 
-        : firstSentence
-      
-      const title = this.sanitizeTitle(truncated || cleaned.slice(0, 60))
-      
+      const cleaned = text.replace(/\s+/g, " ").trim();
+      const firstSentence = (cleaned.match(/[^.!?]+[.!?]?/) || [""])[0].trim();
+      const truncated =
+        firstSentence.length > API_CONFIG.TITLE_MAX_LENGTH
+          ? firstSentence.slice(0, 57).trim() + "…"
+          : firstSentence;
+
+      const title = this.sanitizeTitle(
+        truncated || cleaned.slice(0, API_CONFIG.TITLE_MAX_LENGTH)
+      );
+
       return {
         success: true,
         title,
-      }
-    } catch (error) {
+      };
+    } catch {
       return {
         success: true,
-        title: 'Untitled Note',
-      }
+        title: UI_STRINGS.UNTITLED_NOTE,
+      };
     }
   },
 
@@ -144,11 +155,11 @@ export const aiService = {
    * @returns Cleaned title
    */
   sanitizeTitle(title: string): string {
-    return (title || '')
-      .replace(/[\r\n]+/g, ' ')
-      .replace(/^["'\s]+|["'\s]+$/g, '')
-      .replace(/^```[\w]*\n/, '')
-      .replace(/\n```$/, '')
-      .trim()
+    return (title || "")
+      .replace(/[\r\n]+/g, " ")
+      .replace(/^["'\s]+|["'\s]+$/g, "")
+      .replace(/^```[\w]*\n/, "")
+      .replace(/\n```$/, "")
+      .trim();
   },
-}
+};

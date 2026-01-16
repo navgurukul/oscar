@@ -68,7 +68,7 @@ export const DottedGlowBackground = ({
   // Resolve CSS variable value from the container or root
   const resolveCssVariable = (
     el: Element,
-    variableName?: string,
+    variableName?: string
   ): string | null => {
     if (!variableName) return null;
     const normalized = variableName.startsWith("--")
@@ -202,12 +202,8 @@ export const DottedGlowBackground = ({
 
     regenDots();
 
-    let last = performance.now();
-
     const draw = (now: number) => {
       if (stopped) return;
-      const dt = (now - last) / 1000;
-      last = now;
       const { width, height } = container.getBoundingClientRect();
 
       ctx.clearRect(0, 0, el.width, el.height);
@@ -220,12 +216,12 @@ export const DottedGlowBackground = ({
           Math.min(width, height) * 0.1,
           width * 0.5,
           height * 0.5,
-          Math.max(width, height) * 0.7,
+          Math.max(width, height) * 0.7
         );
         grad.addColorStop(0, "rgba(0,0,0,0)");
         grad.addColorStop(
           1,
-          `rgba(0,0,0,${Math.min(Math.max(backgroundOpacity, 0), 1)})`,
+          `rgba(0,0,0,${Math.min(Math.max(backgroundOpacity, 0), 1)})`
         );
         ctx.fillStyle = grad as unknown as CanvasGradient;
         ctx.fillRect(0, 0, width, height);

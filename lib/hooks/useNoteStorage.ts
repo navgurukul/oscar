@@ -32,11 +32,6 @@ export function useNoteStorage() {
     setFormattedNote(text);
   };
 
-  const updateTitle = (newTitle: string) => {
-    storageService.updateTitle(newTitle);
-    setTitle(newTitle);
-  };
-
   const clearNote = () => {
     storageService.clearNote();
     setFormattedNote("");
@@ -51,7 +46,6 @@ export function useNoteStorage() {
     title,
     saveNote,
     updateFormattedNote,
-    updateTitle,
     clearNote,
   };
 }
