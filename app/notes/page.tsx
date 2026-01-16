@@ -7,8 +7,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { FileText, Mic, Plus, Trash2 } from "lucide-react";
+import { FileText, Mic, Plus, SquaresSubtract, Trash2 } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
+import { HomeRecordingButton } from "@/components/recording/HomeRecordingButton";
+import { getTimeBasedPrompt } from "@/lib/utils";
 
 export default function NotesPage() {
   const router = useRouter();
@@ -16,9 +18,12 @@ export default function NotesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [contextPrompt, setContextPrompt] = useState("");
 
   useEffect(() => {
     loadNotes();
+    // Set initial prompt based on current time
+    setContextPrompt(getTimeBasedPrompt());
   }, []);
 
   const loadNotes = async () => {
@@ -73,15 +78,15 @@ export default function NotesPage() {
   return (
     <main className="flex flex-col items-center px-4 pt-8 pb-24">
       <div className="w-full max-w-2xl mt-16">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-center mb-8">
           <h1 className="text-3xl font-bold text-white">Your Notes</h1>
-          <Button
+          {/* <Button
             onClick={() => router.push("/recording")}
             className="bg-cyan-600 hover:bg-cyan-700 text-white"
           >
             <Mic className="w-4 h-4 mr-2" />
             New Note
-          </Button>
+          </Button> */}
         </div>
 
         {error && (
@@ -91,21 +96,15 @@ export default function NotesPage() {
         )}
 
         {notes.length === 0 ? (
-          <div className="text-center py-16">
-            <FileText className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-            <h2 className="text-xl font-medium text-gray-300 mb-2">
+          <div className="text-center py-16 mt-16">
+            <SquaresSubtract className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+            {/* <h2 className="text-xl font-medium text-gray-300 mb-2">
               No notes yet
-            </h2>
-            <p className="text-gray-500 mb-6">
-              Start recording to create your first voice note
-            </p>
-            <Button
-              onClick={() => router.push("/recording")}
-              className="bg-cyan-600 hover:bg-cyan-700 text-white"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create Your First Note
-            </Button>
+            </h2> */}
+            <p className="text-gray-500 mb-6">{contextPrompt}</p>
+            <div className="fixed bottom-10 left-1/2 -translate-x-1/2 ">
+              <HomeRecordingButton />
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -130,7 +129,7 @@ export default function NotesPage() {
                     <button
                       onClick={(e) => handleDelete(note.id, e)}
                       disabled={deletingId === note.id}
-                      className="p-2 text-gray-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                      className="p-2 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
                       title="Delete note"
                     >
                       {deletingId === note.id ? (

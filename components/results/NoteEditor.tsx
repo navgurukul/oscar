@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Copy, Download, Edit3, Save, X } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
+import { FeedbackWidget } from "@/components/results/FeedbackWidget";
+import type { FeedbackReason } from "@/lib/types/note.types";
 
 interface NoteEditorProps {
   formattedNote: string;
@@ -25,6 +27,12 @@ interface NoteEditorProps {
   canEdit?: boolean;
   isCopying?: boolean;
   isDownloading?: boolean;
+  // Feedback props
+  onFeedbackSubmit?: (helpful: boolean, reasons?: FeedbackReason[]) => void;
+  isFeedbackSubmitting?: boolean;
+  hasFeedbackSubmitted?: boolean;
+  feedbackValue?: boolean | null;
+  showFeedback?: boolean;
 }
 
 export function NoteEditor({
@@ -44,6 +52,12 @@ export function NoteEditor({
   canEdit = false,
   isCopying = false,
   isDownloading = false,
+  // Feedback props
+  onFeedbackSubmit,
+  isFeedbackSubmitting = false,
+  hasFeedbackSubmitted = false,
+  feedbackValue = null,
+  showFeedback = false,
 }: NoteEditorProps) {
   const handleCopy = () => {
     onCopy();
@@ -157,6 +171,18 @@ export function NoteEditor({
           )}
         </CardContent>
       </Card>
+
+      {/* Feedback Widget */}
+      {showFeedback && onFeedbackSubmit && (
+        <div className="mt-4 w-[650px]">
+          <FeedbackWidget
+            onSubmit={onFeedbackSubmit}
+            isSubmitting={isFeedbackSubmitting}
+            hasSubmitted={hasFeedbackSubmitted}
+            submittedValue={feedbackValue}
+          />
+        </div>
+      )}
 
       {/* Raw Transcript - Slide In/Out with Framer Motion */}
       <AnimatePresence mode="wait">

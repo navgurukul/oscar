@@ -4,11 +4,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
 import { notesService } from "@/lib/services/notes.service";
+import { feedbackService } from "@/lib/services/feedback.service";
 import { NoteEditor } from "@/components/results/NoteEditor";
 import { NoteActions } from "@/components/results/NoteActions";
 import { Spinner } from "@/components/ui/spinner";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
+import type { FeedbackReason } from "@/lib/types/note.types";
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -22,6 +24,11 @@ export default function ResultsPage() {
   const [noteId, setNoteId] = useState<string | null>(null);
   const [isCopying, setIsCopying] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Feedback state
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
+  const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
+  const [feedbackValue, setFeedbackValue] = useState<boolean | null>(null);
 
   // Get the note ID from session storage (set by recording page)
   useEffect(() => {
@@ -49,7 +56,7 @@ export default function ResultsPage() {
 
   const handleCopyNote = async () => {
     if (isCopying) return; // Prevent double-clicks
-    
+
     setIsCopying(true);
     try {
       const textToCopy = isEditing ? editedText : formattedNote;
@@ -72,7 +79,7 @@ export default function ResultsPage() {
 
   const handleDownloadNote = () => {
     if (isDownloading) return; // Prevent double-clicks
-    
+
     setIsDownloading(true);
     try {
       const textToDownload = isEditing ? editedText : formattedNote;
@@ -85,7 +92,7 @@ export default function ResultsPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
+
       toast({
         title: "Downloaded!",
         description: "Note saved to your device.",
@@ -142,6 +149,43 @@ export default function ResultsPage() {
     setIsSaving(false);
   };
 
+  const handleFeedbackSubmit = async (
+    helpful: boolean,
+    reasons?: FeedbackReason[]
+  ) => {
+    if (!noteId) {
+      toast({
+        title: "Error",
+        description: "Could not submit feedback - note not found.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsFeedbackSubmitting(true);
+    const { success, error } = await feedbackService.submitFeedback(
+      noteId,
+      helpful,
+      reasons
+    );
+
+    if (error || !success) {
+      toast({
+        title: "Error",
+        description: "Failed to submit feedback. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      setHasFeedbackSubmitted(true);
+      setFeedbackValue(helpful);
+      toast({
+        title: "Thanks!",
+        description: "Your feedback helps us improve.",
+      });
+    }
+    setIsFeedbackSubmitting(false);
+  };
+
   // Show loading state while data is being loaded
   if (isLoading) {
     return (
@@ -184,6 +228,12 @@ export default function ResultsPage() {
           canEdit={!!noteId}
           isCopying={isCopying}
           isDownloading={isDownloading}
+          // Feedback props
+          onFeedbackSubmit={handleFeedbackSubmit}
+          isFeedbackSubmitting={isFeedbackSubmitting}
+          hasFeedbackSubmitted={hasFeedbackSubmitted}
+          feedbackValue={feedbackValue}
+          showFeedback={!!noteId}
         />
       </div>
 

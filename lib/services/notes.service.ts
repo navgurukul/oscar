@@ -86,4 +86,22 @@ export const notesService = {
 
     return { error: error as Error | null };
   },
+
+  /**
+   * Get notes with feedback for analysis
+   * Useful for reviewing AI formatting quality
+   */
+  async getNotesWithFeedback(): Promise<{
+    data: DBNote[] | null;
+    error: Error | null;
+  }> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("notes")
+      .select("*")
+      .not("feedback_helpful", "is", null)
+      .order("feedback_timestamp", { ascending: false });
+
+    return { data, error: error as Error | null };
+  },
 };
