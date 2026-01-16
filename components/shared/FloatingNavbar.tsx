@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Mic, FileText } from "lucide-react";
+import { Mic } from "lucide-react";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useAuth } from "@/lib/contexts/AuthContext";
 
@@ -21,16 +21,7 @@ export function FloatingNavbar() {
           </span>
         </Link>
 
-        <div className="flex items-center gap-4">
-          {!isLoading && user && (
-            <Link
-              href={ROUTES.NOTES}
-              className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300  transition-colors"
-            >
-              <FileText className="w-4 h-4" strokeWidth={2.5} />
-            </Link>
-          )}
-        </div>
+        <div className="flex items-center gap-4"></div>
       </div>
     </nav>
   );
