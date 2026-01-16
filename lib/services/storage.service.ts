@@ -1,0 +1,139 @@
+// Storage service for session storage operations
+
+import type { Note } from "../types/note.types";
+import { STORAGE_KEYS } from "../constants";
+
+/**
+ * Check if we're in a browser environment
+ */
+function isBrowser(): boolean {
+  return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
+}
+
+export const storageService = {
+  /**
+   * Save complete note data to session storage
+   */
+  saveNote(formatted: string, raw: string, title?: string): void {
+    if (!isBrowser()) {
+      console.warn("sessionStorage not available (SSR context)");
+      return;
+    }
+
+    try {
+      sessionStorage.setItem(STORAGE_KEYS.FORMATTED_NOTE, formatted);
+      sessionStorage.setItem(STORAGE_KEYS.RAW_TEXT, raw);
+      if (title) {
+        sessionStorage.setItem(STORAGE_KEYS.TITLE, title);
+      }
+    } catch (error) {
+      console.error("Failed to save note to storage:", error);
+      throw new Error("Failed to save note data");
+    }
+  },
+
+  /**
+   * Retrieve complete note data from session storage
+   */
+  getNote(): Partial<Note> | null {
+    if (!isBrowser()) {
+      return null;
+    }
+
+    try {
+      const formattedText = sessionStorage.getItem(STORAGE_KEYS.FORMATTED_NOTE);
+      const rawText = sessionStorage.getItem(STORAGE_KEYS.RAW_TEXT);
+      const title = sessionStorage.getItem(STORAGE_KEYS.TITLE);
+
+      if (!formattedText && !rawText) {
+        return null;
+      }
+
+      return {
+        formattedText: formattedText || "",
+        rawText: rawText || "",
+        title: title || undefined,
+      };
+    } catch (error) {
+      console.error("Failed to retrieve note from storage:", error);
+      return null;
+    }
+  },
+
+  /**
+   * Get raw transcript text
+   */
+  getRawText(): string | null {
+    if (!isBrowser()) {
+      return null;
+    }
+    return sessionStorage.getItem(STORAGE_KEYS.RAW_TEXT);
+  },
+
+  /**
+   * Update formatted note text
+   */
+  updateFormattedNote(text: string): void {
+    if (!isBrowser()) {
+      return;
+    }
+    sessionStorage.setItem(STORAGE_KEYS.FORMATTED_NOTE, text);
+  },
+
+  /**
+   * Update raw transcript text
+   */
+  updateRawText(text: string): void {
+    if (!isBrowser()) {
+      return;
+    }
+    sessionStorage.setItem(STORAGE_KEYS.RAW_TEXT, text);
+  },
+
+  /**
+   * Clear all note-related data
+   */
+  clearNote(): void {
+    if (!isBrowser()) {
+      return;
+    }
+    sessionStorage.removeItem(STORAGE_KEYS.FORMATTED_NOTE);
+    sessionStorage.removeItem(STORAGE_KEYS.RAW_TEXT);
+    sessionStorage.removeItem(STORAGE_KEYS.TITLE);
+    sessionStorage.removeItem(STORAGE_KEYS.CONTINUE_MODE);
+  },
+
+  /**
+   * Set continue recording mode flag
+   */
+  setContinueMode(enabled: boolean): void {
+    if (!isBrowser()) {
+      return;
+    }
+    if (enabled) {
+      sessionStorage.setItem(STORAGE_KEYS.CONTINUE_MODE, "true");
+    } else {
+      sessionStorage.removeItem(STORAGE_KEYS.CONTINUE_MODE);
+    }
+  },
+
+  /**
+   * Check if continue recording mode is active
+   */
+  getContinueMode(): boolean {
+    if (!isBrowser()) {
+      return false;
+    }
+    return sessionStorage.getItem(STORAGE_KEYS.CONTINUE_MODE) === "true";
+  },
+
+  /**
+   * Clear continue mode flag
+   */
+  clearContinueMode(): void {
+    if (!isBrowser()) {
+      return;
+    }
+    sessionStorage.removeItem(STORAGE_KEYS.CONTINUE_MODE);
+  },
+};

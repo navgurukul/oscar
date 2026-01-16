@@ -1,314 +1,365 @@
-'use client'
+"use client";
 
-import { useState, useRef, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { getTranscriptFromSTT } from '@/lib/audioToText'
-import { formatWithAI } from '@/lib/aiFormatter'
-import type { STTLogic } from 'stt-tts-lib'
+import { useState, useRef, useEffect, Suspense } from "react";
+import { useRouter } from "next/navigation";
+import { useRecording } from "@/lib/hooks/useRecording";
+import { storageService } from "@/lib/services/storage.service";
+import { notesService } from "@/lib/services/notes.service";
+import { aiService } from "@/lib/services/ai.service";
+import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
+import { useAuth } from "@/lib/contexts/AuthContext";
+import { RecordingControls } from "@/components/recording/RecordingControls";
+import { RecordingTimer } from "@/components/recording/RecordingTimer";
 
-export default function RecordingPage() {
-  const [isRecording, setIsRecording] = useState(false)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [isInitializing, setIsInitializing] = useState(false)
-  const [currentTranscript, setCurrentTranscript] = useState('')
-  const [recordingTime, setRecordingTime] = useState(0)
-  const sttRef = useRef<STTLogic | null>(null)
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const router = useRouter()
+import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
+import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
+import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants";
+import { ROUTES, UI_STRINGS, RECORDING_CONFIG } from "@/lib/constants";
+import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/hooks/use-toast";
 
-  // Initialize STT on component mount
+function RecordingPageInner() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { toast } = useToast();
+
+  const {
+    isInitializing,
+    isRequestingPermission,
+    isRecording,
+    isProcessing,
+    recordingTime,
+    error: recordingError,
+    startRecording,
+    stopRecording,
+  } = useRecording();
+
+  const { formatText } = useAIFormatting();
+
+  const [processingStep, setProcessingStep] = useState(0);
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [showProcessing, setShowProcessing] = useState(false);
+
+  // Refs to track intervals for cleanup
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const stepIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup intervals on unmount
   useEffect(() => {
-    async function initSTT() {
-      try {
-        // Check browser support
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-        if (!SpeechRecognition) {
-          alert('Speech recognition is not supported in this browser. Please use Chrome, Safari, or Edge.')
-          router.push('/')
-          return
-        }
-
-        setIsInitializing(true)
-        const { STTLogic } = await import('stt-tts-lib')
-        
-        // Create STT instance with transcript callback
-        const stt = new STTLogic(
-          (message, level) => {
-            console.log(`[STT ${level || 'info'}]`, message)
-          },
-          (transcript) => {
-            // Always update transcript, even if empty (to track state)
-            setCurrentTranscript(transcript || '')
-            if (transcript && transcript.trim()) {
-              console.log('Transcript updated:', transcript)
-            }
-          },
-          {
-            sessionDurationMs: 60000,
-            interimSaveIntervalMs: 2000, // More frequent updates
-            preserveTranscriptOnStart: false,
-          }
-        )
-        
-        // Set up word update callback to track real-time updates
-        stt.setWordsUpdateCallback((words) => {
-          console.log('Words update:', words)
-        })
-        
-        sttRef.current = stt
-        console.log('STT initialized successfully')
-      } catch (error) {
-        console.error('Error initializing STT:', error)
-        alert('Failed to initialize speech recognition. Please check browser compatibility and microphone permissions.')
-        router.push('/')
-      } finally {
-        setIsInitializing(false)
-      }
-    }
-
-    initSTT()
-
-    // Cleanup on unmount
     return () => {
-      if (sttRef.current) {
-        sttRef.current.destroy()
-        sttRef.current = null
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
       }
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current)
+      if (stepIntervalRef.current) {
+        clearInterval(stepIntervalRef.current);
       }
-    }
-  }, [router])
+    };
+  }, []);
 
-  // Start recording
+  // Check for continue mode and auto-start with seed transcript
   useEffect(() => {
-    if (isRecording && sttRef.current) {
-      // Reset timer
-      setRecordingTime(0)
-      
-      // Start timer
-      timerIntervalRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1)
-      }, 1000)
-
-      // Start STT
-      try {
-        setCurrentTranscript('')
-        sttRef.current.clearTranscript()
-        sttRef.current.start()
-        console.log('STT started, waiting for speech...')
-      } catch (error) {
-        console.error('Error starting recording:', error)
-        setIsRecording(false)
-        alert('Failed to start recording. Please check microphone permissions.')
-      }
-    } else {
-      // Stop timer
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current)
-        timerIntervalRef.current = null
-      }
-    }
-  }, [isRecording])
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
-
-  const handleStop = async () => {
-    if (sttRef.current && isRecording) {
-      try {
-        setIsProcessing(true)
-        setIsRecording(false)
-        
-        // Stop STT first
-        sttRef.current.stop()
-
-        // Wait longer for final transcript to be processed
-        await new Promise(resolve => setTimeout(resolve, 2000))
-
-        // Try multiple times to get transcript
-        let transcribedText = ''
-        let attempts = 0
-        const maxAttempts = 3
-        
-        while (!transcribedText && attempts < maxAttempts) {
-          // Try from state first
-          transcribedText = currentTranscript.trim()
-          
-          // If empty, try from STT instance
-          if (!transcribedText) {
-            transcribedText = getTranscriptFromSTT(sttRef.current).trim()
-          }
-          
-          // If still empty, wait and try again
-          if (!transcribedText && attempts < maxAttempts - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000))
-          }
-          
-          attempts++
-        }
-        
-        console.log('Final transcript after', attempts, 'attempts:', transcribedText)
-        console.log('Current transcript state:', currentTranscript)
-        console.log('STT full transcript:', getTranscriptFromSTT(sttRef.current))
-        
-        if (transcribedText && transcribedText.length > 0) {
-          // Format with AI
-          const formattedText = await formatWithAI(transcribedText)
-          
-          // Store and navigate
-          sessionStorage.setItem('formattedNote', formattedText)
-          sessionStorage.setItem('rawText', transcribedText)
-          router.push('/results')
+    // Only run once when component mounts and recording is ready
+    if (!isInitializing && !isRequestingPermission && !isRecording) {
+      const shouldContinue = storageService.getContinueMode();
+      if (shouldContinue) {
+        const rawText = storageService.getRawText();
+        if (rawText) {
+          // Clear continue mode flag
+          storageService.clearContinueMode();
+          // Start recording with existing transcript as seed
+          toast({
+            title: "Continuing Recording",
+            description: "Adding to your existing note...",
+          });
+          // Small delay to show toast
+          setTimeout(() => {
+            startRecording(rawText);
+          }, 500);
         } else {
-          // Check if recording was too short
-          const recordingDuration = recordingTime
-          let errorMessage = 'No speech detected. Please try recording again.\n\n'
-          
-          if (recordingDuration < 2) {
-            errorMessage += '⚠️ Recording was too short. Please record for at least 3-5 seconds.\n\n'
-          }
-          
-          errorMessage += 'Tips:\n'
-          errorMessage += '• Make sure your microphone is working\n'
-          errorMessage += '• Speak clearly and loudly\n'
-          errorMessage += '• Check browser microphone permissions\n'
-          errorMessage += '• Try using Chrome, Safari, or Edge browser\n'
-          errorMessage += '• Record for at least 3-5 seconds'
-          
-          alert(errorMessage)
-          setIsProcessing(false)
+          // No raw text to continue with, clear flag
+          storageService.clearContinueMode();
         }
-      } catch (error) {
-        console.error('Error processing recording:', error)
-        alert('Failed to process recording. Please try again.')
-        setIsProcessing(false)
       }
     }
-  }
+  }, [
+    isInitializing,
+    isRequestingPermission,
+    isRecording,
+    startRecording,
+    toast,
+  ]);
 
-  if (isInitializing) {
+  // Helper to clear all intervals
+  const clearAllIntervals = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    if (stepIntervalRef.current) {
+      clearInterval(stepIntervalRef.current);
+      stepIntervalRef.current = null;
+    }
+  };
+
+  const handleStartRecording = async () => {
+    await startRecording();
+  };
+
+  const handleStopRecording = async () => {
+    setShowProcessing(true);
+    setProcessingStep(0);
+    setProcessingProgress(0);
+
+    // Clear any existing intervals before starting new ones
+    clearAllIntervals();
+
+    // Simulate progress
+    progressIntervalRef.current = setInterval(() => {
+      setProcessingProgress((prev) => {
+        if (prev < 70) return prev + Math.random() * 8 + 3;
+        if (prev < 85) return prev + Math.random() * 4 + 1;
+        if (prev < 95) return prev + Math.random() * 2 + 0.5;
+        if (prev < 99) return prev + 0.3;
+        return Math.min(prev, 99);
+      });
+    }, 400);
+
+    stepIntervalRef.current = setInterval(() => {
+      setProcessingStep((prev) => {
+        if (prev >= 2) {
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1200);
+
+    try {
+      // Stop recording and get transcript
+      const transcript = await stopRecording();
+
+      // Persist raw transcript immediately to support continue mode
+      storageService.updateRawText(transcript);
+
+      if (!transcript || transcript.length === 0) {
+        clearAllIntervals();
+        setShowProcessing(false);
+
+        // Build error message
+        let errorDescription = ERROR_MESSAGES.NO_SPEECH_DETECTED;
+        if (recordingTime < RECORDING_CONFIG.MIN_RECORDING_TIME) {
+          errorDescription += " " + ERROR_MESSAGES.RECORDING_TOO_SHORT;
+        }
+
+        toast({
+          title: "Recording Failed",
+          description: errorDescription,
+          variant: "destructive",
+        });
+
+        // Show tips in a second toast
+        setTimeout(() => {
+          toast({
+            title: "Tips for Better Recording",
+            description: ERROR_TIPS.MIC_TIPS.join(" • "),
+          });
+        }, 500);
+        return;
+      }
+
+      // Format with AI
+      const result = await formatText(transcript);
+
+      clearAllIntervals();
+
+      if (result.success && result.formattedText) {
+        // Generate title before saving
+        const titleResult = await aiService.generateTitle(result.formattedText);
+        const generatedTitle = titleResult.success
+          ? titleResult.title
+          : "Untitled Note";
+
+        // Store in session storage for immediate display
+        storageService.saveNote(
+          result.formattedText,
+          transcript,
+          generatedTitle
+        );
+
+        // Save to Supabase if user is authenticated
+        if (user) {
+          const { data: savedNote, error: saveError } =
+            await notesService.createNote({
+              user_id: user.id,
+              title: generatedTitle || "Untitled Note",
+              raw_text: transcript,
+              original_formatted_text: result.formattedText,
+            });
+
+          if (saveError) {
+            console.error("Failed to save note to database:", saveError);
+            // Show non-blocking warning toast
+            toast({
+              title: "Note Saved Locally",
+              description:
+                "Could not sync to cloud, but your note is safe in this session.",
+              variant: "default",
+            });
+          } else if (savedNote) {
+            // Store the note ID for the results page
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("currentNoteId", savedNote.id);
+            }
+          }
+        }
+
+        setProcessingProgress(100);
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, RECORDING_CONFIG.COMPLETION_DELAY_MS)
+        );
+        router.push(ROUTES.RESULTS);
+      } else {
+        setShowProcessing(false);
+        toast({
+          title: "Formatting Failed",
+          description: ERROR_MESSAGES.FORMATTING_FAILED + " Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      clearAllIntervals();
+      setShowProcessing(false);
+      console.error("Processing error:", error);
+      toast({
+        title: "Processing Failed",
+        description:
+          ERROR_MESSAGES.PROCESSING_FAILED + " Please try recording again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (isInitializing || isRequestingPermission) {
     return (
-      <main className="min-h-screen bg-white flex items-center justify-center">
+      <main className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Initializing...</p>
+          <div className="flex items-center justify-center mb-4">
+            <Spinner className="text-cyan-500" />
+          </div>
+          <p className="text-gray-300">
+            {isRequestingPermission
+              ? UI_STRINGS.REQUESTING_PERMISSION
+              : UI_STRINGS.INITIALIZING}
+          </p>
+          {isRequestingPermission && (
+            <p className="text-gray-500 text-sm mt-2">
+              Please allow microphone access to continue
+            </p>
+          )}
         </div>
       </main>
-    )
+    );
+  }
+
+  if (showProcessing) {
+    return (
+      <ProcessingScreen
+        isProcessing={showProcessing}
+        progress={processingProgress}
+        currentStep={processingStep}
+      />
+    );
   }
 
   return (
-    <main className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
-      {/* Back button */}
-      <div className="absolute top-6 left-6">
-        <button
-          onClick={() => router.push('/')}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          <span>Back</span>
-        </button>
-      </div>
+    <main className="flex flex-col items-center px-4 pt-8">
+      {/* Error Alert */}
+      {recordingError && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-[90%] max-w-md">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{recordingError}</AlertDescription>
+          </Alert>
+        </div>
+      )}
 
-      {/* Header */}
-      <div className="absolute top-6 flex items-center gap-2">
-        <svg className="w-6 h-6 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-        </svg>
-        <h1 className="text-2xl font-bold text-purple-500">OSCAR</h1>
-      </div>
+      <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <h1 className="text-4xl font-bold">
+            Record Your <span className="text-cyan-500">Voice</span>
+          </h1>
+        </div>
 
-      <div className="flex flex-col items-center gap-8 mt-20">
-        {/* Tap to start / Timer */}
-        {!isRecording ? (
-          <p className="text-gray-500 text-lg">Tap to start speaking</p>
-        ) : (
-          <div className="text-center">
-            <div className="text-4xl font-mono font-bold text-gray-900 mb-2">
-              {formatTime(recordingTime)}
-            </div>
+        {/* Main Recording Container */}
+        <div className="bg-slate-900 size-[500px] rounded-3xl shadow-xl border border-cyan-700/30 p-8 md:p-12  space-y-12 relative overflow-hidden">
+          <DottedGlowBackground
+            gap={20}
+            radius={1.3}
+            color="rgba(6, 182, 212, 0.4)"
+            glowColor="rgba(6, 182, 212, 0.7)"
+            opacity={0.6}
+            speedMin={0.6}
+            speedMax={1.4}
+            speedScale={1.2}
+          />
+
+          {/* Timer - always reserve space */}
+          <div className="h-8">
+            {isRecording && <RecordingTimer seconds={recordingTime} />}
           </div>
-        )}
 
-        {/* Purple circles visualizer */}
-        {isRecording && (
-          <div className="flex gap-2 items-center">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"
-                style={{
-                  animationDelay: `${i * 0.1}s`,
-                  animationDuration: '1s',
-                }}
-              />
-            ))}
-          </div>
-        )}
+          {/* Recording Controls */}
+          <RecordingControls
+            isRecording={isRecording}
+            isProcessing={isProcessing}
+            isInitializing={isInitializing}
+            isRequestingPermission={isRequestingPermission}
+            onStart={handleStartRecording}
+            onStop={handleStopRecording}
+          />
 
-        {/* Microphone button */}
-        <button
-          onClick={isRecording ? handleStop : () => setIsRecording(true)}
-          disabled={isProcessing}
-          className={`
-            w-24 h-24 rounded-full flex items-center justify-center
-            transition-all duration-200 shadow-lg
-            ${isRecording 
-              ? 'bg-red-500 hover:bg-red-600 animate-pulse' 
-              : isProcessing
-              ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-purple-500 hover:bg-purple-600 hover:scale-105'
-            }
-          `}
-        >
-          {isProcessing ? (
-            <svg className="animate-spin h-10 w-10 text-white" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          ) : (
-            <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-            </svg>
-          )}
-        </button>
-
-        {/* Instruction text */}
-        <p className="text-gray-500 text-center max-w-md">
-          {isRecording 
-            ? 'Speak naturally and we\'ll transcribe everything' 
-            : 'Speak naturally and we\'ll transcribe everything'
-          }
-        </p>
-
-        {/* Live transcript preview */}
-        {isRecording && (
-          <div className="w-full max-w-2xl mt-8 bg-gray-50 rounded-lg p-4 border border-gray-200 max-h-48 overflow-y-auto min-h-[100px]">
-            <p className="text-sm text-gray-500 mb-2">
-              {currentTranscript ? 'Live transcription:' : 'Listening... (speak now)'}
-            </p>
-            {currentTranscript ? (
-              <p className="text-gray-800 text-sm whitespace-pre-wrap">{currentTranscript}</p>
-            ) : (
-              <p className="text-gray-400 italic text-sm">Waiting for speech...</p>
+          {/* Instruction Text - only when NOT recording */}
+          <div className="text-center pt-4 h-16 flex items-center justify-center">
+            {!isRecording && (
+              <p className="text-gray-400 text-lg">
+                Press the microphone button and start speaking. Oscar will do
+                the rest.
+              </p>
             )}
           </div>
-        )}
-        
-        {/* Recording time warning */}
-        {isRecording && recordingTime < 3 && (
-          <p className="text-xs text-orange-500 mt-2">
-            Please speak for at least 3 seconds for best results
-          </p>
-        )}
+        </div>
       </div>
+
+      <style jsx>{`
+        @keyframes waveform {
+          0%,
+          100% {
+            height: 24px;
+            opacity: 0.6;
+          }
+          50% {
+            height: 48px;
+            opacity: 1;
+          }
+        }
+      `}</style>
     </main>
-  )
+  );
 }
 
+export default function RecordingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Spinner className="text-cyan-500" />
+        </div>
+      }
+    >
+      <RecordingPageInner />
+    </Suspense>
+  );
+}

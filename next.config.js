@@ -3,9 +3,13 @@ const nextConfig = {
   reactStrictMode: true,
   // Explicitly use SWC minifier and treat externals as ESM when possible
   swcMinify: true,
+  // Expose environment variables for API routes
+  env: {
+    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+  },
   experimental: {
     // Helps with packages that use `import.meta` and ESM-only distribution
-    esmExternals: 'loose',
+    esmExternals: "loose",
   },
   // Required for SharedArrayBuffer (WASM multi-threading)
   async headers() {
@@ -34,18 +38,34 @@ const nextConfig = {
         path: false,
       };
 
+      // Externalize onnxruntime-node to prevent webpack from bundling it
+      config.externals = config.externals || [];
+      config.externals.push("onnxruntime-node", "onnxruntime-common");
+
       // Ensure .mjs in certain packages are treated as ESM so minification handles import.meta
       config.module = config.module || { rules: [] };
       config.module.rules = config.module.rules || [];
       config.module.rules.push({
         test: /\.mjs$/,
-        include: [/node_modules\/onnxruntime-web/, /node_modules\/stt-tts-lib/],
-        type: 'javascript/esm',
+        include: [
+          /node_modules\/onnxruntime-web/,
+          /node_modules\/speech-to-speech/,
+        ],
+        type: "javascript/esm",
       });
+    } else {
+      // On server side, completely externalize onnxruntime packages
+      config.externals = config.externals || [];
+      if (Array.isArray(config.externals)) {
+        config.externals.push(
+          "onnxruntime-node",
+          "onnxruntime-common",
+          "onnxruntime-web"
+        );
+      }
     }
     return config;
   },
-}
+};
 
-module.exports = nextConfig
-
+module.exports = nextConfig;

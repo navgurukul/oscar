@@ -71,16 +71,18 @@ Oscar/
 
 The `stt-tts-lib-0.1.0.tgz` package is used for audio transcription. The integration is in `lib/audioToText.ts`. You may need to adjust the import and method calls based on the actual API of the package.
 
+### Environment Variables
+
+Create a `.env.local` file in the project root:
+```
+DEEPSEEK_API_KEY=your_api_key_here
+```
+
+The app uses this key to generate AI‑formatted notes and titles via Deepseek. For production security, prefer server‑side API routes to avoid exposing secrets to the client.
+
 ### AI Formatting
 
-The AI formatting is currently using rule-based formatting. To use an actual AI service (like OpenAI), you can:
-
-1. Add your API key to `.env.local`:
-```
-OPENAI_API_KEY=your_api_key_here
-```
-
-2. Update `lib/aiFormatter.ts` to use the `formatWithOpenAI` function instead of `formatTextWithRules`.
+The app formats text using Deepseek with a safe fallback to local rule‑based formatting. If the API key is missing or the request fails, it falls back automatically.
 
 ## Development
 

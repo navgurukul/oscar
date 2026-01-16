@@ -1,163 +1,244 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import RecordingButton from '@/components/RecordingButton'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
+import { notesService } from "@/lib/services/notes.service";
+import { feedbackService } from "@/lib/services/feedback.service";
+import { NoteEditor } from "@/components/results/NoteEditor";
+import { NoteActions } from "@/components/results/NoteActions";
+import { Spinner } from "@/components/ui/spinner";
+import { ROUTES, UI_STRINGS } from "@/lib/constants";
+import { useToast } from "@/hooks/use-toast";
+import type { FeedbackReason } from "@/lib/types/note.types";
 
 export default function ResultsPage() {
-  const [formattedNote, setFormattedNote] = useState('')
-  const [isEditing, setIsEditing] = useState(false)
-  const [editedNote, setEditedNote] = useState('')
-  const router = useRouter()
+  const router = useRouter();
+  const { toast } = useToast();
+  const { isLoading, formattedNote, rawText, title } = useNoteStorage();
 
+  const [showRawTranscript, setShowRawTranscript] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [noteId, setNoteId] = useState<string | null>(null);
+  const [isCopying, setIsCopying] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // Feedback state
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
+  const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
+  const [feedbackValue, setFeedbackValue] = useState<boolean | null>(null);
+
+  // Get the note ID from session storage (set by recording page)
   useEffect(() => {
-    const note = sessionStorage.getItem('formattedNote')
-    if (note) {
-      setFormattedNote(note)
-      setEditedNote(note)
-    } else {
-      router.push('/')
-    }
-  }, [router])
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(editedNote)
-      alert('Copied to clipboard!')
-    } catch (error) {
-      console.error('Failed to copy:', error)
-    }
-  }
-
-  const handleDownload = () => {
-    const blob = new Blob([editedNote], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'oscar-note.txt'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  const handleSave = () => {
-    setFormattedNote(editedNote)
-    setIsEditing(false)
-    sessionStorage.setItem('formattedNote', editedNote)
-    try {
-      const entry = {
-        id: Date.now(),
-        text: editedNote,
-        createdAt: new Date().toISOString(),
+    if (typeof window !== "undefined") {
+      const storedNoteId = sessionStorage.getItem("currentNoteId");
+      if (storedNoteId) {
+        setNoteId(storedNoteId);
       }
-      const raw = localStorage.getItem('oscar_notes')
-      const list = raw ? JSON.parse(raw) : []
-      list.unshift(entry)
-      localStorage.setItem('oscar_notes', JSON.stringify(list))
-    } catch (e) {
-      console.error('Failed to save history:', e)
     }
-  }
+  }, []);
 
-  const handleCancel = () => {
-    setEditedNote(formattedNote)
-    setIsEditing(false)
+  // Initialize edited text when formatted note loads
+  useEffect(() => {
+    if (formattedNote) {
+      setEditedText(formattedNote);
+    }
+  }, [formattedNote]);
+
+  // Redirect if no note - only after loading completes
+  useEffect(() => {
+    if (!isLoading && !formattedNote && !rawText) {
+      router.push(ROUTES.HOME);
+    }
+  }, [isLoading, formattedNote, rawText, router]);
+
+  const handleCopyNote = async () => {
+    if (isCopying) return; // Prevent double-clicks
+
+    setIsCopying(true);
+    try {
+      const textToCopy = isEditing ? editedText : formattedNote;
+      await navigator.clipboard.writeText(textToCopy);
+      toast({
+        title: "Copied!",
+        description: "Note copied to clipboard.",
+      });
+    } catch (error) {
+      console.error("Failed to copy:", error);
+      toast({
+        title: "Copy Failed",
+        description: "Could not copy to clipboard.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCopying(false);
+    }
+  };
+
+  const handleDownloadNote = () => {
+    if (isDownloading) return; // Prevent double-clicks
+
+    setIsDownloading(true);
+    try {
+      const textToDownload = isEditing ? editedText : formattedNote;
+      const blob = new Blob([textToDownload], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = UI_STRINGS.NOTE_FILENAME;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Downloaded!",
+        description: "Note saved to your device.",
+      });
+    } catch (error) {
+      console.error("Failed to download:", error);
+      toast({
+        title: "Download Failed",
+        description: "Could not download the file.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleStartEditing = () => {
+    setIsEditing(true);
+  };
+
+  const handleCancelEditing = () => {
+    setEditedText(formattedNote);
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!noteId) {
+      toast({
+        title: "Error",
+        description: "Could not save changes - note not found in database.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    const { error } = await notesService.updateNote(noteId, {
+      edited_text: editedText,
+    });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save changes. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Saved!",
+        description: "Your changes have been saved.",
+      });
+      setIsEditing(false);
+    }
+    setIsSaving(false);
+  };
+
+  const handleFeedbackSubmit = async (
+    helpful: boolean,
+    reasons?: FeedbackReason[]
+  ) => {
+    if (!noteId) {
+      toast({
+        title: "Error",
+        description: "Could not submit feedback - note not found.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsFeedbackSubmitting(true);
+    const { success, error } = await feedbackService.submitFeedback(
+      noteId,
+      helpful,
+      reasons
+    );
+
+    if (error || !success) {
+      toast({
+        title: "Error",
+        description: "Failed to submit feedback. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      setHasFeedbackSubmitted(true);
+      setFeedbackValue(helpful);
+      toast({
+        title: "Thanks!",
+        description: "Your feedback helps us improve.",
+      });
+    }
+    setIsFeedbackSubmitting(false);
+  };
+
+  // Show loading state while data is being loaded
+  if (isLoading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="flex items-center justify-center mb-4">
+            <Spinner className="text-cyan-500" />
+          </div>
+          <p className="text-gray-300">{UI_STRINGS.LOADING_NOTE}</p>
+        </div>
+      </main>
+    );
   }
 
   return (
-    <main className="min-h-screen bg-white flex flex-col items-center px-4 py-12">
-      <div className="max-w-4xl w-full">
+    <main className="flex flex-col items-center px-4 pt-8 pb-24">
+      <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">
-            Here's your note ✨
+        <div className="text-center space-y-2 mt-8">
+          <h1 className="text-4xl font-bold text-white">
+            {UI_STRINGS.RESULTS_TITLE}
           </h1>
-          <p className="text-gray-600">
-            AI has formatted your thoughts into clean text.
-          </p>
         </div>
 
-        {/* Note Card */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 mb-8">
-          {/* Note Header */}
-          <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">Your Note</h2>
-            <div className="flex gap-4">
-              {!isEditing ? (
-                <>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="flex items-center gap-2 text-gray-600 hover:text-purple-500 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    <span>Edit</span>
-                  </button>
-                  <button
-                    onClick={handleCopy}
-                    className="flex items-center gap-2 text-gray-600 hover:text-purple-500 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    <span>Copy</span>
-                  </button>
-                  <button
-                    onClick={handleDownload}
-                    className="flex items-center gap-2 text-gray-600 hover:text-purple-500 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    <span>Download</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={handleSave}
-                    className="flex items-center gap-2 text-purple-500 hover:text-purple-600 transition-colors"
-                  >
-                    <span>Save</span>
-                  </button>
-                  <button
-                    onClick={handleCancel}
-                    className="flex items-center gap-2 text-gray-600 hover:text-gray-700 transition-colors"
-                  >
-                    <span>Cancel</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Note Content */}
-          {isEditing ? (
-            <textarea
-              value={editedNote}
-              onChange={(e) => setEditedNote(e.target.value)}
-              className="w-full min-h-[400px] p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
-            />
-          ) : (
-            <div className="prose prose-lg max-w-none text-gray-900 whitespace-pre-wrap">
-              {formattedNote}
-            </div>
-          )}
-        </div>
-
-        {/* Record Again Button */}
-        <div className="flex justify-center gap-4">
-          <RecordingButton />
-          <Link href="/notes">
-            <Button variant="outline">View Saved Notes</Button>
-          </Link>
-        </div>
+        {/* Note Editor with Integrated Raw Transcript */}
+        <NoteEditor
+          formattedNote={isEditing ? editedText : formattedNote}
+          title={title || UI_STRINGS.UNTITLED_NOTE}
+          onCopy={handleCopyNote}
+          onDownload={handleDownloadNote}
+          showRawTranscript={showRawTranscript}
+          onToggleTranscript={() => setShowRawTranscript(!showRawTranscript)}
+          rawText={rawText}
+          isEditing={isEditing}
+          onStartEditing={handleStartEditing}
+          onCancelEditing={handleCancelEditing}
+          onSaveEdit={handleSaveEdit}
+          onTextChange={setEditedText}
+          isSaving={isSaving}
+          canEdit={!!noteId}
+          isCopying={isCopying}
+          isDownloading={isDownloading}
+          // Feedback props
+          onFeedbackSubmit={handleFeedbackSubmit}
+          isFeedbackSubmitting={isFeedbackSubmitting}
+          hasFeedbackSubmitted={hasFeedbackSubmitted}
+          feedbackValue={feedbackValue}
+          showFeedback={!!noteId}
+        />
       </div>
-    </main>
-  )
-}
 
+      {/* Fixed Action Buttons */}
+      <NoteActions />
+    </main>
+  );
+}
