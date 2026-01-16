@@ -14,34 +14,35 @@ export function useRecording() {
   const sttServiceRef = useRef<STTService | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize STT service
+  // Initialize STT service (extracted for reuse)
+  const initializeSTT = useCallback(async () => {
+    setState(RecordingState.INITIALIZING);
+    setError(null);
+
+    try {
+      const service = new STTService();
+
+      // Update state to indicate we're requesting permission
+      setState(RecordingState.REQUESTING_PERMISSION);
+
+      // This will now prompt for permission during initialization
+      await service.initialize((transcript) => {
+        setCurrentTranscript(transcript);
+      });
+
+      sttServiceRef.current = service;
+      setState(RecordingState.READY);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("[useRecording] Initialization error:", error);
+      setError(err?.message || ERROR_MESSAGES.STT_INIT_FAILED);
+      setState(RecordingState.ERROR);
+    }
+  }, []);
+
+  // Initialize on mount
   useEffect(() => {
-    const initSTT = async () => {
-      setState(RecordingState.INITIALIZING);
-      setError(null);
-
-      try {
-        const service = new STTService();
-
-        // Update state to indicate we're requesting permission
-        setState(RecordingState.REQUESTING_PERMISSION);
-
-        // This will now prompt for permission during initialization
-        await service.initialize((transcript) => {
-          setCurrentTranscript(transcript);
-        });
-
-        sttServiceRef.current = service;
-        setState(RecordingState.READY);
-      } catch (error: unknown) {
-        const err = error as Error;
-        console.error("[useRecording] Initialization error:", error);
-        setError(err?.message || ERROR_MESSAGES.STT_INIT_FAILED);
-        setState(RecordingState.ERROR);
-      }
-    };
-
-    initSTT();
+    initializeSTT();
 
     // Cleanup on unmount
     return () => {
@@ -52,7 +53,7 @@ export function useRecording() {
         sttServiceRef.current.destroy();
       }
     };
-  }, []);
+  }, [initializeSTT]);
 
   // Start timer when recording
   useEffect(() => {
@@ -119,10 +120,15 @@ export function useRecording() {
 
   const clearError = useCallback(() => {
     setError(null);
+    // Only mark READY if service exists; otherwise go back to IDLE
     if (state === RecordingState.ERROR) {
-      setState(RecordingState.READY);
+      setState(sttServiceRef.current ? RecordingState.READY : RecordingState.IDLE);
     }
   }, [state]);
+
+  const retryInitialize = useCallback(async () => {
+    await initializeSTT();
+  }, [initializeSTT]);
 
   return {
     // State
@@ -143,5 +149,6 @@ export function useRecording() {
     startRecording,
     stopRecording,
     clearError,
+    retryInitialize,
   };
 }

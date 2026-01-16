@@ -187,7 +187,11 @@ export const RECORDING_CONFIG = {
   INTERIM_SAVE_INTERVAL_MS: 1000,
   MIN_RECORDING_TIME: 2,
   IOS_RESTART_INTERVAL_MS: 25000,
-  IOS_RESTART_DELAY_MS: 150,
+  // Reduced delay to minimize audio loss during restart
+  IOS_RESTART_DELAY_MS: 50,
   STOP_PROCESSING_DELAY_MS: 1500,
   COMPLETION_DELAY_MS: 600,
+  // Silence handling: proactively restart recognition to avoid gaps
+  SILENCE_RESTART_THRESHOLD_MS: 800,
+  MIN_RESTART_GAP_MS: 1000,
 } as const;

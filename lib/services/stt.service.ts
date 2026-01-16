@@ -14,6 +14,9 @@ export class STTService {
   private transcriptCallback: TranscriptCallback | null = null;
   private isRecordingActive: boolean = false;
   private restartInterval: NodeJS.Timeout | null = null;
+  private lastRestartTime: number = 0;
+  private isRestarting: boolean = false;
+  private lastTranscriptTime: number = 0;
 
   /**
    * Initialize the STT service
@@ -91,26 +94,57 @@ export class STTService {
     }
 
     try {
-      // Seed transcript if continuing
-      if (seedTranscript) {
-        this.accumulatedTranscript = seedTranscript;
+      // Seed transcript if continuing - this is critical for continue mode
+      if (seedTranscript && seedTranscript.trim()) {
+        this.accumulatedTranscript = seedTranscript.trim();
+        // Update callback immediately to show previous transcript
         if (this.transcriptCallback) {
-          this.transcriptCallback(seedTranscript);
+          this.transcriptCallback(this.accumulatedTranscript);
         }
       } else {
         this.accumulatedTranscript = "";
       }
 
-      // Start STT
+      // Ensure we're not in a restart state
+      this.isRestarting = false;
+      this.lastRestartTime = Date.now();
+
+      // Start STT immediately for continuous recording
+      // The library handles its own restarts internally, so we don't need preemptive restarts
       this.sttInstance.start();
       this.isRecordingActive = true;
+      this.lastTranscriptTime = Date.now();
 
-      // iOS Safari specific restart strategy
-      if (browserService.isIOSSafari()) {
-        this.startPreemptiveRestartStrategy();
+      // Lightweight silence watchdog to minimize restart gaps
+      if (this.restartInterval) {
+        clearInterval(this.restartInterval);
       }
+      this.restartInterval = setInterval(() => {
+        if (!this.isRecordingActive || !this.sttInstance) return;
+
+        const now = Date.now();
+        const sinceLast = now - this.lastTranscriptTime;
+        const sinceRestart = now - this.lastRestartTime;
+
+        if (
+          sinceLast >= RECORDING_CONFIG.SILENCE_RESTART_THRESHOLD_MS &&
+          sinceRestart >= RECORDING_CONFIG.MIN_RESTART_GAP_MS
+        ) {
+          try {
+            this.sttInstance.start();
+            this.lastRestartTime = now;
+          } catch (e) {
+            console.debug("[STT] Watchdog restart failed:", e);
+          }
+        }
+      }, 250);
+
+      // Note: We removed the preemptive restart strategy because the speech-to-speech
+      // library handles restarts internally. Our manual restarts were conflicting with
+      // the library's own restart mechanism, causing the "produced no result" warnings.
     } catch (error) {
       this.isRecordingActive = false;
+      this.isRestarting = false;
       console.error("[STT] Start recording error:", error);
       throw new Error(ERROR_MESSAGES.RECORDING_FAILED);
     }
@@ -127,10 +161,23 @@ export class STTService {
     try {
       this.isRecordingActive = false;
 
-      // Clear iOS restart interval
+      // Clear any restart interval (though we don't use it anymore)
       if (this.restartInterval) {
         clearInterval(this.restartInterval);
         this.restartInterval = null;
+      }
+
+      // Ensure we're not restarting
+      this.isRestarting = false;
+
+      // Get current transcript before stopping to capture everything
+      // This ensures we have the latest from the library, merged with our accumulated
+      const currentTranscript = this.sttInstance.getFullTranscript();
+      if (currentTranscript && currentTranscript.trim()) {
+        this.accumulatedTranscript = this.mergeTranscripts(
+          this.accumulatedTranscript,
+          currentTranscript.trim()
+        );
       }
 
       // Stop STT
@@ -141,7 +188,7 @@ export class STTService {
         setTimeout(resolve, RECORDING_CONFIG.STOP_PROCESSING_DELAY_MS)
       );
 
-      // Get final transcript
+      // Get final transcript - prefer accumulated, fallback to instance
       const finalTranscript =
         this.accumulatedTranscript.trim() ||
         this.sttInstance.getFullTranscript().trim();
@@ -169,6 +216,9 @@ export class STTService {
       this.restartInterval = null;
     }
 
+    this.isRestarting = false;
+    this.isRecordingActive = false;
+
     if (this.sttInstance) {
       try {
         this.sttInstance.destroy();
@@ -180,15 +230,19 @@ export class STTService {
 
     this.accumulatedTranscript = "";
     this.transcriptCallback = null;
-    this.isRecordingActive = false;
   }
 
   /**
    * Handle transcript updates from STT
+   * Ensures continuous transcript accumulation even during restarts
+   * Properly handles continue mode by merging seed transcript with new updates
    */
   private handleTranscriptUpdate(transcript: string): void {
     if (!transcript) return;
+    this.lastTranscriptTime = Date.now();
 
+    // Merge new transcript with accumulated (which may include seed transcript)
+    // The library's internal restarts preserve transcript, so we merge intelligently
     const merged = this.mergeTranscripts(
       this.accumulatedTranscript,
       transcript
@@ -203,61 +257,55 @@ export class STTService {
   /**
    * Merge incoming transcript with accumulated transcript
    * Handles browser restarts and prevents duplication
+   * Ensures seed transcript (from continue mode) is preserved
    */
   private mergeTranscripts(previous: string, incoming: string): string {
     if (!incoming) return previous;
     if (!previous) return incoming;
 
-    // If incoming is a superset, prefer it
-    if (incoming.startsWith(previous)) return incoming;
-    if (incoming.includes(previous)) return incoming;
+    // Normalize whitespace for comparison
+    const prevTrimmed = previous.trim();
+    const incTrimmed = incoming.trim();
 
-    // If incoming is wholly contained, ignore to avoid repeats
-    if (previous.includes(incoming)) return previous;
+    // If incoming is a superset (contains all of previous), prefer it
+    if (incTrimmed.startsWith(prevTrimmed)) return incTrimmed;
+    if (incTrimmed.includes(prevTrimmed)) return incTrimmed;
+
+    // If incoming is wholly contained in previous, keep previous to preserve seed
+    if (prevTrimmed.includes(incTrimmed)) return prevTrimmed;
 
     // Compute maximal overlap where previous suffix equals incoming prefix
-    const max = Math.min(previous.length, incoming.length);
+    // This handles cases where library restarts and sends partial transcripts
+    const max = Math.min(prevTrimmed.length, incTrimmed.length);
     for (let i = max; i > 0; i--) {
-      if (previous.slice(-i) === incoming.slice(0, i)) {
-        return previous + incoming.slice(i);
+      if (prevTrimmed.slice(-i) === incTrimmed.slice(0, i)) {
+        return prevTrimmed + incTrimmed.slice(i);
       }
     }
 
     // Fallback: append with separating space
-    return previous + (previous.endsWith(" ") ? "" : " ") + incoming;
+    // This ensures seed transcript is preserved and new content is appended
+    return prevTrimmed + (prevTrimmed.endsWith(" ") ? "" : " ") + incTrimmed;
   }
 
   /**
-   * Start preemptive restart strategy for iOS Safari
-   * iOS Safari stops recognition after ~30s, so we restart proactively
+   * NOTE: Preemptive restart strategy has been removed.
+   * 
+   * The speech-to-speech library handles restarts internally and automatically.
+   * Our manual restart strategy was conflicting with the library's own restart
+   * mechanism, causing:
+   * - "produced no result within 2000ms" warnings
+   * - Frequent unnecessary restarts
+   * - Audio loss during restart gaps
+   * 
+   * The library's internal restart mechanism:
+   * - Automatically restarts sessions when needed
+   * - Preserves transcript during restarts (via preserveTranscriptOnStart)
+   * - Handles silence gates and buffering internally
+   * - Is optimized for continuous recording
+   * 
+   * We now rely entirely on the library's built-in restart handling.
    */
-  private startPreemptiveRestartStrategy(): void {
-    if (this.restartInterval) {
-      clearInterval(this.restartInterval);
-    }
-
-    this.restartInterval = setInterval(() => {
-      if (!this.isRecordingActive || !this.sttInstance) {
-        return;
-      }
-
-      try {
-        // Quick stop-start to prevent iOS cutoff
-        this.sttInstance.stop();
-        setTimeout(() => {
-          try {
-            if (this.isRecordingActive && this.sttInstance) {
-              this.sttInstance.start();
-            }
-          } catch (error) {
-            console.warn("[STT] Preemptive restart start failed:", error);
-          }
-        }, RECORDING_CONFIG.IOS_RESTART_DELAY_MS);
-      } catch (error) {
-        console.warn("[STT] Preemptive restart stop failed:", error);
-      }
-    }, RECORDING_CONFIG.IOS_RESTART_INTERVAL_MS); // Restart every 25 seconds
-  }
 
   /**
    * Create log callback for STT instance

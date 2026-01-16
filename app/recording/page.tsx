@@ -35,6 +35,8 @@ function RecordingPageInner() {
     error: recordingError,
     startRecording,
     stopRecording,
+    hasError,
+    retryInitialize,
   } = useRecording();
 
   const { formatText } = useAIFormatting();
@@ -59,6 +61,13 @@ function RecordingPageInner() {
       startRecording(seedTranscript);
     }
   }, [autoStart, continueMode, isRecording, isReady, startRecording]);
+
+  // If initialization failed (e.g., permission denied), attempt to reinitialize
+  useEffect(() => {
+    if (autoStart && hasError && !isRecording && !isReady) {
+      retryInitialize();
+    }
+  }, [autoStart, hasError, isRecording, isReady, retryInitialize]);
 
   const handleStartRecording = async () => {
     // Revert to earlier behavior: start recording directly
