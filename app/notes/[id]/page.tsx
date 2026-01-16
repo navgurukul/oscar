@@ -1,29 +1,25 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
 import { notesService } from "@/lib/services/notes.service";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import {
-  ArrowLeft,
   Copy,
   Download,
   Edit3,
   Save,
   X,
-  Eye,
-  FileText,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { DBNote } from "@/lib/types/note.types";
 
-export default function NoteDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
+export default function NoteDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const router = useRouter();
   const { toast } = useToast();
 
@@ -32,11 +28,11 @@ export default function NoteDetailPage({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editedText, setEditedText] = useState("");
-  const [showOriginal, setShowOriginal] = useState(false);
   const [showRawTranscript, setShowRawTranscript] = useState(false);
 
   useEffect(() => {
     const loadNote = async () => {
+      if (!id) return;
       setIsLoading(true);
       const { data, error } = await notesService.getNoteById(id);
       if (error || !data) {
@@ -112,7 +108,12 @@ export default function NoteDetailPage({
   if (isLoading) {
     return (
       <main className="min-h-screen flex items-center justify-center">
-        <Spinner className="text-cyan-500" />
+        <div className="text-center">
+          <div className="flex items-center justify-center mb-4">
+            <Spinner className="text-cyan-500" />
+          </div>
+          <p className="text-gray-300">Loading your note...</p>
+        </div>
       </main>
     );
   }
@@ -122,151 +123,188 @@ export default function NoteDetailPage({
   }
 
   const displayText = note.edited_text || note.original_formatted_text;
-  const hasEdits = note.edited_text !== null;
 
   return (
     <main className="flex flex-col items-center px-4 pt-8 pb-24">
-      <div className="w-full max-w-2xl mt-16">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <button
-            onClick={() => router.push("/notes")}
-            className="p-2 text-gray-400 hover:text-white transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold text-white">{note.title}</h1>
-            <p className="text-gray-400 text-sm">
-              {formatDate(note.created_at)}
-              {hasEdits && <span className="text-cyan-400 ml-2">(edited)</span>}
-            </p>
-          </div>
-        </div>
+      <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
+        {/* Header with Back Button */}
 
-        {/* Action buttons */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {!isEditing ? (
-            <>
-              <Button
-                onClick={() => setIsEditing(true)}
-                variant="outline"
-                className="text-cyan-400 border-cyan-700/50 hover:bg-cyan-900/20"
-              >
-                <Edit3 className="w-4 h-4 mr-2" />
-                Edit
-              </Button>
-              <Button
-                onClick={handleCopy}
-                variant="outline"
-                className="text-gray-300 border-slate-600 hover:bg-slate-800"
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Copy
-              </Button>
-              <Button
-                onClick={handleDownload}
-                variant="outline"
-                className="text-gray-300 border-slate-600 hover:bg-slate-800"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Download
-              </Button>
-              {hasEdits && (
-                <Button
-                  onClick={() => setShowOriginal(!showOriginal)}
-                  variant="outline"
-                  className="text-gray-300 border-slate-600 hover:bg-slate-800"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  {showOriginal ? "Hide Original" : "View Original"}
-                </Button>
+        {/* <div className="flex-1 text-center">
+          <h1 className="text-3xl font-bold text-white">
+            {note.title || "Untitled Note"}
+          </h1>
+          <p className="text-gray-400 text-sm mt-1">
+            {formatDate(note.created_at)}
+          </p>
+        </div> */}
+        <div className="w-9" />
+
+        {/* Note Editor Card */}
+        <div className="w-[650px]">
+          <Card className="bg-slate-900 border-cyan-700/30 rounded-t-2xl shadow-xl overflow-hidden">
+            <CardHeader>
+              {/* Title and Actions */}
+              <div className="flex gap-6 justify-between items-start">
+                <div className="mb-2">
+                  <h2 className="text-xl font-semibold text-white truncate">
+                    {note.title || "Untitled Note"}
+                  </h2>
+                  <p className="text-gray-400 text-sm">
+                    {formatDate(note.created_at)}
+                  </p>
+                </div>
+
+                <div className="flex items-center">
+                  <div className="flex">
+                    {isEditing ? (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleSaveEdit}
+                          disabled={isSaving}
+                          className="text-cyan-500 hover:text-cyan-300"
+                        >
+                          {isSaving ? (
+                            <Spinner className="w-4 h-4" />
+                          ) : (
+                            <Save className="w-4 h-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setIsEditing(false);
+                            setEditedText(
+                              note.edited_text || note.original_formatted_text
+                            );
+                          }}
+                          disabled={isSaving}
+                          className="text-gray-400 hover:text-white"
+                        >
+                          <X className="w-5 h-5" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsEditing(true)}
+                          className="text-gray-400 hover:text-cyan-500"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleCopy}
+                          className="text-gray-400 hover:text-cyan-500"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleDownload}
+                          className="text-gray-400 hover:text-cyan-500"
+                        >
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <Separator className="w-24 h-0.5 bg-cyan-500" />
+            </CardHeader>
+
+            <CardContent>
+              {isEditing ? (
+                <textarea
+                  value={editedText}
+                  onChange={(e) => setEditedText(e.target.value)}
+                  className="w-full min-h-[300px] bg-slate-800 text-gray-300 rounded-lg p-4 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 border border-slate-700"
+                  autoFocus
+                />
+              ) : (
+                <div className="text-md text-start text-gray-300 whitespace-pre-wrap">
+                  {displayText}
+                </div>
               )}
-              <Button
-                onClick={() => setShowRawTranscript(!showRawTranscript)}
-                variant="outline"
-                className="text-gray-300 border-slate-600 hover:bg-slate-800"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                {showRawTranscript ? "Hide Transcript" : "Raw Transcript"}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                onClick={handleSaveEdit}
-                disabled={isSaving}
-                className="bg-cyan-600 hover:bg-cyan-700 text-white"
-              >
-                {isSaving ? (
-                  <Spinner className="w-4 h-4 mr-2" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                Save
-              </Button>
-              <Button
-                onClick={() => {
-                  setIsEditing(false);
-                  setEditedText(
-                    note.edited_text || note.original_formatted_text
-                  );
+            </CardContent>
+          </Card>
+
+          {/* Raw Transcript - Slide In/Out with Framer Motion */}
+          <AnimatePresence mode="wait">
+            {showRawTranscript ? (
+              <motion.div
+                key="transcript-visible"
+                initial={{ opacity: 0, scaleY: 0, y: 0 }}
+                animate={{ opacity: 1, scaleY: 1, y: 0 }}
+                exit={{ opacity: 0, scaleY: 0, y: 0 }}
+                transition={{
+                  duration: 0.3,
+                  ease: "easeInOut",
                 }}
-                variant="outline"
-                className="text-gray-300 border-slate-600 hover:bg-slate-800"
+                style={{ originY: 0 }}
               >
-                <X className="w-4 h-4 mr-2" />
-                Cancel
-              </Button>
-            </>
-          )}
+                <div className="flex justify-center">
+                  <Card className="bg-white border-none rounded-t-none rounded-b-2xl shadow-xl w-[580px]">
+                    <CardContent className="pt-6">
+                      <div className="space-y-4">
+                        {/* Raw Transcript Text */}
+                        <div className="text-gray-800 text-md whitespace-pre-wrap leading-relaxed">
+                          {note.raw_text || "No transcript available."}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Hide Button - Below Raw Transcript with Delayed Animation */}
+                <motion.div
+                  initial={{ opacity: 0, y: 0 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 0 }}
+                  transition={{
+                    duration: 0.2,
+                    ease: "easeOut",
+                    delay: 0.2,
+                  }}
+                  className="flex justify-center"
+                >
+                  <button
+                    onClick={() => setShowRawTranscript(false)}
+                    className="bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white font-medium py-2.5 px-10 transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl flex items-center justify-center gap-2 rounded-b-2xl"
+                  >
+                    <span className="text-sm">hide original transcript</span>
+                  </button>
+                </motion.div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="transcript-hidden"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{
+                  duration: 0.2,
+                  ease: "easeOut",
+                }}
+                className="flex justify-center"
+              >
+                <button
+                  onClick={() => setShowRawTranscript(true)}
+                  className="bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white font-medium py-2.5 px-10 transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl flex items-center justify-center gap-2 rounded-b-2xl"
+                >
+                  <span className="text-sm">view original transcript</span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-
-        {/* Note content */}
-        <div className="bg-slate-900 border border-slate-700 rounded-xl p-6">
-          {isEditing ? (
-            <textarea
-              value={editedText}
-              onChange={(e) => setEditedText(e.target.value)}
-              className="w-full min-h-[400px] bg-transparent text-gray-200 resize-none focus:outline-none"
-              autoFocus
-            />
-          ) : (
-            <div className="prose prose-invert max-w-none">
-              <pre className="whitespace-pre-wrap text-gray-200 font-sans">
-                {displayText}
-              </pre>
-            </div>
-          )}
-        </div>
-
-        {/* Original text comparison */}
-        {showOriginal && hasEdits && !isEditing && (
-          <div className="mt-6">
-            <h3 className="text-lg font-medium text-gray-300 mb-3">
-              Original AI-Generated Text
-            </h3>
-            <div className="bg-slate-800 border border-slate-600 rounded-xl p-6">
-              <pre className="whitespace-pre-wrap text-gray-400 font-sans">
-                {note.original_formatted_text}
-              </pre>
-            </div>
-          </div>
-        )}
-
-        {/* Raw transcript */}
-        {showRawTranscript && !isEditing && (
-          <div className="mt-6">
-            <h3 className="text-lg font-medium text-gray-300 mb-3">
-              Raw Transcript
-            </h3>
-            <div className="bg-slate-800 border border-slate-600 rounded-xl p-6">
-              <pre className="whitespace-pre-wrap text-gray-400 font-sans">
-                {note.raw_text}
-              </pre>
-            </div>
-          </div>
-        )}
       </div>
     </main>
   );

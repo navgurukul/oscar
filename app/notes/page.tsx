@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { notesService } from "@/lib/services/notes.service";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { FileText, Mic, Plus, Trash2 } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
 
 export default function NotesPage() {
@@ -61,11 +63,9 @@ export default function NotesPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Spinner className="text-cyan-500 mb-4" />
-          <p className="text-gray-300">Loading your notes...</p>
-        </div>
+      <main className="min-h-screen flex flex-col items-center justify-center">
+        <Spinner className="text-cyan-500 mb-4" />
+        <p className="text-gray-300 text-center">Loading your notes...</p>
       </main>
     );
   }
@@ -79,7 +79,7 @@ export default function NotesPage() {
             onClick={() => router.push("/recording?autoStart=true")}
             className="bg-cyan-600 hover:bg-cyan-700 text-white"
           >
-            <Plus className="w-4 h-4 mr-2" />
+            <Mic className="w-4 h-4 mr-2" />
             New Note
           </Button>
         </div>
@@ -110,40 +110,44 @@ export default function NotesPage() {
         ) : (
           <div className="space-y-4">
             {notes.map((note) => (
-              <div
+              <Card
                 key={note.id}
                 onClick={() => router.push(`/notes/${note.id}`)}
-                className="bg-slate-900 border border-slate-700 rounded-xl p-5 cursor-pointer hover:border-cyan-700/50 transition-colors group"
+                className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl cursor-pointer hover:border-cyan-700/60 transition-all hover:shadow-2xl group overflow-hidden"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-medium text-white truncate mb-1">
-                      {note.title}
-                    </h3>
-                    <p className="text-gray-400 text-sm mb-3">
-                      {formatDate(note.created_at)}
-                      {note.edited_text && (
-                        <span className="text-cyan-400 ml-2">(edited)</span>
+                <CardHeader>
+                  <div className="flex gap-6 justify-between items-start">
+                    <div className="flex-1 min-w-0">
+                      <div className="mb-2">
+                        <h2 className="text-xl font-semibold text-white truncate">
+                          {note.title || "Untitled Note"}
+                        </h2>
+                        <p className="text-gray-400 text-sm">
+                          {formatDate(note.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => handleDelete(note.id, e)}
+                      disabled={deletingId === note.id}
+                      className="p-2 text-gray-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Delete note"
+                    >
+                      {deletingId === note.id ? (
+                        <Spinner className="w-4 h-4" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
                       )}
-                    </p>
-                    <p className="text-gray-300 text-sm line-clamp-2">
-                      {getPreview(note)}
-                    </p>
+                    </button>
                   </div>
-                  <button
-                    onClick={(e) => handleDelete(note.id, e)}
-                    disabled={deletingId === note.id}
-                    className="p-2 text-gray-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                    title="Delete note"
-                  >
-                    {deletingId === note.id ? (
-                      <Spinner className="w-4 h-4" />
-                    ) : (
-                      <Trash2 className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
+                  <Separator className="w-24 h-0.5 bg-cyan-500" />
+                </CardHeader>
+                <CardContent>
+                  <p className="text-md text-start text-gray-300 line-clamp-2">
+                    {getPreview(note)}
+                  </p>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}

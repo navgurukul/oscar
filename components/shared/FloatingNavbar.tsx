@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mic, FileText, LogOut, User } from "lucide-react";
+import { Mic, FileText, LogOut } from "lucide-react";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -37,17 +37,16 @@ export function FloatingNavbar() {
                 <>
                   <Link
                     href={ROUTES.NOTES}
-                    className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
+                    className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300  transition-colors"
                   >
-                    <FileText className="w-4 h-4" />
-                    <span className="text-sm">My Notes</span>
+                    <FileText className="w-4 h-4" strokeWidth={2.5} />
                   </Link>
-                  <div className="flex items-center gap-2 text-gray-400">
+                  {/* <div className="flex items-center gap-2 text-gray-400">
                     <User className="w-4 h-4" />
                     <span className="text-sm truncate max-w-[150px]">
                       {user.email}
                     </span>
-                  </div>
+                  </div> */}
                   <Button
                     variant="ghost"
                     size="sm"
