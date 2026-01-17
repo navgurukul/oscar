@@ -3,6 +3,7 @@ import { Roboto } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import { FloatingNavbar } from "@/components/shared/FloatingNavbar";
 import { AuthEdgeButton } from "@/components/shared/AuthEdgeButton";
+import { HomeRecordingButton } from "@/components/recording/HomeRecordingButton";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
 import "./globals.css";
 
@@ -33,6 +34,9 @@ export default function RootLayout({
           <FloatingNavbar />
           <AuthEdgeButton />
           {children}
+          <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50">
+            <HomeRecordingButton />
+          </div>
           <Toaster />
         </AuthProvider>
       </body>

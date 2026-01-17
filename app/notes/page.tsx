@@ -8,7 +8,6 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { SquaresSubtract, Trash2 } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
-import { HomeRecordingButton } from "@/components/recording/HomeRecordingButton";
 import { getTimeBasedPrompt } from "@/lib/utils";
 
 export default function NotesPage() {
@@ -101,9 +100,6 @@ export default function NotesPage() {
               No notes yet
             </h2> */}
             <p className="text-gray-500 mb-6">{contextPrompt}</p>
-            <div className="fixed bottom-10 left-1/2 -translate-x-1/2 ">
-              <HomeRecordingButton />
-            </div>
           </div>
         ) : (
           <div className="space-y-4">
