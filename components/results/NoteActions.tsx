@@ -3,7 +3,7 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Mic, Play, RotateCcw } from "lucide-react";
+import { Play, RotateCcw } from "lucide-react";
 import { storageService } from "@/lib/services/storage.service";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { motion } from "motion/react";
