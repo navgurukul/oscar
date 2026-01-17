@@ -4,7 +4,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Mic } from "lucide-react";
 import { storageService } from "@/lib/services/storage.service";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import { ROUTES } from "@/lib/constants";
 
 export function HomeRecordingButton() {

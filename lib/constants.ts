@@ -175,6 +175,7 @@ export const ROUTES = {
   RESULTS: "/results",
   NOTES: "/notes",
   AUTH: "/auth",
+  SETTINGS: "/settings",
 } as const;
 
 /**

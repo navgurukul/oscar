@@ -78,6 +78,55 @@ export const USER_PROMPTS = {
 } as const;
 
 /**
+ * Build a dynamic format prompt with user's custom vocabulary
+ * Replaces the NAME/TITLE CORRECTION section with custom vocabulary entries
+ */
+export function buildFormatPromptWithVocabulary(
+  vocabularyEntries: Array<{
+    term: string;
+    pronunciation: string | null;
+    context: string | null;
+  }>
+): string {
+  // If no vocabulary, return the base prompt as-is
+  if (!vocabularyEntries || vocabularyEntries.length === 0) {
+    return SYSTEM_PROMPTS.FORMAT;
+  }
+
+  // Build the vocabulary list
+  const vocabList = vocabularyEntries
+    .slice(0, 50) // Limit to 50 entries to stay within token limits
+    .map((entry) => {
+      let line = `- "${entry.term}"`;
+      if (entry.pronunciation) {
+        line += ` (may sound like: "${entry.pronunciation}")`;
+      }
+      if (entry.context) {
+        line += ` [${entry.context}]`;
+      }
+      return line;
+    })
+    .join("\n");
+
+  // Create the custom vocabulary section
+  const customSection = `=== CUSTOM VOCABULARY CORRECTION ===
+The user has defined these custom terms. When you encounter them in speech-to-text, correct them to the exact spelling below:
+
+${vocabList}
+
+Always use the exact capitalization and spelling shown above. If a word sounds similar to any of these terms, prefer the custom vocabulary spelling.`;
+
+  // Replace the NAME/TITLE CORRECTION section with custom vocabulary
+  const basePrompt = SYSTEM_PROMPTS.FORMAT;
+  const updatedPrompt = basePrompt.replace(
+    /=== NAME\/TITLE CORRECTION ===[\s\S]*?(?=\n=== OUTPUT FORMAT ===)/,
+    customSection + "\n\n"
+  );
+
+  return updatedPrompt;
+}
+
+/**
  * FEEDBACK-DRIVEN PROMPT OPTIMIZATION GUIDE
  *
  * This section documents how to use user feedback to improve AI prompts.

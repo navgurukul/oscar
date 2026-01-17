@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { LogIn, LogOut, FileText } from "lucide-react";
+import { LogIn, LogOut, FileText, Settings } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
@@ -50,6 +50,27 @@ export function AuthEdgeButton() {
                 className="flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors"
               >
                 <FileText className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
+              </motion.div>
+            </Link>
+          </motion.div>
+        )}
+        {user && (
+          <motion.div
+            key="settings-link"
+            layout
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="pointer-events-auto"
+          >
+            <Link href={ROUTES.SETTINGS}>
+              <motion.div
+                whileHover={{ y: -5, scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors"
+              >
+                <Settings className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
               </motion.div>
             </Link>
           </motion.div>
