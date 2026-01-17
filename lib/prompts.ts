@@ -19,6 +19,10 @@ Take the raw speech-to-text input and format it properly. That's it. Nothing mor
 3. Break into readable paragraphs where natural pauses occur
 4. Remove repeated sentences/ideas - keep each point only once
 5. Make it flow naturally while keeping ALL original meaning
+6. Format sentences clearly and properly - ensure proper spacing, punctuation, and structure
+7. When user mentions "first point", "second point", "third point", etc., convert them into bullet points format
+8. Auto-correct names, book titles, and other proper nouns if you are 100% certain of the correct spelling/name based on context
+9.If multiple items are introduced using ordinal words (first, second, third), always prefer bullet points over paragraph format.
 
 === WHAT YOU MUST NEVER DO ===
 ❌ NEVER answer questions in the text
@@ -34,6 +38,32 @@ If the input is incomplete or cuts off mid-sentence:
 - Do NOT complete the thought
 - Do NOT add words to make it complete
 
+=== BULLET POINT FORMATTING ===
+When the user mentions numbered points (first point, second point, etc.), convert them to bullet points:
+- Input: "first point is about learning, second point is about practice"
+- Output: 
+  • Learning
+  • Practice
+
+- Input: "my first point, second point, third point about the topic"
+- Output: Format as bullet list with each point on a new line
+
+=== NAME/TITLE CORRECTION ===
+Analyze the full context of the text. If you are 100% certain that a name, book title, or proper noun is misspelled or incorrect, correct it:
+- "Harry Porter" → "Harry Potter" ✓
+- "El Mistake" (about dreams) → "The Alchemist" ✓
+- "To Kill a Mocking Bird" → "To Kill a Mockingbird" ✓
+- Only correct if you are absolutely certain based on context
+- If unsure, keep the original spelling
+
+=== SENTENCE FORMATTING ===
+Ensure all sentences are:
+- Clear and well-structured
+- Properly punctuated
+- Have appropriate spacing
+- Use correct capitalization
+- Flow naturally from one to the next
+
 === CRITICAL EXAMPLES ===
 
 Input: "um so like how to create a react app you know"
@@ -48,11 +78,10 @@ Input: "what is machine learning basically"
 CORRECT Output: "What is machine learning?"
 WRONG Output: "Machine learning is a subset of AI..." ❌
 
-=== NAME/TITLE CORRECTION ===
-Only correct obvious speech recognition errors for names/titles if 100% certain:
-- "Harry Porter" → "Harry Potter" ✓
-- "El Mistake" (about dreams) → "The Alchemist" ✓
-- Don't correct unless absolutely sure
+Input: "first point is about reading books second point is about writing notes"
+CORRECT Output: 
+• Reading books
+• Writing notes
 
 === OUTPUT FORMAT ===
 Return ONLY the formatted text. No explanations. No introductions. Just the clean text.`,
@@ -76,55 +105,6 @@ export const USER_PROMPTS = {
   TITLE_TEMPLATE:
     "Create a concise title (max ~60 chars) for this content. Return ONLY the title.\n\nContent:\n",
 } as const;
-
-/**
- * Build a dynamic format prompt with user's custom vocabulary
- * Replaces the NAME/TITLE CORRECTION section with custom vocabulary entries
- */
-export function buildFormatPromptWithVocabulary(
-  vocabularyEntries: Array<{
-    term: string;
-    pronunciation: string | null;
-    context: string | null;
-  }>
-): string {
-  // If no vocabulary, return the base prompt as-is
-  if (!vocabularyEntries || vocabularyEntries.length === 0) {
-    return SYSTEM_PROMPTS.FORMAT;
-  }
-
-  // Build the vocabulary list
-  const vocabList = vocabularyEntries
-    .slice(0, 50) // Limit to 50 entries to stay within token limits
-    .map((entry) => {
-      let line = `- "${entry.term}"`;
-      if (entry.pronunciation) {
-        line += ` (may sound like: "${entry.pronunciation}")`;
-      }
-      if (entry.context) {
-        line += ` [${entry.context}]`;
-      }
-      return line;
-    })
-    .join("\n");
-
-  // Create the custom vocabulary section
-  const customSection = `=== CUSTOM VOCABULARY CORRECTION ===
-The user has defined these custom terms. When you encounter them in speech-to-text, correct them to the exact spelling below:
-
-${vocabList}
-
-Always use the exact capitalization and spelling shown above. If a word sounds similar to any of these terms, prefer the custom vocabulary spelling.`;
-
-  // Replace the NAME/TITLE CORRECTION section with custom vocabulary
-  const basePrompt = SYSTEM_PROMPTS.FORMAT;
-  const updatedPrompt = basePrompt.replace(
-    /=== NAME\/TITLE CORRECTION ===[\s\S]*?(?=\n=== OUTPUT FORMAT ===)/,
-    customSection + "\n\n"
-  );
-
-  return updatedPrompt;
-}
 
 /**
  * FEEDBACK-DRIVEN PROMPT OPTIMIZATION GUIDE
