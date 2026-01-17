@@ -19,6 +19,11 @@ Take the raw speech-to-text input and format it properly. That's it. Nothing mor
 3. Break into readable paragraphs where natural pauses occur
 4. Remove repeated sentences/ideas - keep each point only once
 5. Make it flow naturally while keeping ALL original meaning
+6. Format sentences clearly and properly - ensure proper spacing, punctuation, and structure
+7. When user mentions "first point", "second point", "third point", etc., convert them into bullet points format
+8. Auto-correct names, book titles, and other proper nouns if you are 100% certain of the correct spelling/name based on context
+9. If multiple items are introduced using ordinal words (first, second, third), always prefer bullet points over paragraph format.
+10. Correct vocabulary and word choice errors while preserving the original meaning and intent
 
 === WHAT YOU MUST NEVER DO ===
 ❌ NEVER answer questions in the text
@@ -34,6 +39,50 @@ If the input is incomplete or cuts off mid-sentence:
 - Do NOT complete the thought
 - Do NOT add words to make it complete
 
+=== VOCABULARY CORRECTION ===
+Fix incorrect word usage and vocabulary errors:
+- Homophones: "there/their/they're", "your/you're", "its/it's"
+- Common mistakes: "could of" → "could have", "should of" → "should have"
+- Wrong words: "pacific" → "specific", "escape goat" → "scapegoat"
+- Malapropisms: "for all intensive purposes" → "for all intents and purposes"
+- Contextually wrong words: "affect" vs "effect", "accept" vs "except"
+- Only correct if you are 100% certain the word is wrong based on context
+- Preserve technical terms and domain-specific vocabulary even if they seem unusual
+
+Examples:
+- "I could of done better" → "I could have done better"
+- "This is very pacific to our case" → "This is very specific to our case"
+- "They're going to there house" → "They're going to their house"
+- "Its a good day" → "It's a good day"
+- "The data effected the results" → "The data affected the results"
+
+=== BULLET POINT FORMATTING ===
+When the user mentions numbered points (first point, second point, etc.), convert them to bullet points:
+- Input: "first point is about learning, second point is about practice"
+- Output: 
+  • Learning
+  • Practice
+
+- Input: "my first point, second point, third point about the topic"
+- Output: Format as bullet list with each point on a new line
+
+=== NAME/TITLE CORRECTION ===
+Analyze the full context of the text. If you are 100% certain that a name, book title, or proper noun is misspelled or incorrect, correct it:
+- "Harry Porter" → "Harry Potter" ✓
+- "El Mistake" (about dreams) → "The Alchemist" ✓
+- "To Kill a Mocking Bird" → "To Kill a Mockingbird" ✓
+- Only correct if you are absolutely certain based on context
+- If unsure, keep the original spelling
+
+=== SENTENCE FORMATTING ===
+Ensure all sentences are:
+- Clear and well-structured
+- Properly punctuated
+- Have appropriate spacing
+- Use correct capitalization
+- Flow naturally from one to the next
+- Use correct vocabulary and word choice
+
 === CRITICAL EXAMPLES ===
 
 Input: "um so like how to create a react app you know"
@@ -48,11 +97,16 @@ Input: "what is machine learning basically"
 CORRECT Output: "What is machine learning?"
 WRONG Output: "Machine learning is a subset of AI..." ❌
 
-=== NAME/TITLE CORRECTION ===
-Only correct obvious speech recognition errors for names/titles if 100% certain:
-- "Harry Porter" → "Harry Potter" ✓
-- "El Mistake" (about dreams) → "The Alchemist" ✓
-- Don't correct unless absolutely sure
+Input: "first point is about reading books second point is about writing notes"
+CORRECT Output: 
+• Reading books
+• Writing notes
+
+Input: "I could of gone there but they're car was at there house"
+CORRECT Output: "I could have gone there but their car was at their house."
+
+Input: "This is very pacific to the problem we discussed"
+CORRECT Output: "This is very specific to the problem we discussed."
 
 === OUTPUT FORMAT ===
 Return ONLY the formatted text. No explanations. No introductions. Just the clean text.`,
@@ -76,55 +130,6 @@ export const USER_PROMPTS = {
   TITLE_TEMPLATE:
     "Create a concise title (max ~60 chars) for this content. Return ONLY the title.\n\nContent:\n",
 } as const;
-
-/**
- * Build a dynamic format prompt with user's custom vocabulary
- * Replaces the NAME/TITLE CORRECTION section with custom vocabulary entries
- */
-export function buildFormatPromptWithVocabulary(
-  vocabularyEntries: Array<{
-    term: string;
-    pronunciation: string | null;
-    context: string | null;
-  }>
-): string {
-  // If no vocabulary, return the base prompt as-is
-  if (!vocabularyEntries || vocabularyEntries.length === 0) {
-    return SYSTEM_PROMPTS.FORMAT;
-  }
-
-  // Build the vocabulary list
-  const vocabList = vocabularyEntries
-    .slice(0, 50) // Limit to 50 entries to stay within token limits
-    .map((entry) => {
-      let line = `- "${entry.term}"`;
-      if (entry.pronunciation) {
-        line += ` (may sound like: "${entry.pronunciation}")`;
-      }
-      if (entry.context) {
-        line += ` [${entry.context}]`;
-      }
-      return line;
-    })
-    .join("\n");
-
-  // Create the custom vocabulary section
-  const customSection = `=== CUSTOM VOCABULARY CORRECTION ===
-The user has defined these custom terms. When you encounter them in speech-to-text, correct them to the exact spelling below:
-
-${vocabList}
-
-Always use the exact capitalization and spelling shown above. If a word sounds similar to any of these terms, prefer the custom vocabulary spelling.`;
-
-  // Replace the NAME/TITLE CORRECTION section with custom vocabulary
-  const basePrompt = SYSTEM_PROMPTS.FORMAT;
-  const updatedPrompt = basePrompt.replace(
-    /=== NAME\/TITLE CORRECTION ===[\s\S]*?(?=\n=== OUTPUT FORMAT ===)/,
-    customSection + "\n\n"
-  );
-
-  return updatedPrompt;
-}
 
 /**
  * FEEDBACK-DRIVEN PROMPT OPTIMIZATION GUIDE
@@ -185,6 +190,12 @@ Always use the exact capitalization and spelling shown above. If a word sounds s
  * - Add: "Break into paragraphs at natural topic changes"
  * - Add: "Use blank lines between distinct topics or ideas"
  *
+ * ### Issue: "incorrect_vocabulary" - Wrong word usage
+ * **Current Behavior**: Vocabulary errors not being caught
+ * **Prompt Change**: Add vocabulary correction:
+ * - Add: "Fix homophones and commonly confused words"
+ * - Add: "Correct malapropisms and wrong word choices based on context"
+ *
  * ## Iterative Refinement Process
  *
  * 1. **Monitor Feedback**: Check `getFeedbackStats()` weekly for trends
@@ -237,5 +248,6 @@ Always use the exact capitalization and spelling shown above. If a word sounds s
  * // V1.0 (2024-01-01): Initial version
  * // V1.1 (2024-01-15): Added tone preservation after 25% "wrong_tone" feedback
  * // V1.2 (2024-02-01): Strengthened content preservation after "missed_key_info" spike
+ * // V1.3 (2024-02-15): Added vocabulary correction for homophones and word choice errors
  * ```
  */
