@@ -11,8 +11,8 @@ export function HomeRecordingButton() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Hide the button on the recording page
-  if (pathname === ROUTES.RECORDING) {
+  // Hide the button on the recording and results pages
+  if (pathname === ROUTES.RECORDING || pathname === ROUTES.RESULTS) {
     return null;
   }
 
