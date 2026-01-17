@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Mic } from "lucide-react";
 import { storageService } from "@/lib/services/storage.service";
@@ -9,6 +9,12 @@ import { ROUTES } from "@/lib/constants";
 
 export function HomeRecordingButton() {
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Hide the button on the recording page
+  if (pathname === ROUTES.RECORDING) {
+    return null;
+  }
 
   const handleStartRecording = () => {
     // Clear previous session data

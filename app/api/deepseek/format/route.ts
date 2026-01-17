@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
-import { SYSTEM_PROMPTS } from "@/lib/prompts";
+import { SYSTEM_PROMPTS, buildFormatPromptWithVocabulary } from "@/lib/prompts";
 
 const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 
@@ -41,6 +41,22 @@ export async function POST(req: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
+  }
+
+  // Fetch user's custom vocabulary for improved recognition
+  let systemPrompt: string = SYSTEM_PROMPTS.FORMAT;
+  try {
+    const { data: vocabulary } = await supabase
+      .from("user_vocabulary")
+      .select("term, pronunciation, context")
+      .order("created_at", { ascending: false });
+
+    if (vocabulary && vocabulary.length > 0) {
+      systemPrompt = buildFormatPromptWithVocabulary(vocabulary);
+    }
+  } catch {
+    // If vocabulary fetch fails, continue with base prompt
+    console.warn("Failed to fetch user vocabulary, using base prompt");
   }
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -83,7 +99,7 @@ export async function POST(req: NextRequest) {
         messages: [
           {
             role: "system",
-            content: SYSTEM_PROMPTS.FORMAT,
+            content: systemPrompt,
           },
           {
             role: "user",
