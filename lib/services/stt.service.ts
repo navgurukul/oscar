@@ -110,38 +110,46 @@ export class STTService {
       this.lastRestartTime = Date.now();
 
       // Start STT immediately for continuous recording
-      // The library handles its own restarts internally, so we don't need preemptive restarts
       this.sttInstance.start();
       this.isRecordingActive = true;
       this.lastTranscriptTime = Date.now();
 
-      // Lightweight silence watchdog to minimize restart gaps
+      // Hybrid restart strategy: Library handles internal restarts + our silence watchdog
+      // The library's internal restarts handle session timeouts and browser limits
+      // Our watchdog handles silence gaps to ensure continuous recording during pauses
+      // Both work together: library for session management, watchdog for silence recovery
       if (this.restartInterval) {
         clearInterval(this.restartInterval);
       }
       this.restartInterval = setInterval(() => {
-        if (!this.isRecordingActive || !this.sttInstance) return;
+        if (!this.isRecordingActive || !this.sttInstance || this.isRestarting) {
+          return;
+        }
 
         const now = Date.now();
-        const sinceLast = now - this.lastTranscriptTime;
-        const sinceRestart = now - this.lastRestartTime;
+        const sinceLastTranscript = now - this.lastTranscriptTime;
+        const sinceLastRestart = now - this.lastRestartTime;
 
+        // Only restart if:
+        // 1. Silence detected (no transcript updates for threshold time)
+        // 2. Enough time has passed since last restart (avoid rapid restarts)
+        // 3. Not already restarting (library might be handling a restart)
         if (
-          sinceLast >= RECORDING_CONFIG.SILENCE_RESTART_THRESHOLD_MS &&
-          sinceRestart >= RECORDING_CONFIG.MIN_RESTART_GAP_MS
+          sinceLastTranscript >= RECORDING_CONFIG.SILENCE_RESTART_THRESHOLD_MS &&
+          sinceLastRestart >= RECORDING_CONFIG.MIN_RESTART_GAP_MS
         ) {
           try {
+            // Lightweight restart: just call start() to wake up recognition
+            // This doesn't stop the current session, just ensures it's active
+            // The library's preserveTranscriptOnStart ensures no data loss
             this.sttInstance.start();
             this.lastRestartTime = now;
           } catch (e) {
-            console.debug("[STT] Watchdog restart failed:", e);
+            // Silently handle - library might be in the middle of its own restart
+            console.debug("[STT] Watchdog restart skipped (library handling):", e);
           }
         }
       }, 250);
-
-      // Note: We removed the preemptive restart strategy because the speech-to-speech
-      // library handles restarts internally. Our manual restarts were conflicting with
-      // the library's own restart mechanism, causing the "produced no result" warnings.
     } catch (error) {
       this.isRecordingActive = false;
       this.isRestarting = false;
@@ -289,22 +297,27 @@ export class STTService {
   }
 
   /**
-   * NOTE: Preemptive restart strategy has been removed.
+   * Hybrid Restart Strategy:
    * 
-   * The speech-to-speech library handles restarts internally and automatically.
-   * Our manual restart strategy was conflicting with the library's own restart
-   * mechanism, causing:
-   * - "produced no result within 2000ms" warnings
-   * - Frequent unnecessary restarts
-   * - Audio loss during restart gaps
+   * We use a combination of the library's internal restarts and our silence watchdog:
    * 
-   * The library's internal restart mechanism:
-   * - Automatically restarts sessions when needed
-   * - Preserves transcript during restarts (via preserveTranscriptOnStart)
-   * - Handles silence gates and buffering internally
-   * - Is optimized for continuous recording
+   * 1. Library's Internal Restarts:
+   *    - Handles session timeouts (iOS Safari ~30s limit)
+   *    - Manages browser recognition limits
+   *    - Preserves transcript during restarts (via preserveTranscriptOnStart)
+   *    - Optimized for continuous recording
    * 
-   * We now rely entirely on the library's built-in restart handling.
+   * 2. Our Silence Watchdog:
+   *    - Monitors for silence gaps (no transcript updates)
+   *    - Proactively restarts recognition during long pauses
+   *    - Ensures recording continues even after silence
+   *    - Lightweight: only calls start() without stopping
+   * 
+   * Both work together:
+   * - Library handles session management and browser limits
+   * - Watchdog handles silence recovery and gap prevention
+   * - No conflicts: watchdog checks timing and state before restarting
+   * - preserveTranscriptOnStart ensures no data loss during either restart type
    */
 
   /**

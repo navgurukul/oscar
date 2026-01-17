@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useRef, useEffect, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
 import { storageService } from "@/lib/services/storage.service";
 import { notesService } from "@/lib/services/notes.service";
@@ -17,18 +17,16 @@ import { Dialog } from "@/components/ui/dialog";
 import { ERROR_MESSAGES, ERROR_TIPS } from "@/lib/constants";
 import { ROUTES, UI_STRINGS, RECORDING_CONFIG } from "@/lib/constants";
 import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/hooks/use-toast";
 
 function RecordingPageInner() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const autoStart = searchParams.get("autoStart") === "true";
-  const continueMode = searchParams.get("mode") === "continue";
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const {
     isInitializing,
     isRequestingPermission,
-    isReady,
     isRecording,
     isProcessing,
     recordingTime,
@@ -48,26 +46,73 @@ function RecordingPageInner() {
   const [errorTitle, setErrorTitle] = useState<string>("");
   const [errorDescription, setErrorDescription] = useState<string>("");
 
-  // Auto-start only when STT is ready to avoid race conditions
+  // Refs to track intervals for cleanup
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const stepIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup intervals on unmount
   useEffect(() => {
-    if (autoStart && isReady && !isRecording) {
-      const seedTranscript = continueMode
-        ? storageService.getRawText() || ""
-        : "";
-      if (continueMode) {
-        storageService.clearContinueMode();
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
       }
-      // Auto-start: attempt recording directly (permission already requested in init)
-      startRecording(seedTranscript);
+      if (stepIntervalRef.current) {
+        clearInterval(stepIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Check for continue mode and auto-start with seed transcript
+  useEffect(() => {
+    // Only run once when component mounts and recording is ready
+    if (!isInitializing && !isRequestingPermission && !isRecording) {
+      const shouldContinue = storageService.getContinueMode();
+      if (shouldContinue) {
+        const rawText = storageService.getRawText();
+        if (rawText) {
+          // Clear continue mode flag
+          storageService.clearContinueMode();
+          // Start recording with existing transcript as seed
+          toast({
+            title: "Continuing Recording",
+            description: "Adding to your existing note...",
+          });
+          // Small delay to show toast
+          setTimeout(() => {
+            startRecording(rawText);
+          }, 500);
+        } else {
+          // No raw text to continue with, clear flag
+          storageService.clearContinueMode();
+        }
+      }
     }
-  }, [autoStart, continueMode, isRecording, isReady, startRecording]);
+  }, [
+    isInitializing,
+    isRequestingPermission,
+    isRecording,
+    startRecording,
+    toast,
+  ]);
+
+  // Helper to clear all intervals
+  const clearAllIntervals = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    if (stepIntervalRef.current) {
+      clearInterval(stepIntervalRef.current);
+      stepIntervalRef.current = null;
+    }
+  };
 
   // If initialization failed (e.g., permission denied), attempt to reinitialize
-  useEffect(() => {
-    if (autoStart && hasError && !isRecording && !isReady) {
-      retryInitialize();
-    }
-  }, [autoStart, hasError, isRecording, isReady, retryInitialize]);
+  // useEffect(() => {
+  //   if (autoStart && hasError && !isRecording && !isReady) {
+  //     retryInitialize();
+  //   }
+  // }, [autoStart, hasError, isRecording, isReady, retryInitialize]);
 
   const handleStartRecording = async () => {
     // Revert to earlier behavior: start recording directly
@@ -80,8 +125,11 @@ function RecordingPageInner() {
     setProcessingStep(0);
     setProcessingProgress(0);
 
+    // Clear any existing intervals before starting new ones
+    clearAllIntervals();
+
     // Simulate progress
-    const progressInterval = setInterval(() => {
+    progressIntervalRef.current = setInterval(() => {
       setProcessingProgress((prev) => {
         if (prev < 70) return prev + Math.random() * 8 + 3;
         if (prev < 85) return prev + Math.random() * 4 + 1;
@@ -91,10 +139,9 @@ function RecordingPageInner() {
       });
     }, 400);
 
-    const stepInterval = setInterval(() => {
+    stepIntervalRef.current = setInterval(() => {
       setProcessingStep((prev) => {
         if (prev >= 2) {
-          clearInterval(stepInterval);
           return prev;
         }
         return prev + 1;
@@ -109,8 +156,7 @@ function RecordingPageInner() {
       storageService.updateRawText(transcript);
 
       if (!transcript || transcript.length === 0) {
-        clearInterval(progressInterval);
-        clearInterval(stepInterval);
+        clearAllIntervals();
         setShowProcessing(false);
 
         const message = [
@@ -131,8 +177,7 @@ function RecordingPageInner() {
       // Format with AI
       const result = await formatText(transcript);
 
-      clearInterval(progressInterval);
-      clearInterval(stepInterval);
+      clearAllIntervals();
 
       if (result.success && result.formattedText) {
         // Generate title before saving
@@ -160,9 +205,18 @@ function RecordingPageInner() {
 
           if (saveError) {
             console.error("Failed to save note to database:", saveError);
+            // Show non-blocking warning toast
+            toast({
+              title: "Note Saved Locally",
+              description:
+                "Could not sync to cloud, but your note is safe in this session.",
+              variant: "default",
+            });
           } else if (savedNote) {
             // Store the note ID for the results page
-            sessionStorage.setItem("currentNoteId", savedNote.id);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem("currentNoteId", savedNote.id);
+            }
           }
         }
 
@@ -178,10 +232,10 @@ function RecordingPageInner() {
         setErrorDescription(ERROR_MESSAGES.FORMATTING_FAILED);
         setErrorOpen(true);
       }
-    } catch {
-      clearInterval(progressInterval);
-      clearInterval(stepInterval);
+    } catch (error) {
+      clearAllIntervals();
       setShowProcessing(false);
+      console.error("Processing error:", error);
       setErrorTitle("Processing Failed");
       setErrorDescription(ERROR_MESSAGES.PROCESSING_FAILED);
       setErrorOpen(true);
@@ -287,15 +341,6 @@ function RecordingPageInner() {
               </p>
             )}
           </div>
-
-          {/* Continue Mode Hint */}
-          {!isRecording && continueMode && (
-            <div className="text-center -mt-6 mb-4">
-              <p className="text-cyan-400 text-sm">
-                Continuing from previous recording…
-              </p>
-            </div>
-          )}
         </div>
       </div>
 

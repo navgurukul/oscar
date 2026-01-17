@@ -10,6 +10,80 @@ import type {
 } from "../types/api.types";
 import { API_CONFIG, ERROR_MESSAGES, UI_STRINGS } from "../constants";
 
+/**
+ * Retry configuration for AI API calls
+ */
+const RETRY_CONFIG = {
+  MAX_RETRIES: 2,
+  INITIAL_DELAY_MS: 1000,
+  TIMEOUT_MS: 30000,
+} as const;
+
+/**
+ * Helper to create fetch request with timeout
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = RETRY_CONFIG.TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Request timed out. Please try again.");
+    }
+    throw error;
+  }
+}
+
+/**
+ * Retry helper with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = RETRY_CONFIG.MAX_RETRIES,
+  initialDelay: number = RETRY_CONFIG.INITIAL_DELAY_MS
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: unknown) {
+      lastError = error as Error;
+
+      // Don't retry on certain errors
+      if (
+        lastError.message?.includes("400") ||
+        lastError.message?.includes("401") ||
+        lastError.message?.includes("403")
+      ) {
+        throw lastError;
+      }
+
+      if (attempt < maxRetries) {
+        const delay = initialDelay * Math.pow(2, attempt);
+        console.log(
+          `Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 export const aiService = {
   /**
    * Format raw transcript text using AI
@@ -25,41 +99,37 @@ export const aiService = {
     }
 
     try {
-      const response = await fetch(API_CONFIG.FORMAT_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText }),
+      return await retryWithBackoff(async () => {
+        const response = await fetchWithTimeout(API_CONFIG.FORMAT_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rawText }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Format API error: ${response.status}`, errorText);
+          throw new Error(`Formatting failed: ${response.status}`);
+        }
+
+        const data = (await response.json()) as DeepseekFormatResponse;
+        const formattedText = data?.formattedText?.trim();
+
+        if (!formattedText) {
+          throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING);
+        }
+
+        // Remove markdown code blocks if present
+        const cleanedText = formattedText
+          .replace(/^```[\w]*\n/, "")
+          .replace(/\n```$/, "")
+          .trim();
+
+        return {
+          success: true,
+          formattedText: cleanedText,
+        };
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Format API error: ${response.status}`, errorText);
-        return {
-          success: false,
-          error: `Formatting failed: ${response.status}`,
-        };
-      }
-
-      const data = (await response.json()) as DeepseekFormatResponse;
-      const formattedText = data?.formattedText?.trim();
-
-      if (!formattedText) {
-        return {
-          success: false,
-          error: ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING,
-        };
-      }
-
-      // Remove markdown code blocks if present
-      const cleanedText = formattedText
-        .replace(/^```[\w]*\n/, "")
-        .replace(/\n```$/, "")
-        .trim();
-
-      return {
-        success: true,
-        formattedText: cleanedText,
-      };
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Format text error:", error);
@@ -86,33 +156,34 @@ export const aiService = {
     }
 
     try {
-      const response = await fetch(API_CONFIG.TITLE_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: source }),
+      return await retryWithBackoff(async () => {
+        const response = await fetchWithTimeout(API_CONFIG.TITLE_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: source }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Title API error: ${response.status}`, errorText);
+          // Fallback to heuristic title on API error
+          return this.generateFallbackTitle(source);
+        }
+
+        const data = (await response.json()) as DeepseekTitleResponse;
+        const title = data?.title?.trim();
+
+        if (!title) {
+          return this.generateFallbackTitle(source);
+        }
+
+        const sanitized = this.sanitizeTitle(title);
+
+        return {
+          success: true,
+          title: sanitized,
+        };
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Title API error: ${response.status}`, errorText);
-
-        // Fallback to heuristic title
-        return this.generateFallbackTitle(source);
-      }
-
-      const data = (await response.json()) as DeepseekTitleResponse;
-      const title = data?.title?.trim();
-
-      if (!title) {
-        return this.generateFallbackTitle(source);
-      }
-
-      const sanitized = this.sanitizeTitle(title);
-
-      return {
-        success: true,
-        title: sanitized,
-      };
     } catch (error: unknown) {
       console.error("Title generation error:", error);
       return this.generateFallbackTitle(source);

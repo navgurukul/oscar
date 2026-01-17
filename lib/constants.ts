@@ -175,8 +175,6 @@ export const ROUTES = {
   RESULTS: "/results",
   NOTES: "/notes",
   AUTH: "/auth",
-  RECORDING_AUTO_START: "/recording?autoStart=true",
-  RECORDING_CONTINUE: "/recording?autoStart=true&mode=continue",
 } as const;
 
 /**

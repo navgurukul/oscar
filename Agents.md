@@ -180,8 +180,112 @@ Error messages are defined in [`/lib/constants.ts`](file:///Users/souvik/Desktop
 2. **Speech-to-Text**: Browser API or stt-tts-lib converts audio to text
 3. **AI Formatting**: Raw transcript sent to formatting agent
 4. **AI Title Generation**: Formatted text sent to title agent
-5. **Storage**: Results saved to sessionStorage
+5. **Storage**: Results saved to sessionStorage and Supabase
 6. **Display**: User can view, edit, copy, or download
+7. **Feedback Collection**: User provides quality feedback on AI formatting
+
+## AI Quality Feedback System
+
+### Overview
+
+The feedback system collects user signals on AI formatting quality to enable continuous improvement of prompts and future model training.
+
+### User Experience
+
+On each formatted note, users see:
+
+- **"Was this formatting helpful?"** with Yes/No buttons
+- If "No", optional reason tags:
+  - Too short
+  - Missed key info
+  - Incorrect grammar
+  - Wrong tone
+  - Poor formatting
+  - Other
+
+### Data Storage
+
+**Location**: [`/lib/types/note.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/note.types.ts)
+
+Each note stores:
+
+```typescript
+feedback_helpful: boolean | null;        // User's yes/no response
+feedback_reasons: FeedbackReason[] | null; // Array of reason tags
+feedback_timestamp: string | null;        // When feedback was given
+```
+
+### Feedback Service
+
+**Location**: [`/lib/services/feedback.service.ts`](file:///Users/souvik/Desktop/oscar/lib/services/feedback.service.ts)
+
+**Methods**:
+
+- `submitFeedback(noteId, helpful, reasons?)` - Store user feedback
+- `getFeedbackStats()` - Get aggregated statistics:
+  - Total feedback count
+  - Helpful vs not helpful counts
+  - Helpful percentage
+  - Breakdown of negative feedback reasons
+- `getRecentNegativeFeedback(limit)` - Get recent negative feedback with full context for analysis
+
+### Using Feedback for Prompt Improvement
+
+**Documentation**: [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) (see FEEDBACK-DRIVEN PROMPT OPTIMIZATION GUIDE)
+
+**Iterative Process**:
+
+1. **Monitor**: Check `getFeedbackStats()` weekly for trends
+2. **Identify Patterns**: If a reason appears >20% of the time, investigate
+3. **Review Examples**: Use `getRecentNegativeFeedback()` to see actual problem cases
+4. **Update Prompt**: Make targeted changes to `SYSTEM_PROMPTS.FORMAT`
+5. **Test**: Try updated prompt on previous negative cases
+6. **Deploy & Monitor**: Push changes and track if the issue decreases
+
+**Example Workflow**:
+
+```typescript
+import { feedbackService } from "@/lib/services/feedback.service";
+
+// Get stats
+const { data: stats } = await feedbackService.getFeedbackStats();
+console.log(`Helpful rate: ${stats.helpfulPercentage}%`);
+console.log("Top issues:", stats.reasonBreakdown);
+
+// If "missed_key_info" is high, review examples
+const { data: cases } = await feedbackService.getRecentNegativeFeedback(20);
+cases.forEach((note) => {
+  console.log("Raw:", note.raw_text);
+  console.log("Formatted:", note.original_formatted_text);
+  console.log("Issues:", note.feedback_reasons);
+});
+
+// Update SYSTEM_PROMPTS.FORMAT in /lib/prompts.ts
+// Add: "Keep every distinct idea, fact, and detail from the original"
+```
+
+### Metrics to Track
+
+- **Helpful Rate**: Target >80% positive feedback
+- **Top Issues**: Most common negative feedback reasons
+- **Trend Over Time**: Is the helpful rate improving after prompt changes?
+- **User Engagement**: What percentage of users provide feedback?
+
+### Components
+
+**FeedbackWidget**: [`/components/results/FeedbackWidget.tsx`](file:///Users/souvik/Desktop/oscar/components/results/FeedbackWidget.tsx)
+
+- Displays Yes/No buttons
+- Shows reason tag selection on "No"
+- Handles submission and display of thank you message
+- Integrated into results and note detail pages
+
+### Future Enhancements
+
+- **A/B Testing**: Test prompt variations and track which performs better
+- **Automated Alerts**: Notify when helpful rate drops below threshold
+- **Training Data Export**: Format feedback for model fine-tuning
+- **Prompt Versioning**: Track which prompt version generated each note
 
 ## Best Practices
 
@@ -194,6 +298,7 @@ Error messages are defined in [`/lib/constants.ts`](file:///Users/souvik/Desktop
 5. **Implement retry logic** for transient failures
 6. **Monitor token usage** to manage costs
 7. **Cache results** when appropriate
+8. **Collect feedback** to continuously improve prompt quality
 
 ### Prompt Engineering Guidelines:
 
@@ -202,6 +307,8 @@ Error messages are defined in [`/lib/constants.ts`](file:///Users/souvik/Desktop
 3. Use clear, imperative language
 4. Test prompts with edge cases
 5. Document prompt changes and their effects
+6. **Use feedback data** to identify and fix prompt issues
+7. **Version prompts** and track performance changes
 
 ## Future Enhancements
 
@@ -211,7 +318,9 @@ Potential improvements to the AI agent system:
 - [ ] Custom formatting styles/preferences
 - [ ] Streaming responses for real-time feedback
 - [ ] Agent performance monitoring and analytics
-- [ ] A/B testing different prompt variations
+- [x] **User feedback collection system** ✅
+- [ ] A/B testing different prompt variations using feedback data
+- [ ] Automated prompt optimization based on feedback trends
 - [ ] Custom vocabulary/name recognition
 - [ ] Sentiment analysis agent
 - [ ] Summary generation agent
@@ -220,12 +329,14 @@ Potential improvements to the AI agent system:
 ## Related Files
 
 - [`/lib/services/ai.service.ts`](file:///Users/souvik/Desktop/oscar/lib/services/ai.service.ts) - AI service implementation
-- [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) - Agent prompts
+- [`/lib/services/feedback.service.ts`](file:///Users/souvik/Desktop/oscar/lib/services/feedback.service.ts) - Feedback collection and analytics
+- [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) - Agent prompts and optimization guide
 - [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts) - Configuration constants
 - [`/lib/types/note.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/note.types.ts) - Type definitions
 - [`/lib/types/api.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/api.types.ts) - API type definitions
 - [`/app/api/deepseek/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/deepseek/format/route.ts) - Format endpoint
 - [`/app/api/deepseek/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/deepseek/title/route.ts) - Title endpoint
+- [`/components/results/FeedbackWidget.tsx`](file:///Users/souvik/Desktop/oscar/components/results/FeedbackWidget.tsx) - Feedback UI component
 
 ## Support
 
