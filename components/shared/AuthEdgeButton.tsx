@@ -82,7 +82,7 @@ export function AuthEdgeButton() {
         onMouseLeave={() => setIsHovered(false)}
         onClick={handleAction}
         layout
-        className="pointer-events-auto flex items-center text-white rounded-l-xl h-12 shadow-2xl backdrop-blur-md border border-cyan-500/30 border-r-0 group overflow-hidden bg-cyan-500/10 hover:bg-cyan-600"
+        className="pointer-events-auto flex items-center rounded-l-xl h-12 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors"
       >
         <div className="flex items-center px-3 min-w-[56px] justify-center">
           <AnimatePresence initial={false}>
@@ -99,7 +99,7 @@ export function AuthEdgeButton() {
                 }}
                 className="overflow-hidden"
               >
-                <span className="text-sm font-bold tracking-wide uppercase whitespace-nowrap mr-3 block">
+                <span className="text-sm font-bold tracking-wide uppercase whitespace-nowrap mr-2 block text-gray-300">
                   {user ? "Sign Out" : "Sign In"}
                 </span>
               </motion.div>
@@ -108,7 +108,7 @@ export function AuthEdgeButton() {
 
           <div className="flex items-center justify-center shrink-0 relative z-10">
             {user ? (
-              <LogOut className="w-5 h-5 transition-transform duration-300 group-hover:scale-110 text-gray-400 group-hover:text-white" />
+              <LogOut className="w-5 h-5 transition-transform duration-300 group-hover:scale-110 text-gray-300" />
             ) : (
               <LogIn className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
             )}

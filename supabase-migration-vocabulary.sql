@@ -6,7 +6,7 @@ CREATE TABLE user_vocabulary (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   term TEXT NOT NULL,
-  pronunciation TEXT NULL,  -- Optional: how the term might sound (e.g., "Sauvic" for "Souvik")
+  pronunciation TEXT NULL,  -- Optional: how the term might sound (e.g., "Saurav" for "Sourav")
   context TEXT NULL,        -- Optional: category/usage hint (e.g., "Person", "Technical Term")
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
