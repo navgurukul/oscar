@@ -103,7 +103,7 @@ export function FeedbackWidget({
                     size="sm"
                     onClick={handleYesClick}
                     disabled={isSubmitting || clickedValue !== null}
-                    className="text-cyan-500 hover:text-cyan-300"
+                    className="text-gray-400 hover:text-white"
                   >
                     <ThumbsUp className="w-4 h-4" />
                     <span className="ml-1.5">Yes</span>
