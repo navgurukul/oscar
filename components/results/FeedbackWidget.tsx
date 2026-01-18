@@ -5,16 +5,21 @@ import { motion, AnimatePresence } from "motion/react";
 import { ThumbsUp, ThumbsDown, X, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+// Reasons are represented as free-form strings
 import type { FeedbackReason } from "@/lib/types/note.types";
 
 interface FeedbackWidgetProps {
-  onSubmit: (helpful: boolean, reasons?: FeedbackReason[]) => void;
+  onSubmit: (
+    helpful: boolean,
+    reasons?: string[]
+  ) => void;
   isSubmitting?: boolean;
   hasSubmitted?: boolean;
   submittedValue?: boolean | null;
 }
 
-const FEEDBACK_REASONS: Array<{ value: FeedbackReason; label: string }> = [
+const FEEDBACK_REASONS: Array<{ value: string; label: string }> = [
   { value: "too_short", label: "Too short" },
   { value: "missed_key_info", label: "Missed key info" },
   { value: "incorrect_grammar", label: "Incorrect grammar" },
@@ -30,8 +35,9 @@ export function FeedbackWidget({
   submittedValue = null,
 }: FeedbackWidgetProps) {
   const [showReasons, setShowReasons] = useState(false);
-  const [selectedReasons, setSelectedReasons] = useState<FeedbackReason[]>([]);
+  const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
   const [clickedValue, setClickedValue] = useState<boolean | null>(null);
+  const [otherText, setOtherText] = useState("");
 
   const handleYesClick = () => {
     setClickedValue(true);
@@ -43,7 +49,7 @@ export function FeedbackWidget({
     setShowReasons(true);
   };
 
-  const handleReasonToggle = (reason: FeedbackReason) => {
+  const handleReasonToggle = (reason: string) => {
     setSelectedReasons((prev) =>
       prev.includes(reason)
         ? prev.filter((r) => r !== reason)
@@ -52,13 +58,20 @@ export function FeedbackWidget({
   };
 
   const handleSubmitReasons = () => {
-    onSubmit(false, selectedReasons.length > 0 ? selectedReasons : undefined);
+    const reasons = selectedReasons.includes("other")
+      ? [
+          ...selectedReasons.filter((r) => r !== "other"),
+          otherText.trim(),
+        ]
+      : selectedReasons;
+    onSubmit(false, reasons.length > 0 ? reasons : undefined);
   };
 
   const handleCancel = () => {
     setShowReasons(false);
     setClickedValue(null);
     setSelectedReasons([]);
+    setOtherText("");
   };
 
   // If already submitted, show thank you message
@@ -162,25 +175,32 @@ export function FeedbackWidget({
                   ))}
                 </div>
 
+                {selectedReasons.includes("other") && (
+                  <div className="pt-2">
+                    <Textarea
+                      value={otherText}
+                      onChange={(e) => setOtherText(e.target.value)}
+                      placeholder="Please describe briefly..."
+                      className="text-sm text-gray-200 bg-slate-800/50 border-slate-700/50 placeholder:text-gray-500"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Your note will be sent with feedback.
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-2 pt-2">
-                  {/* <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleCancel}
-                    disabled={isSubmitting}
-                    className="text-gray-400 hover:text-gray-300"
-                  >
-                    Cancel
-                  </Button> */}
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={handleSubmitReasons}
-                    disabled={isSubmitting}
+                    disabled={
+                      isSubmitting ||
+                      (selectedReasons.includes("other") && otherText.trim().length === 0)
+                    }
                     className=" hover:text-white text-cyan-500"
                   >
                     <SendHorizontal className="w-4 h-4" />
-                    {/* {isSubmitting ? "Submitting..." : "Submit"} */}
                   </Button>
                 </div>
               </div>
