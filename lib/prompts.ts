@@ -1,3 +1,5 @@
+import { DBVocabularyEntry } from "./types/vocabulary.types";
+
 // AI prompt templates for the OSCAR application
 
 /**
@@ -130,6 +132,38 @@ export const USER_PROMPTS = {
   TITLE_TEMPLATE:
     "Create a concise title (max ~60 chars) for this content. Return ONLY the title.\n\nContent:\n",
 } as const;
+
+/**
+ * Builds a formatting prompt that includes user's custom vocabulary
+ * @param vocabulary Array of vocabulary entries from the database
+ * @returns Enhanced system prompt string
+ */
+export function buildFormatPromptWithVocabulary(
+  vocabulary: Pick<DBVocabularyEntry, "term" | "pronunciation" | "context">[]
+) {
+  if (!vocabulary || vocabulary.length === 0) {
+    return SYSTEM_PROMPTS.FORMAT;
+  }
+
+  const vocabItems = vocabulary
+    .map((v) => {
+      let item = `- "${v.term}"`;
+      if (v.pronunciation) item += ` (pronounced: ${v.pronunciation})`;
+      if (v.context) item += ` [Context: ${v.context}]`;
+      return item;
+    })
+    .join("\n");
+
+  return `${SYSTEM_PROMPTS.FORMAT}
+
+=== USER CUSTOM VOCABULARY ===
+The user has provided a custom vocabulary list. 
+IMPORTANT: If you encounter words in the transcript that sound phonetically similar to these terms or seem like misrecognitions of them, you MUST correct them to the exact term provided below:
+
+${vocabItems}
+
+Always prefer the terms from this list when they fit the context.`;
+}
 
 /**
  * FEEDBACK-DRIVEN PROMPT OPTIMIZATION GUIDE

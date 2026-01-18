@@ -9,7 +9,7 @@ const nextConfig = {
   },
   experimental: {
     // Helps with packages that use `import.meta` and ESM-only distribution
-    esmExternals: "loose",
+    esmExternals: true,
   },
   // Required for SharedArrayBuffer (WASM multi-threading)
   async headers() {
@@ -40,19 +40,12 @@ const nextConfig = {
 
       // Externalize onnxruntime-node to prevent webpack from bundling it
       config.externals = config.externals || [];
-      config.externals.push("onnxruntime-node", "onnxruntime-common");
+      config.externals.push("onnxruntime-node", "onnxruntime-common", "onnxruntime-web");
 
       // Ensure .mjs in certain packages are treated as ESM so minification handles import.meta
       config.module = config.module || { rules: [] };
       config.module.rules = config.module.rules || [];
-      config.module.rules.push({
-        test: /\.mjs$/,
-        include: [
-          /node_modules\/onnxruntime-web/,
-          /node_modules\/speech-to-speech/,
-        ],
-        type: "javascript/esm",
-      });
+      // Remove the custom rule that was possibly causing issues with minification
     } else {
       // On server side, completely externalize onnxruntime packages
       config.externals = config.externals || [];
