@@ -42,6 +42,8 @@ export interface DBNoteInsert {
 // Update type for modifying a note
 export interface DBNoteUpdate {
   title?: string;
+  raw_text?: string;
+  original_formatted_text?: string;
   edited_text?: string | null;
   updated_at?: string;
   feedback_helpful?: boolean | null;

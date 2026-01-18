@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
+import { storageService } from "@/lib/services/storage.service";
 import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
 import { NoteEditor } from "@/components/results/NoteEditor";
@@ -32,11 +33,9 @@ export default function ResultsPage() {
 
   // Get the note ID from session storage (set by recording page)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedNoteId = sessionStorage.getItem("currentNoteId");
-      if (storedNoteId) {
-        setNoteId(storedNoteId);
-      }
+    const storedNoteId = storageService.getCurrentNoteId();
+    if (storedNoteId) {
+      setNoteId(storedNoteId);
     }
   }, []);
 

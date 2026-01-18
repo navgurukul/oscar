@@ -101,6 +101,7 @@ export const storageService = {
     sessionStorage.removeItem(STORAGE_KEYS.RAW_TEXT);
     sessionStorage.removeItem(STORAGE_KEYS.TITLE);
     sessionStorage.removeItem(STORAGE_KEYS.CONTINUE_MODE);
+    sessionStorage.removeItem(STORAGE_KEYS.CURRENT_NOTE_ID);
   },
 
   /**
@@ -135,5 +136,25 @@ export const storageService = {
       return;
     }
     sessionStorage.removeItem(STORAGE_KEYS.CONTINUE_MODE);
+  },
+
+  /**
+   * Set current note ID
+   */
+  setCurrentNoteId(id: string): void {
+    if (!isBrowser()) {
+      return;
+    }
+    sessionStorage.setItem(STORAGE_KEYS.CURRENT_NOTE_ID, id);
+  },
+
+  /**
+   * Get current note ID
+   */
+  getCurrentNoteId(): string | null {
+    if (!isBrowser()) {
+      return null;
+    }
+    return sessionStorage.getItem(STORAGE_KEYS.CURRENT_NOTE_ID);
   },
 };

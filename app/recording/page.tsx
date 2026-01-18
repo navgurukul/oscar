@@ -189,13 +189,27 @@ function RecordingPageInner() {
 
         // Save to Supabase if user is authenticated
         if (user) {
-          const { data: savedNote, error: saveError } =
-            await notesService.createNote({
+          const currentNoteId = storageService.getCurrentNoteId();
+          let saveResult;
+
+          if (currentNoteId) {
+            // Update existing note if we have an ID
+            saveResult = await notesService.updateNote(currentNoteId, {
+              title: generatedTitle || "Untitled Note",
+              raw_text: transcript,
+              original_formatted_text: result.formattedText,
+            });
+          } else {
+            // Create new note
+            saveResult = await notesService.createNote({
               user_id: user.id,
               title: generatedTitle || "Untitled Note",
               raw_text: transcript,
               original_formatted_text: result.formattedText,
             });
+          }
+
+          const { data: savedNote, error: saveError } = saveResult;
 
           if (saveError) {
             console.error("Failed to save note to database:", saveError);
@@ -208,9 +222,7 @@ function RecordingPageInner() {
             });
           } else if (savedNote) {
             // Store the note ID for the results page
-            if (typeof window !== "undefined") {
-              sessionStorage.setItem("currentNoteId", savedNote.id);
-            }
+            storageService.setCurrentNoteId(savedNote.id);
           }
         }
 

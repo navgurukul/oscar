@@ -164,6 +164,7 @@ export const STORAGE_KEYS = {
   RAW_TEXT: "rawText",
   TITLE: "noteTitle",
   CONTINUE_MODE: "continueRecording",
+  CURRENT_NOTE_ID: "currentNoteId",
 } as const;
 
 /**
