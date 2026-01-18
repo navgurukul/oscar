@@ -13,7 +13,8 @@ export type FeedbackReason =
   | "incorrect_grammar"
   | "wrong_tone"
   | "poor_formatting"
-  | "other";
+  | "other"
+  | (string & {});
 
 // Database note type (Supabase)
 export interface DBNote {
