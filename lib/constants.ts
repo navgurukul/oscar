@@ -6,7 +6,7 @@
 export const ERROR_MESSAGES = {
   // Browser/Device Errors
   BROWSER_NOT_SUPPORTED:
-    "Speech recognition is not supported in this browser. Please use Chrome, Safari, or Edge.",
+    "Speech recognition is not supported in this browser. On iOS, please use Safari. On other devices, use Chrome, Safari, or Edge.",
   MIC_NOT_FOUND: "No microphone found. Check your device and try again.",
   MIC_PERMISSION_DENIED:
     "Microphone permission required. Enable it from browser settings and reload.",

@@ -7,6 +7,10 @@ export const browserService = {
   isSpeechRecognitionSupported(): boolean {
     if (typeof window === "undefined") return false;
 
+    // Chrome and other third-party browsers on iOS do NOT support the SpeechRecognition API,
+    // as Apple restricts this to Safari only.
+    if (this.isIOS() && !this.isSafari()) return false;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const win = window as any;
     const SpeechRecognitionAPI =
@@ -15,17 +19,28 @@ export const browserService = {
   },
 
   /**
+   * Helper to detect iOS devices
+   */
+  isIOS(): boolean {
+    if (typeof navigator === "undefined") return false;
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  },
+
+  /**
+   * Helper to detect Safari browser
+   */
+  isSafari(): boolean {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent;
+    return /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/i.test(ua);
+  },
+
+  /**
    * Detect if running on iOS Safari
    * iOS Safari has specific limitations that require restart strategy
    */
   isIOSSafari(): boolean {
-    if (typeof navigator === "undefined") return false;
-
-    const ua = navigator.userAgent;
-    const isIOS = /iPhone|iPad|iPod/i.test(ua);
-    const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua);
-
-    return isIOS && isSafari;
+    return this.isIOS() && this.isSafari();
   },
 
   /**

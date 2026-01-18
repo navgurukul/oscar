@@ -63,7 +63,8 @@ export class STTService {
       });
     } catch (error) {
       console.error("[STT] Initialization error:", error);
-      throw new Error(ERROR_MESSAGES.STT_INIT_FAILED);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${ERROR_MESSAGES.STT_INIT_FAILED} (${message})`);
     }
   }
 
