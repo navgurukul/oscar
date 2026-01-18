@@ -118,7 +118,8 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
 
   const handleFeedbackSubmit = async (
     helpful: boolean,
-    reasons?: FeedbackReason[]
+    reasons?: FeedbackReason[],
+    otherText?: string
   ) => {
     if (!note) {
       toast({
@@ -133,7 +134,8 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
     const { success, error } = await feedbackService.submitFeedback(
       note.id,
       helpful,
-      reasons
+      reasons,
+      otherText
     );
 
     if (error || !success) {

@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import type { FeedbackReason } from "@/lib/types/note.types";
 
 interface FeedbackWidgetProps {
-  onSubmit: (helpful: boolean, reasons?: FeedbackReason[]) => void;
+  onSubmit: (helpful: boolean, reasons?: FeedbackReason[], otherText?: string) => void;
   isSubmitting?: boolean;
   hasSubmitted?: boolean;
   submittedValue?: boolean | null;
@@ -31,6 +31,7 @@ export function FeedbackWidget({
 }: FeedbackWidgetProps) {
   const [showReasons, setShowReasons] = useState(false);
   const [selectedReasons, setSelectedReasons] = useState<FeedbackReason[]>([]);
+  const [otherText, setOtherText] = useState<string>("");
   const [clickedValue, setClickedValue] = useState<boolean | null>(null);
 
   const handleYesClick = () => {
@@ -52,13 +53,21 @@ export function FeedbackWidget({
   };
 
   const handleSubmitReasons = () => {
-    onSubmit(false, selectedReasons.length > 0 ? selectedReasons : undefined);
+    const reasons = selectedReasons.length > 0 ? selectedReasons : undefined;
+    const includeOther = reasons?.includes("other");
+    const trimmed = otherText.trim();
+    // If 'Other' is selected, require some text
+    if (includeOther && trimmed.length === 0) {
+      return; // do not submit if required text missing
+    }
+    onSubmit(false, reasons, includeOther ? trimmed : undefined);
   };
 
   const handleCancel = () => {
     setShowReasons(false);
     setClickedValue(null);
     setSelectedReasons([]);
+    setOtherText("");
   };
 
   // If already submitted, show thank you message
@@ -162,6 +171,20 @@ export function FeedbackWidget({
                   ))}
                 </div>
 
+                {selectedReasons.includes("other") && (
+                  <div className="mt-3">
+                    <textarea
+                      value={otherText}
+                      onChange={(e) => setOtherText(e.target.value)}
+                      placeholder="Describe the issue (required for 'Other')"
+                      className="w-full min-h-[80px] bg-slate-800 text-gray-300 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 border border-slate-700"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Provide details so we can improve.
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-2 pt-2">
                   {/* <Button
                     variant="ghost"
@@ -176,7 +199,7 @@ export function FeedbackWidget({
                     size="sm"
                     variant="ghost"
                     onClick={handleSubmitReasons}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || (selectedReasons.includes("other") && otherText.trim().length === 0)}
                     className=" hover:text-white text-cyan-500"
                   >
                     <SendHorizontal className="w-4 h-4" />

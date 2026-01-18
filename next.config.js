@@ -1,35 +1,39 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Explicitly use SWC minifier and treat externals as ESM when possible
-  swcMinify: true,
+  // For Capacitor mobile app, use server URL approach instead of static export
+  // This allows API routes to work normally
+  // Configure capacitor.config.ts with server.url pointing to deployed app
+  // output: 'export', // Not needed with server URL approach
+  // images: {
+  //   unoptimized: true,
+  // },
   // Expose environment variables for API routes
   env: {
     DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
   },
-  experimental: {
-    // Helps with packages that use `import.meta` and ESM-only distribution
-    esmExternals: "loose",
-  },
   // Required for SharedArrayBuffer (WASM multi-threading)
-  async headers() {
-    return [
-      {
-        source: "/(.*)",
-        headers: [
-          {
-            key: "Cross-Origin-Opener-Policy",
-            value: "same-origin",
-          },
-          {
-            key: "Cross-Origin-Embedder-Policy",
-            value: "require-corp",
-          },
-        ],
-      },
-    ];
-  },
+  // Note: headers() is not compatible with static export
+  // These headers should be set at the server/CDN level for static export
+  // async headers() {
+  //   return [
+  //     {
+  //       source: "/(.*)",
+  //       headers: [
+  //         {
+  //           key: "Cross-Origin-Opener-Policy",
+  //           value: "same-origin",
+  //         },
+  //         {
+  //           key: "Cross-Origin-Embedder-Policy",
+  //           value: "require-corp",
+  //         },
+  //       ],
+  //     },
+  //   ];
+  // },
   // Exclude ONNX from webpack bundling (it loads WASM dynamically)
+  // Note: Using webpack explicitly since Turbopack doesn't support custom config yet
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {

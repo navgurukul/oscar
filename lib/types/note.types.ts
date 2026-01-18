@@ -27,6 +27,7 @@ export interface DBNote {
   updated_at: string;
   feedback_helpful: boolean | null;
   feedback_reasons: FeedbackReason[] | null;
+  feedback_other_text: string | null;
   feedback_timestamp: string | null;
 }
 
@@ -46,6 +47,7 @@ export interface DBNoteUpdate {
   updated_at?: string;
   feedback_helpful?: boolean | null;
   feedback_reasons?: FeedbackReason[] | null;
+  feedback_other_text?: string | null;
   feedback_timestamp?: string | null;
 }
 
@@ -66,4 +68,5 @@ export interface FeedbackSubmission {
   noteId: string;
   helpful: boolean;
   reasons?: FeedbackReason[];
+  otherText?: string;
 }

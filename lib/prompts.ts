@@ -22,7 +22,8 @@ Take the raw speech-to-text input and format it properly. That's it. Nothing mor
 6. Format sentences clearly and properly - ensure proper spacing, punctuation, and structure
 7. When user mentions "first point", "second point", "third point", etc., convert them into bullet points format
 8. Auto-correct names, book titles, and other proper nouns if you are 100% certain of the correct spelling/name based on context
-9.If multiple items are introduced using ordinal words (first, second, third), always prefer bullet points over paragraph format.
+9. If multiple items are introduced using ordinal words (first, second, third), always prefer bullet points over paragraph format.
+10. Correct vocabulary and word choice errors while preserving the original meaning and intent
 
 === WHAT YOU MUST NEVER DO ===
 ❌ NEVER answer questions in the text
@@ -37,6 +38,23 @@ If the input is incomplete or cuts off mid-sentence:
 - Keep it exactly as spoken, just formatted
 - Do NOT complete the thought
 - Do NOT add words to make it complete
+
+=== VOCABULARY CORRECTION ===
+Fix incorrect word usage and vocabulary errors:
+- Homophones: "there/their/they're", "your/you're", "its/it's"
+- Common mistakes: "could of" → "could have", "should of" → "should have"
+- Wrong words: "pacific" → "specific", "escape goat" → "scapegoat"
+- Malapropisms: "for all intensive purposes" → "for all intents and purposes"
+- Contextually wrong words: "affect" vs "effect", "accept" vs "except"
+- Only correct if you are 100% certain the word is wrong based on context
+- Preserve technical terms and domain-specific vocabulary even if they seem unusual
+
+Examples:
+- "I could of done better" → "I could have done better"
+- "This is very pacific to our case" → "This is very specific to our case"
+- "They're going to there house" → "They're going to their house"
+- "Its a good day" → "It's a good day"
+- "The data effected the results" → "The data affected the results"
 
 === BULLET POINT FORMATTING ===
 When the user mentions numbered points (first point, second point, etc.), convert them to bullet points:
@@ -63,6 +81,7 @@ Ensure all sentences are:
 - Have appropriate spacing
 - Use correct capitalization
 - Flow naturally from one to the next
+- Use correct vocabulary and word choice
 
 === CRITICAL EXAMPLES ===
 
@@ -82,6 +101,12 @@ Input: "first point is about reading books second point is about writing notes"
 CORRECT Output: 
 • Reading books
 • Writing notes
+
+Input: "I could of gone there but they're car was at there house"
+CORRECT Output: "I could have gone there but their car was at their house."
+
+Input: "This is very pacific to the problem we discussed"
+CORRECT Output: "This is very specific to the problem we discussed."
 
 === OUTPUT FORMAT ===
 Return ONLY the formatted text. No explanations. No introductions. Just the clean text.`,
@@ -165,6 +190,12 @@ export const USER_PROMPTS = {
  * - Add: "Break into paragraphs at natural topic changes"
  * - Add: "Use blank lines between distinct topics or ideas"
  *
+ * ### Issue: "incorrect_vocabulary" - Wrong word usage
+ * **Current Behavior**: Vocabulary errors not being caught
+ * **Prompt Change**: Add vocabulary correction:
+ * - Add: "Fix homophones and commonly confused words"
+ * - Add: "Correct malapropisms and wrong word choices based on context"
+ *
  * ## Iterative Refinement Process
  *
  * 1. **Monitor Feedback**: Check `getFeedbackStats()` weekly for trends
@@ -217,5 +248,6 @@ export const USER_PROMPTS = {
  * // V1.0 (2024-01-01): Initial version
  * // V1.1 (2024-01-15): Added tone preservation after 25% "wrong_tone" feedback
  * // V1.2 (2024-02-01): Strengthened content preservation after "missed_key_info" spike
+ * // V1.3 (2024-02-15): Added vocabulary correction for homophones and word choice errors
  * ```
  */

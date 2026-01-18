@@ -1,0 +1,35 @@
+import { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.oscar.ainotes',
+  appName: 'OSCAR',
+  webDir: 'out',
+  server: {
+    androidScheme: 'https',
+    iosScheme: 'https',
+    // For development, you can point to your local server:
+    // url: 'http://localhost:3000',
+    // cleartext: true
+  },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 2000,
+      launchAutoHide: true,
+      backgroundColor: '#0f172a', // slate-950
+      androidSplashResourceName: 'splash',
+      androidScaleType: 'CENTER_CROP',
+      showSpinner: false,
+    },
+    Keyboard: {
+      resize: 'body',
+      style: 'dark',
+    },
+    StatusBar: {
+      style: 'dark',
+      backgroundColor: '#0f172a',
+    },
+  },
+};
+
+export default config;
+

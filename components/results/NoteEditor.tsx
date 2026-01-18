@@ -28,7 +28,11 @@ interface NoteEditorProps {
   isCopying?: boolean;
   isDownloading?: boolean;
   // Feedback props
-  onFeedbackSubmit?: (helpful: boolean, reasons?: FeedbackReason[]) => void;
+  onFeedbackSubmit?: (
+    helpful: boolean,
+    reasons?: FeedbackReason[],
+    otherText?: string
+  ) => void;
   isFeedbackSubmitting?: boolean;
   hasFeedbackSubmitted?: boolean;
   feedbackValue?: boolean | null;

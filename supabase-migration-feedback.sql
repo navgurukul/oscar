@@ -10,6 +10,10 @@ ADD COLUMN IF NOT EXISTS feedback_helpful BOOLEAN DEFAULT NULL;
 ALTER TABLE notes
 ADD COLUMN IF NOT EXISTS feedback_reasons TEXT [] DEFAULT NULL;
 
+-- Add feedback_other_text column (free-text when 'other' is selected)
+ALTER TABLE notes
+ADD COLUMN IF NOT EXISTS feedback_other_text TEXT DEFAULT NULL;
+
 -- Add feedback_timestamp column (timestamp of when feedback was given)
 ALTER TABLE notes
 ADD COLUMN IF NOT EXISTS feedback_timestamp TIMESTAMPTZ DEFAULT NULL;
@@ -28,6 +32,8 @@ WHERE
 COMMENT ON COLUMN notes.feedback_helpful IS 'User feedback: true if formatting was helpful, false if not, null if no feedback yet';
 
 COMMENT ON COLUMN notes.feedback_reasons IS 'Array of reason tags when feedback is negative: too_short, missed_key_info, incorrect_grammar, wrong_tone, poor_formatting, other';
+
+COMMENT ON COLUMN notes.feedback_other_text IS 'Free-text detail provided when user selects reason "other"';
 
 COMMENT ON COLUMN notes.feedback_timestamp IS 'Timestamp when user submitted feedback';
 

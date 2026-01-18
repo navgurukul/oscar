@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">OSCAR</string>
+    <string name="title_activity_main">OSCAR</string>
+    <string name="package_name">com.oscar.ainotes</string>
+    <string name="custom_url_scheme">com.oscar.ainotes</string>
+</resources>
