@@ -25,7 +25,7 @@ export function ProcessingScreen({
             Processing Your <span className="text-cyan-500">Speech</span>
           </h1>
         </div>
-        <div className="flex flex-col items-center justify-between bg-slate-900 size-[500px] rounded-3xl shadow-xl border border-cyan-700/30 p-8 md:p-12 space-y-12 relative overflow-hidden">
+        <div className="bg-slate-900 w-full max-w-[500px] aspect-square rounded-3xl shadow-xl border border-cyan-700/30 p-6 sm:p-8 md:p-12 space-y-8 sm:space-y-12 relative overflow-hidden">
           <DottedGlowBackground
             gap={20}
             radius={1.3}
@@ -37,15 +37,15 @@ export function ProcessingScreen({
             speedScale={1.2}
           />
 
-          <div className="relative z-10 space-y-8">
+          {/* Top section placeholder to match Timer height */}
+          <div className="h-8" />
+
+          <div className="relative z-10 space-y-8 pt-4">
             {/* Step Title - Clean and Prominent */}
             <div className="text-center">
               <h2 className="text-2xl font-medium text-white transition-all duration-300">
                 {PROCESSING_STEPS[currentStep]?.title}
               </h2>
-              {/* <h6 className="text-white mt-2">
-                {PROCESSING_STEPS[currentStep]?.description}
-              </h6> */}
             </div>
 
             {/* Minimalist Progress Bar */}
@@ -58,18 +58,21 @@ export function ProcessingScreen({
               </div>
             </div>
           </div>
-          {/* Simplified Step Dots */}
-          <div className="flex justify-center gap-1.5">
-            {PROCESSING_STEPS.map((_, i) => (
-              <div
-                key={i}
-                className={`transition-all duration-300 rounded-full ${
-                  i <= currentStep
-                    ? "w-6 h-1 bg-cyan-500"
-                    : "w-6 h-1 bg-gray-700"
-                }`}
-              />
-            ))}
+
+          {/* Simplified Step Dots - Bottom section matching instruction text area */}
+          <div className="text-center pt-4 h-16 flex items-center justify-center">
+            <div className="flex justify-center gap-1.5">
+              {PROCESSING_STEPS.map((_, i) => (
+                <div
+                  key={i}
+                  className={`transition-all duration-300 rounded-full ${
+                    i <= currentStep
+                      ? "w-6 h-1 bg-cyan-500"
+                      : "w-6 h-1 bg-gray-700"
+                  }`}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>

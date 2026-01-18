@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   // Explicitly use SWC minifier and treat externals as ESM when possible
   swcMinify: true,
   // Expose environment variables for API routes
@@ -12,7 +12,7 @@ const nextConfig = {
     esmExternals: true,
   },
   // Required for SharedArrayBuffer (WASM multi-threading)
-  async headers() {
+  /* async headers() {
     return [
       {
         source: "/(.*)",
@@ -28,7 +28,7 @@ const nextConfig = {
         ],
       },
     ];
-  },
+  }, */
   // Exclude ONNX from webpack bundling (it loads WASM dynamically)
   webpack: (config, { isServer }) => {
     if (!isServer) {
@@ -39,8 +39,26 @@ const nextConfig = {
       };
 
       // Externalize onnxruntime-node to prevent webpack from bundling it
-      config.externals = config.externals || [];
-      config.externals.push("onnxruntime-node", "onnxruntime-common", "onnxruntime-web");
+      // Map web/common to global variables loaded via CDN in layout.tsx
+      if (!config.externals) {
+        config.externals = [];
+      }
+
+      if (Array.isArray(config.externals)) {
+        config.externals.push("onnxruntime-node", {
+          "onnxruntime-web": "ort",
+          "onnxruntime-common": "ort",
+        });
+      } else {
+        config.externals = [
+          config.externals,
+          "onnxruntime-node",
+          {
+            "onnxruntime-web": "ort",
+            "onnxruntime-common": "ort",
+          },
+        ];
+      }
 
       // Ensure .mjs in certain packages are treated as ESM so minification handles import.meta
       config.module = config.module || { rules: [] };
@@ -48,13 +66,23 @@ const nextConfig = {
       // Remove the custom rule that was possibly causing issues with minification
     } else {
       // On server side, completely externalize onnxruntime packages
-      config.externals = config.externals || [];
+      if (!config.externals) {
+        config.externals = [];
+      }
+
       if (Array.isArray(config.externals)) {
         config.externals.push(
           "onnxruntime-node",
           "onnxruntime-common",
           "onnxruntime-web"
         );
+      } else {
+        config.externals = [
+          config.externals,
+          "onnxruntime-node",
+          "onnxruntime-common",
+          "onnxruntime-web",
+        ];
       }
     }
     return config;

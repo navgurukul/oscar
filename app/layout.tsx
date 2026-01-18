@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
+import Script from "next/script";
 import { FloatingNavbar } from "@/components/shared/FloatingNavbar";
 import { AuthEdgeButton } from "@/components/shared/AuthEdgeButton";
 import { HomeRecordingButton } from "@/components/recording/HomeRecordingButton";
@@ -29,6 +30,22 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={roboto.variable}>
+      <head>
+        {/* Load ONNX Runtime Web from CDN to avoid bundling issues and fix 'onnxruntime' missing error */}
+        <Script
+          src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"
+          strategy="beforeInteractive"
+          crossOrigin="anonymous"
+        />
+        <Script id="onnx-shim" strategy="beforeInteractive">
+          {`
+            if (typeof window !== 'undefined') {
+              // Shim for libraries that expect 'onnxruntime' instead of 'ort'
+              window.onnxruntime = window.ort;
+            }
+          `}
+        </Script>
+      </head>
       <body className="bg-slate-950 text-white antialiased font-sans">
         <AuthProvider>
           <FloatingNavbar />
