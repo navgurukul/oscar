@@ -30,20 +30,23 @@ export function RecordingControls({
         onClick={isRecording ? onStop : onStart}
         disabled={disabled}
         size="lg"
-        className={`w-32 h-32 rounded-full transition-all duration-300 shadow-2xl transform ${
+        className={`w-24 h-24 sm:w-32 sm:h-32 rounded-full transition-all duration-300 shadow-2xl transform ${
           isRecording
-            ? "bg-red-600 hover:bg-red-700 scale-100 ring-8 ring-red-900"
+            ? "bg-red-600 hover:bg-red-700 scale-100 ring-4 sm:ring-8 ring-red-900"
             : disabled
             ? "bg-gray-600 cursor-not-allowed scale-100"
             : "bg-cyan-600 hover:bg-cyan-700 hover:scale-110 hover:shadow-2xl active:scale-95"
         }`}
       >
         {disabled ? (
-          <Spinner className="size-14 text-white" />
+          <Spinner className="size-10 sm:size-14 text-white" />
         ) : isRecording ? (
-          <Square className="w-14 h-14 text-white" fill="currentColor" />
+          <Square
+            className="w-10 h-10 sm:w-14 sm:h-14 text-white"
+            fill="currentColor"
+          />
         ) : (
-          <Mic className="w-16 h-16 text-white" />
+          <Mic className="w-12 h-12 sm:w-16 sm:h-16 text-white" />
         )}
       </Button>
     </div>

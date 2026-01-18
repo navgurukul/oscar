@@ -275,23 +275,25 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
-            <Button
-              type="submit"
-              disabled={isAdding || !newTerm.trim()}
-              className="bg-cyan-600 hover:bg-cyan-700 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isAdding ? (
-                <span className="flex items-center gap-2">
-                  <Spinner className="w-4 h-4" />
-                  Adding...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  Add Entry
-                </span>
-              )}
-            </Button>
+            <div className="text-end">
+              <Button
+                type="submit"
+                disabled={isAdding || !newTerm.trim()}
+                className="bg-cyan-600 hover:bg-cyan-700 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isAdding ? (
+                  <span className="flex items-center gap-2">
+                    <Spinner className="w-4 h-4" />
+                    Adding...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    Add Entry
+                  </span>
+                )}
+              </Button>
+            </div>
           </form>
 
           {/* Vocabulary List */}

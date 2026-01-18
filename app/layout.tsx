@@ -34,7 +34,7 @@ export default function RootLayout({
           <FloatingNavbar />
           <AuthEdgeButton />
           {children}
-          <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50">
+          <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
             <HomeRecordingButton />
           </div>
           <Toaster />

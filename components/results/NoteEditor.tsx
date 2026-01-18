@@ -70,7 +70,7 @@ export function NoteEditor({
   };
 
   return (
-    <div className="w-[650px]">
+    <div className="w-full max-w-[650px]">
       <Card className="bg-slate-900 border-cyan-700/30 rounded-t-2xl shadow-xl overflow-hidden">
         <CardHeader>
           {/* AI Title */}
@@ -174,7 +174,7 @@ export function NoteEditor({
 
       {/* Feedback Widget */}
       {showFeedback && onFeedbackSubmit && (
-        <div className="mt-4 w-[650px]">
+        <div className="mt-4 w-full">
           <FeedbackWidget
             onSubmit={onFeedbackSubmit}
             isSubmitting={isFeedbackSubmitting}
@@ -199,7 +199,7 @@ export function NoteEditor({
             style={{ originY: 0 }}
           >
             <div className="flex justify-center">
-              <Card className="bg-white border-none rounded-t-none rounded-b-2xl shadow-xl w-[580px]">
+              <Card className="bg-white border-none rounded-t-none rounded-b-2xl shadow-xl w-full max-w-[580px]">
                 <CardContent className="pt-6">
                   <div className="space-y-4">
                     {/* Raw Transcript Text */}

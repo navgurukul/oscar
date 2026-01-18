@@ -294,7 +294,7 @@ function RecordingPageInner() {
         </div>
 
         {/* Main Recording Container */}
-        <div className="bg-slate-900 size-[500px] rounded-3xl shadow-xl border border-cyan-700/30 p-8 md:p-12  space-y-12 relative overflow-hidden">
+        <div className="bg-slate-900 w-full max-w-[500px] aspect-square rounded-3xl shadow-xl border border-cyan-700/30 p-6 sm:p-8 md:p-12 space-y-8 sm:space-y-12 relative overflow-hidden">
           <DottedGlowBackground
             gap={20}
             radius={1.3}
