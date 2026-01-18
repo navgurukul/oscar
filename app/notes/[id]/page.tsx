@@ -202,7 +202,7 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
                   </p>
                 </div>
 
-                <div className="flex items-center">
+                <div className="hidden md:flex items-center">
                   <div className="flex">
                     {isEditing ? (
                       <>
@@ -273,7 +273,7 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
                 <textarea
                   value={editedText}
                   onChange={(e) => setEditedText(e.target.value)}
-                  className="w-full min-h-[300px] bg-slate-800 text-gray-300 rounded-lg p-4 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 border border-slate-700"
+                  className="w-full min-h-[250px] bg-slate-800 text-gray-300 rounded-lg p-4 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 border border-slate-700"
                   autoFocus
                 />
               ) : (
@@ -281,6 +281,70 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
                   {displayText}
                 </div>
               )}
+
+              {/* Mobile Action Buttons */}
+              <div className="flex md:hidden justify-center items-center mt-6 border-slate-700/50">
+                <div className="flex gap-4">
+                  {isEditing ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSaveEdit}
+                        disabled={isSaving}
+                        className="text-cyan-500 hover:text-cyan-400 flex flex-col items-center gap-1 h-auto py-2"
+                      >
+                        {isSaving ? (
+                          <Spinner className="w-5 h-5" />
+                        ) : (
+                          <Save className="w-5 h-5" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setIsEditing(false);
+                          setEditedText(
+                            note.edited_text || note.original_formatted_text
+                          );
+                        }}
+                        disabled={isSaving}
+                        className="text-gray-400 hover:text-white flex flex-col items-center gap-1 h-auto py-2"
+                      >
+                        <X className="w-5 h-5" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsEditing(true)}
+                        className="text-gray-400 hover:text-cyan-500 flex flex-col items-center gap-1 h-auto py-2"
+                      >
+                        <Edit3 className="w-5 h-5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCopy}
+                        className="text-gray-400 hover:text-cyan-500 flex flex-col items-center gap-1 h-auto py-2"
+                      >
+                        <Copy className="w-5 h-5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleDownload}
+                        className="text-gray-400 hover:text-cyan-500 flex flex-col items-center gap-1 h-auto py-2"
+                      >
+                        <Download className="w-5 h-5" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
 

@@ -83,7 +83,7 @@ export function NoteEditor({
               </div>
             </div>
 
-            <div className="flex items-center">
+            <div className="hidden md:flex items-center">
               <div className="flex">
                 {isEditing ? (
                   <>
@@ -169,6 +169,92 @@ export function NoteEditor({
               {formattedNote}
             </div>
           )}
+
+          {/* Mobile Action Buttons */}
+          <div className="flex md:hidden justify-center items-center mt-6 pt-6 border-t border-slate-700/50">
+            <div className="flex gap-4">
+              {isEditing ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onSaveEdit}
+                    disabled={isSaving}
+                    className="text-cyan-500 hover:text-cyan-400 flex flex-col items-center gap-1 h-auto py-2"
+                  >
+                    {isSaving ? (
+                      <Spinner className="w-5 h-5" />
+                    ) : (
+                      <Save className="w-5 h-5" />
+                    )}
+                    <span className="text-[10px] uppercase tracking-wider font-medium">
+                      Save
+                    </span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onCancelEditing}
+                    disabled={isSaving}
+                    className="text-gray-400 hover:text-white flex flex-col items-center gap-1 h-auto py-2"
+                  >
+                    <X className="w-5 h-5" />
+                    <span className="text-[10px] uppercase tracking-wider font-medium">
+                      Cancel
+                    </span>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {canEdit && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onStartEditing}
+                      className="text-gray-400 hover:text-cyan-500 flex flex-col items-center gap-1 h-auto py-2"
+                    >
+                      <Edit3 className="w-5 h-5" />
+                      <span className="text-[10px] uppercase tracking-wider font-medium">
+                        Edit
+                      </span>
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopy}
+                    disabled={isCopying}
+                    className="text-gray-400 hover:text-cyan-500 disabled:opacity-50 flex flex-col items-center gap-1 h-auto py-2"
+                  >
+                    {isCopying ? (
+                      <Spinner className="w-5 h-5" />
+                    ) : (
+                      <Copy className="w-5 h-5" />
+                    )}
+                    <span className="text-[10px] uppercase tracking-wider font-medium">
+                      Copy
+                    </span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDownload}
+                    disabled={isDownloading}
+                    className="text-gray-400 hover:text-cyan-500 disabled:opacity-50 flex flex-col items-center gap-1 h-auto py-2"
+                  >
+                    {isDownloading ? (
+                      <Spinner className="w-5 h-5" />
+                    ) : (
+                      <Download className="w-5 h-5" />
+                    )}
+                    <span className="text-[10px] uppercase tracking-wider font-medium">
+                      Download
+                    </span>
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
