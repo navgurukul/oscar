@@ -1,22 +1,36 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
 import { storageService } from "@/lib/services/storage.service";
 import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
-import { NoteEditor } from "@/components/results/NoteEditor";
+import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
 import { NoteActions } from "@/components/results/NoteActions";
 import { Spinner } from "@/components/ui/spinner";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import type { FeedbackReason } from "@/lib/types/note.types";
 
+// Lazy load the NoteEditor component
+const NoteEditor = dynamic(
+  () =>
+    import("@/components/results/NoteEditor").then((mod) => ({
+      default: mod.NoteEditor,
+    })),
+  {
+    loading: () => <NoteEditorSkeleton />,
+    ssr: false,
+  }
+);
+
 export default function ResultsPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { isLoading, formattedNote, rawText, title } = useNoteStorage();
+  const { isLoading, formattedNote, rawText, title, updateFormattedNote } =
+    useNoteStorage();
 
   const [showRawTranscript, setShowRawTranscript] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -139,6 +153,9 @@ export default function ResultsPage() {
         variant: "destructive",
       });
     } else {
+      // Update session storage and internal state to keep UI in sync
+      updateFormattedNote(editedText);
+
       toast({
         title: "Saved!",
         description: "Your changes have been saved.",

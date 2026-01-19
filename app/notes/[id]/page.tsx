@@ -1,19 +1,34 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
+import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Copy, Download, Edit3, Save, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { FeedbackWidget } from "@/components/results/FeedbackWidget";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
+
+// Lazy load the FeedbackWidget
+const FeedbackWidget = dynamic(
+  () =>
+    import("@/components/results/FeedbackWidget").then((mod) => ({
+      default: mod.FeedbackWidget,
+    })),
+  {
+    loading: () => (
+      <div className="mt-4 h-20 bg-slate-900 border border-cyan-700/30 rounded-xl animate-pulse" />
+    ),
+    ssr: false,
+  }
+);
 
 export default function NoteDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
@@ -155,12 +170,10 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="flex items-center justify-center mb-4">
-            <Spinner className="text-cyan-500" />
-          </div>
-          <p className="text-gray-300">Loading your note...</p>
+      <main className="flex flex-col items-center px-4 pt-8 pb-24">
+        <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
+          <div className="w-9" />
+          <NoteEditorSkeleton />
         </div>
       </main>
     );

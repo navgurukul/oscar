@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, Suspense } from "react";
+import { useState, useRef, useEffect, Suspense, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
 import { storageService } from "@/lib/services/storage.service";
@@ -10,6 +10,7 @@ import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { RecordingTimer } from "@/components/recording/RecordingTimer";
+import { PermissionErrorModal } from "@/components/recording/PermissionErrorModal";
 
 import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
@@ -30,38 +31,58 @@ function RecordingPageInner() {
     isRequestingPermission,
     isRecording,
     isProcessing,
+    isPermissionDenied,
     recordingTime,
     error: recordingError,
+    permissionRetryCount,
     startRecording,
     stopRecording,
+    retryPermission,
   } = useRecording();
 
-  const { formatText } = useAIFormatting();
+  const { formatText, cancelFormatting } = useAIFormatting();
 
   const [processingStep, setProcessingStep] = useState(0);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [showProcessing, setShowProcessing] = useState(false);
+  const [isRetryingPermission, setIsRetryingPermission] = useState(false);
 
-  // Refs to track intervals for cleanup
+  // Refs for race condition protection
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const stepIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isProcessingRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Cleanup intervals on unmount
+  // Track mount state
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
+      // Cleanup on unmount
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
       }
       if (stepIntervalRef.current) {
         clearInterval(stepIntervalRef.current);
       }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      // Cancel any in-flight formatting requests
+      cancelFormatting();
     };
-  }, []);
+  }, [cancelFormatting]);
 
   // Check for continue mode and auto-start with seed transcript
   useEffect(() => {
     // Only run once when component mounts and recording is ready
-    if (!isInitializing && !isRequestingPermission && !isRecording) {
+    if (
+      !isInitializing &&
+      !isRequestingPermission &&
+      !isRecording &&
+      !isPermissionDenied
+    ) {
       const shouldContinue = storageService.getContinueMode();
       if (shouldContinue) {
         const rawText = storageService.getRawText();
@@ -87,12 +108,13 @@ function RecordingPageInner() {
     isInitializing,
     isRequestingPermission,
     isRecording,
+    isPermissionDenied,
     startRecording,
     toast,
   ]);
 
   // Helper to clear all intervals
-  const clearAllIntervals = () => {
+  const clearAllIntervals = useCallback(() => {
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
       progressIntervalRef.current = null;
@@ -101,13 +123,33 @@ function RecordingPageInner() {
       clearInterval(stepIntervalRef.current);
       stepIntervalRef.current = null;
     }
-  };
+  }, []);
 
   const handleStartRecording = async () => {
     await startRecording();
   };
 
+  const handleRetryPermission = async () => {
+    setIsRetryingPermission(true);
+    try {
+      await retryPermission();
+    } finally {
+      if (isMountedRef.current) {
+        setIsRetryingPermission(false);
+      }
+    }
+  };
+
   const handleStopRecording = async () => {
+    // Guard against multiple concurrent processing
+    if (isProcessingRef.current) {
+      return;
+    }
+    isProcessingRef.current = true;
+
+    // Create abort controller for this processing session
+    abortControllerRef.current = new AbortController();
+
     setShowProcessing(true);
     setProcessingStep(0);
     setProcessingProgress(0);
@@ -139,43 +181,81 @@ function RecordingPageInner() {
       // Stop recording and get transcript
       const transcript = await stopRecording();
 
+      // Check if unmounted or cancelled
+      if (!isMountedRef.current || abortControllerRef.current?.signal.aborted) {
+        clearAllIntervals();
+        isProcessingRef.current = false;
+        return;
+      }
+
       // Persist raw transcript immediately to support continue mode
       storageService.updateRawText(transcript);
 
       if (!transcript || transcript.length === 0) {
         clearAllIntervals();
-        setShowProcessing(false);
+        if (isMountedRef.current) {
+          setShowProcessing(false);
 
-        // Build error message
-        let errorDescription = ERROR_MESSAGES.NO_SPEECH_DETECTED;
-        if (recordingTime < RECORDING_CONFIG.MIN_RECORDING_TIME) {
-          errorDescription += " " + ERROR_MESSAGES.RECORDING_TOO_SHORT;
-        }
+          // Build error message
+          let errorDescription = ERROR_MESSAGES.NO_SPEECH_DETECTED;
+          if (recordingTime < RECORDING_CONFIG.MIN_RECORDING_TIME) {
+            errorDescription += " " + ERROR_MESSAGES.RECORDING_TOO_SHORT;
+          }
 
-        toast({
-          title: "Recording Failed",
-          description: errorDescription,
-          variant: "destructive",
-        });
-
-        // Show tips in a second toast
-        setTimeout(() => {
           toast({
-            title: "Tips for Better Recording",
-            description: ERROR_TIPS.MIC_TIPS.join(" • "),
+            title: "Recording Failed",
+            description: errorDescription,
+            variant: "destructive",
           });
-        }, 500);
+
+          // Show tips in a second toast
+          setTimeout(() => {
+            toast({
+              title: "Tips for Better Recording",
+              description: ERROR_TIPS.MIC_TIPS.join(" • "),
+            });
+          }, 500);
+        }
+        isProcessingRef.current = false;
         return;
       }
 
       // Format with AI
       const result = await formatText(transcript);
 
+      // Check if unmounted or cancelled
+      if (!isMountedRef.current || abortControllerRef.current?.signal.aborted) {
+        clearAllIntervals();
+        isProcessingRef.current = false;
+        return;
+      }
+
       clearAllIntervals();
 
       if (result.success && result.formattedText) {
+        // Show fallback notification if local formatting was used
+        if (result.fallback) {
+          toast({
+            title: "Basic Formatting Applied",
+            description: ERROR_MESSAGES.FORMATTING_FALLBACK,
+          });
+        }
+
         // Generate title before saving
-        const titleResult = await aiService.generateTitle(result.formattedText);
+        const titleResult = await aiService.generateTitle(
+          result.formattedText,
+          abortControllerRef.current?.signal
+        );
+
+        // Check if unmounted or cancelled
+        if (
+          !isMountedRef.current ||
+          abortControllerRef.current?.signal.aborted
+        ) {
+          isProcessingRef.current = false;
+          return;
+        }
+
         const generatedTitle = titleResult.success
           ? titleResult.title
           : "Untitled Note";
@@ -214,44 +294,71 @@ function RecordingPageInner() {
           if (saveError) {
             console.error("Failed to save note to database:", saveError);
             // Show non-blocking warning toast
-            toast({
-              title: "Note Saved Locally",
-              description:
-                "Could not sync to cloud, but your note is safe in this session.",
-              variant: "default",
-            });
+            if (isMountedRef.current) {
+              toast({
+                title: "Note Saved Locally",
+                description:
+                  "Could not sync to cloud, but your note is safe in this session.",
+                variant: "default",
+              });
+            }
           } else if (savedNote) {
             // Store the note ID for the results page
             storageService.setCurrentNoteId(savedNote.id);
           }
         }
 
-        setProcessingProgress(100);
+        if (isMountedRef.current) {
+          setProcessingProgress(100);
 
-        await new Promise((resolve) =>
-          setTimeout(resolve, RECORDING_CONFIG.COMPLETION_DELAY_MS)
-        );
-        router.push(ROUTES.RESULTS);
+          await new Promise((resolve) =>
+            setTimeout(resolve, RECORDING_CONFIG.COMPLETION_DELAY_MS)
+          );
+
+          if (isMountedRef.current) {
+            router.push(ROUTES.RESULTS);
+          }
+        }
       } else {
-        setShowProcessing(false);
-        toast({
-          title: "Formatting Failed",
-          description: ERROR_MESSAGES.FORMATTING_FAILED + " Please try again.",
-          variant: "destructive",
-        });
+        if (isMountedRef.current) {
+          setShowProcessing(false);
+          toast({
+            title: "Formatting Failed",
+            description:
+              ERROR_MESSAGES.FORMATTING_FAILED + " Please try again.",
+            variant: "destructive",
+          });
+        }
       }
     } catch (error) {
       clearAllIntervals();
-      setShowProcessing(false);
-      console.error("Processing error:", error);
-      toast({
-        title: "Processing Failed",
-        description:
-          ERROR_MESSAGES.PROCESSING_FAILED + " Please try recording again.",
-        variant: "destructive",
-      });
+      if (isMountedRef.current) {
+        setShowProcessing(false);
+        console.error("Processing error:", error);
+        toast({
+          title: "Processing Failed",
+          description:
+            ERROR_MESSAGES.PROCESSING_FAILED + " Please try recording again.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      isProcessingRef.current = false;
     }
   };
+
+  // Show permission error modal
+  if (isPermissionDenied) {
+    return (
+      <main className="min-h-screen bg-black">
+        <PermissionErrorModal
+          onRetry={handleRetryPermission}
+          retryCount={permissionRetryCount}
+          isRetrying={isRetryingPermission}
+        />
+      </main>
+    );
+  }
 
   if (isInitializing || isRequestingPermission) {
     return (
@@ -288,7 +395,7 @@ function RecordingPageInner() {
   return (
     <main className="flex flex-col items-center px-4 pt-8">
       {/* Error Alert */}
-      {recordingError && (
+      {recordingError && !isPermissionDenied && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-[90%] max-w-md">
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />

@@ -56,6 +56,8 @@ export interface FormattingResult {
   success: boolean;
   formattedText?: string;
   error?: string;
+  /** True if local fallback formatting was used instead of AI */
+  fallback?: boolean;
 }
 
 export interface TitleGenerationResult {

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { notesService } from "@/lib/services/notes.service";
 import { Spinner } from "@/components/ui/spinner";
+import { NotesListSkeleton } from "@/components/shared/NotesListSkeleton";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { SquaresSubtract, Trash2 } from "lucide-react";
@@ -66,9 +67,13 @@ export default function NotesPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center">
-        <Spinner className="text-cyan-500 mb-4" />
-        <p className="text-gray-300 text-center">Loading your notes...</p>
+      <main className="flex flex-col items-center px-4 pt-8 pb-24">
+        <div className="w-full max-w-2xl mt-16">
+          <div className="flex items-center justify-center mb-8">
+            <h1 className="text-3xl font-bold text-white">Your Notes</h1>
+          </div>
+          <NotesListSkeleton />
+        </div>
       </main>
     );
   }

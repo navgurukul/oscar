@@ -12,6 +12,12 @@ export const ERROR_MESSAGES = {
     "Microphone permission required. Enable it from browser settings and reload.",
   MIC_IN_USE: "Microphone in use. Close other apps and try again.",
 
+  // Permission-specific errors (for retry flow)
+  PERMISSION_DENIED_RETRY:
+    "Microphone access denied. Click 'Try Again' to allow access.",
+  PERMISSION_BLOCKED:
+    "Microphone access blocked. Please enable in browser settings.",
+
   // Recording Errors
   RECORDING_FAILED:
     "Failed to start recording. Please check microphone permissions.",
@@ -25,6 +31,9 @@ export const ERROR_MESSAGES = {
   PROCESSING_FAILED: "Failed to process recording. Please try again.",
   FORMATTING_FAILED: "Failed to format text. Please try again.",
   TITLE_GENERATION_FAILED: "Failed to generate title.",
+  FORMATTING_FALLBACK:
+    "AI unavailable - basic formatting applied. You can still edit your note.",
+  FORMATTING_CANCELLED: "Formatting cancelled.",
 
   // API Errors
   API_ERROR: "API request failed. Please try again.",
@@ -190,4 +199,34 @@ export const RECORDING_CONFIG = {
   IOS_RESTART_DELAY_MS: 150,
   STOP_PROCESSING_DELAY_MS: 1500,
   COMPLETION_DELAY_MS: 600,
+} as const;
+
+/**
+ * Permission handling configuration
+ */
+export const PERMISSION_CONFIG = {
+  MAX_RETRY_ATTEMPTS: 3,
+  RETRY_DELAY_MS: 2000,
+} as const;
+
+/**
+ * Local formatter configuration for fallback text processing
+ */
+export const LOCAL_FORMATTER_CONFIG = {
+  FILLER_WORDS: [
+    "um",
+    "uh",
+    "er",
+    "ah",
+    "like",
+    "you know",
+    "actually",
+    "basically",
+    "so",
+    "well",
+    "i mean",
+    "sort of",
+    "kind of",
+  ],
+  PARAGRAPH_SENTENCE_COUNT: 4,
 } as const;
