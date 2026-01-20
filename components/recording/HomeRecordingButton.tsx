@@ -11,8 +11,13 @@ export function HomeRecordingButton() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Hide the button on the recording and results pages
-  if (pathname === ROUTES.RECORDING || pathname === ROUTES.RESULTS) {
+  // Hide the button on auth/recording/results pages
+  // (Auth page can have redirectTo=/recording in the URL, but pathname is still /auth)
+  if (
+    pathname === ROUTES.AUTH ||
+    pathname === ROUTES.RECORDING ||
+    pathname === ROUTES.RESULTS
+  ) {
     return null;
   }
 

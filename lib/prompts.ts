@@ -130,7 +130,7 @@ export const USER_PROMPTS = {
    * Append the content after this template
    */
   TITLE_TEMPLATE:
-    "Create a concise title (max ~60 chars) for this content. Return ONLY the title.\n\nContent:\n",
+    "Create a concise title (max ~40 chars) for this content. Return ONLY the title.\n\nContent:\n",
 } as const;
 
 /**
