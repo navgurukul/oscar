@@ -1,29 +1,85 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { notesService } from "@/lib/services/notes.service";
 import { Spinner } from "@/components/ui/spinner";
 import { NotesListSkeleton } from "@/components/shared/NotesListSkeleton";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { SquaresSubtract, Trash2 } from "lucide-react";
+import { SquaresSubtract, Trash2, Search, Star } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
 import { getTimeBasedPrompt } from "@/lib/utils";
 
+type SortOption = "created" | "updated" | "length";
+
 export default function NotesPage() {
   const router = useRouter();
-  const [notes, setNotes] = useState<DBNote[]>([]);
+  const [allNotes, setAllNotes] = useState<DBNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingStarId, setTogglingStarId] = useState<string | null>(null);
   const [contextPrompt, setContextPrompt] = useState("");
+
+  // Filter and sort state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortOption>("created");
+  const [showOnlyStarred, setShowOnlyStarred] = useState(false);
 
   useEffect(() => {
     loadNotes();
-    // Set initial prompt based on current time
     setContextPrompt(getTimeBasedPrompt());
   }, []);
+
+  // Filter and sort notes
+  const filteredNotes = useMemo(() => {
+    let result = [...allNotes];
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter((note) => {
+        const title = (note.title || "").toLowerCase();
+        const content = (
+          note.edited_text || note.original_formatted_text
+        ).toLowerCase();
+        return title.includes(query) || content.includes(query);
+      });
+    }
+
+    // Filter by starred
+    if (showOnlyStarred) {
+      result = result.filter((note) => note.is_starred);
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      let comparison = 0;
+      switch (sortBy) {
+        case "created":
+          comparison =
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          break;
+        case "updated":
+          comparison =
+            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+          break;
+        case "length":
+          const aLength = (a.edited_text || a.original_formatted_text).length;
+          const bLength = (b.edited_text || b.original_formatted_text).length;
+          comparison = bLength - aLength;
+          break;
+      }
+      // Secondary sort by ID for stability
+      if (comparison === 0) {
+        comparison = a.id.localeCompare(b.id);
+      }
+      return comparison;
+    });
+
+    return result;
+  }, [allNotes, searchQuery, sortBy, showOnlyStarred]);
 
   const loadNotes = async () => {
     setIsLoading(true);
@@ -31,7 +87,7 @@ export default function NotesPage() {
     if (error) {
       setError("Failed to load notes. Please try again.");
     } else {
-      setNotes(data || []);
+      setAllNotes(data || []);
     }
     setIsLoading(false);
   };
@@ -45,9 +101,37 @@ export default function NotesPage() {
     if (error) {
       alert("Failed to delete note. Please try again.");
     } else {
-      setNotes(notes.filter((note) => note.id !== id));
+      setAllNotes(allNotes.filter((note) => note.id !== id));
     }
     setDeletingId(null);
+  };
+
+  const handleToggleStar = async (
+    id: string,
+    currentStarred: boolean,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+
+    // Optimistic update
+    setAllNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, is_starred: !currentStarred } : n))
+    );
+    setTogglingStarId(id);
+
+    const { error } = await notesService.toggleStar(id, !currentStarred);
+
+    if (error) {
+      // Revert on error
+      setAllNotes((prev) =>
+        prev.map((n) =>
+          n.id === id ? { ...n, is_starred: currentStarred } : n
+        )
+      );
+      alert("Failed to update star. Please try again.");
+    }
+
+    setTogglingStarId(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -63,6 +147,24 @@ export default function NotesPage() {
   const getPreview = (note: DBNote) => {
     const text = note.edited_text || note.original_formatted_text;
     return text.length > 150 ? text.substring(0, 150) + "..." : text;
+  };
+
+  const hasActiveFilters = searchQuery.trim() || showOnlyStarred;
+
+  const getEmptyMessage = () => {
+    if (allNotes.length === 0) {
+      return contextPrompt;
+    }
+    if (showOnlyStarred && searchQuery.trim()) {
+      return "No starred notes match your search";
+    }
+    if (showOnlyStarred) {
+      return "No starred notes yet";
+    }
+    if (searchQuery.trim()) {
+      return `No notes found for "${searchQuery}"`;
+    }
+    return contextPrompt;
   };
 
   if (isLoading) {
@@ -83,13 +185,6 @@ export default function NotesPage() {
       <div className="w-full max-w-2xl mt-16">
         <div className="flex items-center justify-center mb-8">
           <h1 className="text-3xl font-bold text-white">Your Notes</h1>
-          {/* <Button
-            onClick={() => router.push("/recording")}
-            className="bg-cyan-600 hover:bg-cyan-700 text-white"
-          >
-            <Mic className="w-4 h-4 mr-2" />
-            New Note
-          </Button> */}
         </div>
 
         {error && (
@@ -98,17 +193,68 @@ export default function NotesPage() {
           </div>
         )}
 
-        {notes.length === 0 ? (
+        {/* Filter Bar */}
+        {allNotes.length > 0 && (
+          <div className="flex flex-col md:flex-row gap-3 mb-6">
+            {/* Search Input */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input
+                type="text"
+                placeholder="Search notes..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
+              />
+            </div>
+
+            {/* Sort Dropdown */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="px-4 py-2 bg-slate-800 border border-cyan-700/30 rounded-lg text-white focus:outline-none focus:border-cyan-600 transition-colors cursor-pointer"
+            >
+              <option value="created">Date Created</option>
+              <option value="updated">Date Updated</option>
+              <option value="length">Length</option>
+            </select>
+
+            {/* Starred Toggle */}
+            <button
+              onClick={() => setShowOnlyStarred(!showOnlyStarred)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                showOnlyStarred
+                  ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
+                  : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
+              }`}
+            >
+              <Star
+                className={`w-4 h-4 ${showOnlyStarred ? "fill-cyan-500" : ""}`}
+              />
+              <span className="hidden md:inline">Starred</span>
+            </button>
+          </div>
+        )}
+
+        {filteredNotes.length === 0 ? (
           <div className="text-center py-16 mt-16">
             <SquaresSubtract className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-            {/* <h2 className="text-xl font-medium text-gray-300 mb-2">
-              No notes yet
-            </h2> */}
-            <p className="text-gray-500 mb-6">{contextPrompt}</p>
+            <p className="text-gray-500 mb-6">{getEmptyMessage()}</p>
+            {hasActiveFilters && (
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setShowOnlyStarred(false);
+                }}
+                className="text-cyan-500 hover:text-cyan-400 transition-colors"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
-            {notes.map((note) => (
+            {filteredNotes.map((note) => (
               <Card
                 key={note.id}
                 onClick={() => router.push(`/notes/${note.id}`)}
@@ -126,18 +272,44 @@ export default function NotesPage() {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => handleDelete(note.id, e)}
-                      disabled={deletingId === note.id}
-                      className="p-2 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
-                      title="Delete note"
-                    >
-                      {deletingId === note.id ? (
-                        <Spinner className="w-4 h-4" />
-                      ) : (
-                        <Trash2 className="w-4 h-4" />
-                      )}
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {/* Star Button */}
+                      <button
+                        onClick={(e) =>
+                          handleToggleStar(note.id, note.is_starred, e)
+                        }
+                        disabled={togglingStarId === note.id}
+                        className={`p-2 transition-colors ${
+                          note.is_starred
+                            ? "text-cyan-500"
+                            : "text-gray-500 hover:text-cyan-500"
+                        }`}
+                        title={note.is_starred ? "Unstar note" : "Star note"}
+                      >
+                        {togglingStarId === note.id ? (
+                          <Spinner className="w-4 h-4" />
+                        ) : (
+                          <Star
+                            className={`w-4 h-4 ${
+                              note.is_starred ? "fill-cyan-500" : ""
+                            }`}
+                          />
+                        )}
+                      </button>
+                      {/* Delete Button */}
+                      <button
+                        onClick={(e) => handleDelete(note.id, e)}
+                        disabled={deletingId === note.id}
+                        className="p-2 text-gray-500 hover:text-white transition-colors"
+                        title="Delete note"
+                      >
+                        {deletingId === note.id ? (
+                          <Spinner className="w-4 h-4" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <Separator className="w-24 h-0.5 bg-cyan-500" />
                 </CardHeader>
