@@ -14,6 +14,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { SquaresSubtract, Trash2, Search, Star } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
 import { getTimeBasedPrompt } from "@/lib/utils";
@@ -30,16 +39,23 @@ export default function NotesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingStarId, setTogglingStarId] = useState<string | null>(null);
   const [contextPrompt, setContextPrompt] = useState("");
+  const ITEMS_PER_PAGE = 5;
 
   // Filter and sort state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("created");
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     loadNotes();
     setContextPrompt(getTimeBasedPrompt());
   }, []);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, sortBy, showOnlyStarred]);
 
   // Filter and sort notes
   const filteredNotes = useMemo(() => {
@@ -89,6 +105,13 @@ export default function NotesPage() {
 
     return result;
   }, [allNotes, searchQuery, sortBy, showOnlyStarred]);
+
+  const totalPages = Math.ceil(filteredNotes.length / ITEMS_PER_PAGE);
+
+  const paginatedNotes = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredNotes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredNotes, currentPage]);
 
   const loadNotes = async () => {
     setIsLoading(true);
@@ -174,6 +197,75 @@ export default function NotesPage() {
       return `No notes found for "${searchQuery}"`;
     }
     return contextPrompt;
+  };
+
+  const renderPaginationItems = () => {
+    const items = [];
+    const maxVisiblePages = 5;
+
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    if (startPage > 1) {
+      items.push(
+        <PaginationItem key="1">
+          <PaginationLink
+            onClick={(e) => {
+              e.preventDefault();
+              setCurrentPage(1);
+            }}
+            href="#"
+          >
+            1
+          </PaginationLink>
+        </PaginationItem>
+      );
+      if (startPage > 2) {
+        items.push(<PaginationEllipsis key="ellipsis-start" />);
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      items.push(
+        <PaginationItem key={i}>
+          <PaginationLink
+            isActive={currentPage === i}
+            onClick={(e) => {
+              e.preventDefault();
+              setCurrentPage(i);
+            }}
+            href="#"
+          >
+            {i}
+          </PaginationLink>
+        </PaginationItem>
+      );
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) {
+        items.push(<PaginationEllipsis key="ellipsis-end" />);
+      }
+      items.push(
+        <PaginationItem key={totalPages}>
+          <PaginationLink
+            onClick={(e) => {
+              e.preventDefault();
+              setCurrentPage(totalPages);
+            }}
+            href="#"
+          >
+            {totalPages}
+          </PaginationLink>
+        </PaginationItem>
+      );
+    }
+
+    return items;
   };
 
   if (isLoading) {
@@ -268,72 +360,116 @@ export default function NotesPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredNotes.map((note) => (
-              <Card
-                key={note.id}
-                onClick={() => router.push(`/notes/${note.id}`)}
-                className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl cursor-pointer hover:border-cyan-700/60 transition-all hover:shadow-2xl group overflow-hidden"
-              >
-                <CardHeader>
-                  <div className="flex gap-6 justify-between items-start">
-                    <div className="flex-1 min-w-0">
-                      <div className="mb-2">
-                        <h2 className="text-xl font-semibold text-white truncate">
-                          {note.title || "Untitled Note"}
-                        </h2>
-                        <p className="text-gray-400 text-sm">
-                          {formatDate(note.created_at)}
-                        </p>
+            <div className="space-y-4 min-h-[400px]">
+              {paginatedNotes.map((note) => (
+                <Card
+                  key={note.id}
+                  onClick={() => router.push(`/notes/${note.id}`)}
+                  className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl cursor-pointer hover:border-cyan-700/60 transition-all hover:shadow-2xl group overflow-hidden"
+                >
+                  <CardHeader>
+                    <div className="flex gap-6 justify-between items-start">
+                      <div className="flex-1 min-w-0">
+                        <div className="mb-2">
+                          <h2 className="text-xl font-semibold text-white truncate">
+                            {note.title || "Untitled Note"}
+                          </h2>
+                          <p className="text-gray-400 text-sm">
+                            {formatDate(note.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {/* Star Button */}
+                        <button
+                          onClick={(e) =>
+                            handleToggleStar(note.id, note.is_starred, e)
+                          }
+                          disabled={togglingStarId === note.id}
+                          className={`p-2 transition-colors ${
+                            note.is_starred
+                              ? "text-cyan-500"
+                              : "text-gray-500 hover:text-cyan-500"
+                          }`}
+                          title={note.is_starred ? "Unstar note" : "Star note"}
+                        >
+                          {togglingStarId === note.id ? (
+                            <Spinner className="w-4 h-4" />
+                          ) : (
+                            <Star
+                              className={`w-4 h-4 ${
+                                note.is_starred ? "fill-cyan-500" : ""
+                              }`}
+                            />
+                          )}
+                        </button>
+                        {/* Delete Button */}
+                        <button
+                          onClick={(e) => handleDelete(note.id, e)}
+                          disabled={deletingId === note.id}
+                          className="p-2 text-gray-500 hover:text-white transition-colors"
+                          title="Delete note"
+                        >
+                          {deletingId === note.id ? (
+                            <Spinner className="w-4 h-4" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      {/* Star Button */}
-                      <button
-                        onClick={(e) =>
-                          handleToggleStar(note.id, note.is_starred, e)
+                    <Separator className="w-24 h-0.5 bg-cyan-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-md text-start text-gray-300 line-clamp-2">
+                      {getPreview(note)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="mt-8">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (currentPage > 1) setCurrentPage(currentPage - 1);
+                        }}
+                        href="#"
+                        className={
+                          currentPage === 1
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
                         }
-                        disabled={togglingStarId === note.id}
-                        className={`p-2 transition-colors ${
-                          note.is_starred
-                            ? "text-cyan-500"
-                            : "text-gray-500 hover:text-cyan-500"
-                        }`}
-                        title={note.is_starred ? "Unstar note" : "Star note"}
-                      >
-                        {togglingStarId === note.id ? (
-                          <Spinner className="w-4 h-4" />
-                        ) : (
-                          <Star
-                            className={`w-4 h-4 ${
-                              note.is_starred ? "fill-cyan-500" : ""
-                            }`}
-                          />
-                        )}
-                      </button>
-                      {/* Delete Button */}
-                      <button
-                        onClick={(e) => handleDelete(note.id, e)}
-                        disabled={deletingId === note.id}
-                        className="p-2 text-gray-500 hover:text-white transition-colors"
-                        title="Delete note"
-                      >
-                        {deletingId === note.id ? (
-                          <Spinner className="w-4 h-4" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                  <Separator className="w-24 h-0.5 bg-cyan-500" />
-                </CardHeader>
-                <CardContent>
-                  <p className="text-md text-start text-gray-300 line-clamp-2">
-                    {getPreview(note)}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
+                      />
+                    </PaginationItem>
+
+                    {renderPaginationItems()}
+
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (currentPage < totalPages)
+                            setCurrentPage(currentPage + 1);
+                        }}
+                        href="#"
+                        className={
+                          currentPage === totalPages
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
           </div>
         )}
       </div>
