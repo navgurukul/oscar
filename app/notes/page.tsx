@@ -7,9 +7,18 @@ import { Spinner } from "@/components/ui/spinner";
 import { NotesListSkeleton } from "@/components/shared/NotesListSkeleton";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SquaresSubtract, Trash2, Search, Star } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
 import { getTimeBasedPrompt } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 type SortOption = "created" | "updated" | "length";
 
@@ -195,34 +204,39 @@ export default function NotesPage() {
 
         {/* Filter Bar */}
         {allNotes.length > 0 && (
-          <div className="flex flex-col md:flex-row gap-3 mb-6">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
             {/* Search Input */}
+
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <input
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 z-10" />
+              <Input
                 type="text"
                 placeholder="Search notes..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
+                className="h-10 w-full pl-10 pr-4 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
               />
             </div>
 
             {/* Sort Dropdown */}
-            <select
+            <Select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="px-4 py-2 bg-slate-800 border border-cyan-700/30 rounded-lg text-white focus:outline-none focus:border-cyan-600 transition-colors cursor-pointer"
+              onValueChange={(value) => setSortBy(value as SortOption)}
             >
-              <option value="created">Date Created</option>
-              <option value="updated">Date Updated</option>
-              <option value="length">Length</option>
-            </select>
+              <SelectTrigger className="h-10 w-full md:w-[160px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
+                <SelectItem value="created">Date Created</SelectItem>
+                <SelectItem value="updated">Date Updated</SelectItem>
+                <SelectItem value="length">Length</SelectItem>
+              </SelectContent>
+            </Select>
 
             {/* Starred Toggle */}
-            <button
+            <Button
               onClick={() => setShowOnlyStarred(!showOnlyStarred)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+              className={`flex items-center gap-2 rounded-lg border transition-colors ${
                 showOnlyStarred
                   ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
                   : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
@@ -232,7 +246,7 @@ export default function NotesPage() {
                 className={`w-4 h-4 ${showOnlyStarred ? "fill-cyan-500" : ""}`}
               />
               <span className="hidden md:inline">Starred</span>
-            </button>
+            </Button>
           </div>
         )}
 
