@@ -141,6 +141,52 @@ export const aiService = {
   },
 
   /**
+   * Translate text into a target language (en/hi)
+   */
+  async translateText(
+    text: string,
+    targetLanguage: "en" | "hi"
+  ): Promise<{ success: boolean; translatedText?: string; error?: string }> {
+    if (!text || !text.trim()) {
+      return {
+        success: false,
+        error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_TRANSLATION,
+      };
+    }
+
+    try {
+      return await retryWithBackoff(async () => {
+        const response = await fetchWithTimeout(API_CONFIG.TRANSLATE_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, targetLanguage }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Translate API error: ${response.status}`, errorText);
+          throw new Error(`Translation failed: ${response.status}`);
+        }
+
+        const data = (await response.json()) as { translatedText?: string };
+        const translatedText = data?.translatedText?.trim();
+
+        if (!translatedText) {
+          throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_TRANSLATION);
+        }
+
+        return { success: true, translatedText };
+      });
+    } catch (error) {
+      console.error("Translation error:", error);
+      return {
+        success: false,
+        error: ERROR_MESSAGES.API_ERROR,
+      };
+    }
+  },
+
+  /**
    * Generate a concise title for the note
    * @param text - Formatted or raw text content
    * @returns Title generation result

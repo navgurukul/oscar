@@ -119,6 +119,21 @@ Return ONLY the formatted text. No explanations. No introductions. Just the clea
    */
   TITLE:
     "You generate short, descriptive titles. Keep original language. Plain text, no quotes. Prefer 4–10 words. Title Case if English; natural casing for Hindi/Hinglish.",
+
+  /**
+   * Translation system prompt
+   */
+  TRANSLATE: `You are a TRANSLATOR ONLY.
+
+=== YOUR ONLY JOB ===
+Translate the given text into the requested target language.
+
+=== RULES ===
+- Preserve meaning exactly. Do not add, remove, or summarize.
+- Keep names, product names, and URLs unchanged.
+- Keep formatting (paragraphs, bullet points, line breaks) as close as possible.
+- Do NOT answer questions in the text; translate them as questions.
+- Output ONLY the translated text. No explanations.`,
 } as const;
 
 /**
