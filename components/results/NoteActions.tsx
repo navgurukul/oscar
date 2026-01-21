@@ -1,12 +1,13 @@
 "use client";
 
 import React from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Play, RotateCcw } from "lucide-react";
 import { storageService } from "@/lib/services/storage.service";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { motion } from "motion/react";
+import { useAuth } from "@/lib/contexts/AuthContext";
 import {
   Tooltip,
   TooltipContent,
@@ -16,6 +17,11 @@ import {
 
 export function NoteActions() {
   const router = useRouter();
+  const pathname = usePathname();
+  const { user } = useAuth();
+
+  // After login, on results page show only ONE bottom action button (hide the "audio/play" one)
+  const hideContinueRecording = !!user && pathname === ROUTES.RECORDING;
 
   const handleContinueRecording = () => {
     // Set continue mode flag so recording page knows to seed the transcript
@@ -54,25 +60,27 @@ export function NoteActions() {
           </TooltipContent>
         </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <motion.div
-              whileHover={{ y: -5 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-            >
-              <Button
-                onClick={handleContinueRecording}
-                size="icon"
-                className="bg-cyan-600 hover:bg-cyan-700 text-white w-12 h-12 shadow-lg rounded-full"
+        {!hideContinueRecording && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <motion.div
+                whileHover={{ y: -5 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
               >
-                <Play className="w-5 h-5" />
-              </Button>
-            </motion.div>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{UI_STRINGS.CONTINUE_RECORDING}</p>
-          </TooltipContent>
-        </Tooltip>
+                <Button
+                  onClick={handleContinueRecording}
+                  size="icon"
+                  className="bg-cyan-600 hover:bg-cyan-700 text-white w-12 h-12 shadow-lg rounded-full"
+                >
+                  <Play className="w-5 h-5" />
+                </Button>
+              </motion.div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{UI_STRINGS.CONTINUE_RECORDING}</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </TooltipProvider>
   );
