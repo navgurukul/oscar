@@ -186,6 +186,8 @@ export const ROUTES = {
   NOTES: "/notes",
   AUTH: "/auth",
   SETTINGS: "/settings",
+  BILLING: "/billing",
+  PRICING: "/pricing",
 } as const;
 
 /**
