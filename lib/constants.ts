@@ -230,3 +230,21 @@ export const LOCAL_FORMATTER_CONFIG = {
   ],
   PARAGRAPH_SENTENCE_COUNT: 4,
 } as const;
+
+/**
+ * Subscription tier limits
+ */
+export const SUBSCRIPTION_CONFIG = {
+  FREE_MONTHLY_RECORDINGS: 5,
+  FREE_MAX_NOTES: 20,
+} as const;
+
+/**
+ * Pricing configuration (INR)
+ */
+export const PRICING = {
+  MONTHLY: 399,
+  YEARLY: 2999,
+  YEARLY_SAVINGS_PERCENT: 37,
+  CURRENCY: "INR",
+} as const;

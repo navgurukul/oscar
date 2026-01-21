@@ -8,9 +8,12 @@ import { notesService } from "@/lib/services/notes.service";
 import { aiService } from "@/lib/services/ai.service";
 import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
 import { RecordingControls } from "@/components/recording/RecordingControls";
 import { RecordingTimer } from "@/components/recording/RecordingTimer";
 import { PermissionErrorModal } from "@/components/recording/PermissionErrorModal";
+import { UpgradePrompt } from "@/components/subscription/UpgradePrompt";
+import { UsageIndicator } from "@/components/subscription/UsageIndicator";
 
 import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
@@ -25,6 +28,13 @@ function RecordingPageInner() {
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
+  const {
+    canRecord,
+    recordingsThisMonth,
+    recordingsLimit,
+    isProUser,
+    incrementUsage,
+  } = useSubscriptionContext();
 
   const {
     isInitializing,
@@ -46,6 +56,7 @@ function RecordingPageInner() {
   const [processingProgress, setProcessingProgress] = useState(0);
   const [showProcessing, setShowProcessing] = useState(false);
   const [isRetryingPermission, setIsRetryingPermission] = useState(false);
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   // Refs for race condition protection
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -126,6 +137,11 @@ function RecordingPageInner() {
   }, []);
 
   const handleStartRecording = async () => {
+    // Check if user can record (subscription limit)
+    if (user && !canRecord) {
+      setShowUpgradePrompt(true);
+      return;
+    }
     await startRecording();
   };
 
@@ -305,6 +321,8 @@ function RecordingPageInner() {
           } else if (savedNote) {
             // Store the note ID for the results page
             storageService.setCurrentNoteId(savedNote.id);
+            // Increment usage count for authenticated users
+            await incrementUsage();
           }
         }
 
@@ -394,6 +412,15 @@ function RecordingPageInner() {
 
   return (
     <main className="flex flex-col items-center px-4 pt-8">
+      {/* Upgrade Prompt Modal */}
+      {showUpgradePrompt && (
+        <UpgradePrompt
+          limitType="recordings"
+          currentUsage={recordingsThisMonth}
+          onClose={() => setShowUpgradePrompt(false)}
+        />
+      )}
+
       {/* Error Alert */}
       {recordingError && !isPermissionDenied && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-[90%] max-w-md">
@@ -410,6 +437,17 @@ function RecordingPageInner() {
           <h1 className="text-4xl font-bold">
             Record Your <span className="text-cyan-500">Voice</span>
           </h1>
+          {/* Usage indicator for authenticated users */}
+          {user && !isProUser && (
+            <div className="flex justify-center mt-2">
+              <UsageIndicator
+                type="recordings"
+                current={recordingsThisMonth}
+                limit={recordingsLimit}
+                variant="compact"
+              />
+            </div>
+          )}
         </div>
 
         {/* Main Recording Container */}

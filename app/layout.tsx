@@ -6,6 +6,7 @@ import { FloatingNavbar } from "@/components/shared/FloatingNavbar";
 import { AuthEdgeButton } from "@/components/shared/AuthEdgeButton";
 import { HomeRecordingButton } from "@/components/recording/HomeRecordingButton";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
+import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
 import "./globals.css";
 
 const roboto = Roboto({
@@ -48,13 +49,15 @@ export default function RootLayout({
       </head>
       <body className="bg-slate-950 text-white antialiased font-sans">
         <AuthProvider>
-          <FloatingNavbar />
-          <AuthEdgeButton />
-          {children}
-          <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
-            <HomeRecordingButton />
-          </div>
-          <Toaster />
+          <SubscriptionProvider>
+            <FloatingNavbar />
+            <AuthEdgeButton />
+            {children}
+            <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
+              <HomeRecordingButton />
+            </div>
+            <Toaster />
+          </SubscriptionProvider>
         </AuthProvider>
       </body>
     </html>
