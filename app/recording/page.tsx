@@ -437,17 +437,6 @@ function RecordingPageInner() {
           <h1 className="text-4xl font-bold">
             Record Your <span className="text-cyan-500">Voice</span>
           </h1>
-          {/* Usage indicator for authenticated users */}
-          {user && !isProUser && (
-            <div className="flex justify-center mt-2">
-              <UsageIndicator
-                type="recordings"
-                current={recordingsThisMonth}
-                limit={recordingsLimit}
-                variant="compact"
-              />
-            </div>
-          )}
         </div>
 
         {/* Main Recording Container */}
