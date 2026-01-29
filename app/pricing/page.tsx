@@ -37,7 +37,7 @@ const PRO_FEATURES = [
 export default function PricingPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { tier, refetch } = useSubscriptionContext();
+  const { tier, status, refetch } = useSubscriptionContext();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
 
   const { initiateCheckout, isLoading } = useRazorpayCheckout({
@@ -115,6 +115,7 @@ export default function PricingPage() {
             billingCycle={billingCycle}
             features={FREE_FEATURES}
             currentTier={tier}
+            currentStatus={status}
             onSelect={handleFreePlan}
           />
           <PricingCard
@@ -124,6 +125,7 @@ export default function PricingPage() {
             features={PRO_FEATURES}
             highlighted
             currentTier={tier}
+            currentStatus={status}
             onSelect={handleProPlan}
             isLoading={isLoading}
           />

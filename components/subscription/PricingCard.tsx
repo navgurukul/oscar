@@ -16,6 +16,7 @@ interface PricingCardProps {
   features: string[];
   highlighted?: boolean;
   currentTier?: SubscriptionTier;
+  currentStatus?: string;
   onSelect: () => void;
   isLoading?: boolean;
 }
@@ -27,10 +28,13 @@ export function PricingCard({
   features,
   highlighted = false,
   currentTier,
+  currentStatus,
   onSelect,
   isLoading = false,
 }: PricingCardProps) {
-  const isCurrentPlan = tier === currentTier;
+  // A plan is current only if tiers match AND status is active
+  // This prevents showing "Current Plan" for cancelled subscriptions
+  const isCurrentPlan = tier === currentTier && currentStatus === "active";
   const isFree = tier === "free";
 
   return (
