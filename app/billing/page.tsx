@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
@@ -8,7 +8,8 @@ import { UsageIndicator } from "@/components/subscription/UsageIndicator";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { PRICING } from "@/lib/constants";
+import { PRICING, SUBSCRIPTION_CONFIG } from "@/lib/constants";
+import { vocabularyService } from "@/lib/services/vocabulary.service";
 import {
   Crown,
   CreditCard,
@@ -37,6 +38,7 @@ export default function BillingPage() {
 
   const [isCancelling, setIsCancelling] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [vocabCount, setVocabCount] = useState<number>(0);
 
   // Redirect to auth if not logged in
   if (!authLoading && !user) {
@@ -88,6 +90,24 @@ export default function BillingPage() {
       day: "numeric",
     });
   };
+
+  // Load vocabulary count
+  useEffect(() => {
+    let active = true;
+    async function loadVocabCount() {
+      if (!user) return;
+      const { count, error } = await vocabularyService.getVocabularyCount();
+      if (!active) return;
+      if (error) {
+        console.error("Failed to load vocabulary count:", error);
+      }
+      setVocabCount(count || 0);
+    }
+    loadVocabCount();
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   if (isLoading) {
     return (
@@ -195,7 +215,7 @@ export default function BillingPage() {
                     <Button
                       variant="outline"
                       onClick={() => setShowCancelConfirm(true)}
-                      className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                      className="border-gray-700 text-gray-400 hover:bg-gray-800"
                     >
                       Cancel Subscription
                     </Button>
@@ -232,6 +252,12 @@ export default function BillingPage() {
                 limit={notesLimit}
                 variant="full"
               />
+              <UsageIndicator
+                type="vocabulary"
+                current={vocabCount}
+                limit={isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY}
+                variant="full"
+              />
             </div>
           </CardContent>
         </Card>
@@ -253,6 +279,10 @@ export default function BillingPage() {
                 <li className="flex items-center gap-3 text-gray-300">
                   <Check className="w-5 h-5 text-cyan-400" />
                   Store unlimited notes forever
+                </li>
+                <li className="flex items-center gap-3 text-gray-300">
+                  <Check className="w-5 h-5 text-cyan-400" />
+                  Unlimited vocabulary entries
                 </li>
                 <li className="flex items-center gap-3 text-gray-300">
                   <Check className="w-5 h-5 text-cyan-400" />

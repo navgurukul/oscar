@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_CONFIG, PRICING } from "@/lib/constants";
 
 interface UpgradePromptProps {
-  limitType: "recordings" | "notes";
+  limitType: "recordings" | "notes" | "vocabulary";
   currentUsage: number;
   onClose: () => void;
 }
@@ -21,7 +21,9 @@ export function UpgradePrompt({
   const limit =
     limitType === "recordings"
       ? SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS
-      : SUBSCRIPTION_CONFIG.FREE_MAX_NOTES;
+      : limitType === "notes"
+      ? SUBSCRIPTION_CONFIG.FREE_MAX_NOTES
+      : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY;
 
   const handleUpgrade = () => {
     onClose();
@@ -62,7 +64,9 @@ export function UpgradePrompt({
           <h2 className="text-xl font-bold text-white">
             {limitType === "recordings"
               ? "Recording Limit Reached"
-              : "Note Limit Reached"}
+              : limitType === "notes"
+              ? "Note Limit Reached"
+              : "Vocabulary Limit Reached"}
           </h2>
 
           {/* Description */}
@@ -71,7 +75,9 @@ export function UpgradePrompt({
             <span className="text-white font-medium">{limit}</span>{" "}
             {limitType === "recordings"
               ? "recordings this month"
-              : "note slots"}
+              : limitType === "notes"
+              ? "note slots"
+              : "vocabulary entries"}
             . Upgrade to Pro for unlimited {limitType}.
           </p>
 
@@ -99,6 +105,9 @@ export function UpgradePrompt({
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-cyan-400">✓</span> Unlimited notes
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-cyan-400">✓</span> Unlimited vocabulary entries
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-cyan-400">✓</span> Priority AI processing

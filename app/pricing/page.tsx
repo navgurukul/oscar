@@ -20,6 +20,7 @@ import {
 const FREE_FEATURES = [
   `${SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} recordings per month`,
   `Up to ${SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total notes`,
+  `Custom vocabulary (up to ${SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} entries)`,
   "AI-powered text formatting",
   "Basic voice-to-text",
   "Download and copy notes",
@@ -28,6 +29,7 @@ const FREE_FEATURES = [
 const PRO_FEATURES = [
   "Unlimited recordings",
   "Unlimited notes",
+  "Unlimited vocabulary entries",
   "AI-powered text formatting",
   "Priority processing",
   "Download and copy notes",
@@ -67,10 +69,10 @@ export default function PricingPage() {
   const price = billingCycle === "monthly" ? PRICING.MONTHLY : PRICING.YEARLY;
 
   return (
-    <main className="min-h-screen py-16 px-4">
+    <main className="min-h-screen py-16 px-4 mt-3">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-12 mt-6">
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
             Simple, Transparent <span className="text-cyan-500">Pricing</span>
           </h1>
