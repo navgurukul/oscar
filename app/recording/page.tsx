@@ -13,7 +13,6 @@ import { RecordingControls } from "@/components/recording/RecordingControls";
 import { RecordingTimer } from "@/components/recording/RecordingTimer";
 import { PermissionErrorModal } from "@/components/recording/PermissionErrorModal";
 import { UpgradePrompt } from "@/components/subscription/UpgradePrompt";
-import { UsageIndicator } from "@/components/subscription/UsageIndicator";
 
 import { DottedGlowBackground } from "@/components/ui/dotted-glow-background";
 import { ProcessingScreen } from "@/components/shared/ProcessingScreen";
@@ -31,8 +30,6 @@ function RecordingPageInner() {
   const {
     canRecord,
     recordingsThisMonth,
-    recordingsLimit,
-    isProUser,
     incrementUsage,
   } = useSubscriptionContext();
 
