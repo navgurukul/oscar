@@ -23,6 +23,7 @@ import { UsageIndicator } from "@/components/subscription/UsageIndicator";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
@@ -281,31 +282,44 @@ export default function SettingsPage() {
     <main className="flex flex-col items-center px-4 pt-8 pb-24">
       <div className="w-full max-w-4xl mt-16">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-8 mt-5">
           <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
           <p className="text-gray-400">
             Manage your vocabulary, subscription, and billing
           </p>
         </div>
 
-        {/* Vertical Tabs */}
+        {/* Mobile Dropdown + Vertical Tabs */}
+        {/* Mobile: Dropdown to pick section */}
+        <div className="md:hidden mb-4">
+          <Select value={activeTab} onValueChange={setActiveTab}>
+            <SelectTrigger className="w-full bg-slate-900 border-cyan-700/30 font-bold  text-white">
+              <SelectValue placeholder="Choose section" />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-900 border-cyan-700/30 font-bold  text-white">
+              <SelectItem value="vocabulary">Vocabulary</SelectItem>
+              <SelectItem value="billing">Billing</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
           orientation="vertical"
-          className="flex gap-6"
+          className="md:flex gap-6"
         >
-          <TabsList className="flex flex-col h-fit w-48 bg-slate-900 border border-cyan-700/30 p-2">
+          <TabsList className="hidden md:flex md:flex-col h-fit w-48 bg-slate-900 border border-cyan-700/30 p-2">
             <TabsTrigger
               value="vocabulary"
-              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white my-2"
+              className="w-full justify-start font-bold  data-[state=active]:bg-cyan-500 data-[state=active]:text-white my-2"
             >
               <BookOpen className="w-4 h-4 mr-2" />
               Vocabulary
             </TabsTrigger>
             <TabsTrigger
               value="billing"
-              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white my-2"
+              className="w-full justify-start data-[state=active]:bg-cyan-500 font-bold  data-[state=active]:text-white my-2"
             >
               <CreditCard className="w-4 h-4 mr-2" />
               Billing

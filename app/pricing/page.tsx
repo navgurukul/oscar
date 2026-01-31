@@ -69,11 +69,11 @@ export default function PricingPage() {
   const price = billingCycle === "monthly" ? PRICING.MONTHLY : PRICING.YEARLY;
 
   return (
-    <main className="min-h-screen py-16 px-4 mt-3">
+    <main className="min-h-screen py-16 px-4 mt-8">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12 mt-6">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+        <div className="text-center mb-12 mt-7 pt-4">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 mt-3">
             Simple, Transparent <span className="text-cyan-500">Pricing</span>
           </h1>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
