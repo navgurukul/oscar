@@ -20,6 +20,7 @@ import {
 const FREE_FEATURES = [
   `${SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} recordings per month`,
   `Up to ${SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total notes`,
+  `Custom vocabulary (up to ${SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} entries)`,
   "AI-powered text formatting",
   "Basic voice-to-text",
   "Download and copy notes",
@@ -28,6 +29,7 @@ const FREE_FEATURES = [
 const PRO_FEATURES = [
   "Unlimited recordings",
   "Unlimited notes",
+  "Unlimited vocabulary entries",
   "AI-powered text formatting",
   "Priority processing",
   "Download and copy notes",
@@ -67,10 +69,10 @@ export default function PricingPage() {
   const price = billingCycle === "monthly" ? PRICING.MONTHLY : PRICING.YEARLY;
 
   return (
-    <main className="min-h-screen py-16 px-4">
+    <main className="min-h-screen py-16 px-4 mt-3">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-12 mt-6">
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
             Simple, Transparent <span className="text-cyan-500">Pricing</span>
           </h1>
@@ -140,13 +142,13 @@ export default function PricingPage() {
             <table className="w-full max-w-2xl mx-auto">
               <thead>
                 <tr className="border-b border-gray-800">
-                  <th className="text-left py-4 text-gray-400 font-medium">
+                  <th className="text-left py-4 text-gray-400 font-bold">
                     Feature
                   </th>
-                  <th className="text-center py-4 text-gray-400 font-medium">
+                  <th className="text-center py-4 text-gray-400 font-bold">
                     Free
                   </th>
-                  <th className="text-center py-4 text-cyan-400 font-medium">
+                  <th className="text-center py-4 text-cyan-400 font-bold">
                     Pro
                   </th>
                 </tr>
@@ -223,7 +225,7 @@ export default function PricingPage() {
             className="bg-slate-900/50 border border-gray-800 rounded-lg"
           >
             <AccordionItem value="item-1" className="border-gray-800">
-              <AccordionTrigger className="px-6 text-lg font-medium text-white hover:no-underline">
+              <AccordionTrigger className="px-6 text-md font-bold  text-white hover:no-underline">
                 Can I cancel anytime?
               </AccordionTrigger>
               <AccordionContent className="px-6 text-gray-400">
@@ -232,7 +234,7 @@ export default function PricingPage() {
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-2" className="border-gray-800">
-              <AccordionTrigger className="px-6 text-lg font-medium text-white hover:no-underline">
+              <AccordionTrigger className="px-6 text-md font-bold text-white hover:no-underline">
                 What happens to my notes if I downgrade?
               </AccordionTrigger>
               <AccordionContent className="px-6 text-gray-400">
@@ -244,7 +246,7 @@ export default function PricingPage() {
               value="item-3"
               className="border-gray-800 border-b-0"
             >
-              <AccordionTrigger className="px-6 text-lg font-medium text-white hover:no-underline">
+              <AccordionTrigger className="px-6 text-md font-bold text-white hover:no-underline">
                 Is my payment secure?
               </AccordionTrigger>
               <AccordionContent className="px-6 text-gray-400">

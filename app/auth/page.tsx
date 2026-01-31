@@ -10,7 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 function AuthFormInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/";
+  const redirectTo = searchParams?.get("redirectTo") ?? "/";
   const { signIn, signUp, isLoading: authLoading } = useAuth();
 
   const [isSignUp, setIsSignUp] = useState(false);

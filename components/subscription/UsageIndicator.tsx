@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 
 interface UsageIndicatorProps {
-  type: "recordings" | "notes";
+  type: "recordings" | "notes" | "vocabulary";
   current: number;
   limit: number | null;
   variant?: "compact" | "full";
@@ -24,8 +24,13 @@ export function UsageIndicator({
         </span>
         {variant === "full" && (
           <span className="text-sm text-gray-400">
-            {current} {type === "recordings" ? "recordings" : "notes"} this{" "}
-            {type === "recordings" ? "month" : "total"}
+            {current}{" "}
+            {type === "recordings"
+              ? "recordings"
+              : type === "notes"
+              ? "notes"
+              : "vocabulary entries"}{" "}
+            {type === "recordings" ? "this month" : "total"}
           </span>
         )}
       </div>
@@ -69,7 +74,11 @@ export function UsageIndicator({
     <div className="space-y-2">
       <div className="flex items-center justify-between text-sm">
         <span className="text-gray-400">
-          {type === "recordings" ? "Recordings this month" : "Total notes"}
+          {type === "recordings"
+            ? "Recordings this month"
+            : type === "notes"
+            ? "Total notes"
+            : "Vocabulary entries"}
         </span>
         <span className={cn("font-medium", getTextColor())}>
           {current} / {limit}

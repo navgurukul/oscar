@@ -9,9 +9,39 @@
 }
 
 body {
-  font-family: var(--font-roboto), system-ui, sans-serif;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base, 16px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Define actual font families */
+:root {
+  /* Default font stack */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  
+  /* Specific font variables (if you have these fonts loaded) */
+  --font-roboto: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Font mapping helpers: these set --font-sans to a concrete font variable */
+.font-roboto {
+  --font-sans: var(--font-roboto);
+}
+.font-inter {
+  --font-sans: var(--font-inter);
+}
+
+/* Text size mapping on the root element */
+html.text-size-sm {
+  --font-size-base: 14px;
+}
+html.text-size-md {
+  --font-size-base: 16px;
+}
+html.text-size-lg {
+  --font-size-base: 18px;
 }
 
 @layer base {
@@ -21,6 +51,12 @@ body {
   h1, h2, h3 {
     letter-spacing: -0.01em;
   }
+  /* Global spacing for headings and paragraphs */
+  h1, h2, h3, h4, h5, h6, p {
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+
   ::selection {
     background-color: #a5f3fc; /* cyan-200 */
     color: #111827; /* gray-900 */
@@ -116,4 +152,3 @@ body {
     @apply bg-background text-foreground;
   }
 }
-

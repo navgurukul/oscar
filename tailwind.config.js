@@ -10,7 +10,7 @@ module.exports = {
   	extend: {
   		fontFamily: {
   			sans: [
-  				'var(--font-roboto)',
+  				'var(--font-sans)',
   				'system-ui',
   				'sans-serif'
   			],

@@ -28,7 +28,8 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
 import type { DBVocabularyEntry } from "@/lib/types/vocabulary.types";
-import { ROUTES, PRICING } from "@/lib/constants";
+import { ROUTES, PRICING, SUBSCRIPTION_CONFIG } from "@/lib/constants";
+import { UpgradePrompt } from "@/components/subscription/UpgradePrompt";
 
 const MAX_VOCABULARY_ENTRIES = 50;
 
@@ -69,6 +70,7 @@ export default function SettingsPage() {
   // Billing state
   const [isCancelling, setIsCancelling] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showVocabUpgradePrompt, setShowVocabUpgradePrompt] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -114,6 +116,13 @@ export default function SettingsPage() {
       return;
     }
 
+    // Free tier vocabulary limit enforcement
+    if (!isProUser && vocabulary.length >= SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY) {
+      setShowVocabUpgradePrompt(true);
+      return;
+    }
+
+    // Absolute max entries guard
     if (vocabulary.length >= MAX_VOCABULARY_ENTRIES) {
       toast({
         title: "Vocabulary limit reached",
@@ -289,14 +298,14 @@ export default function SettingsPage() {
           <TabsList className="flex flex-col h-fit w-48 bg-slate-900 border border-cyan-700/30 p-2">
             <TabsTrigger
               value="vocabulary"
-              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
+              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white my-2"
             >
               <BookOpen className="w-4 h-4 mr-2" />
               Vocabulary
             </TabsTrigger>
             <TabsTrigger
               value="billing"
-              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
+              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white my-2"
             >
               <CreditCard className="w-4 h-4 mr-2" />
               Billing
@@ -314,7 +323,10 @@ export default function SettingsPage() {
                   </h2>
                 </div>
                 <span className="text-sm text-gray-400">
-                  {vocabulary.length}/{MAX_VOCABULARY_ENTRIES} entries
+                  {vocabulary.length}/
+                  {isProUser
+                    ? MAX_VOCABULARY_ENTRIES
+                    : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} entries
                 </span>
               </div>
 
@@ -467,23 +479,23 @@ export default function SettingsPage() {
                           // Display mode
                           <div className="flex items-center justify-between">
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap ">
                                 <span className="text-white font-medium">
                                   {entry.term}
                                 </span>
                                 {entry.context && (
-                                  <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded">
+                                  <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded ">
                                     {entry.context}
                                   </span>
                                 )}
                               </div>
                               {entry.pronunciation && (
-                                <p className="text-gray-400 text-sm mt-0.5">
+                                <p className="text-gray-400 text-sm mt-1">
                                   Sounds like: {entry.pronunciation}
                                 </p>
                               )}
                             </div>
-                            <div className="flex items-center gap-1 ml-2">
+                            <div className="flex items-center gap-1 ml-2 ">
                               <button
                                 onClick={() => startEditing(entry)}
                                 className="p-2 text-gray-400 hover:text-cyan-400 transition-colors"
@@ -649,6 +661,12 @@ export default function SettingsPage() {
                           limit={notesLimit}
                           variant="full"
                         />
+                        <UsageIndicator
+                          type="vocabulary"
+                          current={vocabulary.length}
+                          limit={isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY}
+                          variant="full"
+                        />
                       </div>
                     </CardContent>
                   </Card>
@@ -673,6 +691,10 @@ export default function SettingsPage() {
                           </li>
                           <li className="flex items-center gap-3 text-gray-300">
                             <Check className="w-5 h-5 text-cyan-400" />
+                            Unlimited vocabulary entries
+                          </li>
+                          <li className="flex items-center gap-3 text-gray-300">
+                            <Check className="w-5 h-5 text-cyan-400" />
                             Priority AI processing
                           </li>
                           <li className="flex items-center gap-3 text-gray-300">
@@ -694,6 +716,15 @@ export default function SettingsPage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Upgrade prompt for vocabulary limit (free tier) */}
+        {showVocabUpgradePrompt && (
+          <UpgradePrompt
+            limitType="vocabulary"
+            currentUsage={vocabulary.length}
+            onClose={() => setShowVocabUpgradePrompt(false)}
+          />
+        )}
 
         {/* Cancel Confirmation Modal */}
         {showCancelConfirm && (

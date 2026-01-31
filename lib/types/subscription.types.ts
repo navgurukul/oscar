@@ -283,7 +283,7 @@ export interface UpgradePromptProps {
  * Props for UsageIndicator component
  */
 export interface UsageIndicatorProps {
-  type: "recordings" | "notes";
+  type: "recordings" | "notes" | "vocabulary";
   current: number;
   limit: number | null;
   variant?: "compact" | "full";
