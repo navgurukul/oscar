@@ -60,6 +60,7 @@ export const subscriptionService = {
   /**
    * Get or create a subscription record for user
    * Creates a free tier subscription if none exists
+   * Also handles expired cancelled subscriptions by resetting to free tier
    */
   async getOrCreateSubscription(
     userId: string
@@ -72,6 +73,37 @@ export const subscriptionService = {
     }
 
     if (existing) {
+      // Check if subscription is cancelled and period has ended
+      if (
+        existing.status === "cancelled" &&
+        existing.current_period_end &&
+        new Date(existing.current_period_end) < new Date()
+      ) {
+        // Period has ended, downgrade to free tier
+        const supabase = getSupabaseAdmin();
+        const { data: updated, error: updateError } = await supabase
+          .from("subscriptions")
+          .update({
+            tier: "free",
+            status: "active",
+            razorpay_subscription_id: null,
+            razorpay_customer_id: null,
+            razorpay_plan_id: null,
+            billing_cycle: null,
+            current_period_start: null,
+            current_period_end: null,
+          })
+          .eq("user_id", userId)
+          .select()
+          .single();
+
+        if (updateError) {
+          return { data: null, error: updateError as Error };
+        }
+
+        return { data: updated, error: null };
+      }
+
       return { data: existing, error: null };
     }
 

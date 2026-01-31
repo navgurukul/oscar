@@ -155,6 +155,9 @@ export function useRazorpayCheckout({
               variant: "destructive",
             });
             onError?.(errorMessage);
+          } finally {
+            // Reset loading state after payment verification completes
+            setIsLoading(false);
           }
         },
         prefill: {
@@ -166,6 +169,7 @@ export function useRazorpayCheckout({
         },
         modal: {
           ondismiss: () => {
+            // Reset loading state when user cancels/closes the payment modal
             setIsLoading(false);
           },
         },
@@ -183,7 +187,7 @@ export function useRazorpayCheckout({
         variant: "destructive",
       });
       onError?.(errorMessage);
-    } finally {
+      // Reset loading state on checkout initialization error
       setIsLoading(false);
     }
   }, [
