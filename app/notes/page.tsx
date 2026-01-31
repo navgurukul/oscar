@@ -284,7 +284,7 @@ export default function NotesPage() {
   return (
     <main className="flex flex-col items-center px-4 pt-8 pb-24">
       <div className="w-full max-w-2xl mt-16">
-        <div className="flex items-center justify-center mb-8">
+        <div className="flex items-center justify-center mt-8 mb-8">
           <h1 className="text-3xl font-bold text-white">Your Notes</h1>
         </div>
 
@@ -371,10 +371,10 @@ export default function NotesPage() {
                     <div className="flex gap-6 justify-between items-start">
                       <div className="flex-1 min-w-0">
                         <div className="mb-2">
-                          <h2 className="text-xl font-semibold text-white truncate">
+                          <h2 className="text-xl font-semibold text-white truncate mb-0">
                             {note.title || "Untitled Note"}
                           </h2>
-                          <p className="text-gray-400 text-sm">
+                          <p className="text-gray-400 text-sm mt-0.5">
                             {formatDate(note.created_at)}
                           </p>
                         </div>
@@ -421,7 +421,7 @@ export default function NotesPage() {
                     <Separator className="w-24 h-0.5 bg-cyan-500" />
                   </CardHeader>
                   <CardContent>
-                    <p className="text-md text-start text-gray-300 line-clamp-2">
+                    <p className="text-md text-start text-gray-400 line-clamp-2">
                       {getPreview(note)}
                     </p>
                   </CardContent>

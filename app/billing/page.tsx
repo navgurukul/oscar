@@ -206,7 +206,7 @@ export default function BillingPage() {
                 </div>
               </div>
             )}
-
+            
             {/* Actions */}
             <div className="flex gap-3">
               {isProUser ? (
@@ -215,7 +215,7 @@ export default function BillingPage() {
                     <Button
                       variant="outline"
                       onClick={() => setShowCancelConfirm(true)}
-                      className="border-gray-700 text-gray-400 hover:bg-gray-800"
+                      className="border-gray-700 text-gray-400 hover:bg-gray-800 font-medium"
                     >
                       Cancel Subscription
                     </Button>

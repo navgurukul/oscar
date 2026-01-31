@@ -140,13 +140,13 @@ export default function PricingPage() {
             <table className="w-full max-w-2xl mx-auto">
               <thead>
                 <tr className="border-b border-gray-800">
-                  <th className="text-left py-4 text-gray-400 font-medium">
+                  <th className="text-left py-4 text-gray-400 font-bold">
                     Feature
                   </th>
-                  <th className="text-center py-4 text-gray-400 font-medium">
+                  <th className="text-center py-4 text-gray-400 font-bold">
                     Free
                   </th>
-                  <th className="text-center py-4 text-cyan-400 font-medium">
+                  <th className="text-center py-4 text-cyan-400 font-bold">
                     Pro
                   </th>
                 </tr>
@@ -223,7 +223,7 @@ export default function PricingPage() {
             className="bg-slate-900/50 border border-gray-800 rounded-lg"
           >
             <AccordionItem value="item-1" className="border-gray-800">
-              <AccordionTrigger className="px-6 text-lg font-medium text-white hover:no-underline">
+              <AccordionTrigger className="px-6 text-md font-bold  text-white hover:no-underline">
                 Can I cancel anytime?
               </AccordionTrigger>
               <AccordionContent className="px-6 text-gray-400">
@@ -232,7 +232,7 @@ export default function PricingPage() {
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-2" className="border-gray-800">
-              <AccordionTrigger className="px-6 text-lg font-medium text-white hover:no-underline">
+              <AccordionTrigger className="px-6 text-md font-bold text-white hover:no-underline">
                 What happens to my notes if I downgrade?
               </AccordionTrigger>
               <AccordionContent className="px-6 text-gray-400">
@@ -244,7 +244,7 @@ export default function PricingPage() {
               value="item-3"
               className="border-gray-800 border-b-0"
             >
-              <AccordionTrigger className="px-6 text-lg font-medium text-white hover:no-underline">
+              <AccordionTrigger className="px-6 text-md font-bold text-white hover:no-underline">
                 Is my payment secure?
               </AccordionTrigger>
               <AccordionContent className="px-6 text-gray-400">

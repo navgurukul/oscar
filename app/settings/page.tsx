@@ -298,14 +298,14 @@ export default function SettingsPage() {
           <TabsList className="flex flex-col h-fit w-48 bg-slate-900 border border-cyan-700/30 p-2">
             <TabsTrigger
               value="vocabulary"
-              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
+              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white my-2"
             >
               <BookOpen className="w-4 h-4 mr-2" />
               Vocabulary
             </TabsTrigger>
             <TabsTrigger
               value="billing"
-              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
+              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white my-2"
             >
               <CreditCard className="w-4 h-4 mr-2" />
               Billing
@@ -479,23 +479,23 @@ export default function SettingsPage() {
                           // Display mode
                           <div className="flex items-center justify-between">
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap ">
                                 <span className="text-white font-medium">
                                   {entry.term}
                                 </span>
                                 {entry.context && (
-                                  <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded">
+                                  <span className="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded ">
                                     {entry.context}
                                   </span>
                                 )}
                               </div>
                               {entry.pronunciation && (
-                                <p className="text-gray-400 text-sm mt-0.5">
+                                <p className="text-gray-400 text-sm mt-1">
                                   Sounds like: {entry.pronunciation}
                                 </p>
                               )}
                             </div>
-                            <div className="flex items-center gap-1 ml-2">
+                            <div className="flex items-center gap-1 ml-2 ">
                               <button
                                 onClick={() => startEditing(entry)}
                                 className="p-2 text-gray-400 hover:text-cyan-400 transition-colors"
