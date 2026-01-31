@@ -9,10 +9,20 @@
 }
 
 body {
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: var(--font-size-base, 16px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Define actual font families */
+:root {
+  /* Default font stack */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  
+  /* Specific font variables (if you have these fonts loaded) */
+  --font-roboto: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 /* Font mapping helpers: these set --font-sans to a concrete font variable */
@@ -142,4 +152,3 @@ html.text-size-lg {
     @apply bg-background text-foreground;
   }
 }
-
