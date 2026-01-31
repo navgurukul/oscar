@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${roboto.variable} ${inter.variable} font-roboto`}>
+    <html lang="en" className={`${roboto.variable} ${inter.variable} font-inter`}>
       <head>
         {/* Load ONNX Runtime Web from CDN to avoid bundling issues and fix 'onnxruntime' missing error */}
         <Script

@@ -40,6 +40,24 @@ export default function BillingPage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [vocabCount, setVocabCount] = useState<number>(0);
 
+  // Load vocabulary count — must be a top-level hook (not conditional)
+  useEffect(() => {
+    let active = true;
+    async function loadVocabCount() {
+      if (!user) return;
+      const { count, error } = await vocabularyService.getVocabularyCount();
+      if (!active) return;
+      if (error) {
+        console.error("Failed to load vocabulary count:", error);
+      }
+      setVocabCount(count || 0);
+    }
+    loadVocabCount();
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
   // Redirect to auth if not logged in
   if (!authLoading && !user) {
     router.push("/auth?redirectTo=/billing");
@@ -91,23 +109,6 @@ export default function BillingPage() {
     });
   };
 
-  // Load vocabulary count
-  useEffect(() => {
-    let active = true;
-    async function loadVocabCount() {
-      if (!user) return;
-      const { count, error } = await vocabularyService.getVocabularyCount();
-      if (!active) return;
-      if (error) {
-        console.error("Failed to load vocabulary count:", error);
-      }
-      setVocabCount(count || 0);
-    }
-    loadVocabCount();
-    return () => {
-      active = false;
-    };
-  }, [user]);
 
   if (isLoading) {
     return (
