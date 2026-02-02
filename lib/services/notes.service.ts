@@ -88,6 +88,16 @@ export const notesService = {
   },
 
   /**
+   * Toggle the starred status of a note
+   */
+  async toggleStar(
+    id: string,
+    isStarred: boolean
+  ): Promise<{ data: DBNote | null; error: Error | null }> {
+    return this.updateNote(id, { is_starred: isStarred });
+  },
+
+  /**
    * Get notes with feedback for analysis
    * Useful for reviewing AI formatting quality
    */

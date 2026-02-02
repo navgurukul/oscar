@@ -1,19 +1,34 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
+import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Copy, Download, Edit3, Save, X } from "lucide-react";
+import { Copy, Download, Edit3, Save, X, Share2, Mail, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { FeedbackWidget } from "@/components/results/FeedbackWidget";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
+
+// Lazy load the FeedbackWidget
+const FeedbackWidget = dynamic(
+  () =>
+    import("@/components/results/FeedbackWidget").then((mod) => ({
+      default: mod.FeedbackWidget,
+    })),
+  {
+    loading: () => (
+      <div className="mt-4 h-20 bg-slate-900 border border-cyan-700/30 rounded-xl animate-pulse" />
+    ),
+    ssr: false,
+  }
+);
 
 export default function NoteDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
@@ -27,6 +42,8 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
   const [isSaving, setIsSaving] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [showRawTranscript, setShowRawTranscript] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   // Feedback state
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
@@ -106,6 +123,25 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
     URL.revokeObjectURL(url);
   };
 
+  const buildFormalEmailBody = (title: string, text: string) => {
+    const lines = [
+      "Dear Recipient,",
+      "",
+      "I hope you are doing well.",
+      "",
+      `Please find the note titled "${title}" below:`,
+      "",
+      text,
+      "",
+      "If you have any questions or need further clarifications, please let me know.",
+      "",
+      "Best regards,",
+      "",
+      "[Your Name]",
+    ];
+    return lines.join("\n");
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "long",
@@ -155,12 +191,10 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="flex items-center justify-center mb-4">
-            <Spinner className="text-cyan-500" />
-          </div>
-          <p className="text-gray-300">Loading your note...</p>
+      <main className="flex flex-col items-center px-4 pt-8 pb-24">
+        <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
+          <div className="w-9" />
+          <NoteEditorSkeleton />
         </div>
       </main>
     );
@@ -260,6 +294,14 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
                         >
                           <Download className="w-4 h-4" />
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsShareModalOpen(true)}
+                          className="text-gray-400 hover:text-cyan-500"
+                        >
+                          <Share2 className="w-4 h-4" />
+                        </Button>
                       </>
                     )}
                   </div>
@@ -341,12 +383,134 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
                       >
                         <Download className="w-5 h-5" />
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsShareModalOpen(true)}
+                        className="text-gray-400 hover:text-cyan-500 flex flex-col items-center gap-1 h-auto py-2"
+                      >
+                        <Share2 className="w-5 h-5" />
+                      </Button>
                     </>
                   )}
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Share Options Modal */}
+          {isShareModalOpen && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={() => setIsShareModalOpen(false)}
+              />
+              <div className="relative w-full max-w-md rounded-2xl border border-cyan-700/30 bg-slate-900 p-6 shadow-2xl">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <Share2 className="w-5 h-5 text-cyan-400" />
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">Share note</h3>
+                      <p className="text-sm text-gray-400">Choose a destination</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsShareModalOpen(false)}
+                    className="text-gray-400 hover:text-white text-xl"
+                    aria-label="Close share dialog"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <Separator className="bg-cyan-700/30" />
+
+                <div className="mt-4 grid grid-cols-1 gap-3">
+                  {/* WhatsApp */}
+                  <button
+                    onClick={async () => {
+                      const textToShare = displayText || "";
+                      const shareTitle = note.title || "Untitled Note";
+                      const payload = `${shareTitle}\n\n${textToShare}`.trim();
+                      const url = `https://wa.me/?text=${encodeURIComponent(payload)}`;
+                      window.open(url, "_blank", "noopener,noreferrer");
+                      setIsShareModalOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    <span>WhatsApp</span>
+                  </button>
+
+                  {/* Gmail */}
+                  <button
+                    onClick={() => {
+                      const textToShare = displayText || "";
+                      const shareTitle = note.title || "Untitled Note";
+                      const subject = encodeURIComponent(shareTitle);
+                      const body = encodeURIComponent(
+                        buildFormalEmailBody(shareTitle, textToShare)
+                      );
+                      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}&tf=1`;
+                      window.open(gmailUrl, "_blank", "noopener,noreferrer");
+                      setIsShareModalOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+                  >
+                    <Mail className="w-5 h-5" />
+                    <div className="flex flex-col items-start">
+                      <span>Gmail</span>
+                      <span className="text-xs text-gray-400">Formal email format</span>
+                    </div>
+                  </button>
+
+                  {/* Default Email Client */}
+                  <button
+                    onClick={() => {
+                      const textToShare = displayText || "";
+                      const shareTitle = note.title || "Untitled Note";
+                      const subject = encodeURIComponent(shareTitle);
+                      const body = encodeURIComponent(
+                        buildFormalEmailBody(shareTitle, textToShare)
+                      );
+                      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                      setIsShareModalOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+                  >
+                    <Mail className="w-5 h-5" />
+                    <div className="flex flex-col items-start">
+                      <span>Email (Default Client)</span>
+                      <span className="text-xs text-gray-400">Formal email format</span>
+                    </div>
+                  </button>
+
+                  {/* Web Share API */}
+                  {typeof navigator !== "undefined" && (navigator as any).share && (
+                    <button
+                      onClick={async () => {
+                        const textToShare = displayText || "";
+                        const shareTitle = note.title || "Untitled Note";
+                        const payload = `${shareTitle}\n\n${textToShare}`.trim();
+                        try {
+                          setIsSharing(true);
+                          await (navigator as any).share({ title: shareTitle, text: payload });
+                          setIsShareModalOpen(false);
+                        } catch (e) {
+                          // user cancelled
+                        } finally {
+                          setIsSharing(false);
+                        }
+                      }}
+                      className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+                    >
+                      <Share2 className="w-5 h-5" />
+                      <span>More Options…</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Feedback Widget */}
           <div className="mt-4">

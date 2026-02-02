@@ -8,6 +8,7 @@ export enum RecordingState {
   RECORDING = "RECORDING",
   PROCESSING = "PROCESSING",
   ERROR = "ERROR",
+  PERMISSION_DENIED = "PERMISSION_DENIED",
 }
 
 export interface TranscriptUpdate {
