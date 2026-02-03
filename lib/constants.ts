@@ -75,6 +75,7 @@ export const ERROR_TIPS = {
 export const API_CONFIG = {
   // Internal API routes
   FORMAT_ENDPOINT: "/api/deepseek/format",
+  FORMAT_EMAIL_ENDPOINT: "/api/deepseek/format-email",
   TITLE_ENDPOINT: "/api/deepseek/title",
   TRANSLATE_ENDPOINT: "/api/deepseek/translate",
 

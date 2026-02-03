@@ -224,6 +224,89 @@ export const aiService = {
   },
 
   /**
+   * Format a note into a Gmail-friendly formal email body via AI
+   * @param rawText - base content to convert into email body
+   * @param title - optional title for contextual intro
+   * @param signal - optional AbortSignal for cancellation
+   */
+  async formatEmailText(
+    rawText: string,
+    title?: string,
+    signal?: AbortSignal
+  ): Promise<FormattingResult> {
+    if (!rawText || !rawText.trim()) {
+      return {
+        success: false,
+        error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_FORMATTING,
+      };
+    }
+
+    if (signal?.aborted) {
+      return {
+        success: false,
+        error: ERROR_MESSAGES.FORMATTING_CANCELLED,
+      };
+    }
+
+    try {
+      return await retryWithBackoff(
+        async () => {
+          const response = await fetchWithTimeout(
+            API_CONFIG.FORMAT_EMAIL_ENDPOINT,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ rawText, title }),
+            },
+            RETRY_CONFIG.TIMEOUT_MS,
+            signal
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Email Format API error: ${response.status}`, errorText);
+            throw new Error(`Formatting failed: ${response.status}`);
+          }
+
+          const data = (await response.json()) as DeepseekFormatResponse;
+          const formattedText = data?.formattedText?.trim();
+
+          if (!formattedText) {
+            throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING);
+          }
+
+          const cleanedText = formattedText
+            .replace(/^```[\w]*\n/, "")
+            .replace(/\n```$/, "")
+            .trim();
+
+          return { success: true, formattedText: cleanedText };
+        },
+        RETRY_CONFIG.MAX_RETRIES,
+        RETRY_CONFIG.INITIAL_DELAY_MS,
+        signal
+      );
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Format email text error:", error);
+
+      if (err?.message === ERROR_MESSAGES.FORMATTING_CANCELLED) {
+        return { success: false, error: ERROR_MESSAGES.FORMATTING_CANCELLED };
+      }
+
+      // Fallback: use local formatter as plain formatting and wrap minimally
+      console.log("AI email formatting failed, using local fallback");
+      const localFormatted = localFormatterService.formatTextLocally(rawText);
+      if (localFormatted) {
+        const fallbackBody = `${localFormatted}`;
+        return { success: true, formattedText: fallbackBody, fallback: true };
+      }
+
+      return { success: false, error: err?.message || "Failed to format text" };
+    }
+  },
+
+  /**
    * Translate text into a target language (en/hi)
    */
   async translateText(

@@ -4,18 +4,20 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
+import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { storageService } from "@/lib/services/storage.service";
 import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
 import { aiService } from "@/lib/services/ai.service";
 import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
+import { Button } from "@/components/ui/button";
 import { NoteActions } from "@/components/results/NoteActions";
 import { Spinner } from "@/components/ui/spinner";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import type { FeedbackReason } from "@/lib/types/note.types";
-import { Mail, MessageCircle, Share2 } from "lucide-react";
-import { Separator } from "@radix-ui/react-separator";
+import { Mail, MessageCircle, Share2, FileText } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 
 // Lazy load the NoteEditor component
 const NoteEditor = dynamic(
@@ -35,15 +37,22 @@ export default function ResultsPage() {
   const { isLoading, formattedNote, rawText, title, updateFormattedNote } =
     useNoteStorage();
 
-  const [showRawTranscript, setShowRawTranscript] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  const [showRawTranscript, setShowRawTranscript] = useState<boolean>(false);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editedText, setEditedText] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [noteId, setNoteId] = useState<string | null>(null);
-  const [isCopying, setIsCopying] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isCopying, setIsCopying] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [isSharing, setIsSharing] = useState<boolean>(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [shareSubject, setShareSubject] = useState<string | null>(null);
+  const {
+    isFormatting: isGmailFormatting,
+    formatText: gmailFormatText,
+  } = useAIEmailFormatting();
+  const [isGmailMode, setIsGmailMode] = useState<boolean>(false);
+  const [gmailBody, setGmailBody] = useState<string | null>(null);
 
   // Language / translation state (post-recording)
   const [selectedLanguage, setSelectedLanguage] = useState<
@@ -89,7 +98,11 @@ export default function ResultsPage() {
 
     setIsCopying(true);
     try {
-      const textToCopy = isEditing ? editedText : formattedNote;
+      const textToCopy = isEditing
+        ? editedText
+        : isGmailMode
+        ? gmailBody || ""
+        : translatedNote ?? formattedNote;
       await navigator.clipboard.writeText(textToCopy);
       toast({
         title: "Copied!",
@@ -112,7 +125,11 @@ export default function ResultsPage() {
 
     setIsDownloading(true);
     try {
-      const textToDownload = isEditing ? editedText : formattedNote;
+      const textToDownload = isEditing
+        ? editedText
+        : isGmailMode
+        ? gmailBody || ""
+        : translatedNote ?? formattedNote;
       const blob = new Blob([textToDownload], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -148,7 +165,8 @@ export default function ResultsPage() {
     }
 
     if (isTranslating) return;
-    const baseNote = (isEditing ? editedText : formattedNote) || "";
+    // Always translate the simple content, not Gmail mode.
+    const baseNote = (isEditing && !isGmailMode ? editedText : formattedNote) || "";
     const baseRaw = rawText || "";
     if (!baseNote && !baseRaw) return;
 
@@ -183,33 +201,35 @@ export default function ResultsPage() {
   };
 
   const handleShareNote = async () => {
+    // Initialize editable subject with current title when opening
+    setShareSubject(title || UI_STRINGS.UNTITLED_NOTE);
     setIsShareModalOpen(true);
   };
 
   // Build a formal email body for Gmail and mailto
-  const buildFormalEmailBody = (shareTitle: string, content: string) => {
-    const lines = [] as string[];
-    lines.push("Dear Sir/Madam,");
-    lines.push("");
-    lines.push(
-      `I hope you're well. Please find the note titled \"${shareTitle}\" below for your review.`
-    );
-    lines.push("");
-    lines.push("— Note");
-    lines.push("");
-    lines.push(content.trim());
-    lines.push("");
-    lines.push("Best regards,");
-    lines.push("Oscar Notes");
-    return lines.join("\n");
-  };
 
-  const handleStartEditing = () => {
+
+  const handleStartEditing = async () => {
     setIsEditing(true);
+    if (isGmailMode) {
+      setShareSubject(title || UI_STRINGS.UNTITLED_NOTE);
+      let bodyToUse = gmailBody;
+      if (!bodyToUse) {
+        const baseText = ((translatedNote ?? formattedNote) || rawText || "");
+        const res = await gmailFormatText(baseText, title || UI_STRINGS.UNTITLED_NOTE);
+        bodyToUse = res.success ? (res.formattedText || baseText) : baseText;
+        setGmailBody(bodyToUse);
+      }
+      setEditedText(bodyToUse || "");
+    } else {
+      const base = (translatedNote ?? formattedNote) || "";
+      setEditedText(base);
+    }
   };
 
   const handleCancelEditing = () => {
-    setEditedText(formattedNote);
+    const base = isGmailMode ? (gmailBody || "") : (translatedNote ?? formattedNote);
+    setEditedText(base || "");
     setIsEditing(false);
   };
 
@@ -306,26 +326,84 @@ export default function ResultsPage() {
           </h1>
         </div>
 
-        {/* Language selector (translate after recording) */}
-        <div className="w-full max-w-[650px] flex items-center justify-end gap-3">
-          <label className="text-sm text-gray-400">Transcript language:</label>
-          <select
-            value={selectedLanguage}
-            onChange={(e) =>
-              applyLanguage(e.target.value as "original" | "en" | "hi")
-            }
-            disabled={isTranslating}
-            className="bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
-          >
-            <option value="original">Original</option>
-            <option value="en">English</option>
-            <option value="hi">Hindi</option>
-          </select>
+        {/* Language selector + Simple/Gmail mode toggle in one row */}
+        <div className="w-full max-w-[650px] flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-400">Transcript language:</label>
+            <select
+              value={selectedLanguage}
+              onChange={(e) =>
+                applyLanguage(e.target.value as "original" | "en" | "hi")
+              }
+              disabled={isTranslating}
+              className="bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+            >
+              <option value="original">Original</option>
+              <option value="en">English</option>
+              <option value="hi">Hindi</option>
+            </select>
+          </div>
+
+          <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+            <button
+              onClick={() => {
+                setIsGmailMode(false);
+                if (isEditing) {
+                  const base = (translatedNote ?? formattedNote) || "";
+                  setEditedText(base);
+                }
+              }}
+              className={`px-3 py-1 text-sm ${!isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"}`}
+            >
+              <FileText className="w-4 h-4" />
+            </button>
+              
+            
+            <button
+              onClick={async () => {
+                setIsGmailMode(true);
+                setShareSubject((prev) => prev ?? (title || UI_STRINGS.UNTITLED_NOTE));
+                let bodyToUse = gmailBody;
+                if (!gmailBody) {
+                  const baseText = ((translatedNote ?? formattedNote) || rawText || "");
+                  const res = await gmailFormatText(baseText, title || UI_STRINGS.UNTITLED_NOTE);
+                  const emailBody = res.success ? (res.formattedText || baseText) : baseText;
+                  setGmailBody(emailBody);
+                  bodyToUse = emailBody;
+                }
+                if (isEditing) {
+                  setEditedText(bodyToUse || "");
+                }
+              }}
+              className={`px-3 py-1 text-sm flex items-center gap-1 ${isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"}`}
+            >
+              {isGmailFormatting ? <Spinner className="w-4 h-4 text-cyan-500" /> : <Mail className="w-4 h-4" />}
+              
+            </button>
+          </div>
         </div>
+
+        {/* Inline subject editor when Gmail mode + editing */}
+        {isGmailMode && isEditing && (
+          <div className="w-full max-w-[650px]">
+            <label className="text-sm text-gray-400 block mb-1">Email subject</label>
+            <input
+              type="text"
+              value={shareSubject ?? (title || UI_STRINGS.UNTITLED_NOTE)}
+              onChange={(e) => setShareSubject(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              placeholder="Subject"
+            />
+          </div>
+        )}
 
         <NoteEditor
           formattedNote={
-            isEditing ? editedText : translatedNote ?? formattedNote
+            isEditing
+              ? editedText
+              : isGmailMode
+              ? (gmailBody || "")
+              : translatedNote ?? formattedNote
           }
           title={title || UI_STRINGS.UNTITLED_NOTE}
           onCopy={handleCopyNote}
@@ -380,6 +458,20 @@ export default function ResultsPage() {
             </div>
             <Separator className="bg-cyan-700/30" />
 
+            {/* Subject input */}
+            <div className="mt-4">
+              <label className="text-sm text-gray-400 block mb-1">Email subject</label>
+              <input
+                type="text"
+                value={shareSubject ?? (title || UI_STRINGS.UNTITLED_NOTE)}
+                onChange={(e) => setShareSubject(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                placeholder="Subject"
+              />
+            </div>
+
+            {/* Removed Gmail toggle/preview. Share will use editor content if already email-formatted. */}
+
             <div className="mt-4 grid grid-cols-1 gap-3">
               {/* WhatsApp */}
               <button
@@ -397,15 +489,18 @@ export default function ResultsPage() {
                 <span>WhatsApp</span>
               </button>
 
-              {/* Gmail (Formal) */}
+              {/* Gmail */}
               <button
                 onClick={() => {
-                  const textToShare = (isEditing ? editedText : formattedNote) || "";
-                  const shareTitle = title || UI_STRINGS.UNTITLED_NOTE;
-                  const subject = encodeURIComponent(shareTitle);
-                  const body = encodeURIComponent(
-                    buildFormalEmailBody(shareTitle, textToShare)
-                  );
+              const shareTitle = title || UI_STRINGS.UNTITLED_NOTE;
+              const subjectText = shareSubject ?? shareTitle;
+              const subject = encodeURIComponent(subjectText);
+              const bodyText = isEditing
+                ? editedText
+                : isGmailMode
+                ? (gmailBody || "")
+                : (translatedNote ?? formattedNote) || "";
+                  const body = encodeURIComponent(bodyText);
                   const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}&tf=1`;
                   window.open(gmailUrl, "_blank", "noopener,noreferrer");
                   setIsShareModalOpen(false);
@@ -415,19 +510,22 @@ export default function ResultsPage() {
                 <Mail className="w-5 h-5" />
                 <div className="flex flex-col items-start">
                   <span>Gmail</span>
-                  <span className="text-xs text-gray-400">Formal email format</span>
+                  <span className="text-xs text-gray-400">Uses editor content (AI formatted if applied)</span>
                 </div>
               </button>
 
-              {/* Default Email Client (Formal) */}
+              {/* Default Email Client */}
               <button
                 onClick={() => {
-                  const textToShare = (isEditing ? editedText : formattedNote) || "";
-                  const shareTitle = title || UI_STRINGS.UNTITLED_NOTE;
-                  const subject = encodeURIComponent(shareTitle);
-                  const body = encodeURIComponent(
-                    buildFormalEmailBody(shareTitle, textToShare)
-                  );
+              const shareTitle = title || UI_STRINGS.UNTITLED_NOTE;
+              const subjectText = shareSubject ?? shareTitle;
+              const subject = encodeURIComponent(subjectText);
+              const bodyText = isEditing
+                ? editedText
+                : isGmailMode
+                ? (gmailBody || "")
+                : (translatedNote ?? formattedNote) || "";
+                  const body = encodeURIComponent(bodyText);
                   window.location.href = `mailto:?subject=${subject}&body=${body}`;
                   setIsShareModalOpen(false);
                 }}
@@ -436,7 +534,7 @@ export default function ResultsPage() {
                 <Mail className="w-5 h-5" />
                 <div className="flex flex-col items-start">
                   <span>Email (Default Client)</span>
-                  <span className="text-xs text-gray-400">Formal email format</span>
+                  <span className="text-xs text-gray-400">Uses editor content (AI formatted if applied)</span>
                 </div>
               </button>
 
@@ -449,10 +547,11 @@ export default function ResultsPage() {
                     const payload = `${shareTitle}\n\n${textToShare}`.trim();
                     try {
                       setIsSharing(true);
-                      await (navigator as any).share({ title: shareTitle, text: payload });
+                      const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+                      await nav.share?.({ title: shareTitle, text: payload });
                       setIsShareModalOpen(false);
-                    } catch (e) {
-                      // user cancelled
+                    } catch {
+                      // user may have cancelled
                     } finally {
                       setIsSharing(false);
                     }
