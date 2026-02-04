@@ -219,13 +219,14 @@ export default function NotesPage() {
               setCurrentPage(1);
             }}
             href="#"
+            className="h-8 w-8 sm:h-10 sm:w-10 text-sm"
           >
             1
           </PaginationLink>
         </PaginationItem>
       );
       if (startPage > 2) {
-        items.push(<PaginationEllipsis key="ellipsis-start" />);
+        items.push(<PaginationEllipsis key="ellipsis-start" className="h-8 w-8 sm:h-9 sm:w-9" />);
       }
     }
 
@@ -239,6 +240,7 @@ export default function NotesPage() {
               setCurrentPage(i);
             }}
             href="#"
+            className="h-8 w-8 sm:h-10 sm:w-10 text-sm"
           >
             {i}
           </PaginationLink>
@@ -248,7 +250,7 @@ export default function NotesPage() {
 
     if (endPage < totalPages) {
       if (endPage < totalPages - 1) {
-        items.push(<PaginationEllipsis key="ellipsis-end" />);
+        items.push(<PaginationEllipsis key="ellipsis-end" className="h-8 w-8 sm:h-9 sm:w-9" />);
       }
       items.push(
         <PaginationItem key={totalPages}>
@@ -258,6 +260,7 @@ export default function NotesPage() {
               setCurrentPage(totalPages);
             }}
             href="#"
+            className="h-8 w-8 sm:h-10 sm:w-10 text-sm"
           >
             {totalPages}
           </PaginationLink>
@@ -309,7 +312,7 @@ export default function NotesPage() {
                 className="h-10 w-full pl-10 pr-4 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
               />
             </div>
-
+            <div className="flex w-full items-center gap-2">
             {/* Sort Dropdown */}
             <Select
               value={sortBy}
@@ -340,7 +343,9 @@ export default function NotesPage() {
               <span className="hidden md:inline">Starred</span>
             </Button>
           </div>
+          </div>
         )}
+        
 
         {filteredNotes.length === 0 ? (
           <div className="text-center py-16 mt-16">
@@ -371,10 +376,10 @@ export default function NotesPage() {
                     <div className="flex gap-6 justify-between items-start">
                       <div className="flex-1 min-w-0">
                         <div className="mb-2">
-                          <h2 className="text-xl font-semibold text-white truncate mb-0">
+                          <h2 className="text-xl font-semibold text-white truncate">
                             {note.title || "Untitled Note"}
                           </h2>
-                          <p className="text-gray-400 text-sm mt-0.5">
+                          <p className="text-gray-300 text-sm">
                             {formatDate(note.created_at)}
                           </p>
                         </div>
@@ -431,9 +436,9 @@ export default function NotesPage() {
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="mt-8">
+              <div className="mt-8 -mx-4 sm:mx-0 overflow-x-auto pb-2">
                 <Pagination>
-                  <PaginationContent>
+                  <PaginationContent className="flex-nowrap gap-1 min-w-max">
                     <PaginationItem>
                       <PaginationPrevious
                         onClick={(e) => {
