@@ -230,10 +230,49 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
             {formatDate(note.created_at)}
           </p>
         </div> */}
-        <div className="w-9" />
+        <div className="w-10" />
+
+        <div className="flex bg-slate-800 border border-slate-700 rounded-lg overflow-hidden ml-auto mr-2">
+          <button
+            onClick={() => {
+              setIsGmailMode(false);
+              if (isEditing) {
+                const base = note.edited_text || note.original_formatted_text || "";
+                setEditedText(base);
+              }
+            }}
+            className={`px-3 py-2 text-sm ${!isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"}`}
+          >
+            <FileText className="w-4 h-4" />
+          </button>
+          <button
+            onClick={async () => {
+              setIsGmailMode(true);
+              setShareSubject(note.title || "Untitled Note");
+              const baseText = note.edited_text || note.original_formatted_text || note.raw_text || "";
+              if (!gmailBody) {
+                const res = await gmailFormatText(baseText, note.title || "Untitled Note");
+                const emailBody = res.success ? (res.formattedText || baseText) : baseText;
+                setGmailBody(emailBody);
+                if (isEditing) {
+                  setEditedText(emailBody);
+                }
+              } else {
+                if (isEditing) {
+                  setEditedText(gmailBody);
+                }
+              }
+            }}
+            className={`px-3 py-2 text-sm flex items-center gap-1 ${isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"}`}
+          >
+            {isGmailFormatting ? <Spinner className="w-4 h-4 text-cyan-500" /> : <Mail className="w-4 h-4" />}
+            
+          </button>
+        </div>
 
         {/* Note Editor Card */}
-        <div className="w-full max-w-[650px]">
+        <div className="w-full max-w-[800px]">
+          
           <Card className="bg-slate-900 border-cyan-700/30 rounded-t-2xl shadow-xl overflow-hidden">
             <CardHeader>
               {/* Title and Actions */}
@@ -282,43 +321,7 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
                     ) : (
                     <>
                       {/* Simple/Gmail mode toggle */}
-                      <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg overflow-hidden mr-2">
-                        <button
-                          onClick={() => {
-                            setIsGmailMode(false);
-                            if (isEditing) {
-                              const base = note.edited_text || note.original_formatted_text || "";
-                              setEditedText(base);
-                            }
-                          }}
-                          className={`px-3 py-2 text-sm ${!isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"}`}
-                        >
-                          <FileText className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={async () => {
-                            setIsGmailMode(true);
-                            setShareSubject(note.title || "Untitled Note");
-                            const baseText = note.edited_text || note.original_formatted_text || note.raw_text || "";
-                            if (!gmailBody) {
-                              const res = await gmailFormatText(baseText, note.title || "Untitled Note");
-                              const emailBody = res.success ? (res.formattedText || baseText) : baseText;
-                              setGmailBody(emailBody);
-                              if (isEditing) {
-                                setEditedText(emailBody);
-                              }
-                            } else {
-                              if (isEditing) {
-                                setEditedText(gmailBody);
-                              }
-                            }
-                          }}
-                          className={`px-3 py-2 text-sm flex items-center gap-1 ${isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"}`}
-                        >
-                          {isGmailFormatting ? <Spinner className="w-4 h-4 text-cyan-500" /> : <Mail className="w-4 h-4" />}
-                         
-                        </button>
-                      </div>
+                      
                         <Button
                           variant="ghost"
                           size="sm"
@@ -399,43 +402,7 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
               <div className="flex md:hidden justify-center items-center mt-6 border-slate-700/50">
                 <div className="flex gap-4 items-center">
                   {/* Simple/Gmail toggle for mobile */}
-                  <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => {
-                        setIsGmailMode(false);
-                        if (isEditing) {
-                          const base = note.edited_text || note.original_formatted_text || "";
-                          setEditedText(base);
-                        }
-                      }}
-                      className={`px-3 py-1 text-sm ${!isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"}`}
-                    >
-                      <FileText className="w-4 h-4"/>
-                    </button>
-                    <button
-                      onClick={async () => {
-                        setIsGmailMode(true);
-                        setShareSubject(note.title || "Untitled Note");
-                        const baseText = note.edited_text || note.original_formatted_text || note.raw_text || "";
-                        if (!gmailBody) {
-                          const res = await gmailFormatText(baseText, note.title || "Untitled Note");
-                          const emailBody = res.success ? (res.formattedText || baseText) : baseText;
-                          setGmailBody(emailBody);
-                          if (isEditing) {
-                            setEditedText(emailBody);
-                          }
-                        } else {
-                          if (isEditing) {
-                            setEditedText(gmailBody);
-                          }
-                        }
-                      }}
-                      className={`px-3 py-1 text-sm flex items-center gap-1 ${isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"}`}
-                    >
-                      {isGmailFormatting ? <Spinner className="w-4 h-4 text-cyan-500" /> : <Mail className="w-4 h-4" />}
-                      
-                    </button>
-                  </div>
+                  
                   {isEditing ? (
                     <>
                       {isGmailMode && (

@@ -476,7 +476,7 @@ export default function ResultsPage() {
               {/* WhatsApp */}
               <button
                 onClick={async () => {
-                  const textToShare = (isEditing ? editedText : formattedNote) || "";
+                  const textToShare = (isEditing ? editedText : (translatedNote ?? formattedNote)) || "";
                   const shareTitle = title || UI_STRINGS.UNTITLED_NOTE;
                   const payload = `${shareTitle}\n\n${textToShare}`.trim();
                   const url = `https://wa.me/?text=${encodeURIComponent(payload)}`;
@@ -498,7 +498,7 @@ export default function ResultsPage() {
               const bodyText = isEditing
                 ? editedText
                 : isGmailMode
-                ? (gmailBody || "")
+                ? (gmailBody ?? (translatedNote ?? formattedNote ?? ""))
                 : (translatedNote ?? formattedNote) || "";
                   const body = encodeURIComponent(bodyText);
                   const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}&tf=1`;
