@@ -44,7 +44,7 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
   const [editedText, setEditedText] = useState("");
   const [showRawTranscript, setShowRawTranscript] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
+  // const [isSharing, setIsSharing] = useState(false);
   const [shareSubject, setShareSubject] = useState<string | null>(null);
   // Gmail AI format now applies directly to the main editor text (no separate box)
   const {
@@ -132,24 +132,6 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
     URL.revokeObjectURL(url);
   };
 
-  const buildFormalEmailBody = (title: string, text: string) => {
-    const lines = [
-      "Dear Recipient,",
-      "",
-      "I hope you are doing well.",
-      "",
-      `Please find the note titled "${title}" below:`,
-      "",
-      text,
-      "",
-      "If you have any questions or need further clarifications, please let me know.",
-      "",
-      "Best regards,",
-      "",
-      "[Your Name]",
-    ];
-    return lines.join("\n");
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -601,14 +583,14 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
                         const shareTitle = note.title || "Untitled Note";
                         const payload = `${shareTitle}\n\n${textToShare}`.trim();
                         try {
-                          setIsSharing(true);
+                          // setIsSharing(true);
                           const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
                           await nav.share?.({ title: shareTitle, text: payload });
                           setIsShareModalOpen(false);
                         } catch {
                           // user may have cancelled
                         } finally {
-                          setIsSharing(false);
+                          // setIsSharing(false);
                         }
                       }}
                       className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
