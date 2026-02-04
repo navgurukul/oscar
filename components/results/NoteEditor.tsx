@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Copy, Download, Edit3, Save, X } from "lucide-react";
+import { Copy, Download, Edit3, Save, Share2, X } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { FeedbackWidget } from "@/components/results/FeedbackWidget";
 import type { FeedbackReason } from "@/lib/types/note.types";
@@ -15,6 +15,7 @@ interface NoteEditorProps {
   title: string;
   onCopy: () => void;
   onDownload: () => void;
+  onShare?: () => void;
   showRawTranscript: boolean;
   onToggleTranscript: () => void;
   rawText: string;
@@ -27,6 +28,7 @@ interface NoteEditorProps {
   canEdit?: boolean;
   isCopying?: boolean;
   isDownloading?: boolean;
+  isSharing?: boolean;
   // Feedback props
   onFeedbackSubmit?: (helpful: boolean, reasons?: FeedbackReason[]) => void;
   isFeedbackSubmitting?: boolean;
@@ -40,6 +42,7 @@ export function NoteEditor({
   title,
   onCopy,
   onDownload,
+  onShare,
   showRawTranscript,
   onToggleTranscript,
   rawText,
@@ -52,6 +55,7 @@ export function NoteEditor({
   canEdit = false,
   isCopying = false,
   isDownloading = false,
+  isSharing = false,
   // Feedback props
   onFeedbackSubmit,
   isFeedbackSubmitting = false,
@@ -67,6 +71,11 @@ export function NoteEditor({
   const handleDownload = () => {
     onDownload();
     // Toast is now handled in the parent component
+  };
+
+  const handleShare = () => {
+    onShare?.();
+    // Toast is handled in the parent
   };
 
   return (
@@ -148,6 +157,21 @@ export function NoteEditor({
                         <Download className="w-4 h-4" />
                       )}
                     </Button>
+                    {onShare && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleShare}
+                        disabled={isSharing}
+                        className="text-gray-400 hover:text-cyan-500 disabled:opacity-50"
+                      >
+                        {isSharing ? (
+                          <Spinner className="w-4 h-4" />
+                        ) : (
+                          <Share2 className="w-4 h-4" />
+                        )}
+                      </Button>
+                    )}
                   </>
                 )}
               </div>
@@ -249,6 +273,22 @@ export function NoteEditor({
                     )}
                     <span className="text-[10px] uppercase tracking-wider font-medium">
                       Download
+                    </span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleShare}
+                    disabled={isSharing}
+                    className="text-gray-400 hover:text-cyan-500 disabled:opacity-50 flex flex-col items-center gap-1 h-auto py-2"
+                  >
+                    {isSharing ? (
+                      <Spinner className="w-5 h-5" />
+                    ) : (
+                      <Share2 className="w-5 h-5" />
+                    )}
+                    <span className="text-[10px] uppercase tracking-wider font-medium">
+                      Share
                     </span>
                   </Button>
                 </>

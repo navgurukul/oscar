@@ -302,7 +302,7 @@ export default function NotesPage() {
           <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
             {/* Search Input */}
 
-            <div className="relative flex-1">
+            <div className="relative flex-3 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 z-10" />
               <Input
                 type="text"
@@ -312,7 +312,7 @@ export default function NotesPage() {
                 className="h-10 w-full pl-10 pr-4 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
               />
             </div>
-            <div className="flex w-full items-center gap-2">
+            <div className="flex w-full items-center gap-2 ">
             {/* Sort Dropdown */}
             <Select
               value={sortBy}

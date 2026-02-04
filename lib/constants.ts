@@ -47,7 +47,9 @@ export const ERROR_MESSAGES = {
   TEXT_REQUIRED: "text is required",
   NO_TEXT_PROVIDED_FOR_FORMATTING: "No text provided for formatting",
   NO_TEXT_PROVIDED_FOR_TITLE: "No text provided for title generation",
+  NO_TEXT_PROVIDED_FOR_TRANSLATION: "No text provided for translation",
   EMPTY_RESPONSE_FROM_FORMATTING: "Empty response from formatting service",
+  EMPTY_RESPONSE_FROM_TRANSLATION: "Empty response from translation service",
 
   // Storage Errors
   STORAGE_ERROR: "Failed to save data. Please try again.",
@@ -73,7 +75,9 @@ export const ERROR_TIPS = {
 export const API_CONFIG = {
   // Internal API routes
   FORMAT_ENDPOINT: "/api/deepseek/format",
+  FORMAT_EMAIL_ENDPOINT: "/api/deepseek/format-email",
   TITLE_ENDPOINT: "/api/deepseek/title",
+  TRANSLATE_ENDPOINT: "/api/deepseek/translate",
 
   // External APIs
   DEEPSEEK_API_URL: "https://api.deepseek.com/v1/chat/completions",
