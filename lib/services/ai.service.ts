@@ -311,7 +311,8 @@ export const aiService = {
    */
   async translateText(
     text: string,
-    targetLanguage: "en" | "hi"
+    targetLanguage: "en" | "hi",
+    signal?: AbortSignal
   ): Promise<{ success: boolean; translatedText?: string; error?: string }> {
     if (!text || !text.trim()) {
       return {
@@ -321,28 +322,38 @@ export const aiService = {
     }
 
     try {
-      return await retryWithBackoff(async () => {
-        const response = await fetchWithTimeout(API_CONFIG.TRANSLATE_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, targetLanguage }),
-        });
+      return await retryWithBackoff(
+        async () => {
+          const response = await fetchWithTimeout(
+            API_CONFIG.TRANSLATE_ENDPOINT,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text, targetLanguage }),
+            },
+            RETRY_CONFIG.TIMEOUT_MS,
+            signal
+          );
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Translate API error: ${response.status}`, errorText);
-          throw new Error(`Translation failed: ${response.status}`);
-        }
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Translate API error: ${response.status}`, errorText);
+            throw new Error(`Translation failed: ${response.status}`);
+          }
 
-        const data = (await response.json()) as { translatedText?: string };
-        const translatedText = data?.translatedText?.trim();
+          const data = (await response.json()) as { translatedText?: string };
+          const translatedText = data?.translatedText?.trim();
 
-        if (!translatedText) {
-          throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_TRANSLATION);
-        }
+          if (!translatedText) {
+            throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_TRANSLATION);
+          }
 
-        return { success: true, translatedText };
-      });
+          return { success: true, translatedText };
+        },
+        /* maxRetries */ 0,
+        RETRY_CONFIG.INITIAL_DELAY_MS,
+        signal
+      );
     } catch (error) {
       console.error("Translation error:", error);
       return {
