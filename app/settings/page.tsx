@@ -23,7 +23,13 @@ import { UsageIndicator } from "@/components/subscription/UsageIndicator";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
@@ -118,7 +124,10 @@ export default function SettingsPage() {
     }
 
     // Free tier vocabulary limit enforcement
-    if (!isProUser && vocabulary.length >= SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY) {
+    if (
+      !isProUser &&
+      vocabulary.length >= SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY
+    ) {
       setShowVocabUpgradePrompt(true);
       return;
     }
@@ -312,14 +321,14 @@ export default function SettingsPage() {
           <TabsList className="hidden md:flex md:flex-col h-fit w-48 bg-slate-900 border border-cyan-700/30 p-2">
             <TabsTrigger
               value="vocabulary"
-              className="w-full justify-start font-bold  data-[state=active]:bg-cyan-500 data-[state=active]:text-white my-2"
+              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white py-2 font-semibold"
             >
               <BookOpen className="w-4 h-4 mr-2" />
               Vocabulary
             </TabsTrigger>
             <TabsTrigger
               value="billing"
-              className="w-full justify-start data-[state=active]:bg-cyan-500 font-bold  data-[state=active]:text-white my-2"
+              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white py-2 font-semibold"
             >
               <CreditCard className="w-4 h-4 mr-2" />
               Billing
@@ -340,7 +349,8 @@ export default function SettingsPage() {
                   {vocabulary.length}/
                   {isProUser
                     ? MAX_VOCABULARY_ENTRIES
-                    : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} entries
+                    : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY}{" "}
+                  entries
                 </span>
               </div>
 
@@ -678,7 +688,11 @@ export default function SettingsPage() {
                         <UsageIndicator
                           type="vocabulary"
                           current={vocabulary.length}
-                          limit={isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY}
+                          limit={
+                            isProUser
+                              ? null
+                              : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY
+                          }
                           variant="full"
                         />
                       </div>

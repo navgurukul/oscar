@@ -226,7 +226,12 @@ export default function NotesPage() {
         </PaginationItem>
       );
       if (startPage > 2) {
-        items.push(<PaginationEllipsis key="ellipsis-start" className="h-8 w-8 sm:h-9 sm:w-9" />);
+        items.push(
+          <PaginationEllipsis
+            key="ellipsis-start"
+            className="h-8 w-8 sm:h-9 sm:w-9"
+          />
+        );
       }
     }
 
@@ -250,7 +255,12 @@ export default function NotesPage() {
 
     if (endPage < totalPages) {
       if (endPage < totalPages - 1) {
-        items.push(<PaginationEllipsis key="ellipsis-end" className="h-8 w-8 sm:h-9 sm:w-9" />);
+        items.push(
+          <PaginationEllipsis
+            key="ellipsis-end"
+            className="h-8 w-8 sm:h-9 sm:w-9"
+          />
+        );
       }
       items.push(
         <PaginationItem key={totalPages}>
@@ -301,8 +311,7 @@ export default function NotesPage() {
         {allNotes.length > 0 && (
           <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
             {/* Search Input */}
-
-            <div className="relative flex-3 w-full">
+            <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 z-10" />
               <Input
                 type="text"
@@ -312,13 +321,13 @@ export default function NotesPage() {
                 className="h-10 w-full pl-10 pr-4 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
               />
             </div>
-            <div className="flex w-full items-center gap-2 ">
+
             {/* Sort Dropdown */}
             <Select
               value={sortBy}
               onValueChange={(value) => setSortBy(value as SortOption)}
             >
-              <SelectTrigger className="h-10 w-full md:w-[160px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
+              <SelectTrigger className="h-10 w-full md:w-[180px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
@@ -331,7 +340,7 @@ export default function NotesPage() {
             {/* Starred Toggle */}
             <Button
               onClick={() => setShowOnlyStarred(!showOnlyStarred)}
-              className={`flex items-center gap-2 rounded-lg border transition-colors ${
+              className={`h-10 flex items-center justify-center gap-2 px-4 rounded-lg border transition-colors w-full md:w-auto ${
                 showOnlyStarred
                   ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
                   : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
@@ -340,12 +349,10 @@ export default function NotesPage() {
               <Star
                 className={`w-4 h-4 ${showOnlyStarred ? "fill-cyan-500" : ""}`}
               />
-              <span className="hidden md:inline">Starred</span>
+              <span className="hidden md:inline font-normal">Starred</span>
             </Button>
           </div>
-          </div>
         )}
-        
 
         {filteredNotes.length === 0 ? (
           <div className="text-center py-16 mt-16">
