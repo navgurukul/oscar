@@ -67,7 +67,7 @@ export function PricingCard({
             </span>
             {!isFree && (
               <span className="text-gray-400">
-                /{billingCycle === "monthly" ? "mo" : "yr"}
+                /{billingCycle === "monthly" ? "month" : "year"}
               </span>
             )}
           </div>

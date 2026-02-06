@@ -8,7 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 
 interface VocabularyFormProps {
-  onSubmit: (data: { term: string; pronunciation: string; context: string }) => Promise<boolean>;
+  onSubmit: (data: {
+    term: string;
+    pronunciation: string;
+    context: string;
+  }) => Promise<boolean>;
   isLoading: boolean;
 }
 
@@ -19,7 +23,7 @@ export function VocabularyForm({ onSubmit, isLoading }: VocabularyFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const success = await onSubmit({
       term: term.trim(),
       pronunciation: pronunciation.trim(),

@@ -136,7 +136,9 @@ export function BillingSection({
               <UsageIndicator
                 type="vocabulary"
                 current={vocabularyCount}
-                limit={isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY}
+                limit={
+                  isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY
+                }
                 variant="full"
               />
             </div>
@@ -147,7 +149,9 @@ export function BillingSection({
         {!isProUser && (
           <Card className="bg-slate-900 border-cyan-500/50 rounded-2xl shadow-xl ring-1 ring-cyan-500/50">
             <CardHeader>
-              <h2 className="text-lg font-bold text-white">Why Upgrade to Pro?</h2>
+              <h2 className="text-lg font-bold text-white">
+                Why Upgrade to Pro?
+              </h2>
             </CardHeader>
             <CardContent>
               <ul className="space-y-3 mb-6">

@@ -44,7 +44,9 @@ export function CurrentPlanCard({
               }`}
             >
               <Crown
-                className={`w-6 h-6 ${isProUser ? "text-cyan-400" : "text-gray-400"}`}
+                className={`w-6 h-6 ${
+                  isProUser ? "text-cyan-400" : "text-gray-400"
+                }`}
               />
             </div>
             <div>
@@ -53,9 +55,11 @@ export function CurrentPlanCard({
               </h2>
               <p className="text-gray-400 text-sm">
                 {isProUser
-                  ? `₹${billingCycle === "monthly" ? PRICING.MONTHLY : PRICING.YEARLY}/${
-                      billingCycle === "monthly" ? "month" : "year"
-                    }`
+                  ? `₹${
+                      billingCycle === "monthly"
+                        ? PRICING.MONTHLY
+                        : PRICING.YEARLY
+                    }/${billingCycle === "monthly" ? "month" : "year"}`
                   : "No payment required"}
               </p>
             </div>

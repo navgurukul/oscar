@@ -38,13 +38,15 @@ export function CancelSubscriptionModal({
             <div className="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center">
               <AlertTriangle className="w-6 h-6 text-yellow-400" />
             </div>
-            <h2 className="text-xl font-bold text-white">Cancel Subscription?</h2>
+            <h2 className="text-xl font-bold text-white">
+              Cancel Subscription?
+            </h2>
           </div>
         </CardHeader>
         <CardContent>
           <p className="text-gray-400 mb-6">
-            Are you sure you want to cancel? You&apos;ll lose access to Pro features at the end of
-            your billing period on{" "}
+            Are you sure you want to cancel? You&apos;ll lose access to Pro
+            features at the end of your billing period on{" "}
             <span className="text-white">{formatDate(periodEnd)}</span>.
           </p>
           <div className="flex gap-3">
@@ -62,7 +64,11 @@ export function CancelSubscriptionModal({
               className="flex-1"
               disabled={isLoading}
             >
-              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Yes, Cancel"}
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Yes, Cancel"
+              )}
             </Button>
           </div>
         </CardContent>

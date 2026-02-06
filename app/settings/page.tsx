@@ -133,7 +133,9 @@ export default function SettingsPage() {
 
             {activeTab === "billing" && (
               <BillingSection
-                status={status as "active" | "cancelled" | "expired" | "past_due"}
+                status={
+                  status as "active" | "cancelled" | "expired" | "past_due"
+                }
                 billingCycle={billingCycle as "monthly" | "yearly" | null}
                 currentPeriodEnd={currentPeriodEnd}
                 recordingsThisMonth={recordingsThisMonth}

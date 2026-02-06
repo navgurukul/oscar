@@ -19,7 +19,10 @@ interface VocabularySectionProps {
   isProUser: boolean;
 }
 
-export function VocabularySection({ userId, isProUser }: VocabularySectionProps) {
+export function VocabularySection({
+  userId,
+  isProUser,
+}: VocabularySectionProps) {
   const { toast } = useToast();
 
   const [vocabulary, setVocabulary] = useState<DBVocabularyEntry[]>([]);
@@ -57,7 +60,11 @@ export function VocabularySection({ userId, isProUser }: VocabularySectionProps)
   }, [toast]);
 
   const handleAddEntry = useCallback(
-    async (data: { term: string; pronunciation: string; context: string }): Promise<boolean> => {
+    async (data: {
+      term: string;
+      pronunciation: string;
+      context: string;
+    }): Promise<boolean> => {
       if (!data.term) {
         toast({
           title: "Term is required",
@@ -68,7 +75,10 @@ export function VocabularySection({ userId, isProUser }: VocabularySectionProps)
       }
 
       // Free tier vocabulary limit enforcement
-      if (!isProUser && vocabulary.length >= SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY) {
+      if (
+        !isProUser &&
+        vocabulary.length >= SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY
+      ) {
         setShowUpgradePrompt(true);
         return false;
       }
@@ -84,12 +94,13 @@ export function VocabularySection({ userId, isProUser }: VocabularySectionProps)
       }
 
       setIsAdding(true);
-      const { data: newEntry, error } = await vocabularyService.addVocabularyEntry({
-        user_id: userId,
-        term: data.term,
-        pronunciation: data.pronunciation || null,
-        context: data.context || null,
-      });
+      const { data: newEntry, error } =
+        await vocabularyService.addVocabularyEntry({
+          user_id: userId,
+          term: data.term,
+          pronunciation: data.pronunciation || null,
+          context: data.context || null,
+        });
 
       if (error) {
         const isDuplicate = error.message?.includes("duplicate");
@@ -163,11 +174,14 @@ export function VocabularySection({ userId, isProUser }: VocabularySectionProps)
         return;
       }
 
-      const { data, error } = await vocabularyService.updateVocabularyEntry(id, {
-        term: editState.term.trim(),
-        pronunciation: editState.pronunciation.trim() || null,
-        context: editState.context.trim() || null,
-      });
+      const { data, error } = await vocabularyService.updateVocabularyEntry(
+        id,
+        {
+          term: editState.term.trim(),
+          pronunciation: editState.pronunciation.trim() || null,
+          context: editState.context.trim() || null,
+        }
+      );
 
       if (error) {
         toast({
@@ -187,11 +201,16 @@ export function VocabularySection({ userId, isProUser }: VocabularySectionProps)
     [editState, cancelEditing, toast]
   );
 
-  const handleEditStateChange = useCallback((field: keyof EditState, value: string) => {
-    setEditState((prev) => ({ ...prev, [field]: value }));
-  }, []);
+  const handleEditStateChange = useCallback(
+    (field: keyof EditState, value: string) => {
+      setEditState((prev) => ({ ...prev, [field]: value }));
+    },
+    []
+  );
 
-  const maxEntries = isProUser ? MAX_VOCABULARY_ENTRIES : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY;
+  const maxEntries = isProUser
+    ? MAX_VOCABULARY_ENTRIES
+    : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY;
 
   return (
     <>
@@ -199,7 +218,9 @@ export function VocabularySection({ userId, isProUser }: VocabularySectionProps)
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <BookOpen className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-xl font-semibold text-white">Custom Vocabulary</h2>
+            <h2 className="text-xl font-semibold text-white">
+              Custom Vocabulary
+            </h2>
           </div>
           <span className="text-sm text-gray-400">
             {vocabulary.length}/{maxEntries} entries
@@ -207,8 +228,8 @@ export function VocabularySection({ userId, isProUser }: VocabularySectionProps)
         </div>
 
         <p className="text-gray-400 text-sm mb-6">
-          Add names, technical terms, or abbreviations that are often misrecognized. These will be
-          used to improve speech-to-text accuracy.
+          Add names, technical terms, or abbreviations that are often
+          misrecognized. These will be used to improve speech-to-text accuracy.
         </p>
 
         {/* Add Form */}

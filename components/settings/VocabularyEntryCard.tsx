@@ -55,7 +55,9 @@ export function VocabularyEntryCard({
             <Input
               type="text"
               value={editState.pronunciation}
-              onChange={(e) => onEditStateChange("pronunciation", e.target.value)}
+              onChange={(e) =>
+                onEditStateChange("pronunciation", e.target.value)
+              }
               placeholder="Sounds like"
               maxLength={100}
               className="bg-slate-900 border-slate-600 text-white text-sm h-8 focus-visible:ring-cyan-500"
