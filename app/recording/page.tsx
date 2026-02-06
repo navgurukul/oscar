@@ -283,6 +283,7 @@ function RecordingPageInner() {
         // Save to Supabase if user is authenticated
         if (user) {
           const currentNoteId = storageService.getCurrentNoteId();
+          const isContinuingExistingNote = Boolean(currentNoteId);
           let saveResult;
 
           if (currentNoteId) {
@@ -318,8 +319,10 @@ function RecordingPageInner() {
           } else if (savedNote) {
             // Store the note ID for the results page
             storageService.setCurrentNoteId(savedNote.id);
-            // Increment usage count for authenticated users
-            await incrementUsage();
+            // Increment usage count only when creating a new note
+            if (!isContinuingExistingNote) {
+              await incrementUsage();
+            }
           }
         }
 

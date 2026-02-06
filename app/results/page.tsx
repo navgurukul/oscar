@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
@@ -60,6 +60,11 @@ export default function ResultsPage() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [translatedNote, setTranslatedNote] = useState<string | null>(null);
   const [translatedRaw, setTranslatedRaw] = useState<string | null>(null);
+
+  // Translation caching and cancellation
+  const translationCacheNoteRef = useRef<Map<string, string>>(new Map());
+  const translationCacheRawRef = useRef<Map<string, string>>(new Map());
+  const translateControllerRef = useRef<AbortController | null>(null);
 
   // Feedback state
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
@@ -157,28 +162,66 @@ export default function ResultsPage() {
 
   const applyLanguage = async (lang: "original" | "en" | "hi") => {
     if (lang === "original") {
+      // Cancel any in-flight translation
+      translateControllerRef.current?.abort();
+      translateControllerRef.current = null;
       setSelectedLanguage("original");
       setTranslatedNote(null);
       setTranslatedRaw(null);
       return;
     }
 
-    if (isTranslating) return;
     // Always translate the simple content, not Gmail mode.
     const baseNote = (isEditing && !isGmailMode ? editedText : formattedNote) || "";
     const baseRaw = rawText || "";
     if (!baseNote && !baseRaw) return;
 
+    // Abort any previous translation in-flight
+    if (isTranslating && translateControllerRef.current) {
+      translateControllerRef.current.abort();
+    }
+
+    // Build cache keys
+    const noteKey = baseNote ? `${lang}|note|${baseNote}` : "";
+    const rawKey = baseRaw ? `${lang}|raw|${baseRaw}` : "";
+
+    // If both are cached, apply instantly
+    const cachedNote = noteKey ? translationCacheNoteRef.current.get(noteKey) : "";
+    const cachedRaw = rawKey ? translationCacheRawRef.current.get(rawKey) : "";
+    if ((baseNote ? !!cachedNote : true) && (baseRaw ? !!cachedRaw : true)) {
+      setSelectedLanguage(lang);
+      setTranslatedNote(cachedNote || "");
+      setTranslatedRaw(cachedRaw || "");
+      toast({
+        title: "Language updated",
+        description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
+      });
+      return;
+    }
+
+    // Start new translation with cancellation support
+    const controller = new AbortController();
+    translateControllerRef.current = controller;
     setIsTranslating(true);
     try {
-      const noteRes = baseNote
-        ? await aiService.translateText(baseNote, lang)
-        : { success: true as const, translatedText: "" };
-      const rawRes = baseRaw
-        ? await aiService.translateText(baseRaw, lang)
-        : { success: true as const, translatedText: "" };
+      const [noteRes, rawRes] = await Promise.all([
+        baseNote
+          ? cachedNote
+            ? Promise.resolve({ success: true as const, translatedText: cachedNote })
+            : aiService.translateText(baseNote, lang, controller.signal)
+          : Promise.resolve({ success: true as const, translatedText: "" }),
+        baseRaw
+          ? cachedRaw
+            ? Promise.resolve({ success: true as const, translatedText: cachedRaw })
+            : aiService.translateText(baseRaw, lang, controller.signal)
+          : Promise.resolve({ success: true as const, translatedText: "" }),
+      ]);
 
       if (!noteRes.success || !rawRes.success) {
+        // If aborted, silently return without error toast
+        if (controller.signal.aborted) {
+          return;
+        }
         toast({
           title: "Translation failed",
           description: "Could not translate right now. Please try again.",
@@ -187,15 +230,49 @@ export default function ResultsPage() {
         return;
       }
 
+      const noteText = noteRes.translatedText || "";
+      const rawTextTranslated = rawRes.translatedText || "";
+
+      // Update cache
+      if (noteKey && noteText) translationCacheNoteRef.current.set(noteKey, noteText);
+      if (rawKey && rawTextTranslated) translationCacheRawRef.current.set(rawKey, rawTextTranslated);
+
       setSelectedLanguage(lang);
-      setTranslatedNote(noteRes.translatedText || "");
-      setTranslatedRaw(rawRes.translatedText || "");
+      setTranslatedNote(noteText);
+      setTranslatedRaw(rawTextTranslated);
       toast({
         title: "Language updated",
         description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
       });
+
+      // Background prefetch opposite language for snappier subsequent switches
+      const oppositeLang = lang === "hi" ? "en" : "hi";
+      const oppNoteKey = baseNote ? `${oppositeLang}|note|${baseNote}` : "";
+      const oppRawKey = baseRaw ? `${oppositeLang}|raw|${baseRaw}` : "";
+      setTimeout(async () => {
+        try {
+          if (baseNote && oppNoteKey && !translationCacheNoteRef.current.has(oppNoteKey)) {
+            const res = await aiService.translateText(baseNote, oppositeLang);
+            if (res.success && res.translatedText) {
+              translationCacheNoteRef.current.set(oppNoteKey, res.translatedText);
+            }
+          }
+          if (baseRaw && oppRawKey && !translationCacheRawRef.current.has(oppRawKey)) {
+            const res = await aiService.translateText(baseRaw, oppositeLang);
+            if (res.success && res.translatedText) {
+              translationCacheRawRef.current.set(oppRawKey, res.translatedText);
+            }
+          }
+        } catch {
+          // ignore background prefetch errors
+        }
+      }, 200);
     } finally {
       setIsTranslating(false);
+      // Clear controller reference after completion
+      if (translateControllerRef.current === controller) {
+        translateControllerRef.current = null;
+      }
     }
   };
 
