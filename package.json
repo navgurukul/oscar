@@ -28,11 +28,10 @@
     "matter-js": "^0.20.0",
     "motion": "^12.26.2",
     "next": "^14.0.0",
-    "onnxruntime-web": "^1.24.1",
     "razorpay": "^2.9.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "speech-to-speech": "^0.1.2",
+    "speech-to-speech": "^0.1.1",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7"
   },
