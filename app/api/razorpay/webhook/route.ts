@@ -9,6 +9,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { razorpayService } from "@/lib/services/razorpay.service";
 import { subscriptionService } from "@/lib/services/subscription.service";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
+import { RATE_LIMITS } from "@/lib/constants";
 import type {
   RazorpayWebhookPayload,
   RazorpaySubscriptionStatus,
@@ -36,6 +41,15 @@ function getSupabaseAdmin() {
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting based on IP to prevent DoS attacks
+    // Note: Legitimate Razorpay webhooks should never hit this limit
+    const clientId = getClientIdentifier(undefined, request);
+    const rateLimitResult = applyRateLimit(
+      clientId,
+      "payment-webhook",
+      RATE_LIMITS.PAYMENT_WEBHOOK
+    );
+    if (rateLimitResult) return rateLimitResult;
     // Get raw body for signature verification
     const rawBody = await request.text();
 

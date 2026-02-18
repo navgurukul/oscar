@@ -255,3 +255,46 @@ export const PRICING = {
   YEARLY_SAVINGS_PERCENT: 37,
   CURRENCY: "INR",
 } as const;
+
+/**
+ * Rate limiting configuration
+ * Protects APIs from abuse and runaway costs
+ */
+export const RATE_LIMITS = {
+  // AI API Endpoints (DeepSeek) - More restrictive due to cost
+  AI_FORMAT: {
+    maxRequests: 20, // 20 requests per user
+    windowMs: 60 * 1000, // Per 1 minute
+    message:
+      "Too many formatting requests. Please wait a moment before trying again.",
+  },
+  AI_TITLE: {
+    maxRequests: 30, // 30 requests per user
+    windowMs: 60 * 1000, // Per 1 minute
+    message: "Too many title generation requests. Please wait a moment.",
+  },
+  AI_FORMAT_EMAIL: {
+    maxRequests: 15, // 15 requests per user
+    windowMs: 60 * 1000, // Per 1 minute
+    message: "Too many email formatting requests. Please wait a moment.",
+  },
+  AI_TRANSLATE: {
+    maxRequests: 15, // 15 requests per user
+    windowMs: 60 * 1000, // Per 1 minute
+    message: "Too many translation requests. Please wait a moment.",
+  },
+
+  // Payment API Endpoints - Prevent subscription spam
+  PAYMENT_CREATE_SUBSCRIPTION: {
+    maxRequests: 5, // 5 subscription creation attempts
+    windowMs: 15 * 60 * 1000, // Per 15 minutes
+    message: "Too many subscription requests. Please wait before trying again.",
+  },
+
+  // Webhook endpoints - Very generous but prevents DoS
+  PAYMENT_WEBHOOK: {
+    maxRequests: 100, // 100 webhooks per source
+    windowMs: 60 * 1000, // Per 1 minute
+    message: "Webhook rate limit exceeded.",
+  },
+} as const;

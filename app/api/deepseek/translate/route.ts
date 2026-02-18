@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
+import { API_CONFIG, ERROR_MESSAGES, RATE_LIMITS } from "@/lib/constants";
 import { SYSTEM_PROMPTS } from "@/lib/prompts";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
 
 const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 
@@ -44,6 +48,15 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
   }
+
+  // Apply rate limiting
+  const clientId = getClientIdentifier(user.id, req);
+  const rateLimitResult = applyRateLimit(
+    clientId,
+    "ai-translate",
+    RATE_LIMITS.AI_TRANSLATE
+  );
+  if (rateLimitResult) return rateLimitResult;
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
@@ -139,5 +152,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
-

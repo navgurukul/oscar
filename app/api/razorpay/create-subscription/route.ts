@@ -9,6 +9,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { razorpayService } from "@/lib/services/razorpay.service";
 import { subscriptionService } from "@/lib/services/subscription.service";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
+import { RATE_LIMITS } from "@/lib/constants";
 import type {
   CreateSubscriptionRequest,
   CreateSubscriptionResponse,
@@ -27,6 +32,15 @@ export async function POST(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Apply rate limiting - prevent subscription spam
+    const clientId = getClientIdentifier(user.id, request);
+    const rateLimitResult = applyRateLimit(
+      clientId,
+      "payment-create-subscription",
+      RATE_LIMITS.PAYMENT_CREATE_SUBSCRIPTION
+    );
+    if (rateLimitResult) return rateLimitResult;
 
     // Parse request body
     const body: CreateSubscriptionRequest = await request.json();

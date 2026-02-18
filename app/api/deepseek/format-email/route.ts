@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
+import { API_CONFIG, ERROR_MESSAGES, RATE_LIMITS } from "@/lib/constants";
 import { SYSTEM_PROMPTS } from "@/lib/prompts";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
 
 const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 
@@ -14,7 +18,10 @@ async function fetchWithTimeout(
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
     return response;
   } catch (error) {
@@ -36,6 +43,15 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
   }
+
+  // Apply rate limiting
+  const clientId = getClientIdentifier(user.id, req);
+  const rateLimitResult = applyRateLimit(
+    clientId,
+    "ai-format-email",
+    RATE_LIMITS.AI_FORMAT_EMAIL
+  );
+  if (rateLimitResult) return rateLimitResult;
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
