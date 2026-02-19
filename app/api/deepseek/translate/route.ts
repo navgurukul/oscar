@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { API_CONFIG, ERROR_MESSAGES, RATE_LIMITS } from "@/lib/constants";
-import { SYSTEM_PROMPTS } from "@/lib/prompts";
+import { SYSTEM_PROMPTS, validateUserInput, wrapUserInput } from "@/lib/prompts";
 import {
   applyRateLimit,
   getClientIdentifier,
@@ -93,9 +93,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // SECURITY: Validate user input for prompt injection attempts
+  const validation = validateUserInput(text);
+  if (!validation.isValid) {
+    console.warn(`Prompt injection attempt detected (${validation.severity}): ${validation.warning}`);
+    return NextResponse.json(
+      { 
+        error: "Input validation failed",
+        details: validation.warning 
+      },
+      { status: 400 }
+    );
+  }
+
   const languageLabel = targetLanguage === "hi" ? "Hindi" : "English";
 
   try {
+    // SECURITY: Wrap user input in explicit delimiters
+    const secureUserContent = wrapUserInput(text, 'text');
+    
     const response = await fetchWithTimeout(API_CONFIG.DEEPSEEK_API_URL, {
       method: "POST",
       headers: {
@@ -108,7 +124,7 @@ export async function POST(req: NextRequest) {
           { role: "system", content: SYSTEM_PROMPTS.TRANSLATE },
           {
             role: "user",
-            content: `TARGET LANGUAGE: ${languageLabel}\n\nTEXT:\n${text}`,
+            content: `TARGET LANGUAGE: ${languageLabel}\n\n${secureUserContent}`,
           },
         ],
         temperature: 0.2,

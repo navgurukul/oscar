@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { API_CONFIG, ERROR_MESSAGES, RATE_LIMITS } from "@/lib/constants";
-import { SYSTEM_PROMPTS, USER_PROMPTS } from "@/lib/prompts";
+import { SYSTEM_PROMPTS, USER_PROMPTS, validateUserInput, wrapUserInput } from "@/lib/prompts";
 import {
   applyRateLimit,
   getClientIdentifier,
@@ -82,7 +82,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // SECURITY: Validate user input for prompt injection attempts
+  const validation = validateUserInput(text);
+  if (!validation.isValid) {
+    console.warn(`Prompt injection attempt detected (${validation.severity}): ${validation.warning}`);
+    return NextResponse.json(
+      { 
+        error: "Input validation failed",
+        details: validation.warning 
+      },
+      { status: 400 }
+    );
+  }
+
   try {
+    // SECURITY: Wrap user input in explicit delimiters
+    const secureUserContent = wrapUserInput(text, 'content');
+    
     const response = await fetchWithTimeout(API_CONFIG.DEEPSEEK_API_URL, {
       method: "POST",
       headers: {
@@ -98,7 +114,7 @@ export async function POST(req: NextRequest) {
           },
           {
             role: "user",
-            content: `${USER_PROMPTS.TITLE_TEMPLATE}${text}`,
+            content: `${USER_PROMPTS.TITLE_TEMPLATE}${secureUserContent}`,
           },
         ],
         temperature: API_CONFIG.TITLE_TEMPERATURE,
