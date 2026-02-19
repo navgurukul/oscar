@@ -1,55 +1,31 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { Eye, EyeOff } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
 function AuthFormInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams?.get("redirectTo") ?? "/";
-  const { signIn, signUp, isLoading: authLoading } = useAuth();
+  const { signInWithGoogle, isLoading: authLoading } = useAuth();
 
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
+  // Show server-provided error from callback redirect
+  const errorParam = searchParams?.get("error");
+  const initialError = errorParam ? decodeURIComponent(errorParam) : null;
+
+  const handleGoogleSignIn = async () => {
+    setError(initialError);
     setIsSubmitting(true);
-
     try {
-      if (isSignUp) {
-        const { error } = await signUp(email, password);
-        if (error) {
-          setError(error.message);
-        } else {
-          setSuccessMessage(
-            "Account created successfully! You can now sign in."
-          );
-          setIsSignUp(false);
-          setPassword("");
-        }
-      } else {
-        const { error } = await signIn(email, password);
-        if (error) {
-          setError(error.message);
-        } else {
-          router.push(redirectTo);
-          router.refresh();
-        }
-      }
+      await signInWithGoogle(redirectTo);
+      // Redirect handled by Supabase, this code may not run
     } catch {
-      setError("An unexpected error occurred. Please try again.");
+      setError("Failed to start Google sign-in. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -68,113 +44,60 @@ function AuthFormInner() {
       <div className="w-full max-w-md">
         <div className="bg-slate-900 rounded-2xl border border-cyan-700/30 p-8 shadow-xl">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">
-              {isSignUp ? "Create Account" : "Welcome Back"}
-            </h1>
-            <p className="text-gray-400">
-              {isSignUp
-                ? "Sign up to start recording your voice notes"
-                : "Sign in to continue with Oscar"}
-            </p>
+            <h1 className="text-3xl font-bold text-white mb-2">Sign in</h1>
+            <p className="text-gray-400">Continue to Oscar with your Google account</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-colors"
-                placeholder="you@example.com"
-              />
+          {initialError && (
+            <div className="mb-6 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <p className="text-red-400 text-sm">{initialError}</p>
             </div>
+          )}
 
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="w-full pr-12 px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-colors"
-                  placeholder="Enter your password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-white focus:outline-none"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+          {error && !initialError && (
+            <div className="mb-6 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+
+          <Button
+            onClick={handleGoogleSignIn}
+            disabled={isSubmitting}
+            className="w-full bg-white text-gray-900 hover:bg-gray-100 font-medium py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+          >
+            {isSubmitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <Spinner className="w-4 h-4" />
+                Redirecting to Google…
+              </span>
+            ) : (
+              <>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 48 48"
+                  className="w-5 h-5"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-5 h-5" />
-                  ) : (
-                    <Eye className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <p className="text-red-400 text-sm">{error}</p>
-              </div>
+                  <path
+                    fill="#FFC107"
+                    d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12 c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C35.12,6.053,29.805,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20 c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"
+                  />
+                  <path
+                    fill="#FF3D00"
+                    d="M6.306,14.691l6.571,4.819C14.655,16.108,18.961,13,24,13c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657 C35.12,6.053,29.805,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"
+                  />
+                  <path
+                    fill="#4CAF50"
+                    d="M24,44c5.166,0,9.86-1.977,13.409-5.197l-6.191-5.238C29.211,35.091,26.736,36,24,36 c-5.202,0-9.619-3.317-11.283-7.946l-6.52,5.025C9.505,39.556,16.227,44,24,44z"
+                  />
+                  <path
+                    fill="#1976D2"
+                    d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.094,5.565 c0.001-0.001,0.002-0.001,0.003-0.002l6.191,5.238C36.972,40.019,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"
+                  />
+                </svg>
+                Continue with Google
+              </>
             )}
-
-            {successMessage && (
-              <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                <p className="text-green-400 text-sm">{successMessage}</p>
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Spinner className="w-4 h-4" />
-                  {isSignUp ? "Creating account..." : "Signing in..."}
-                </span>
-              ) : isSignUp ? (
-                "Create Account"
-              ) : (
-                "Sign In"
-              )}
-            </Button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError(null);
-                setSuccessMessage(null);
-              }}
-              className="text-cyan-400 hover:text-cyan-300 text-sm transition-colors"
-            >
-              {isSignUp
-                ? "Already have an account? Sign in"
-                : "Don't have an account? Sign up"}
-            </button>
-          </div>
+          </Button>
         </div>
       </div>
     </main>

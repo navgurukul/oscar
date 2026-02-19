@@ -15,8 +15,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signInWithGoogle: (redirectTo?: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -51,27 +50,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [supabase.auth]);
 
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      return { error: error as Error | null };
-    },
-    [supabase.auth]
-  );
-
-  const signUp = useCallback(
-    async (email: string, password: string) => {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
+  const signInWithGoogle = useCallback(
+    async (redirectTo: string = "/") => {
+      const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+        redirectTo
+      )}`;
+      await supabase.auth.signInWithOAuth({
+        provider: "google",
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: callbackUrl,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
         },
       });
-      return { error: error as Error | null };
     },
     [supabase.auth]
   );
@@ -82,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, session, isLoading, signIn, signUp, signOut }}
+      value={{ user, session, isLoading, signInWithGoogle, signOut }}
     >
       {children}
     </AuthContext.Provider>
