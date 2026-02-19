@@ -1,12 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
-  // Explicitly use SWC minifier and treat externals as ESM when possible
-  swcMinify: true,
-  experimental: {
-    // Helps with packages that use `import.meta` and ESM-only distribution
-    esmExternals: true,
-  },
   // Required for SharedArrayBuffer (WASM multi-threading)
   /* async headers() {
     return [
