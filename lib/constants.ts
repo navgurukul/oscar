@@ -250,9 +250,9 @@ export const SUBSCRIPTION_CONFIG = {
  * Pricing configuration (INR)
  */
 export const PRICING = {
-  MONTHLY: 399,
-  YEARLY: 2999,
-  YEARLY_SAVINGS_PERCENT: 37,
+  MONTHLY: 249,
+  YEARLY: 1999,
+  YEARLY_SAVINGS_PERCENT: 33,
   CURRENCY: "INR",
 } as const;
 
