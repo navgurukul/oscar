@@ -47,6 +47,7 @@ html.text-size-lg {
 @layer base {
   html {
     scroll-behavior: smooth;
+    scroll-snap-type: y proximity;
   }
   h1, h2, h3 {
     letter-spacing: -0.01em;

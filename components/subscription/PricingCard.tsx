@@ -72,7 +72,7 @@ export function PricingCard({
             )}
           </div>
           {tier === "pro" && billingCycle === "yearly" && (
-            <p className="text-sm text-cyan-400 mt-1">Save 37% vs monthly</p>
+            <p className="text-sm text-cyan-400 mt-1">Save 33% vs monthly</p>
           )}
         </div>
       </CardHeader>
