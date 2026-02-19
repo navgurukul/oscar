@@ -241,7 +241,7 @@ export const LOCAL_FORMATTER_CONFIG = {
  * Subscription tier limits
  */
 export const SUBSCRIPTION_CONFIG = {
-  FREE_MONTHLY_RECORDINGS: 5,
+  FREE_MONTHLY_RECORDINGS: 10, // Free tier: 10 recordings per month, Pro: unlimited
   FREE_MAX_NOTES: 20,
   FREE_MAX_VOCABULARY: 5,
 } as const;

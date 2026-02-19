@@ -104,6 +104,15 @@ export const usageService = {
 
   /**
    * Check if user can create a new recording
+   * 
+   * Compares current monthly usage against tier limits:
+   * - Free tier: LIMITED to FREE_MONTHLY_RECORDINGS (10 per month)
+   * - Pro tier: UNLIMITED recordings
+   * 
+   * @returns {allowed: boolean, remaining: number | null, current: number}
+   *   - allowed: true if user can record, false if limit reached
+   *   - remaining: recordings left this month (null for pro users)
+   *   - current: total recordings this month
    */
   async canUserRecord(
     userId: string
@@ -115,9 +124,9 @@ export const usageService = {
       return { allowed: true, remaining: null, current: 0 };
     }
 
-    // Get current usage
+    // Get current usage via get_monthly_usage() database function
     const currentUsage = await this.getMonthlyUsage(userId);
-    const limit = SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS;
+    const limit = SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS; // 10 for free tier
     const remaining = Math.max(0, limit - currentUsage);
 
     return {
