@@ -8,6 +8,7 @@ import { storageService } from "@/lib/services/storage.service";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { motion } from "motion/react";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { notesService } from "@/lib/services/notes.service";
 import {
   Tooltip,
   TooltipContent,
@@ -30,11 +31,18 @@ export function NoteActions() {
     router.push(ROUTES.RECORDING);
   };
 
-  const handleRecordAgain = () => {
-    // Clear previous session data
-    storageService.clearNote();
-    // Navigate to recording page
-    router.push(ROUTES.RECORDING);
+  const handleRecordAgain = async () => {
+    try {
+      const currentId = storageService.getCurrentNoteId();
+      if (currentId && user) {
+        await notesService.deleteNote(currentId);
+      }
+    } catch (err) {
+      // ignore deletion errors; proceed to clear local session
+    } finally {
+      storageService.clearNote();
+      router.push(ROUTES.RECORDING);
+    }
   };
 
   return (
