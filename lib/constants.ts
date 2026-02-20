@@ -102,7 +102,7 @@ export const API_CONFIG = {
  */
 export const UI_STRINGS = {
   // App branding
-  APP_NAME: "OSCARRR",
+  APP_NAME: "OSCAR",
 
   // Page titles
   PROCESSING_TITLE: "Processing Your Speech",
