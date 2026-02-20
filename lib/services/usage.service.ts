@@ -14,9 +14,6 @@ function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  console.log("[usage.getSupabaseAdmin] URL exists:", !!supabaseUrl);
-  console.log("[usage.getSupabaseAdmin] Service key exists:", !!serviceRoleKey);
-
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error("Supabase admin credentials not configured");
   }
@@ -120,33 +117,23 @@ export const usageService = {
   async canUserRecord(
     userId: string
   ): Promise<{ allowed: boolean; remaining: number | null; current: number }> {
-    try {
-      console.log("[canUserRecord] Starting check for user:", userId);
-      
-      // Check if user is pro
-      const isProUser = await subscriptionService.isProUser(userId);
-      console.log("[canUserRecord] Is pro user:", isProUser);
+    // Check if user is pro
+    const isProUser = await subscriptionService.isProUser(userId);
 
-      if (isProUser) {
-        return { allowed: true, remaining: null, current: 0 };
-      }
-
-      // Get current usage via get_monthly_usage() database function
-      const currentUsage = await this.getMonthlyUsage(userId);
-      console.log("[canUserRecord] Current usage:", currentUsage);
-      
-      const limit = SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS; // 10 for free tier
-      const remaining = Math.max(0, limit - currentUsage);
-
-      return {
-        allowed: currentUsage < limit,
-        remaining,
-        current: currentUsage,
-      };
-    } catch (error) {
-      console.error("[canUserRecord] Error:", error);
-      throw error;
+    if (isProUser) {
+      return { allowed: true, remaining: null, current: 0 };
     }
+
+    // Get current usage via get_monthly_usage() database function
+    const currentUsage = await this.getMonthlyUsage(userId);
+    const limit = SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS; // 10 for free tier
+    const remaining = Math.max(0, limit - currentUsage);
+
+    return {
+      allowed: currentUsage < limit,
+      remaining,
+      current: currentUsage,
+    };
   },
 
   /**
