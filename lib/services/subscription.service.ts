@@ -21,6 +21,10 @@ function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  console.log("[getSupabaseAdmin] URL exists:", !!supabaseUrl);
+  console.log("[getSupabaseAdmin] Service key exists:", !!serviceRoleKey);
+  console.log("[getSupabaseAdmin] Service key length:", serviceRoleKey?.length || 0);
+
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error("Supabase admin credentials not configured");
   }
@@ -235,8 +239,17 @@ export const subscriptionService = {
    * Check if user is on pro tier
    */
   async isProUser(userId: string): Promise<boolean> {
-    const { data } = await this.getUserSubscription(userId);
-    return data?.tier === "pro" && data?.status === "active";
+    try {
+      console.log("[isProUser] Checking for user:", userId);
+      const { data } = await this.getUserSubscription(userId);
+      console.log("[isProUser] Subscription data:", data);
+      const isPro = data?.tier === "pro" && data?.status === "active";
+      console.log("[isProUser] Is pro:", isPro);
+      return isPro;
+    } catch (error) {
+      console.error("[isProUser] Error:", error);
+      throw error;
+    }
   },
 
   /**
