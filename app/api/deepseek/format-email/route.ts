@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { API_CONFIG, ERROR_MESSAGES, RATE_LIMITS } from "@/lib/constants";
-import { SYSTEM_PROMPTS } from "@/lib/prompts";
+import { SYSTEM_PROMPTS, validateUserInput, wrapUserInput, sanitizeUserInput } from "@/lib/prompts";
 import {
   applyRateLimit,
   getClientIdentifier,
@@ -81,7 +81,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // SECURITY: Validate user input for prompt injection attempts
+  const validation = validateUserInput(rawText);
+  if (!validation.isValid) {
+    console.warn(`Prompt injection attempt detected (${validation.severity}): ${validation.warning}`);
+    return NextResponse.json(
+      { 
+        error: "Input validation failed",
+        details: validation.warning 
+      },
+      { status: 400 }
+    );
+  }
+
   try {
+    // SECURITY: Wrap user input in explicit delimiters and sanitize title
+    const secureUserContent = wrapUserInput(rawText, 'content');
+    const sanitizedTitle = sanitizeUserInput(title);
+    
     const response = await fetchWithTimeout(API_CONFIG.DEEPSEEK_API_URL, {
       method: "POST",
       headers: {
@@ -96,10 +113,9 @@ export async function POST(req: NextRequest) {
             role: "user",
             content: `Convert this note into a Gmail-ready formal email body. If a title is provided, reference it in the intro naturally.
 
-Title: ${title || "(none)"}
+Title: ${sanitizedTitle || "(none)"}
 
-Content:
-${rawText}`,
+${secureUserContent}`,
           },
         ],
         temperature: API_CONFIG.FORMAT_TEMPERATURE,

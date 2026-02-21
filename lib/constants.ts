@@ -241,7 +241,7 @@ export const LOCAL_FORMATTER_CONFIG = {
  * Subscription tier limits
  */
 export const SUBSCRIPTION_CONFIG = {
-  FREE_MONTHLY_RECORDINGS: 5,
+  FREE_MONTHLY_RECORDINGS: 10, // Free tier: 10 recordings per month, Pro: unlimited
   FREE_MAX_NOTES: 20,
   FREE_MAX_VOCABULARY: 5,
 } as const;
@@ -250,9 +250,9 @@ export const SUBSCRIPTION_CONFIG = {
  * Pricing configuration (INR)
  */
 export const PRICING = {
-  MONTHLY: 399,
-  YEARLY: 2999,
-  YEARLY_SAVINGS_PERCENT: 37,
+  MONTHLY: 249,
+  YEARLY: 1999,
+  YEARLY_SAVINGS_PERCENT: 33,
   CURRENCY: "INR",
 } as const;
 

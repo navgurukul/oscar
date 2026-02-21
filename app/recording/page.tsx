@@ -139,6 +139,43 @@ function RecordingPageInner() {
       setShowUpgradePrompt(true);
       return;
     }
+
+    // Server-side pre-flight check for authenticated users
+    if (user) {
+      try {
+        const response = await fetch("/api/usage/check");
+        const data = await response.json();
+
+        if (response.status === 402) {
+          // Limit exceeded
+          setShowUpgradePrompt(true);
+          toast({
+            title: "Recording Limit Reached",
+            description: data.message || "Please upgrade to Pro for unlimited recordings.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to check recording limit");
+        }
+
+        if (!data.canRecord) {
+          setShowUpgradePrompt(true);
+          return;
+        }
+      } catch (error) {
+        console.error("Pre-flight check error:", error);
+        toast({
+          title: "Error",
+          description: "Failed to verify recording limit. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     await startRecording();
   };
 

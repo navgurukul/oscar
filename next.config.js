@@ -1,20 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
-  // Treat externals as ESM when possible
-  // Expose environment variables for API routes
-  env: {
-    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
-    RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
-    RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
-    RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
-    RAZORPAY_PLAN_MONTHLY: process.env.RAZORPAY_PLAN_MONTHLY,
-    RAZORPAY_PLAN_YEARLY: process.env.RAZORPAY_PLAN_YEARLY,
-    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-  },
-  experimental: {
-    // Helps with packages that use `import.meta` and ESM-only distribution
-    esmExternals: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
+    ],
   },
   // Required for SharedArrayBuffer (WASM multi-threading)
   /* async headers() {
