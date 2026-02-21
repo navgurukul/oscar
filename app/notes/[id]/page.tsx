@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
@@ -31,8 +31,9 @@ const FeedbackWidget = dynamic(
   }
 );
 
-export default function NoteDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function NoteDetailPage() {
+  const params = useParams<{ id: string }>();
+  const id = (params?.id as string) || "";
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();

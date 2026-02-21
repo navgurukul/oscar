@@ -1,8 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
-  // Explicitly use SWC minifier and treat externals as ESM when possible
-  swcMinify: true,
+  // Treat externals as ESM when possible
   // Expose environment variables for API routes
   env: {
     DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
