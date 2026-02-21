@@ -37,7 +37,7 @@ export function NoteActions() {
       if (currentId && user) {
         await notesService.deleteNote(currentId);
       }
-    } catch (err) {
+    } catch {
       // ignore deletion errors; proceed to clear local session
     } finally {
       storageService.clearNote();
