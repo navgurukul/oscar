@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { LogIn, LogOut, FileText, Settings } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { ROUTES } from "@/lib/constants";
 
@@ -16,10 +16,11 @@ import { ROUTES } from "@/lib/constants";
 export function AuthEdgeButton() {
   const { user, signOut, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [isHovered, setIsHovered] = useState(false);
 
-  // Don't show anything while auth is loading
-  if (isLoading) return null;
+  // Don't show anything while auth is loading or on auth page
+  if (isLoading || pathname === ROUTES.AUTH) return null;
 
   const handleAction = async () => {
     if (user) {
