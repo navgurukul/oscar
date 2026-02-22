@@ -41,8 +41,12 @@ const FeedbackWidget = dynamic(
   }
 );
 
-export default function NoteDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function NoteDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const [id, setId] = useState<string | null>(null);
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -66,6 +70,14 @@ export default function NoteDetailPage({ params }: { params: { id: string } }) {
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
   const [feedbackValue, setFeedbackValue] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const initializeParams = async () => {
+      const resolvedParams = await params;
+      setId(resolvedParams.id);
+    };
+    initializeParams();
+  }, [params]);
 
   useEffect(() => {
     const loadNote = async () => {
