@@ -8,7 +8,7 @@ import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Check } from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency } from "@/lib/constants";
 import type { BillingCycle } from "@/lib/types/subscription.types";
@@ -53,9 +53,9 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col">
-      {/* Lamp Effect Header */}
+      {/* Hero Section with Lamp Effect */}
       <LampContainer>
-        <motion.h1
+        <motion.div
           initial={{ opacity: 0.5, y: 100 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{
@@ -63,23 +63,239 @@ export default function Home() {
             duration: 0.8,
             ease: "easeInOut",
           }}
-          className="mt-8 bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-center text-4xl font-medium tracking-tight text-transparent md:text-7xl"
+          className="mt-8 text-center px-4"
         >
-          <LayoutTextFlip
-            text="Bring your ideas to light."
-            words={[
-              "Let AI write.",
-              "Let AI refine.",
-              "Let AI transform.",
-              "Create effortlessly.",
-            ]}
-            duration={3000}
-          />
-        </motion.h1>
+          <h1 className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-4xl font-medium tracking-tight text-transparent md:text-7xl">
+            <LayoutTextFlip
+              text="Bring your ideas to light."
+              words={[
+                "Let AI write.",
+                "Let AI refine.",
+                "Let AI transform.",
+                "Create effortlessly.",
+              ]}
+              duration={3000}
+            />
+          </h1>
+          <p className="mt-10 text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
+            Turn messy voice notes into clean text. Instantly.
+          </p>
+          {!session && (
+            <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+              <Button
+                onClick={handleViewPricing}
+                size="lg"
+                className="bg-cyan-500 hover:bg-cyan-600 text-white px-8 py-6 text-lg"
+              >
+                Start Free - No Credit Card
+              </Button>
+              <Button
+                onClick={() => {
+                  document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                size="lg"
+                variant="outline"
+                className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 px-8 py-6 text-lg"
+              >
+                See How It Works
+              </Button>
+            </div>
+          )}
+        </motion.div>
       </LampContainer>
 
       {!session && (
         <>
+          {/* Problem Statement Section */}
+          <section className="min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-950 to-slate-900">
+            <div className="max-w-6xl mx-auto">
+              <div className="text-center mb-16">
+                <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
+                  Your <span className="text-cyan-500">Best Ideas</span> Vanish Before You Type Them
+                </h2>
+                <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
+                  That perfect thought you had while walking? Gone by the time you open your laptop.
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                <div className="bg-slate-900/50 border border-red-500/20 rounded-xl p-6">
+                  <div className="text-red-400 mb-4">
+                    <Clock className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-3">Ideas Fade Fast</h3>
+                  <p className="text-gray-400">
+                    The perfect words you thought of? Gone before you start typing.
+                  </p>
+                </div>
+
+                <div className="bg-slate-900/50 border border-red-500/20 rounded-xl p-6">
+                  <div className="text-red-400 mb-4">
+                    <FileText className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-3">Voice Notes Are Messy</h3>
+                  <p className="text-gray-400">
+                    Full of ums and uhs. Too embarrassing to share with anyone.
+                  </p>
+                </div>
+
+                <div className="bg-slate-900/50 border border-red-500/20 rounded-xl p-6">
+                  <div className="text-red-400 mb-4">
+                    <Zap className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-3">Typing Kills Momentum</h3>
+                  <p className="text-gray-400">
+                    Switching to your phone or laptop breaks your flow. By the time you&apos;re typing, the moment&apos;s gone.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* How It Works Section */}
+          <section id="how-it-works" className="min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-slate-900">
+            <div className="max-w-6xl mx-auto">
+              <div className="text-center mb-16">
+                <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
+                  Speak It. <span className="text-cyan-500">OSCAR</span> Writes It.
+                </h2>
+                <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
+                  From messy voice note to polished text in 3 steps. No typing, no cleanup, no hassle.
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                <div className="relative">
+                  <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded-xl p-8">
+                    <div className="w-16 h-16 bg-cyan-500 rounded-full flex items-center justify-center mb-6 mx-auto">
+                      <Mic className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-2xl font-bold text-white mb-3">1. Speak</h3>
+                      <p className="text-gray-300">
+                        Hit record and talk. Walk, drive, commute. Capture your thoughts wherever inspiration strikes.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-gradient-to-r from-cyan-500/50 to-transparent"></div>
+                </div>
+
+                <div className="relative">
+                  <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded-xl p-8">
+                    <div className="w-16 h-16 bg-cyan-500 rounded-full flex items-center justify-center mb-6 mx-auto">
+                      <Brain className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-2xl font-bold text-white mb-3">2. AI Cleans</h3>
+                      <p className="text-gray-300">
+                        OSCAR removes filler words, fixes grammar, formats paragraphs. All automatically in seconds.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-gradient-to-r from-cyan-500/50 to-transparent"></div>
+                </div>
+
+                <div className="relative">
+                  <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded-xl p-8">
+                    <div className="w-16 h-16 bg-cyan-500 rounded-full flex items-center justify-center mb-6 mx-auto">
+                      <FileText className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-2xl font-bold text-white mb-3">3. Use It</h3>
+                      <p className="text-gray-300">
+                        Copy, share, or download your polished note. Ready for docs, emails, or wherever you need it.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          {/* Benefits Section */}
+          <section className="min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
+            <div className="max-w-6xl mx-auto">
+              <div className="text-center mb-16">
+                <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
+                  Why <span className="text-cyan-500">OSCAR</span>?
+                </h2>
+                <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
+                  Built for people who think faster than they type.
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                <div className="bg-slate-900/70 border border-cyan-500/20 rounded-xl p-8">
+                  <div className="text-cyan-400 mb-4">
+                    <Zap className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-2xl font-semibold text-white mb-4">10x Faster Than Typing</h3>
+                  <p className="text-gray-300 mb-4">
+                    You speak at 150+ words per minute. You type at 40. Stop wasting time transcribing your own thoughts.
+                  </p>
+                  <p className="text-cyan-400 text-sm">
+                    Perfect for: Meeting notes, blog drafts, task lists, brainstorming sessions
+                  </p>
+                </div>
+
+                <div className="bg-slate-900/70 border border-cyan-500/20 rounded-xl p-8">
+                  <div className="text-cyan-400 mb-4">
+                    <Brain className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-2xl font-semibold text-white mb-4">AI That Understands Context</h3>
+                  <p className="text-gray-300 mb-4">
+                    Not just speech-to-text. OSCAR formats your ideas intelligently with proper paragraphs, punctuation, and structure.
+                  </p>
+                  <p className="text-cyan-400 text-sm">
+                    Perfect for: Long-form content, complex ideas, multi-step plans
+                  </p>
+                </div>
+
+                <div className="bg-slate-900/70 border border-cyan-500/20 rounded-xl p-8">
+                  <div className="text-cyan-400 mb-4">
+                    <FileText className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-2xl font-semibold text-white mb-4">Always Shareable</h3>
+                  <p className="text-gray-300 mb-4">
+                    Every note is clean enough to send directly to your team, paste into docs, or post online. No embarrassing filler words.
+                  </p>
+                  <p className="text-cyan-400 text-sm">
+                    Perfect for: Collaboration, client updates, content creation
+                  </p>
+                </div>
+
+                <div className="bg-slate-900/70 border border-cyan-500/20 rounded-xl p-8">
+                  <div className="text-cyan-400 mb-4">
+                    <Sparkles className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-2xl font-semibold text-white mb-4">Custom Vocabulary</h3>
+                  <p className="text-gray-300 mb-4">
+                    Teach OSCAR your industry terms, product names, or company jargon. It learns and adapts to your world.
+                  </p>
+                  <p className="text-cyan-400 text-sm">
+                    Perfect for: Technical notes, business contexts, specialized fields
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Testimonials Section */}
+          <section className="min-h-screen snap-start flex items-center justify-center py-16 bg-slate-900">
+            <div className="w-full">
+              <div className="mx-auto max-w-4xl px-4 md:px-8 lg:px-12 text-center mb-12">
+                <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
+                  Loved by <span className="text-cyan-500">Creators & Teams</span>
+                </h2>
+                <p className="text-gray-300 text-lg md:text-xl">
+                  Join thousands capturing ideas on the go.
+                </p>
+              </div>
+              <AnimatedTestimonials testimonials={TESTIMONIALS} autoplay />
+            </div>
+          </section>
+
           {/* Pricing Section */}
           <section className="min-h-screen snap-start flex items-center justify-center py-16 px-4">
             <div className="max-w-5xl mx-auto">
@@ -248,18 +464,27 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Testimonials Section */}
-          <section className="min-h-screen snap-start flex items-center justify-center pb-16">
-            <div className="w-full">
-              <div className="mx-auto max-w-4xl px-4 md:px-8 lg:px-12 text-center mb-8">
-                <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                  What <span className="text-cyan-500">People Say</span>
-                </h2>
-                <p className="text-gray-400 text-lg">
-                  Creators and teams using OSCAR to turn voice into clear notes.
-                </p>
+          {/* Final CTA Section */}
+          <section className="min-h-[60vh] snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-950 to-black">
+            <div className="max-w-4xl mx-auto text-center">
+              <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
+                Stop Losing Your <span className="text-cyan-500">Best Ideas</span>
+              </h2>
+              <p className="text-gray-300 text-lg md:text-xl mb-8 max-w-2xl mx-auto">
+                Start free. No credit card required. Turn messy thoughts into clean text in seconds.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button
+                  onClick={handleViewPricing}
+                  size="lg"
+                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-10 py-7 text-xl font-semibold"
+                >
+                  Try OSCAR Free
+                </Button>
               </div>
-              <AnimatedTestimonials testimonials={TESTIMONIALS} autoplay />
+              <p className="text-gray-500 text-sm mt-6">
+                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free recordings/month • No credit card • Upgrade anytime
+              </p>
             </div>
           </section>
         </>
