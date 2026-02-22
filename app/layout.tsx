@@ -5,6 +5,7 @@ import Script from "next/script";
 import { FloatingNavbar } from "@/components/shared/FloatingNavbar";
 import { AuthEdgeButton } from "@/components/shared/AuthEdgeButton";
 import { HomeRecordingButton } from "@/components/recording/HomeRecordingButton";
+import { Footer } from "@/components/shared/Footer";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
 import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
 import "./globals.css";
@@ -37,7 +38,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${roboto.variable} ${inter.variable} font-inter`}>
+    <html
+      lang="en"
+      className={`${roboto.variable} ${inter.variable} font-inter`}
+    >
       <head>
         {/* Load ONNX Runtime Web from CDN to avoid bundling issues and fix 'onnxruntime' missing error */}
         <Script
@@ -63,6 +67,7 @@ export default function RootLayout({
             <FloatingNavbar />
             <AuthEdgeButton />
             {children}
+            <Footer />
             <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
               <HomeRecordingButton />
             </div>
