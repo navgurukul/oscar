@@ -41,12 +41,8 @@ const FeedbackWidget = dynamic(
   }
 );
 
-export default function NoteDetailPage({
-  params,
-}: {
-  params?: { id: string };
-}) {
-  const id = params?.id;
+export default function NoteDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
