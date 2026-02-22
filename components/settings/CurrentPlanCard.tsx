@@ -64,11 +64,11 @@ export function CurrentPlanCard({
               </p>
             </div>
           </div>
-          {isProUser && (
+          {isProUser ? (
             <span
               className={`px-3 py-1 rounded-full text-xs font-medium ${
                 status === "active"
-                  ? "bg-green-500/20 text-green-400"
+                  ? "bg-green-500/20 text-cyan-400"
                   : status === "cancelled"
                   ? "bg-yellow-500/20 text-yellow-400"
                   : "bg-red-500/20 text-red-400"
@@ -80,12 +80,19 @@ export function CurrentPlanCard({
                 ? "Cancelling"
                 : status.charAt(0).toUpperCase() + status.slice(1)}
             </span>
+          ) : (
+            <Button
+              onClick={onUpgradeClick}
+              className="bg-cyan-500 hover:bg-cyan-600 text-white self-center"
+            >
+              Upgrade to Pro
+            </Button>
           )}
         </div>
       </CardHeader>
-      <CardContent>
-        {/* Subscription Details */}
-        {isProUser && (
+      {isProUser && (
+        <CardContent>
+          {/* Subscription Details */}
           <div className="space-y-3 mb-6 pb-6 border-b border-gray-800">
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-400 flex items-center gap-2">
@@ -104,33 +111,22 @@ export function CurrentPlanCard({
               <span className="text-white">{formatDate(currentPeriodEnd)}</span>
             </div>
           </div>
-        )}
 
-        {/* Actions */}
-        <div className="text-end">
-          {isProUser ? (
-            <>
-              {status !== "cancelled" && (
-                <Button
-                  variant="outline"
-                  onClick={onCancelClick}
-                  size="sm"
-                  // className="border-cyan-700 text-gray-300 hover:bg-gray-800"
-                >
-                  Cancel Subscription
-                </Button>
-              )}
-            </>
-          ) : (
-            <Button
-              onClick={onUpgradeClick}
-              className="bg-cyan-500 hover:bg-cyan-600 text-white"
-            >
-              Upgrade to Pro
-            </Button>
+          {/* Actions */}
+          {status !== "cancelled" && (
+            <div className="text-end">
+              <Button
+                variant="outline"
+                onClick={onCancelClick}
+                size="sm"
+                // className="border-cyan-700 text-gray-300 hover:bg-gray-800"
+              >
+                Cancel Subscription
+              </Button>
+            </div>
           )}
-        </div>
-      </CardContent>
+        </CardContent>
+      )}
     </Card>
   );
 }

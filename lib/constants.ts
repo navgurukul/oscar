@@ -257,6 +257,19 @@ export const PRICING = {
 } as const;
 
 /**
+ * USD pricing (display only - actual charge is INR)
+ * Fixed conversion: ₹249 ≈ $3, ₹1999 ≈ $24
+ */
+export const PRICING_USD = {
+  MONTHLY: 3,
+  YEARLY: 24,
+  YEARLY_SAVINGS_PERCENT: 33,
+  CURRENCY: "USD",
+} as const;
+
+export type Currency = "INR" | "USD";
+
+/**
  * Rate limiting configuration
  * Protects APIs from abuse and runaway costs
  */

@@ -142,7 +142,7 @@ export function useRazorpayCheckout({
             });
 
             onSuccess?.();
-            router.push("/billing");
+            router.push("/recording");
           } catch (verifyError) {
             console.error("Verification error:", verifyError);
             const errorMessage =
