@@ -108,7 +108,7 @@ export function CurrentPlanCard({
 
         {/* Actions */}
         <div className="text-end">
-          {!isProUser ? (
+          {isProUser ? (
             <>
               {status !== "cancelled" && (
                 <Button
