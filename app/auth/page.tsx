@@ -81,7 +81,7 @@ function AuthFormInner() {
             <Button
               onClick={handleGoogleSignIn}
               disabled={isSubmitting}
-              className="bg-white text-gray-900 hover:bg-gray-50 hover:scale-105 font-semibold py-4 px-8 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-3 shadow-2xl shadow-cyan-500/20"
+              className="bg-white text-gray-900 hover:bg-gray-50 hover:scale-105 font-semibold py-4 px-8 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-3 shadow-2xl shadow-cyan-500/20"
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">

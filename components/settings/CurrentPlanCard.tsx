@@ -107,14 +107,15 @@ export function CurrentPlanCard({
         )}
 
         {/* Actions */}
-        <div className="flex gap-3">
+        <div className="text-end">
           {isProUser ? (
             <>
               {status !== "cancelled" && (
                 <Button
                   variant="outline"
                   onClick={onCancelClick}
-                  className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                  size="sm"
+                  // className="border-cyan-700 text-gray-300 hover:bg-gray-800"
                 >
                   Cancel Subscription
                 </Button>

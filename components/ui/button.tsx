@@ -11,14 +11,11 @@ const buttonVariants = cva(
       variant: {
         default: "bg-cyan-700 text-white hover:bg-cyan-700",
         destructive: "bg-red-600 text-white hover:bg-red-700",
-        outline:
-          "border border-gray-300 bg-white text-gray-900 hover:bg-gray-50",
+        outline: "border text-white hover:bg-gray-700",
         ghost: "bg-transparent",
         // New design variants
-        glow:
-          "relative bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_30px_rgba(6,182,212,0.35)] hover:from-cyan-500 hover:to-blue-500 ring-1 ring-cyan-400/30",
-        soft:
-          "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25",
+        glow: "relative bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_30px_rgba(6,182,212,0.35)] hover:from-cyan-500 hover:to-blue-500 ring-1 ring-cyan-400/30",
+        soft: "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25",
         outlineDark:
           "border border-cyan-700/40 text-cyan-300 hover:bg-cyan-700/20",
       },
@@ -48,7 +45,6 @@ const buttonVariants = cva(
       size: "default",
       margin: "none",
     },
-
   }
 );
 
@@ -56,7 +52,14 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {}
 
-export function Button({ className, variant, size, margin, padding, ...props }: ButtonProps) {
+export function Button({
+  className,
+  variant,
+  size,
+  margin,
+  padding,
+  ...props
+}: ButtonProps) {
   return (
     <button
       className={cn(
