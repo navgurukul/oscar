@@ -41,16 +41,8 @@ const FeedbackWidget = dynamic(
   }
 );
 
-export default function NoteDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const [id, setId] = useState<string>("");
-
-  useEffect(() => {
-    params.then((p) => setId(p.id));
-  }, [params]);
+export default function NoteDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();

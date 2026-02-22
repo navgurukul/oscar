@@ -114,6 +114,7 @@ export function CurrentPlanCard({
                 <Button
                   variant="outline"
                   onClick={onCancelClick}
+                  size="sm"
                   // className="border-cyan-700 text-gray-300 hover:bg-gray-800"
                 >
                   Cancel Subscription
