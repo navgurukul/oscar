@@ -8,6 +8,7 @@ import type {
   SubscriptionTier,
   BillingCycle,
 } from "@/lib/types/subscription.types";
+import type { Currency } from "@/lib/constants";
 
 interface PricingCardProps {
   tier: SubscriptionTier;
@@ -19,6 +20,7 @@ interface PricingCardProps {
   currentStatus?: string;
   onSelect: () => void;
   isLoading?: boolean;
+  currency?: Currency;
 }
 
 export function PricingCard({
@@ -31,11 +33,13 @@ export function PricingCard({
   currentStatus,
   onSelect,
   isLoading = false,
+  currency = "INR",
 }: PricingCardProps) {
   // A plan is current only if tiers match AND status is active
   // This prevents showing "Current Plan" for cancelled subscriptions
   const isCurrentPlan = tier === currentTier && currentStatus === "active";
   const isFree = tier === "free";
+  const currencySymbol = currency === "USD" ? "$" : "₹";
 
   return (
     <Card
@@ -63,7 +67,7 @@ export function PricingCard({
           </h3>
           <div className="flex items-baseline justify-center gap-1">
             <span className="text-4xl font-bold text-white">
-              {isFree ? "₹0" : `₹${price}`}
+              {isFree ? `${currencySymbol}0` : `${currencySymbol}${price}`}
             </span>
             {!isFree && (
               <span className="text-gray-400">
@@ -71,6 +75,11 @@ export function PricingCard({
               </span>
             )}
           </div>
+          {!isFree && currency === "USD" && (
+            <p className="text-xs text-gray-500 mt-2">
+              Charged in INR (₹{currency === "USD" && billingCycle === "monthly" ? "249" : "1999"})
+            </p>
+          )}
           {tier === "pro" && billingCycle === "yearly" && (
             <p className="text-sm text-cyan-400 mt-1">Save 33% vs monthly</p>
           )}

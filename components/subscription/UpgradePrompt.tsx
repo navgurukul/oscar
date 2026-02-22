@@ -119,7 +119,7 @@ export function UpgradePrompt({
           <p className="text-gray-400 text-sm">
             Starting at just{" "}
             <span className="text-white font-medium">
-              ₹{PRICING.MONTHLY}/month
+              ₹{PRICING.MONTHLY}/month (~$3/month)
             </span>
           </p>
 

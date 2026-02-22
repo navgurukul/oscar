@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { PRICING, SUBSCRIPTION_CONFIG } from "@/lib/constants";
+import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency } from "@/lib/constants";
 import type { BillingCycle } from "@/lib/types/subscription.types";
 
 const TESTIMONIALS = [
@@ -41,12 +41,15 @@ export default function Home() {
   const { session } = useAuth();
   const router = useRouter();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+  const [currency, setCurrency] = useState<Currency>("INR");
 
   const handleViewPricing = () => {
     router.push("/auth?redirectTo=/pricing");
   };
 
-  const price = billingCycle === "monthly" ? PRICING.MONTHLY : PRICING.YEARLY;
+  const pricingConfig = currency === "USD" ? PRICING_USD : PRICING;
+  const price = billingCycle === "monthly" ? pricingConfig.MONTHLY : pricingConfig.YEARLY;
+  const currencySymbol = currency === "USD" ? "$" : "₹";
 
   return (
     <main className="min-h-screen flex flex-col">
@@ -89,8 +92,31 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Billing toggle */}
-              <div className="flex items-center justify-center mb-12">
+              {/* Currency and Billing toggles */}
+              <div className="flex flex-col items-center justify-center mb-12 gap-6">
+                {/* Currency toggle */}
+                <Tabs
+                  value={currency}
+                  onValueChange={(value) => setCurrency(value as Currency)}
+                  className="w-fit"
+                >
+                  <TabsList className="bg-gray-900">
+                    <TabsTrigger
+                      value="INR"
+                      className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
+                    >
+                      ₹ INR
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="USD"
+                      className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
+                    >
+                      $ USD
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+
+                {/* Billing toggle */}
                 <Tabs
                   value={billingCycle}
                   onValueChange={(value) => setBillingCycle(value as BillingCycle)}
@@ -109,7 +135,7 @@ export default function Home() {
                     >
                       Yearly
                       <span className="ml-2 text-xs bg-white/80 text-cyan-700 px-2 py-0.5 rounded-full">
-                        Save {PRICING.YEARLY_SAVINGS_PERCENT}%
+                        Save {pricingConfig.YEARLY_SAVINGS_PERCENT}%
                       </span>
                     </TabsTrigger>
                   </TabsList>
@@ -123,7 +149,7 @@ export default function Home() {
                   <div className="text-center mb-6">
                     <h3 className="text-xl font-bold text-white mb-2">Free</h3>
                     <div className="flex items-baseline justify-center gap-1">
-                      <span className="text-4xl font-bold text-white">₹0</span>
+                      <span className="text-4xl font-bold text-white">{currencySymbol}0</span>
                     </div>
                   </div>
 
@@ -169,13 +195,18 @@ export default function Home() {
                   <div className="text-center mb-6">
                     <h3 className="text-xl font-bold text-white mb-2">Pro</h3>
                     <div className="flex items-baseline justify-center gap-1">
-                      <span className="text-4xl font-bold text-white">₹{price}</span>
+                      <span className="text-4xl font-bold text-white">{currencySymbol}{price}</span>
                       <span className="text-gray-400">
                         /{billingCycle === "monthly" ? "month" : "year"}
                       </span>
                     </div>
                     {billingCycle === "yearly" && (
-                      <p className="text-sm text-cyan-400 mt-1">Save 33% vs monthly</p>
+                      <p className="text-sm text-cyan-400 mt-1">Save {pricingConfig.YEARLY_SAVINGS_PERCENT}% vs monthly</p>
+                    )}
+                    {currency === "USD" && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        Charged in INR (₹{billingCycle === "monthly" ? "249" : "1999"})
+                      </p>
                     )}
                   </div>
 

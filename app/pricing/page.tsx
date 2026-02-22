@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
 import { PricingCard } from "@/components/subscription/PricingCard";
 import { useRazorpayCheckout } from "@/components/subscription/RazorpayCheckout";
-import { PRICING, SUBSCRIPTION_CONFIG } from "@/lib/constants";
+import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency } from "@/lib/constants";
 import { Check } from "lucide-react";
 import type { BillingCycle } from "@/lib/types/subscription.types";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,6 +41,7 @@ export default function PricingPage() {
   const { user } = useAuth();
   const { tier, status, refetch } = useSubscriptionContext();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+  const [currency, setCurrency] = useState<Currency>("INR");
 
   const { initiateCheckout, isLoading } = useRazorpayCheckout({
     billingCycle,
@@ -66,7 +67,8 @@ export default function PricingPage() {
     }
   };
 
-  const price = billingCycle === "monthly" ? PRICING.MONTHLY : PRICING.YEARLY;
+  const pricingConfig = currency === "USD" ? PRICING_USD : PRICING;
+  const price = billingCycle === "monthly" ? pricingConfig.MONTHLY : pricingConfig.YEARLY;
 
   return (
     <main className="min-h-screen py-16 px-4 mt-8">
@@ -82,8 +84,31 @@ export default function PricingPage() {
           </p>
         </div>
 
-        {/* Billing toggle */}
-        <div className="flex items-center justify-center mb-12">
+        {/* Currency and Billing toggles */}
+        <div className="flex flex-col items-center justify-center mb-12 gap-6">
+          {/* Currency toggle */}
+          <Tabs
+            value={currency}
+            onValueChange={(value) => setCurrency(value as Currency)}
+            className="w-fit"
+          >
+            <TabsList className="bg-gray-900">
+              <TabsTrigger
+                value="INR"
+                className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
+              >
+                ₹ INR
+              </TabsTrigger>
+              <TabsTrigger
+                value="USD"
+                className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
+              >
+                $ USD
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {/* Billing toggle */}
           <Tabs
             value={billingCycle}
             onValueChange={(value) => setBillingCycle(value as BillingCycle)}
@@ -102,7 +127,7 @@ export default function PricingPage() {
               >
                 Yearly
                 <span className="ml-2 text-xs bg-white/80 text-cyan-700 px-2 py-0.5 rounded-full">
-                  Save {PRICING.YEARLY_SAVINGS_PERCENT}%
+                  Save {pricingConfig.YEARLY_SAVINGS_PERCENT}%
                 </span>
               </TabsTrigger>
             </TabsList>
@@ -119,6 +144,7 @@ export default function PricingPage() {
             currentTier={tier}
             currentStatus={status}
             onSelect={handleFreePlan}
+            currency={currency}
           />
           <PricingCard
             tier="pro"
@@ -130,6 +156,7 @@ export default function PricingPage() {
             currentStatus={status}
             onSelect={handleProPlan}
             isLoading={isLoading}
+            currency={currency}
           />
         </div>
 

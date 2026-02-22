@@ -51,7 +51,7 @@ export function CancelSubscriptionModal({
           </p>
           <div className="flex gap-3">
             <Button
-              variant="outline"
+              // variant="outline"
               onClick={onClose}
               className="flex-1 border-gray-700"
               disabled={isLoading}
@@ -59,7 +59,7 @@ export function CancelSubscriptionModal({
               Keep Subscription
             </Button>
             <Button
-              variant="destructive"
+              variant="outline"
               onClick={onConfirm}
               className="flex-1"
               disabled={isLoading}
