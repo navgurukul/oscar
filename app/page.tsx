@@ -63,9 +63,9 @@ export default function Home() {
             duration: 0.8,
             ease: "easeInOut",
           }}
-          className="mt-8 text-center px-4"
+          className="mt-16 sm:mt-20 md:mt-24 w-full flex flex-col items-center justify-center text-center px-4 sm:px-6 md:px-8"
         >
-          <h1 className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-4xl font-medium tracking-tight text-transparent md:text-7xl">
+          <h1 className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-medium tracking-tight text-transparent max-w-5xl mx-auto">
             <LayoutTextFlip
               text="Bring your ideas to light."
               words={[
@@ -77,15 +77,15 @@ export default function Home() {
               duration={3000}
             />
           </h1>
-          <p className="mt-10 text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
+          <p className="mt-8 sm:mt-10 text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto px-4">
             Turn messy voice notes into clean text. Instantly.
           </p>
           {!session && (
-            <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="mt-8 w-full max-w-md sm:max-w-xl mx-auto flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center px-4">
               <Button
                 onClick={handleViewPricing}
                 size="lg"
-                className="bg-cyan-500 hover:bg-cyan-600 text-white px-8 py-6 text-lg"
+                className="w-full sm:w-auto bg-cyan-500 hover:bg-cyan-600 text-white px-6 sm:px-8 py-5 sm:py-6 text-base sm:text-lg whitespace-nowrap"
               >
                 Start Free - No Credit Card
               </Button>
@@ -95,7 +95,7 @@ export default function Home() {
                 }}
                 size="lg"
                 variant="outline"
-                className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 px-8 py-6 text-lg"
+                className="w-full sm:w-auto border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 px-6 sm:px-8 py-5 sm:py-6 text-base sm:text-lg whitespace-nowrap"
               >
                 See How It Works
               </Button>
