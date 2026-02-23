@@ -58,19 +58,23 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className="bg-slate-950 text-white antialiased font-sans">
+      <body className="bg-slate-950 text-white antialiased font-sans pb-16">
         <AuthProvider>
           <SubscriptionProvider>
-            {/* Apply saved theme and font preferences */}
-            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-
             <FloatingNavbar />
             <AuthEdgeButton />
             {children}
-            <Footer />
-            <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
+
+           {/* Fixed Footer at bottom - no border/line */}
+            <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950">
+              <Footer />
+            </div>
+
+            {/* Recording button - positioned lower, overlapping footer area */}
+            <div className="fixed bottom-10 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
               <HomeRecordingButton />
             </div>
+
             <Toaster />
           </SubscriptionProvider>
         </AuthProvider>

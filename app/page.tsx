@@ -12,28 +12,39 @@ import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain } from "lucide-react"
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency } from "@/lib/constants";
 import type { BillingCycle } from "@/lib/types/subscription.types";
+import img1 from "@/components/ui/assets/image_1.png";
+import img2 from "@/components/ui/assets/image_2.jpg";
+import img3 from "@/components/ui/assets/image_3.jpg";
+import img4 from "@/components/ui/assets/image_4.png";
 
 const TESTIMONIALS = [
   {
     quote:
-      "OSCAR turns my messy voice notes into clean summaries I can drop straight into my docs.",
-    name: "Product Manager",
-    designation: "Plans sprints on the go",
-    src: "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?w=800&q=80",
+      "Oscar has completely improved the way I handle my daily tasks, offering fast and accurate speech-to-text transcription along with seamless editing, sharing, and downloading features, all within a user-friendly platform that keeps everything organized and efficient.",
+    name: "Saloni Panwar",
+    designation: "Frontend Developer",
+    src: img1,
   },
   {
     quote:
-      "I record tasks while walking between meetings and review a polished checklist later.",
-    name: "Engineering Lead",
-    designation: "Keeps projects moving",
-    src: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&q=80",
+      "The design is minimal, modern, and easy to read. The layout, spacing, and typography make the product look like very attractive.t is more affordable compared to others, making it a better choice for users. Its lower price makes it more attractive and easier for people to use. Because it is more budget-friendly than others, more users will prefer it.",
+    name: "Roshni Jha",
+    designation: "Frontend Developer",
+    src: img2,
   },
   {
     quote:
-      "Speaking ideas out loud is faster; OSCAR makes them look like I sat and wrote them.",
-    name: "Founder",
-    designation: "Captures ideas in motion",
-    src: "https://images.unsplash.com/photo-1556157382-97eda2d62296?w=800&q=80",
+      "OSCAR is really helpful for turning voice notes into clear text. It saves time and makes capturing ideas much easier. I find it very useful for learning and work notes",
+    name: "Komal Ahire",
+    designation: "Senior Fullstack Developer",
+    src: img3,
+  },
+  {
+    quote:
+      "Sentence structure recognition – The app correctly transcribed: The quick brown fox jumps over the lazy dog. She sells seashells by the seashore.Punctuation handling – Full stops were placed correctly.Most words were captured accurately – No missing words in the first two sentences.",
+    name: "Sanjna Panwar",
+    designation: "Senior Backend Developer",
+    src: img4,
   },
 ];
 
@@ -52,57 +63,59 @@ export default function Home() {
   const currencySymbol = currency === "USD" ? "$" : "₹";
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="h-screen snap-y snap-mandatory overflow-y-auto flex flex-col">
       {/* Hero Section with Lamp Effect */}
-      <LampContainer>
-        <motion.div
-          initial={{ opacity: 0.5, y: 100 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{
-            delay: 0.3,
-            duration: 0.8,
-            ease: "easeInOut",
-          }}
-          className="mt-8 text-center px-4"
-        >
-          <h1 className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-4xl font-medium tracking-tight text-transparent md:text-7xl">
-            <LayoutTextFlip
-              text="Bring your ideas to light."
-              words={[
-                "Let AI write.",
-                "Let AI refine.",
-                "Let AI transform.",
-                "Create effortlessly.",
-              ]}
-              duration={3000}
-            />
-          </h1>
-          <p className="mt-10 text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
-            Turn messy voice notes into clean text. Instantly.
-          </p>
-          {!session && (
-            <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                onClick={handleViewPricing}
-                size="lg"
-                className="bg-cyan-500 hover:bg-cyan-600 text-white px-8 py-6 text-lg"
-              >
-                Start Free - No Credit Card
-              </Button>
-              <Button
-                onClick={() => {
-                  document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                size="lg"
-                variant="outline"
-                className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 px-8 py-6 text-lg"
-              >
-                See How It Works
-              </Button>
-            </div>
-          )}
-        </motion.div>
-      </LampContainer>
+      <section className="min-h-screen snap-start flex items-center justify-center mt-5 py-16 px-4">
+        <LampContainer >
+          <motion.div
+            initial={{ opacity: 0.5, y: 100 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{
+              delay: 0.3,
+              duration: 0.8,
+              ease: "easeInOut",
+            }}
+            className="mt-8 text-center px-4"
+          >
+            <h1 className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-4xl font-medium tracking-tight text-transparent md:text-7xl">
+              <LayoutTextFlip
+                text="Bring your ideas to light."
+                words={[
+                  "Let AI write.",
+                  "Let AI refine.",
+                  "Let AI transform.",
+                  "Create effortlessly.",
+                ]}
+                duration={3000}
+              />
+            </h1>
+            <p className="mt-10 text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
+              Turn messy voice notes into clean text. Instantly.
+            </p>
+            {!session && (
+              <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+                <Button
+                  onClick={handleViewPricing}
+                  size="lg"
+                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-8 py-6 text-lg"
+                >
+                  Start Free - No Credit Card
+                </Button>
+                <Button
+                  onClick={() => {
+                    document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  size="lg"
+                  variant="outline"
+                  className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 px-8 py-6 text-lg"
+                >
+                  See How It Works
+                </Button>
+              </div>
+            )}
+          </motion.div>
+        </LampContainer>
+      </section>
 
       {!session && (
         <>
