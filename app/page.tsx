@@ -63,7 +63,7 @@ export default function Home() {
             duration: 0.8,
             ease: "easeInOut",
           }}
-          className="mt-16 sm:mt-20 md:mt-24 w-full flex flex-col items-center justify-center text-center px-4 sm:px-6 md:px-8"
+          className="mt-8 sm:mt-12 md:mt-16 w-full flex flex-col items-center justify-center text-center px-4 sm:px-6 md:px-8"
         >
           <h1 className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-medium tracking-tight text-transparent max-w-5xl mx-auto">
             <LayoutTextFlip
