@@ -1,0 +1,44 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm install -g pnpm
+        - pnpm install
+    build:
+      commands:
+        - echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" >> .env.production
+        - echo "RAZORPAY_KEY_SECRET=$RAZORPAY_KEY_SECRET" >> .env.production
+        - echo "RAZORPAY_WEBHOOK_SECRET=$RAZORPAY_WEBHOOK_SECRET" >> .env.production
+        - echo "RAZORPAY_KEY_ID=$RAZORPAY_KEY_ID" >> .env.production
+        - echo "RAZORPAY_PLAN_MONTHLY=$RAZORPAY_PLAN_MONTHLY" >> .env.production
+        - echo "RAZORPAY_PLAN_YEARLY=$RAZORPAY_PLAN_YEARLY" >> .env.production
+        - echo "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY" >> .env.production
+        - pnpm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - .pnpm-store/**/*
+      - .next/cache/**/*
+  # Lambda SSR Runtime Environment Variables
+  # These are required for Next.js API routes and server components
+  environment:
+    variables:
+      # Supabase Configuration
+      SUPABASE_SERVICE_ROLE_KEY: $SUPABASE_SERVICE_ROLE_KEY
+      NEXT_PUBLIC_SUPABASE_URL: $NEXT_PUBLIC_SUPABASE_URL
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: $NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      # Razorpay Configuration (CRITICAL for subscription creation)
+      RAZORPAY_KEY_ID: $RAZORPAY_KEY_ID
+      RAZORPAY_KEY_SECRET: $RAZORPAY_KEY_SECRET
+      RAZORPAY_WEBHOOK_SECRET: $RAZORPAY_WEBHOOK_SECRET
+      RAZORPAY_PLAN_MONTHLY: $RAZORPAY_PLAN_MONTHLY
+      RAZORPAY_PLAN_YEARLY: $RAZORPAY_PLAN_YEARLY
+      NEXT_PUBLIC_RAZORPAY_KEY_ID: $NEXT_PUBLIC_RAZORPAY_KEY_ID
+
+      # DeepSeek AI Configuration
+      DEEPSEEK_API_KEY: $DEEPSEEK_API_KEY
