@@ -2,16 +2,17 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { LogIn, LogOut, FileText, Settings } from "lucide-react";
+import { LogIn, FileText, Settings } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { ROUTES } from "@/lib/constants";
+import Image from "next/image";
 
 /**
  * AuthEdgeButton - A fixed-position authentication button attached to the right edge.
- * Desktop: Horizontal layout with sliding text animation on hover
- * Mobile: Vertical stack with simple icon-only buttons
+ * Desktop: Horizontal layout with sliding text animation on hover (top-right corner)
+ * Mobile: Vertical stack with simple icon-only buttons (top-right corner)
  */
 export function AuthEdgeButton() {
   const { user, signOut, isLoading } = useAuth();
@@ -35,26 +36,34 @@ export function AuthEdgeButton() {
   return (
     <>
       {/* Mobile Layout - Vertical stack with simple icon buttons */}
-      {/* Order: Notes (top) -> Settings -> Auth (bottom, aligned with Mic button at bottom-6) */}
-      <div className="fixed bottom-6 right-4 z-50 flex flex-col items-center gap-2 md:hidden">
-        <AnimatePresence mode="popLayout">
-          {user && (
-            <motion.div
-              key="notes-link-mobile"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-            >
-              <Link href={ROUTES.NOTES}>
-                <motion.div
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl"
-                >
-                  <FileText className="w-4 h-4 text-cyan-400" />
-                </motion.div>
-              </Link>
-            </motion.div>
+      {/* Order: Auth (top) -> Settings -> Notes (bottom) */}
+      <div className="fixed top-20 right-4 z-50 flex flex-col items-center gap-2 md:hidden">
+        {/* Auth button - displays avatar when logged in, at top */}
+        <motion.button
+          onClick={handleAction}
+          whileTap={{ scale: 0.95 }}
+          className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl overflow-hidden"
+        >
+          {user ? (
+            user.user_metadata?.avatar_url ? (
+              <Image
+                src={user.user_metadata.avatar_url}
+                alt="Profile"
+                width={40}
+                height={40}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-bold text-sm">
+                {user.email?.[0].toUpperCase() || "U"}
+              </div>
+            )
+          ) : (
+            <LogIn className="w-4 h-4 text-cyan-400" />
           )}
+        </motion.button>
+
+        <AnimatePresence mode="popLayout">
           {user && (
             <motion.div
               key="settings-link-mobile"
@@ -72,24 +81,28 @@ export function AuthEdgeButton() {
               </Link>
             </motion.div>
           )}
-        </AnimatePresence>
-
-        {/* Auth button - simple icon only on mobile, at bottom */}
-        <motion.button
-          onClick={handleAction}
-          whileTap={{ scale: 0.95 }}
-          className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl"
-        >
-          {user ? (
-            <LogOut className="w-4 h-4 text-gray-300" />
-          ) : (
-            <LogIn className="w-4 h-4 text-cyan-400" />
+          {user && (
+            <motion.div
+              key="notes-link-mobile"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+            >
+              <Link href={ROUTES.NOTES}>
+                <motion.div
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl"
+                >
+                  <FileText className="w-4 h-4 text-cyan-400" />
+                </motion.div>
+              </Link>
+            </motion.div>
           )}
-        </motion.button>
+        </AnimatePresence>
       </div>
 
       {/* Desktop Layout - Horizontal with sliding animation */}
-      <div className="fixed bottom-10 right-0 z-50 pointer-events-none items-center gap-3 pr-0 hidden md:flex">
+      <div className="fixed top-8 right-0 z-50 pointer-events-none items-center gap-3 pr-0 hidden md:flex">
         <AnimatePresence mode="popLayout">
           {user && (
             <motion.div
@@ -141,7 +154,7 @@ export function AuthEdgeButton() {
           onMouseLeave={() => setIsHovered(false)}
           onClick={handleAction}
           layout
-          className="pointer-events-auto flex items-center rounded-l-xl h-12 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors"
+          className="pointer-events-auto flex items-center rounded-l-xl h-12 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors overflow-hidden"
         >
           <div className="flex items-center px-3 min-w-[56px] justify-center">
             <AnimatePresence initial={false}>
@@ -167,7 +180,21 @@ export function AuthEdgeButton() {
 
             <div className="flex items-center justify-center shrink-0 relative z-10">
               {user ? (
-                <LogOut className="w-5 h-5 transition-transform duration-300 group-hover:scale-110 text-gray-300" />
+                user.user_metadata?.avatar_url ? (
+                  <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-cyan-400/50 transition-transform duration-300 group-hover:scale-110">
+                    <Image
+                      src={user.user_metadata.avatar_url}
+                      alt="Profile"
+                      width={32}
+                      height={32}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-bold text-sm border-2 border-cyan-400/50 transition-transform duration-300 group-hover:scale-110">
+                    {user.email?.[0].toUpperCase() || "U"}
+                  </div>
+                )
               ) : (
                 <LogIn className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
               )}

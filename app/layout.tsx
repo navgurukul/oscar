@@ -1,12 +1,14 @@
-import type { Metadata } from "next";
+"use client";
+
 import { Roboto, Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import Script from "next/script";
+import { usePathname } from "next/navigation";
 import { FloatingNavbar } from "@/components/shared/FloatingNavbar";
 import { AuthEdgeButton } from "@/components/shared/AuthEdgeButton";
 import { HomeRecordingButton } from "@/components/recording/HomeRecordingButton";
 import { Footer } from "@/components/shared/Footer";
-import { AuthProvider } from "@/lib/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/lib/contexts/AuthContext";
 import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
 import "./globals.css";
 
@@ -24,13 +26,25 @@ const inter = Inter({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "OSCAR - AI Voice Notes",
-  description: "Turn your voice into clear, formatted text using AI",
-  icons: {
-    icon: "/OSCARLOGO.png",
-  },
-};
+function LayoutContent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { session } = useAuth();
+
+  const shouldShowFooter = !(pathname === "/" && session);
+
+  return (
+    <>
+      <FloatingNavbar />
+      <AuthEdgeButton />
+      {children}
+      {shouldShowFooter && <Footer />}
+      <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
+        <HomeRecordingButton />
+      </div>
+      <Toaster />
+    </>
+  );
+}
 
 export default function RootLayout({
   children,
@@ -61,17 +75,7 @@ export default function RootLayout({
       <body className="bg-slate-950 text-white antialiased font-sans">
         <AuthProvider>
           <SubscriptionProvider>
-            {/* Apply saved theme and font preferences */}
-            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-
-            <FloatingNavbar />
-            <AuthEdgeButton />
-            {children}
-            <Footer />
-            <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
-              <HomeRecordingButton />
-            </div>
-            <Toaster />
+            <LayoutContent>{children}</LayoutContent>
           </SubscriptionProvider>
         </AuthProvider>
       </body>
