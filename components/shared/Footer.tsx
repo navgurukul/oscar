@@ -8,7 +8,7 @@ export function Footer() {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           {/* Copyright */}
           <p className="text-gray-500 text-sm">
-            © {new Date().getFullYear()} OSCAR
+            © {new Date().getFullYear()} Samyak Arth Services Private Limited
           </p>
 
           {/* Legal Links */}

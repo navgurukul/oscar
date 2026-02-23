@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { LogIn, LogOut, FileText, Settings } from "lucide-react";
+import { LogIn, FileText, Settings } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";

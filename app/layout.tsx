@@ -1,6 +1,5 @@
 "use client";
 
-import type { Metadata } from "next";
 import { Roboto, Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import Script from "next/script";
@@ -27,18 +26,10 @@ const inter = Inter({
   display: "swap",
 });
 
-const metadata: Metadata = {
-  title: "OSCAR - AI Voice Notes",
-  description: "Turn your voice into clear, formatted text using AI",
-  icons: {
-    icon: "/OSCARLOGO.png",
-  },
-};
-
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { session } = useAuth();
-  
+
   const shouldShowFooter = !(pathname === "/" && session);
 
   return (

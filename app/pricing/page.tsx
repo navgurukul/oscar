@@ -6,10 +6,17 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
 import { PricingCard } from "@/components/subscription/PricingCard";
 import { useRazorpayCheckout } from "@/components/subscription/RazorpayCheckout";
-import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency } from "@/lib/constants";
+import {
+  PRICING,
+  PRICING_USD,
+  SUBSCRIPTION_CONFIG,
+  type Currency,
+} from "@/lib/constants";
 import { Check } from "lucide-react";
 import type { BillingCycle } from "@/lib/types/subscription.types";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Accordion,
   AccordionContent,
@@ -40,8 +47,8 @@ export default function PricingPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { tier, status, refetch } = useSubscriptionContext();
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
-  const [currency, setCurrency] = useState<Currency>("INR");
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("yearly");
+  const [currency, setCurrency] = useState<Currency>("USD");
 
   const { initiateCheckout, isLoading } = useRazorpayCheckout({
     billingCycle,
@@ -68,7 +75,8 @@ export default function PricingPage() {
   };
 
   const pricingConfig = currency === "USD" ? PRICING_USD : PRICING;
-  const price = billingCycle === "monthly" ? pricingConfig.MONTHLY : pricingConfig.YEARLY;
+  const price =
+    billingCycle === "monthly" ? pricingConfig.MONTHLY : pricingConfig.YEARLY;
 
   return (
     <main className="min-h-screen py-16 px-4 mt-8">
@@ -86,27 +94,23 @@ export default function PricingPage() {
 
         {/* Currency and Billing toggles */}
         <div className="flex flex-col items-center justify-center mb-12 gap-6">
-          {/* Currency toggle */}
-          <Tabs
-            value={currency}
-            onValueChange={(value) => setCurrency(value as Currency)}
-            className="w-fit"
-          >
-            <TabsList className="bg-gray-900">
-              <TabsTrigger
-                value="INR"
-                className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
-              >
-                ₹ INR
-              </TabsTrigger>
-              <TabsTrigger
-                value="USD"
-                className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
-              >
-                $ USD
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {/* Currency switch */}
+          <div className="flex items-center gap-3">
+            <Label htmlFor="currency-switch" className="text-gray-400">
+              ₹ INR
+            </Label>
+            <Switch
+              id="currency-switch"
+              checked={currency === "USD"}
+              onCheckedChange={(checked) =>
+                setCurrency(checked ? "USD" : "INR")
+              }
+              className="data-[state=checked]:bg-cyan-500"
+            />
+            <Label htmlFor="currency-switch" className="text-gray-400">
+              $ USD
+            </Label>
+          </div>
 
           {/* Billing toggle */}
           <Tabs

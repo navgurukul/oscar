@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { PRICING, PRICING_USD } from "@/lib/constants";
 import type {
   SubscriptionTier,
   BillingCycle,
@@ -39,6 +40,11 @@ export function PricingCard({
   // This prevents showing "Current Plan" for cancelled subscriptions
   const isCurrentPlan = tier === currentTier && currentStatus === "active";
   const isFree = tier === "free";
+  const pricingConfig = currency === "USD" ? PRICING_USD : PRICING;
+  const monthlyEquivalent =
+    billingCycle === "yearly" && !isFree
+      ? (pricingConfig.YEARLY / 12).toFixed(2)
+      : null;
   const currencySymbol = currency === "USD" ? "$" : "₹";
 
   return (
@@ -67,21 +73,30 @@ export function PricingCard({
           </h3>
           <div className="flex items-baseline justify-center gap-1">
             <span className="text-4xl font-bold text-white">
-              {isFree ? `${currencySymbol}0` : `${currencySymbol}${price}`}
+              {isFree
+                ? `${currencySymbol}0`
+                : billingCycle === "yearly" && monthlyEquivalent
+                ? `${currencySymbol}${monthlyEquivalent}`
+                : `${currencySymbol}${price}`}
             </span>
-            {!isFree && (
-              <span className="text-gray-400">
-                /{billingCycle === "monthly" ? "month" : "year"}
-              </span>
-            )}
+            <span className="text-gray-400">/month</span>
           </div>
+          {!isFree && billingCycle === "yearly" && (
+            <>
+              <p className="text-xs text-gray-500 mt-1">
+                {currencySymbol}
+                {price} billed annually
+              </p>
+              <p className="text-sm text-cyan-400 mt-1">
+                Save {pricingConfig.YEARLY_SAVINGS_PERCENT}% vs monthly
+              </p>
+            </>
+          )}
           {!isFree && currency === "USD" && (
             <p className="text-xs text-gray-500 mt-2">
-              Charged in INR (₹{currency === "USD" && billingCycle === "monthly" ? "249" : "1999"})
+              Charged in INR (₹
+              {currency === "USD" && billingCycle === "monthly" ? "99" : "990"})
             </p>
-          )}
-          {tier === "pro" && billingCycle === "yearly" && (
-            <p className="text-sm text-cyan-400 mt-1">Save 33% vs monthly</p>
           )}
         </div>
       </CardHeader>
