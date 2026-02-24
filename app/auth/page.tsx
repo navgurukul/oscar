@@ -40,9 +40,9 @@ function AuthFormInner() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-gray-950 via-gray-900 to-black">
+    <main className="min-h-screen flex items-center justify-center px-4 py-8 md:py-0 bg-gradient-to-br from-gray-950 via-gray-900 to-black">
       <div className="w-full max-w-6xl">
-        <div className="flex items-center justify-center gap-20">
+        <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-20">
           {/* Left side - Avatar */}
           <div className="flex-shrink-0">
             <div className="relative">
@@ -50,30 +50,30 @@ function AuthFormInner() {
               <img
                 src="/OSCAR_AVATAR.png"
                 alt="Oscar Avatar"
-                className="relative w-80 h-80 object-contain drop-shadow-2xl"
+                className="relative w-48 h-48 md:w-64 md:h-64 lg:w-80 lg:h-80 object-contain drop-shadow-2xl"
               />
             </div>
           </div>
 
           {/* Right side - Login Form */}
-          <div className="flex flex-col items-start space-y-8">
-            <div className="space-y-3">
-              <h1 className="text-5xl font-bold text-white tracking-tight">
+          <div className="flex flex-col items-center md:items-start space-y-6 md:space-y-8 w-full md:w-auto">
+            <div className="space-y-2 md:space-y-3 text-center md:text-left">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
                 Welcome to <span className="text-cyan-400">Oscar</span>
               </h1>
-              <p className="text-lg text-gray-400">
+              <p className="text-base sm:text-lg text-gray-400">
                 Transform your voice into structured notes
               </p>
             </div>
 
             {initialError && (
-              <div className="w-full p-4 bg-red-500/10 border border-red-500/30 rounded-xl backdrop-blur-sm">
+              <div className="w-full max-w-md p-4 bg-red-500/10 border border-red-500/30 rounded-xl backdrop-blur-sm">
                 <p className="text-red-400 text-sm">{initialError}</p>
               </div>
             )}
 
             {error && !initialError && (
-              <div className="w-full p-4 bg-red-500/10 border border-red-500/30 rounded-xl backdrop-blur-sm">
+              <div className="w-full max-w-md p-4 bg-red-500/10 border border-red-500/30 rounded-xl backdrop-blur-sm">
                 <p className="text-red-400 text-sm">{error}</p>
               </div>
             )}
@@ -81,7 +81,7 @@ function AuthFormInner() {
             <Button
               onClick={handleGoogleSignIn}
               disabled={isSubmitting}
-              className="bg-white text-gray-900 hover:bg-gray-50 hover:scale-105 font-semibold py-4 px-8 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-3 shadow-2xl shadow-cyan-500/20"
+              className="w-full max-w-md bg-white text-gray-900 hover:bg-gray-50 hover:scale-105 font-semibold py-4 px-8 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-3 shadow-2xl shadow-cyan-500/20 min-h-[56px]"
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
@@ -93,7 +93,7 @@ function AuthFormInner() {
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 48 48"
-                    className="w-6 h-6"
+                    className="w-6 h-6 flex-shrink-0"
                   >
                     <path
                       fill="#FFC107"
