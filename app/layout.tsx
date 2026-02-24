@@ -65,13 +65,13 @@ export default function RootLayout({
             <AuthEdgeButton />
             {children}
 
-           {/* Fixed Footer at bottom - no border/line */}
-            <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950">
+           {/* Footer shown at the end of content */}
+            <div className="mt-12 bg-slate-950">
               <Footer />
             </div>
 
             {/* Recording button - positioned lower, overlapping footer area */}
-            <div className="fixed bottom-10 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
+            <div className="fixed bottom-16 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
               <HomeRecordingButton />
             </div>
 
