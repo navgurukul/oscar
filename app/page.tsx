@@ -41,7 +41,7 @@ const TESTIMONIALS = [
   },
   {
     quote:
-      "Sentence structure recognition – The app correctly transcribed: The quick brown fox jumps over the lazy dog. She sells seashells by the seashore.Punctuation handling – Full stops were placed correctly.Most words were captured accurately – No missing words in the first two sentences.",
+      " structure recognition – The app correctly transcribed: The quick brown fox jumps over the lazy dog. She sells seashells by the seashore.Punctuation handling – Full stops were placed correctly.Most words were captured accurately – No missing words in the first two sentences.",
     name: "Sanjna Panwar",
     designation: "Senior Backend Developer",
     src: img4,
@@ -120,7 +120,7 @@ export default function Home() {
       {!session && (
         <>
           {/* Problem Statement Section */}
-          <section className="min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-950 to-slate-900">
+          <section className="min-h-screen snap-start flex items-center justify-center py-16 sm:py-24 px-4 bg-gradient-to-b from-slate-950 to-slate-900">
             <div className="max-w-6xl mx-auto">
               <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
@@ -166,7 +166,7 @@ export default function Home() {
           </section>
 
           {/* How It Works Section */}
-          <section id="how-it-works" className="min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-slate-900">
+          <section id="how-it-works" className="md:min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-slate-900">
             <div className="max-w-6xl mx-auto">
               <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
@@ -227,7 +227,7 @@ export default function Home() {
           </section>
 
           {/* Benefits Section */}
-          <section className="min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
+          <section className="md:min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
             <div className="max-w-6xl mx-auto">
               <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
@@ -295,7 +295,7 @@ export default function Home() {
           </section>
 
           {/* Testimonials Section */}
-          <section className="min-h-screen snap-start flex items-center justify-center py-16 bg-slate-900">
+          <section className="md:min-h-screen snap-start flex items-center justify-center py-16 bg-slate-900">
             <div className="w-full">
               <div className="mx-auto max-w-4xl px-4 md:px-8 lg:px-12 text-center mb-12">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">

@@ -250,20 +250,20 @@ export const SUBSCRIPTION_CONFIG = {
  * Pricing configuration (INR)
  */
 export const PRICING = {
-  MONTHLY: 249,
-  YEARLY: 1999,
-  YEARLY_SAVINGS_PERCENT: 33,
+  MONTHLY: 99,
+  YEARLY: 990,
+  YEARLY_SAVINGS_PERCENT: 17,
   CURRENCY: "INR",
 } as const;
 
 /**
  * USD pricing (display only - actual charge is INR)
- * Fixed conversion: ₹249 ≈ $3, ₹1999 ≈ $24
+ * Fixed conversion: ₹99 ≈ $1, ₹990 ≈ $10
  */
 export const PRICING_USD = {
-  MONTHLY: 3,
-  YEARLY: 24,
-  YEARLY_SAVINGS_PERCENT: 33,
+  MONTHLY: 1,
+  YEARLY: 10,
+  YEARLY_SAVINGS_PERCENT: 17,
   CURRENCY: "USD",
 } as const;
 
