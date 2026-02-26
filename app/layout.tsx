@@ -30,7 +30,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { session } = useAuth();
 
-  const shouldShowFooter = !(pathname === "/" && session);
+  const shouldShowFooter = !(pathname === "/" && session) && pathname !== "/recording";
 
   return (
     <>
