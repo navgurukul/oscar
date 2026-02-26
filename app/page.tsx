@@ -41,7 +41,7 @@ const TESTIMONIALS = [
   },
   {
     quote:
-      " structure recognition – The app correctly transcribed: The quick brown fox jumps over the lazy dog. She sells seashells by the seashore.Punctuation handling – Full stops were placed correctly.Most words were captured accurately – No missing words in the first two sentences.",
+      "Oscar is an amazing and user-friendly tool that quickly converts speech into text with good accuracy. It saves a lot of time, especially for long content, and works smoothly in daily use. The easy sharing feature across different platforms makes it even more convenient and helpful. Overall, it is a great time-saving and productive tool.",
     name: "Sanjna Panwar",
     designation: "Senior Backend Developer",
     src: img4,
@@ -132,8 +132,8 @@ export default function Home() {
               </div>
 
               <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-                <div className="bg-slate-900/50 border border-red-500/20 rounded-xl p-6">
-                  <div className="text-red-400 mb-4">
+                <div className="bg-slate-900/50 border border-cyan-500/20 rounded-xl p-6">
+                  <div className="text-cyan-300 mb-4">
                     <Clock className="w-10 h-10" />
                   </div>
                   <h3 className="text-xl font-semibold text-white mb-3">Ideas Fade Fast</h3>
@@ -142,8 +142,8 @@ export default function Home() {
                   </p>
                 </div>
 
-                <div className="bg-slate-900/50 border border-red-500/20 rounded-xl p-6">
-                  <div className="text-red-400 mb-4">
+                <div className="bg-slate-900/50 border border-cyan-500/20 rounded-xl p-6">
+                  <div className="text-cyan-300 mb-4">
                     <FileText className="w-10 h-10" />
                   </div>
                   <h3 className="text-xl font-semibold text-white mb-3">Voice Notes Are Messy</h3>
@@ -152,8 +152,8 @@ export default function Home() {
                   </p>
                 </div>
 
-                <div className="bg-slate-900/50 border border-red-500/20 rounded-xl p-6">
-                  <div className="text-red-400 mb-4">
+                <div className="bg-slate-900/50 border border-cyan-500/20 rounded-xl p-6">
+                  <div className="text-cyan-300 mb-4">
                     <Zap className="w-10 h-10" />
                   </div>
                   <h3 className="text-xl font-semibold text-white mb-3">Typing Kills Momentum</h3>
@@ -247,7 +247,7 @@ export default function Home() {
                   <p className="text-gray-300 mb-4">
                     You speak at 150+ words per minute. You type at 40. Stop wasting time transcribing your own thoughts.
                   </p>
-                  <p className="text-cyan-400 text-sm">
+                  <p className="text-cyan-200 text-sm">
                     Perfect for: Meeting notes, blog drafts, task lists, brainstorming sessions
                   </p>
                 </div>
@@ -260,7 +260,7 @@ export default function Home() {
                   <p className="text-gray-300 mb-4">
                     Not just speech-to-text. OSCAR formats your ideas intelligently with proper paragraphs, punctuation, and structure.
                   </p>
-                  <p className="text-cyan-400 text-sm">
+                  <p className="text-cyan-200 text-sm">
                     Perfect for: Long-form content, complex ideas, multi-step plans
                   </p>
                 </div>
@@ -273,7 +273,7 @@ export default function Home() {
                   <p className="text-gray-300 mb-4">
                     Every note is clean enough to send directly to your team, paste into docs, or post online. No embarrassing filler words.
                   </p>
-                  <p className="text-cyan-400 text-sm">
+                  <p className="text-cyan-200 text-sm">
                     Perfect for: Collaboration, client updates, content creation
                   </p>
                 </div>
@@ -286,7 +286,7 @@ export default function Home() {
                   <p className="text-gray-300 mb-4">
                     Teach OSCAR your industry terms, product names, or company jargon. It learns and adapts to your world.
                   </p>
-                  <p className="text-cyan-400 text-sm">
+                  <p className="text-cyan-200 text-sm">
                     Perfect for: Technical notes, business contexts, specialized fields
                   </p>
                 </div>
