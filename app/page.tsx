@@ -7,175 +7,158 @@ import { LampContainer } from "@/components/ui/lamp";
 import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import {
-  Check,
-  Mic,
-  Sparkles,
-  FileText,
-  Zap,
-  Clock,
-  Brain,
-} from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import {
-  PRICING,
-  PRICING_USD,
-  SUBSCRIPTION_CONFIG,
-  type Currency,
-} from "@/lib/constants";
+import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency } from "@/lib/constants";
 import type { BillingCycle } from "@/lib/types/subscription.types";
+import img1 from "@/components/ui/assets/image_1.png";
+import img2 from "@/components/ui/assets/image_2.jpg";
+import img3 from "@/components/ui/assets/image_3.jpg";
+import img4 from "@/components/ui/assets/image_4.png";
 
 const TESTIMONIALS = [
   {
     quote:
-      "OSCAR turns my messy voice notes into clean summaries I can drop straight into my docs.",
-    name: "Product Manager",
-    designation: "Plans sprints on the go",
-    src: "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?w=800&q=80",
+      "Oscar has completely improved the way I handle my daily tasks, offering fast and accurate speech-to-text transcription along with seamless editing, sharing, and downloading features, all within a user-friendly platform that keeps everything organized and efficient.",
+    name: "Saloni Panwar",
+    designation: "Frontend Developer",
+    src: img1,
   },
   {
     quote:
-      "I record tasks while walking between meetings and review a polished checklist later.",
-    name: "Engineering Lead",
-    designation: "Keeps projects moving",
-    src: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&q=80",
+      "The design is minimal, modern, and easy to read. The layout, spacing, and typography make the product look like very attractive.t is more affordable compared to others, making it a better choice for users. Its lower price makes it more attractive and easier for people to use. Because it is more budget-friendly than others, more users will prefer it.",
+    name: "Roshni Jha",
+    designation: "Frontend Developer",
+    src: img2,
   },
   {
     quote:
-      "Speaking ideas out loud is faster; OSCAR makes them look like I sat and wrote them.",
-    name: "Founder",
-    designation: "Captures ideas in motion",
-    src: "https://images.unsplash.com/photo-1556157382-97eda2d62296?w=800&q=80",
+      "OSCAR is really helpful for turning voice notes into clear text. It saves time and makes capturing ideas much easier. I find it very useful for learning and work notes",
+    name: "Komal Ahire",
+    designation: "Senior Fullstack Developer",
+    src: img3,
+  },
+  {
+    quote:
+      "Oscar is an amazing and user-friendly tool that quickly converts speech into text with good accuracy. It saves a lot of time, especially for long content, and works smoothly in daily use. The easy sharing feature across different platforms makes it even more convenient and helpful. Overall, it is a great time-saving and productive tool.",
+    name: "Sanjna Panwar",
+    designation: "Senior Backend Developer",
+    src: img4,
   },
 ];
 
 export default function Home() {
   const { session } = useAuth();
   const router = useRouter();
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>("yearly");
-  const [currency, setCurrency] = useState<Currency>("USD");
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+  const [currency, setCurrency] = useState<Currency>("INR");
 
   const handleViewPricing = () => {
     router.push("/auth?redirectTo=/pricing");
   };
 
   const pricingConfig = currency === "USD" ? PRICING_USD : PRICING;
-  const price =
-    billingCycle === "monthly" ? pricingConfig.MONTHLY : pricingConfig.YEARLY;
-  const monthlyEquivalent =
-    billingCycle === "yearly" ? (pricingConfig.YEARLY / 12).toFixed(2) : null;
+  const price = billingCycle === "monthly" ? pricingConfig.MONTHLY : pricingConfig.YEARLY;
   const currencySymbol = currency === "USD" ? "$" : "₹";
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="h-screen snap-y snap-mandatory overflow-y-auto flex flex-col">
       {/* Hero Section with Lamp Effect */}
-      <LampContainer>
-        <motion.div
-          initial={{ opacity: 0.5, y: 100 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{
-            delay: 0.3,
-            duration: 0.8,
-            ease: "easeInOut",
-          }}
-          className="mt-8 sm:mt-12 md:mt-16 w-full flex flex-col items-center justify-center text-center px-4 sm:px-6 md:px-8"
-        >
-          <h1 className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-medium tracking-tight text-transparent max-w-5xl mx-auto">
-            <LayoutTextFlip
-              text="Bring your ideas to light."
-              words={[
-                "Let AI write.",
-                "Let AI refine.",
-                "Let AI transform.",
-                "Create effortlessly.",
-              ]}
-              duration={3000}
-            />
-          </h1>
-          <p className="mt-8 sm:mt-10 text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto px-4">
-            Turn messy voice notes into clean text. Instantly.
-          </p>
-          {!session && (
-            <div className="mt-8 w-full max-w-md sm:max-w-xl mx-auto flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center px-4">
-              <Button
-                onClick={handleViewPricing}
-                size="lg"
-                className="w-full sm:w-auto bg-cyan-500 hover:bg-cyan-600 text-white px-6 sm:px-8 py-5 sm:py-6 text-base sm:text-lg whitespace-nowrap"
-              >
-                Start Free - No Credit Card
-              </Button>
-              <Button
-                onClick={() => {
-                  document
-                    .getElementById("how-it-works")
-                    ?.scrollIntoView({ behavior: "smooth" });
-                }}
-                size="lg"
-                variant="outline"
-                className="w-full sm:w-auto border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 px-6 sm:px-8 py-5 sm:py-6 text-base sm:text-lg whitespace-nowrap"
-              >
-                See How It Works
-              </Button>
-            </div>
-          )}
-        </motion.div>
-      </LampContainer>
+      <section className="min-h-screen snap-start flex items-center justify-center mt-5 py-16 px-4">
+        <LampContainer >
+          <motion.div
+            initial={{ opacity: 0.5, y: 100 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{
+              delay: 0.3,
+              duration: 0.8,
+              ease: "easeInOut",
+            }}
+            className="mt-8 text-center px-4"
+          >
+            <h1 className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-4xl font-medium tracking-tight text-transparent md:text-7xl">
+              <LayoutTextFlip
+                text="Bring your ideas to light."
+                words={[
+                  "Let AI write.",
+                  "Let AI refine.",
+                  "Let AI transform.",
+                  "Create effortlessly.",
+                ]}
+                duration={3000}
+              />
+            </h1>
+            <p className="mt-10 text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
+              Turn messy voice notes into clean text. Instantly.
+            </p>
+            {!session && (
+              <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+                <Button
+                  onClick={handleViewPricing}
+                  size="lg"
+                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-8 py-6 text-lg"
+                >
+                  Start Free - No Credit Card
+                </Button>
+                <Button
+                  onClick={() => {
+                    document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  size="lg"
+                  variant="outline"
+                  className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 px-8 py-6 text-lg"
+                >
+                  See How It Works
+                </Button>
+              </div>
+            )}
+          </motion.div>
+        </LampContainer>
+      </section>
 
       {!session && (
         <>
           {/* Problem Statement Section */}
-          <section className="min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-950 to-slate-900">
+          <section className="min-h-screen snap-start flex items-center justify-center py-16 sm:py-24 px-4 bg-gradient-to-b from-slate-950 to-slate-900">
             <div className="max-w-6xl mx-auto">
               <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                  Your <span className="text-cyan-500">Best Ideas</span> Vanish
-                  Before You Type Them
+                  Your <span className="text-cyan-500">Best Ideas</span> Vanish Before You Type Them
                 </h2>
                 <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
-                  That perfect thought you had while walking? Gone by the time
-                  you open your laptop.
+                  That perfect thought you had while walking? Gone by the time you open your laptop.
                 </p>
               </div>
 
               <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-                <div className="bg-slate-900/50 border border-red-500/20 rounded-xl p-6">
-                  <div className="text-red-400 mb-4">
+                <div className="bg-slate-900/50 border border-cyan-500/20 rounded-xl p-6">
+                  <div className="text-cyan-300 mb-4">
                     <Clock className="w-10 h-10" />
                   </div>
-                  <h3 className="text-xl font-semibold text-white mb-3">
-                    Ideas Fade Fast
-                  </h3>
+                  <h3 className="text-xl font-semibold text-white mb-3">Ideas Fade Fast</h3>
                   <p className="text-gray-400">
-                    The perfect words you thought of? Gone before you start
-                    typing.
+                    The perfect words you thought of? Gone before you start typing.
                   </p>
                 </div>
 
-                <div className="bg-slate-900/50 border border-red-500/20 rounded-xl p-6">
-                  <div className="text-red-400 mb-4">
+                <div className="bg-slate-900/50 border border-cyan-500/20 rounded-xl p-6">
+                  <div className="text-cyan-300 mb-4">
                     <FileText className="w-10 h-10" />
                   </div>
-                  <h3 className="text-xl font-semibold text-white mb-3">
-                    Voice Notes Are Messy
-                  </h3>
+                  <h3 className="text-xl font-semibold text-white mb-3">Voice Notes Are Messy</h3>
                   <p className="text-gray-400">
                     Full of ums and uhs. Too embarrassing to share with anyone.
                   </p>
                 </div>
 
-                <div className="bg-slate-900/50 border border-red-500/20 rounded-xl p-6">
-                  <div className="text-red-400 mb-4">
+                <div className="bg-slate-900/50 border border-cyan-500/20 rounded-xl p-6">
+                  <div className="text-cyan-300 mb-4">
                     <Zap className="w-10 h-10" />
                   </div>
-                  <h3 className="text-xl font-semibold text-white mb-3">
-                    Typing Kills Momentum
-                  </h3>
+                  <h3 className="text-xl font-semibold text-white mb-3">Typing Kills Momentum</h3>
                   <p className="text-gray-400">
-                    Switching to your phone or laptop breaks your flow. By the
-                    time you&apos;re typing, the moment&apos;s gone.
+                    Switching to your phone or laptop breaks your flow. By the time you&apos;re typing, the moment&apos;s gone.
                   </p>
                 </div>
               </div>
@@ -183,19 +166,14 @@ export default function Home() {
           </section>
 
           {/* How It Works Section */}
-          <section
-            id="how-it-works"
-            className="min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-slate-900"
-          >
+          <section id="how-it-works" className="md:min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-slate-900">
             <div className="max-w-6xl mx-auto">
               <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                  Speak It. <span className="text-cyan-500">OSCAR</span> Writes
-                  It.
+                  Speak It. <span className="text-cyan-500">OSCAR</span> Writes It.
                 </h2>
                 <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
-                  From messy voice note to polished text in 3 steps. No typing,
-                  no cleanup, no hassle.
+                  From messy voice note to polished text in 3 steps. No typing, no cleanup, no hassle.
                 </p>
               </div>
 
@@ -206,12 +184,9 @@ export default function Home() {
                       <Mic className="w-8 h-8 text-white" />
                     </div>
                     <div className="text-center">
-                      <h3 className="text-2xl font-bold text-white mb-3">
-                        1. Speak
-                      </h3>
+                      <h3 className="text-2xl font-bold text-white mb-3">1. Speak</h3>
                       <p className="text-gray-300">
-                        Hit record and talk. Walk, drive, commute. Capture your
-                        thoughts wherever inspiration strikes.
+                        Hit record and talk. Walk, drive, commute. Capture your thoughts wherever inspiration strikes.
                       </p>
                     </div>
                   </div>
@@ -224,12 +199,9 @@ export default function Home() {
                       <Brain className="w-8 h-8 text-white" />
                     </div>
                     <div className="text-center">
-                      <h3 className="text-2xl font-bold text-white mb-3">
-                        2. AI Cleans
-                      </h3>
+                      <h3 className="text-2xl font-bold text-white mb-3">2. AI Cleans</h3>
                       <p className="text-gray-300">
-                        OSCAR removes filler words, fixes grammar, formats
-                        paragraphs. All automatically in seconds.
+                        OSCAR removes filler words, fixes grammar, formats paragraphs. All automatically in seconds.
                       </p>
                     </div>
                   </div>
@@ -242,22 +214,20 @@ export default function Home() {
                       <FileText className="w-8 h-8 text-white" />
                     </div>
                     <div className="text-center">
-                      <h3 className="text-2xl font-bold text-white mb-3">
-                        3. Use It
-                      </h3>
+                      <h3 className="text-2xl font-bold text-white mb-3">3. Use It</h3>
                       <p className="text-gray-300">
-                        Copy, share, or download your polished note. Ready for
-                        docs, emails, or wherever you need it.
+                        Copy, share, or download your polished note. Ready for docs, emails, or wherever you need it.
                       </p>
                     </div>
                   </div>
                 </div>
               </div>
+
             </div>
           </section>
 
           {/* Benefits Section */}
-          <section className="min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
+          <section className="md:min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
             <div className="max-w-6xl mx-auto">
               <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
@@ -273,16 +243,12 @@ export default function Home() {
                   <div className="text-cyan-400 mb-4">
                     <Zap className="w-10 h-10" />
                   </div>
-                  <h3 className="text-2xl font-semibold text-white mb-4">
-                    10x Faster Than Typing
-                  </h3>
+                  <h3 className="text-2xl font-semibold text-white mb-4">10x Faster Than Typing</h3>
                   <p className="text-gray-300 mb-4">
-                    You speak at 150+ words per minute. You type at 40. Stop
-                    wasting time transcribing your own thoughts.
+                    You speak at 150+ words per minute. You type at 40. Stop wasting time transcribing your own thoughts.
                   </p>
-                  <p className="text-cyan-400 text-sm">
-                    Perfect for: Meeting notes, blog drafts, task lists,
-                    brainstorming sessions
+                  <p className="text-cyan-200 text-sm">
+                    Perfect for: Meeting notes, blog drafts, task lists, brainstorming sessions
                   </p>
                 </div>
 
@@ -290,17 +256,12 @@ export default function Home() {
                   <div className="text-cyan-400 mb-4">
                     <Brain className="w-10 h-10" />
                   </div>
-                  <h3 className="text-2xl font-semibold text-white mb-4">
-                    AI That Understands Context
-                  </h3>
+                  <h3 className="text-2xl font-semibold text-white mb-4">AI That Understands Context</h3>
                   <p className="text-gray-300 mb-4">
-                    Not just speech-to-text. OSCAR formats your ideas
-                    intelligently with proper paragraphs, punctuation, and
-                    structure.
+                    Not just speech-to-text. OSCAR formats your ideas intelligently with proper paragraphs, punctuation, and structure.
                   </p>
-                  <p className="text-cyan-400 text-sm">
-                    Perfect for: Long-form content, complex ideas, multi-step
-                    plans
+                  <p className="text-cyan-200 text-sm">
+                    Perfect for: Long-form content, complex ideas, multi-step plans
                   </p>
                 </div>
 
@@ -308,15 +269,11 @@ export default function Home() {
                   <div className="text-cyan-400 mb-4">
                     <FileText className="w-10 h-10" />
                   </div>
-                  <h3 className="text-2xl font-semibold text-white mb-4">
-                    Always Shareable
-                  </h3>
+                  <h3 className="text-2xl font-semibold text-white mb-4">Always Shareable</h3>
                   <p className="text-gray-300 mb-4">
-                    Every note is clean enough to send directly to your team,
-                    paste into docs, or post online. No embarrassing filler
-                    words.
+                    Every note is clean enough to send directly to your team, paste into docs, or post online. No embarrassing filler words.
                   </p>
-                  <p className="text-cyan-400 text-sm">
+                  <p className="text-cyan-200 text-sm">
                     Perfect for: Collaboration, client updates, content creation
                   </p>
                 </div>
@@ -325,16 +282,12 @@ export default function Home() {
                   <div className="text-cyan-400 mb-4">
                     <Sparkles className="w-10 h-10" />
                   </div>
-                  <h3 className="text-2xl font-semibold text-white mb-4">
-                    Custom Vocabulary
-                  </h3>
+                  <h3 className="text-2xl font-semibold text-white mb-4">Custom Vocabulary</h3>
                   <p className="text-gray-300 mb-4">
-                    Teach OSCAR your industry terms, product names, or company
-                    jargon. It learns and adapts to your world.
+                    Teach OSCAR your industry terms, product names, or company jargon. It learns and adapts to your world.
                   </p>
-                  <p className="text-cyan-400 text-sm">
-                    Perfect for: Technical notes, business contexts, specialized
-                    fields
+                  <p className="text-cyan-200 text-sm">
+                    Perfect for: Technical notes, business contexts, specialized fields
                   </p>
                 </div>
               </div>
@@ -342,12 +295,11 @@ export default function Home() {
           </section>
 
           {/* Testimonials Section */}
-          <section className="min-h-screen snap-start flex items-center justify-center py-16 bg-slate-900">
+          <section className="md:min-h-screen snap-start flex items-center justify-center py-16 bg-slate-900">
             <div className="w-full">
               <div className="mx-auto max-w-4xl px-4 md:px-8 lg:px-12 text-center mb-12">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                  Loved by{" "}
-                  <span className="text-cyan-500">Creators & Teams</span>
+                  Loved by <span className="text-cyan-500">Creators & Teams</span>
                 </h2>
                 <p className="text-gray-300 text-lg md:text-xl">
                   Join thousands capturing ideas on the go.
@@ -362,41 +314,41 @@ export default function Home() {
             <div className="max-w-5xl mx-auto">
               <div className="text-center mb-12">
                 <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                  Simple, Transparent{" "}
-                  <span className="text-cyan-500">Pricing</span>
+                  Simple, Transparent <span className="text-cyan-500">Pricing</span>
                 </h2>
                 <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-                  Start free and upgrade when you need more. No hidden fees,
-                  cancel anytime.
+                  Start free and upgrade when you need more. No hidden fees, cancel anytime.
                 </p>
               </div>
 
               {/* Currency and Billing toggles */}
               <div className="flex flex-col items-center justify-center mb-12 gap-6">
-                {/* Currency switch */}
-                <div className="flex items-center gap-3">
-                  <Label htmlFor="currency-switch" className="text-gray-400">
-                    ₹ INR
-                  </Label>
-                  <Switch
-                    id="currency-switch"
-                    checked={currency === "USD"}
-                    onCheckedChange={(checked) =>
-                      setCurrency(checked ? "USD" : "INR")
-                    }
-                    className="data-[state=checked]:bg-cyan-500"
-                  />
-                  <Label htmlFor="currency-switch" className="text-gray-400">
-                    $ USD
-                  </Label>
-                </div>
+                {/* Currency toggle */}
+                <Tabs
+                  value={currency}
+                  onValueChange={(value) => setCurrency(value as Currency)}
+                  className="w-fit"
+                >
+                  <TabsList className="bg-gray-900">
+                    <TabsTrigger
+                      value="INR"
+                      className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
+                    >
+                      ₹ INR
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="USD"
+                      className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
+                    >
+                      $ USD
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
 
                 {/* Billing toggle */}
                 <Tabs
                   value={billingCycle}
-                  onValueChange={(value) =>
-                    setBillingCycle(value as BillingCycle)
-                  }
+                  onValueChange={(value) => setBillingCycle(value as BillingCycle)}
                   className="w-fit"
                 >
                   <TabsList className="bg-gray-900">
@@ -426,44 +378,30 @@ export default function Home() {
                   <div className="text-center mb-6">
                     <h3 className="text-xl font-bold text-white mb-2">Free</h3>
                     <div className="flex items-baseline justify-center gap-1">
-                      <span className="text-4xl font-bold text-white">
-                        {currencySymbol}0
-                      </span>
+                      <span className="text-4xl font-bold text-white">{currencySymbol}0</span>
                     </div>
                   </div>
 
                   <ul className="space-y-3 mb-8">
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} recordings
-                        per month
-                      </span>
+                      <span className="text-gray-300 text-sm">{SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} recordings per month</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        Up to {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total notes
-                      </span>
+                      <span className="text-gray-300 text-sm">Up to {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total notes</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        Custom vocabulary (up to{" "}
-                        {SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} entries)
-                      </span>
+                      <span className="text-gray-300 text-sm">Custom vocabulary (up to {SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} entries)</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        AI-powered text formatting
-                      </span>
+                      <span className="text-gray-300 text-sm">AI-powered text formatting</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        Basic voice-to-text
-                      </span>
+                      <span className="text-gray-300 text-sm">Basic voice-to-text</span>
                     </li>
                   </ul>
 
@@ -486,30 +424,17 @@ export default function Home() {
                   <div className="text-center mb-6">
                     <h3 className="text-xl font-bold text-white mb-2">Pro</h3>
                     <div className="flex items-baseline justify-center gap-1">
-                      <span className="text-4xl font-bold text-white">
-                        {currencySymbol}
-                        {billingCycle === "yearly" && monthlyEquivalent
-                          ? monthlyEquivalent
-                          : price}
+                      <span className="text-4xl font-bold text-white">{currencySymbol}{price}</span>
+                      <span className="text-gray-400">
+                        /{billingCycle === "monthly" ? "month" : "year"}
                       </span>
-                      <span className="text-gray-400">/month</span>
                     </div>
                     {billingCycle === "yearly" && (
-                      <>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {currencySymbol}
-                          {price} billed annually
-                        </p>
-                        <p className="text-sm text-cyan-400 mt-1">
-                          Save {pricingConfig.YEARLY_SAVINGS_PERCENT}% vs
-                          monthly
-                        </p>
-                      </>
+                      <p className="text-sm text-cyan-400 mt-1">Save {pricingConfig.YEARLY_SAVINGS_PERCENT}% vs monthly</p>
                     )}
                     {currency === "USD" && (
                       <p className="text-xs text-gray-500 mt-2">
-                        Charged in INR (₹
-                        {billingCycle === "monthly" ? "99" : "990"})
+                        Charged in INR (₹{billingCycle === "monthly" ? "249" : "1999"})
                       </p>
                     )}
                   </div>
@@ -517,39 +442,27 @@ export default function Home() {
                   <ul className="space-y-3 mb-8">
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        Unlimited recordings
-                      </span>
+                      <span className="text-gray-300 text-sm">Unlimited recordings</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        Unlimited notes
-                      </span>
+                      <span className="text-gray-300 text-sm">Unlimited notes</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        Unlimited vocabulary entries
-                      </span>
+                      <span className="text-gray-300 text-sm">Unlimited vocabulary entries</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        AI-powered text formatting
-                      </span>
+                      <span className="text-gray-300 text-sm">AI-powered text formatting</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        Priority processing
-                      </span>
+                      <span className="text-gray-300 text-sm">Priority processing</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">
-                        Priority support
-                      </span>
+                      <span className="text-gray-300 text-sm">Priority support</span>
                     </li>
                   </ul>
 
@@ -568,12 +481,10 @@ export default function Home() {
           <section className="min-h-[60vh] snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-950 to-black">
             <div className="max-w-4xl mx-auto text-center">
               <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                Stop Losing Your{" "}
-                <span className="text-cyan-500">Best Ideas</span>
+                Stop Losing Your <span className="text-cyan-500">Best Ideas</span>
               </h2>
               <p className="text-gray-300 text-lg md:text-xl mb-8 max-w-2xl mx-auto">
-                Start free. No credit card required. Turn messy thoughts into
-                clean text in seconds.
+                Start free. No credit card required. Turn messy thoughts into clean text in seconds.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button
@@ -585,8 +496,7 @@ export default function Home() {
                 </Button>
               </div>
               <p className="text-gray-500 text-sm mt-6">
-                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free
-                recordings/month • No credit card • Upgrade anytime
+                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free recordings/month • No credit card • Upgrade anytime
               </p>
             </div>
           </section>

@@ -72,7 +72,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className="bg-slate-950 text-white antialiased font-sans">
+      <body className="bg-slate-950 text-white antialiased font-sans pb-16">
         <AuthProvider>
           <SubscriptionProvider>
             <LayoutContent>{children}</LayoutContent>
