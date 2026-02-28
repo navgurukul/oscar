@@ -30,6 +30,11 @@ export interface DBNote {
   feedback_reasons: FeedbackReason[] | null;
   feedback_timestamp: string | null;
   is_starred: boolean;
+  // Soft delete metadata
+  deleted_at: string | null;
+  // Organization
+  tags: string[] | null;
+  notebook: string | null;
 }
 
 // Insert type for creating a new note
@@ -40,6 +45,9 @@ export interface DBNoteInsert {
   original_formatted_text: string;
   edited_text?: string | null;
   is_starred?: boolean;
+  // Optional organization fields
+  tags?: string[] | null;
+  notebook?: string | null;
 }
 
 // Update type for modifying a note
@@ -53,6 +61,11 @@ export interface DBNoteUpdate {
   feedback_reasons?: FeedbackReason[] | null;
   feedback_timestamp?: string | null;
   is_starred?: boolean;
+  // Soft delete metadata
+  deleted_at?: string | null;
+  // Organization
+  tags?: string[] | null;
+  notebook?: string | null;
 }
 
 export interface FormattingResult {

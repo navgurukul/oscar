@@ -31,20 +31,21 @@ export const notesService = {
   },
 
   /**
-   * Get all notes for the current user
+   * Get all notes for the current user (excluding soft-deleted)
    */
   async getNotes(): Promise<{ data: DBNote[] | null; error: Error | null }> {
     const supabase = getSupabase();
     const { data, error } = await supabase
       .from("notes")
       .select("*")
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
     return { data, error: error as Error | null };
   },
 
   /**
-   * Get a single note by ID
+   * Get a single note by ID (excluding soft-deleted)
    */
   async getNoteById(
     id: string
@@ -54,6 +55,7 @@ export const notesService = {
       .from("notes")
       .select("*")
       .eq("id", id)
+      .is("deleted_at", null)
       .single();
 
     return { data, error: error as Error | null };
@@ -78,11 +80,14 @@ export const notesService = {
   },
 
   /**
-   * Delete a note
+   * Soft delete a note by setting deleted_at
    */
   async deleteNote(id: string): Promise<{ error: Error | null }> {
     const supabase = getSupabase();
-    const { error } = await supabase.from("notes").delete().eq("id", id);
+    const { error } = await supabase
+      .from("notes")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
 
     return { error: error as Error | null };
   },
