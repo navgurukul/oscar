@@ -36,9 +36,46 @@ export function AuthEdgeButton() {
   return (
     <>
       {/* Mobile Layout - Vertical stack with simple icon buttons */}
-      {/* Order: Auth (top) -> Settings -> Notes (bottom) */}
-      <div className="fixed top-20 right-4 z-50 flex flex-col items-center gap-2 md:hidden">
-        {/* Auth button - displays avatar when logged in, at top */}
+      {/* Order: Notes (top) -> Settings -> Auth (bottom, aligned with Mic button at bottom-6) */}
+      <div className="fixed bottom-6 right-4 z-50 flex flex-col items-center gap-2 md:hidden">
+        <AnimatePresence mode="popLayout">
+          {user && (
+            <motion.div
+              key="notes-link-mobile"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+            >
+              <Link href={ROUTES.NOTES}>
+                <motion.div
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl"
+                >
+                  <FileText className="w-4 h-4 text-cyan-400" />
+                </motion.div>
+              </Link>
+            </motion.div>
+          )}
+          {user && (
+            <motion.div
+              key="settings-link-mobile"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+            >
+              <Link href={ROUTES.SETTINGS}>
+                <motion.div
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl"
+                >
+                  <Settings className="w-4 h-4 text-cyan-400" />
+                </motion.div>
+              </Link>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Auth button - displays avatar when logged in, at bottom */}
         <motion.button
           onClick={handleAction}
           whileTap={{ scale: 0.95 }}
@@ -62,43 +99,6 @@ export function AuthEdgeButton() {
             <LogIn className="w-4 h-4 text-cyan-400" />
           )}
         </motion.button>
-
-        <AnimatePresence mode="popLayout">
-          {user && (
-            <motion.div
-              key="settings-link-mobile"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-            >
-              <Link href={ROUTES.SETTINGS}>
-                <motion.div
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl"
-                >
-                  <Settings className="w-4 h-4 text-cyan-400" />
-                </motion.div>
-              </Link>
-            </motion.div>
-          )}
-          {user && (
-            <motion.div
-              key="notes-link-mobile"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-            >
-              <Link href={ROUTES.NOTES}>
-                <motion.div
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl"
-                >
-                  <FileText className="w-4 h-4 text-cyan-400" />
-                </motion.div>
-              </Link>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* Desktop Layout - Horizontal with sliding animation */}

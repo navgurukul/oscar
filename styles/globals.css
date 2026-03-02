@@ -1,0 +1,13 @@
+html, body, #__next {
+  height: 100%;
+}
+
+html {
+  -webkit-overflow-scrolling: touch; /* iOS momentum scrolling */
+  scroll-behavior: smooth;
+}
+
+/* ensure sections don't collapse and respect snap */
+main {
+  scroll-snap-type: y mandatory;
+}

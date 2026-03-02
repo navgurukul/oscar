@@ -3,6 +3,7 @@
 import { IconArrowLeft, IconArrowRight } from "@tabler/icons-react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
+import type { StaticImageData } from "next/image";
 
 import { useEffect, useState } from "react";
 
@@ -10,7 +11,7 @@ type Testimonial = {
   quote: string;
   name: string;
   designation: string;
-  src: string;
+  src: string | StaticImageData;
 };
 export const AnimatedTestimonials = ({
   testimonials,
@@ -45,14 +46,14 @@ export const AnimatedTestimonials = ({
     return Math.floor(Math.random() * 21) - 10;
   };
   return (
-    <div className="mx-auto max-w-sm px-4 py-20 font-sans antialiased md:max-w-4xl md:px-8 lg:px-12">
+    <div className="mx-auto max-w-sm px-4 py-8 md:py-20 font-sans antialiased md:max-w-4xl md:px-8 lg:px-12">
       <div className="relative grid grid-cols-1 gap-20 md:grid-cols-2">
         <div>
           <div className="relative h-80 w-full">
             <AnimatePresence>
               {testimonials.map((testimonial, index) => (
                 <motion.div
-                  key={testimonial.src}
+                  key={testimonial.name}
                   initial={{
                     opacity: 0,
                     scale: 0.9,
