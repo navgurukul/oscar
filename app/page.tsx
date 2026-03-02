@@ -63,9 +63,9 @@ export default function Home() {
   const currencySymbol = currency === "USD" ? "$" : "₹";
 
   return (
-    <main className="h-screen snap-y snap-mandatory overflow-y-auto flex flex-col">
+    <main className="w-full flex flex-col">
       {/* Hero Section with Lamp Effect */}
-      <section className="min-h-screen snap-start flex items-center justify-center mt-5 py-16 px-4">
+      <section className="min-h-screen snap-start flex items-center justify-center py-8 px-4">
         <LampContainer >
           <motion.div
             initial={{ opacity: 0.5, y: 100 }}
@@ -295,10 +295,10 @@ export default function Home() {
           </section>
 
           {/* Testimonials Section */}
-          <section className="md:min-h-screen snap-start flex items-center justify-center py-16 bg-slate-900">
+          <section className="md:min-h-screen snap-start flex items-center justify-center py-8 md:py-16 bg-slate-900">
             <div className="w-full">
-              <div className="mx-auto max-w-4xl px-4 md:px-8 lg:px-12 text-center mb-12">
-                <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
+              <div className="mx-auto max-w-4xl px-4 md:px-8 lg:px-12 text-center mb-6 md:mb-12">
+                <h2 className="text-2xl md:text-5xl font-bold text-white mb-3 md:mb-6">
                   Loved by <span className="text-cyan-500">Creators & Teams</span>
                 </h2>
                 <p className="text-gray-300 text-lg md:text-xl">
@@ -310,13 +310,13 @@ export default function Home() {
           </section>
 
           {/* Pricing Section */}
-          <section className="min-h-screen snap-start flex items-center justify-center py-16 px-4">
-            <div className="max-w-5xl mx-auto">
-              <div className="text-center mb-12">
-                <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+          <section className="min-h-auto md:min-h-screen snap-start flex items-center justify-center py-16 md:py-20 px-4">
+            <div className="max-w-5xl mx-auto w-full">
+              <div className="text-center mb-8 md:mb-12">
+                <h2 className="text-2xl md:text-4xl font-bold text-white mb-3 md:mb-4">
                   Simple, Transparent <span className="text-cyan-500">Pricing</span>
                 </h2>
-                <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+                <p className="text-gray-400 text-base md:text-lg max-w-2xl mx-auto">
                   Start free and upgrade when you need more. No hidden fees, cancel anytime.
                 </p>
               </div>
@@ -372,7 +372,7 @@ export default function Home() {
               </div>
 
               {/* Pricing cards */}
-              <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-3xl mx-auto">
                 {/* Free Plan */}
                 <div className="relative bg-slate-900 border border-cyan-700/30 rounded-2xl shadow-xl p-6">
                   <div className="text-center mb-6">
@@ -478,7 +478,7 @@ export default function Home() {
           </section>
 
           {/* Final CTA Section */}
-          <section className="min-h-[60vh] snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-950 to-black">
+          <section className="min-h-auto md:min-h-[60vh] snap-start flex items-center justify-center py-12 md:py-16 px-4 bg-gradient-to-b from-slate-950 to-black">
             <div className="max-w-4xl mx-auto text-center">
               <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
                 Stop Losing Your <span className="text-cyan-500">Best Ideas</span>
