@@ -11,7 +11,7 @@ export default function TermsPage() {
 
         <div className="space-y-8 text-gray-300">
           <p className="mb-8 text-base leading-relaxed">
-            Thank you for using OSCAR. When we say "we", "us", or "our" in this document, we are referring to the people who build and run OSCAR. When we say "Service", we mean OSCAR and everything it offers. When we say "you", we mean the person or organization using OSCAR.
+            Thank you for using OSCAR. When we say &quot;we&quot;, &quot;us&quot;, or &quot;our&quot; in this document, we are referring to the people who build and run OSCAR. When we say &quot;Service&quot;, we mean OSCAR and everything it offers. When we say &quot;you&quot;, we mean the person or organization using OSCAR.
           </p>
 
           <p className="mb-8 text-base leading-relaxed">
@@ -21,7 +21,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-white mb-6">Your Account</h2>
             <p className="text-base leading-relaxed">
-              You need an account to use OSCAR. When registering, you must provide accurate information and keep it up to date. You are responsible for maintaining the security of your account — do not share it with others. You must be of legal age to form a binding contract in your country, or have obtained your parent's or guardian's permission to use OSCAR. You must be at least 13 years old.
+              You need an account to use OSCAR. When registering, you must provide accurate information and keep it up to date. You are responsible for maintaining the security of your account — do not share it with others. You must be of legal age to form a binding contract in your country, or have obtained your parent&apos;s or guardian&apos;s permission to use OSCAR. You must be at least 13 years old.
             </p>
           </section>
 
@@ -62,7 +62,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-white mb-6">Acceptable Use</h2>
             <p className="mb-4 text-base leading-relaxed">
-              You agree to use OSCAR only for lawful purposes. You may not use the Service to violate any laws or regulations, infringe on intellectual property rights, transmit harmful or offensive content, attempt to breach security or access other users' accounts, reverse engineer or copy the Service, use automated tools to abuse the Service, or resell or redistribute it in any form. Uploading malware or malicious code of any kind is strictly prohibited.
+              You agree to use OSCAR only for lawful purposes. You may not use the Service to violate any laws or regulations, infringe on intellectual property rights, transmit harmful or offensive content, attempt to breach security or access other users&apos; accounts, reverse engineer or copy the Service, use automated tools to abuse the Service, or resell or redistribute it in any form. Uploading malware or malicious code of any kind is strictly prohibited.
             </p>
           </section>
 

@@ -17,7 +17,7 @@ export default function RefundPolicyPage() {
           <section>
             <h2 className="text-2xl font-bold text-white mb-6">7-Day Money-Back Guarantee</h2>
             <p className="mb-4 text-base leading-relaxed">
-              If you subscribe to OSCAR Pro for the first time and change your mind, you can request a full refund within 7 days of your purchase — no questions asked. This applies to new subscribers only. To request a refund, go to Settings → Billing and click "Request Refund", or reach out to our support team directly.
+              If you subscribe to OSCAR Pro for the first time and change your mind, you can request a full refund within 7 days of your purchase — no questions asked. This applies to new subscribers only. To request a refund, go to Settings → Billing and click &quot;Request Refund&quot;, or reach out to our support team directly.
             </p>
             <p className="mb-3 text-base leading-relaxed">Once your request is submitted, here is what to expect:</p>
             <ul className="list-disc pl-6 space-y-2 mb-4">
