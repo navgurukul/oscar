@@ -23,11 +23,10 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { SquaresSubtract, Trash2, Search, Star } from "lucide-react";
+import { SquaresSubtract, Trash2, Search } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
 import { getTimeBasedPrompt } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 
 type SortOption = "created" | "updated" | "length";
 
@@ -37,14 +36,12 @@ export default function NotesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [togglingStarId, setTogglingStarId] = useState<string | null>(null);
   const [contextPrompt, setContextPrompt] = useState("");
   const ITEMS_PER_PAGE = 5;
 
   // Filter and sort state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("created");
-  const [showOnlyStarred, setShowOnlyStarred] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -55,7 +52,7 @@ export default function NotesPage() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortBy, showOnlyStarred]);
+  }, [searchQuery, sortBy]);
 
   // Filter and sort notes
   const filteredNotes = useMemo(() => {
@@ -71,11 +68,6 @@ export default function NotesPage() {
         ).toLowerCase();
         return title.includes(query) || content.includes(query);
       });
-    }
-
-    // Filter by starred
-    if (showOnlyStarred) {
-      result = result.filter((note) => note.is_starred);
     }
 
     // Sort
@@ -104,7 +96,7 @@ export default function NotesPage() {
     });
 
     return result;
-  }, [allNotes, searchQuery, sortBy, showOnlyStarred]);
+  }, [allNotes, searchQuery, sortBy]);
 
   const totalPages = Math.ceil(filteredNotes.length / ITEMS_PER_PAGE);
 
@@ -138,34 +130,6 @@ export default function NotesPage() {
     setDeletingId(null);
   };
 
-  const handleToggleStar = async (
-    id: string,
-    currentStarred: boolean,
-    e: React.MouseEvent
-  ) => {
-    e.stopPropagation();
-
-    // Optimistic update
-    setAllNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_starred: !currentStarred } : n))
-    );
-    setTogglingStarId(id);
-
-    const { error } = await notesService.toggleStar(id, !currentStarred);
-
-    if (error) {
-      // Revert on error
-      setAllNotes((prev) =>
-        prev.map((n) =>
-          n.id === id ? { ...n, is_starred: currentStarred } : n
-        )
-      );
-      alert("Failed to update star. Please try again.");
-    }
-
-    setTogglingStarId(null);
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
@@ -181,17 +145,11 @@ export default function NotesPage() {
     return text.length > 150 ? text.substring(0, 150) + "..." : text;
   };
 
-  const hasActiveFilters = searchQuery.trim() || showOnlyStarred;
+  const hasActiveFilters = searchQuery.trim();
 
   const getEmptyMessage = () => {
     if (allNotes.length === 0) {
       return contextPrompt;
-    }
-    if (showOnlyStarred && searchQuery.trim()) {
-      return "No starred notes match your search";
-    }
-    if (showOnlyStarred) {
-      return "No starred notes yet";
     }
     if (searchQuery.trim()) {
       return `No notes found for "${searchQuery}"`;
@@ -336,21 +294,6 @@ export default function NotesPage() {
                 <SelectItem value="length">Length</SelectItem>
               </SelectContent>
             </Select>
-
-            {/* Starred Toggle */}
-            <Button
-              onClick={() => setShowOnlyStarred(!showOnlyStarred)}
-              className={`h-10 flex items-center justify-center gap-2 px-4 rounded-lg border transition-colors w-full md:w-auto ${
-                showOnlyStarred
-                  ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
-                  : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
-              }`}
-            >
-              <Star
-                className={`w-4 h-4 ${showOnlyStarred ? "fill-cyan-500" : ""}`}
-              />
-              <span className="hidden md:inline font-normal">Starred</span>
-            </Button>
           </div>
         )}
 
@@ -362,7 +305,6 @@ export default function NotesPage() {
               <button
                 onClick={() => {
                   setSearchQuery("");
-                  setShowOnlyStarred(false);
                 }}
                 className="text-cyan-500 hover:text-cyan-400 transition-colors"
               >
@@ -392,29 +334,6 @@ export default function NotesPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        {/* Star Button */}
-                        <button
-                          onClick={(e) =>
-                            handleToggleStar(note.id, note.is_starred, e)
-                          }
-                          disabled={togglingStarId === note.id}
-                          className={`p-2 transition-colors ${
-                            note.is_starred
-                              ? "text-cyan-500"
-                              : "text-gray-500 hover:text-cyan-500"
-                          }`}
-                          title={note.is_starred ? "Unstar note" : "Star note"}
-                        >
-                          {togglingStarId === note.id ? (
-                            <Spinner className="w-4 h-4" />
-                          ) : (
-                            <Star
-                              className={`w-4 h-4 ${
-                                note.is_starred ? "fill-cyan-500" : ""
-                              }`}
-                            />
-                          )}
-                        </button>
                         {/* Delete Button */}
                         <button
                           onClick={(e) => handleDelete(note.id, e)}
