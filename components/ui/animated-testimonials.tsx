@@ -34,6 +34,13 @@ export const AnimatedTestimonials = ({
     return index === active;
   };
 
+  // Generate stable rotation based on index (not random)
+  const getRotation = (index: number) => {
+    // Use index to create deterministic rotation values
+    const rotations = [-10, -5, 3, 8, -3, 5, -8, 10];
+    return rotations[index % rotations.length];
+  };
+
   useEffect(() => {
     if (!autoplay) return;
     const interval = setInterval(() => {
@@ -41,11 +48,6 @@ export const AnimatedTestimonials = ({
     }, 5000);
     return () => clearInterval(interval);
   }, [autoplay, testimonials.length]);
-
-  const getRotation = (index: number) => {
-    const rotations = [-8, -5, -2, 1, 3, 5, 8, 10];
-    return rotations[index % rotations.length];
-  };
   return (
     <div className="mx-auto max-w-sm px-4 py-20 font-sans antialiased md:max-w-4xl md:px-8 lg:px-12">
       <div className="relative grid grid-cols-1 gap-20 md:grid-cols-2">

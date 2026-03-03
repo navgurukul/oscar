@@ -477,7 +477,7 @@ function RecordingPageInner() {
         </div>
 
         {/* Main Recording Container */}
-        <div className="bg-slate-900 w-full max-w-[500px] aspect-square rounded-3xl shadow-xl border border-cyan-700/30 p-6 sm:p-8 md:p-12 space-y-8 sm:space-y-12 relative overflow-hidden">
+        <div className="bg-slate-900 w-full max-w-[500px] aspect-square rounded-3xl shadow-xl border border-cyan-700/30 p-6 sm:p-8 md:p-12 relative overflow-hidden">
           <DottedGlowBackground
             gap={20}
             radius={1.3}
@@ -505,7 +505,7 @@ function RecordingPageInner() {
           />
 
           {/* Instruction Text - only when NOT recording */}
-          <div className="text-center pt-4 h-16 flex items-center justify-center">
+          <div className="text-center pb-16 h-16 flex items-center justify-center">
             {!isRecording && (
               <p className="text-gray-400 text-lg">
                 Press the microphone button and start speaking. Oscar will do
