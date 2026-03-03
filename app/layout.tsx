@@ -30,19 +30,22 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { session } = useAuth();
 
-  const shouldShowFooter = !(pathname === "/" && session) && pathname !== "/recording";
+  const shouldShowFooter = pathname === "/settings" && !!session;
+  // Don't add bottom padding on the logged-in home page — the hero is h-screen
+  // and pb-16 would make the body taller than the viewport, causing unwanted scroll.
+  const shouldAddBottomPadding = !(pathname === "/" && !!session);
 
   return (
-    <>
+    <div className={`flex flex-col min-h-screen${shouldAddBottomPadding ? " pb-16" : ""}`}>
       <FloatingNavbar />
       <AuthEdgeButton />
       {children}
-      {shouldShowFooter && <Footer />}
+      {shouldShowFooter && <div className="mt-auto"><Footer /></div>}
       <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
         <HomeRecordingButton />
       </div>
       <Toaster />
-    </>
+    </div>
   );
 }
 
@@ -72,7 +75,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className="bg-slate-950 text-white antialiased font-sans pb-16">
+      <body className="bg-slate-950 text-white antialiased font-sans">
         <AuthProvider>
           <SubscriptionProvider>
             <LayoutContent>{children}</LayoutContent>
