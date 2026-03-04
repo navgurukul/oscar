@@ -21,6 +21,10 @@ import {
   Mail,
   MessageCircle,
   FileText,
+  Languages,
+  ListChecks,
+  BookOpen,
+  Star,
 } from "lucide-react";
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
@@ -61,15 +65,19 @@ export default function NoteDetailPage({
   // const [isSharing, setIsSharing] = useState(false);
   const [shareSubject, setShareSubject] = useState<string | null>(null);
   // Gmail AI format now applies directly to the main editor text (no separate box)
-  const { isFormatting: isGmailFormatting, formatText: gmailFormatText } =
+  const { formatText: gmailFormatText } =
     useAIEmailFormatting();
-  const [isGmailMode, setIsGmailMode] = useState(false);
-  const [gmailBody, setGmailBody] = useState<string | null>(null);
+  const [activeMode, setActiveMode] = useState<"normal" | "email" | "translate" | "summary" | "bullets">("normal");
+  const [modeContent, setModeContent] = useState<Record<string, string>>({});
+  const [isLoadingMode, setIsLoadingMode] = useState(false);
 
   // Feedback state
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
   const [feedbackValue, setFeedbackValue] = useState<boolean | null>(null);
+
+  // Star state
+  const [isStarring, setIsStarring] = useState(false);
 
   useEffect(() => {
     const initializeParams = async () => {
@@ -199,6 +207,29 @@ export default function NoteDetailPage({
     setIsFeedbackSubmitting(false);
   };
 
+  const handleToggleStar = async () => {
+    if (!note || isStarring) return;
+    const currentNote = note;
+    const newStarred = !currentNote.is_starred;
+    setIsStarring(true);
+    // Optimistic update
+    setNote((prev) => prev ? { ...prev, is_starred: newStarred } : prev);
+    const { data, error } = await notesService.toggleStar(currentNote.id, newStarred);
+    if (error || !data) {
+      // Revert on failure
+      setNote((prev) => prev ? { ...prev, is_starred: currentNote.is_starred } : prev);
+      toast({
+        title: "Error",
+        description: "Failed to update star. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      // Sync with actual DB value
+      setNote((prev) => prev ? { ...prev, is_starred: data.is_starred } : prev);
+    }
+    setIsStarring(false);
+  };
+
   if (isLoading) {
     return (
       <main className="flex flex-col items-center px-4 pt-8 pb-24">
@@ -214,9 +245,9 @@ export default function NoteDetailPage({
     return null;
   }
 
-  const displayText = isGmailMode
-    ? gmailBody || ""
-    : note.edited_text || note.original_formatted_text;
+  const displayText = activeMode === "normal"
+    ? (note.edited_text || note.original_formatted_text)
+    : (modeContent[activeMode] || note.edited_text || note.original_formatted_text);
 
   return (
     <main className="flex flex-col items-center px-5 pt-8 pb-24">
@@ -233,57 +264,153 @@ export default function NoteDetailPage({
         </div> */}
         <div className="w-10" />
 
-        <div className="flex bg-slate-800 border border-slate-700 rounded-lg overflow-hidden ml-auto mr-2">
+        <div className="flex bg-slate-800 border border-slate-700 rounded-lg overflow-hidden ml-auto mr-2 gap-0.5">
+          {/* Normal mode */}
           <button
             onClick={() => {
-              setIsGmailMode(false);
+              setActiveMode("normal");
               if (isEditing) {
-                const base =
-                  note.edited_text || note.original_formatted_text || "";
+                const base = note.edited_text || note.original_formatted_text || "";
                 setEditedText(base);
               }
             }}
-            className={`px-3 py-2 text-sm ${
-              !isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"
+            className={`px-3 py-2 text-sm transition-colors ${
+              activeMode === "normal" ? "bg-cyan-600 text-white" : "text-gray-300 hover:text-white"
             }`}
+            title="Normal"
           >
             <FileText className="w-4 h-4" />
           </button>
+
+          {/* Email mode */}
           <button
             onClick={async () => {
-              setIsGmailMode(true);
+              setActiveMode("email");
               setShareSubject(note.title || "Untitled Note");
-              const baseText =
-                note.edited_text ||
-                note.original_formatted_text ||
-                note.raw_text ||
-                "";
-              if (!gmailBody) {
-                const res = await gmailFormatText(
-                  baseText,
-                  note.title || "Untitled Note"
-                );
-                const emailBody = res.success
-                  ? res.formattedText || baseText
-                  : baseText;
-                setGmailBody(emailBody);
-                if (isEditing) {
-                  setEditedText(emailBody);
-                }
+              const baseText = note.edited_text || note.original_formatted_text || note.raw_text || "";
+              
+              if (!modeContent["email"]) {
+                setIsLoadingMode(true);
+                const res = await gmailFormatText(baseText, note.title || "Untitled Note");
+                const emailBody = res.success ? res.formattedText || baseText : baseText;
+                setModeContent(prev => ({ ...prev, email: emailBody }));
+                if (isEditing) setEditedText(emailBody);
+                setIsLoadingMode(false);
               } else {
-                if (isEditing) {
-                  setEditedText(gmailBody);
-                }
+                if (isEditing) setEditedText(modeContent["email"]);
               }
             }}
-            className={`px-3 py-2 text-sm flex items-center gap-1 ${
-              isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"
+            className={`px-3 py-2 text-sm flex items-center gap-1 transition-colors ${
+              activeMode === "email" ? "bg-cyan-600 text-white" : "text-gray-300 hover:text-white"
             }`}
+            title="Email format"
           >
-            {isGmailFormatting ? (
-              <Spinner className="w-4 h-4 text-cyan-500" />
+            {isLoadingMode && activeMode === "email" ? (
+              <Spinner className="w-4 h-4" />
             ) : (
               <Mail className="w-4 h-4" />
+            )}
+          </button>
+
+          {/* Bullet points mode */}
+          <button
+            onClick={async () => {
+              setActiveMode("bullets");
+              const baseText = note.edited_text || note.original_formatted_text || "";
+              
+              if (!modeContent["bullets"]) {
+                setIsLoadingMode(true);
+                // For now, use a simple conversion - you can add a dedicated API endpoint later
+                const bulletPoints = baseText
+                  .split('\n')
+                  .filter(line => line.trim())
+                  .map(line => `• ${line.trim()}`)
+                  .join('\n');
+                setModeContent(prev => ({ ...prev, bullets: bulletPoints }));
+                if (isEditing) setEditedText(bulletPoints);
+                setIsLoadingMode(false);
+              } else {
+                if (isEditing) setEditedText(modeContent["bullets"]);
+              }
+            }}
+            className={`px-3 py-2 text-sm flex items-center gap-1 transition-colors ${
+              activeMode === "bullets" ? "bg-cyan-600 text-white" : "text-gray-300 hover:text-white"
+            }`}
+            title="Bullet points"
+          >
+            {isLoadingMode && activeMode === "bullets" ? (
+              <Spinner className="w-4 h-4" />
+            ) : (
+              <ListChecks className="w-4 h-4" />
+            )}
+          </button>
+
+          {/* Summary mode */}
+          <button
+            onClick={async () => {
+              setActiveMode("summary");
+              const baseText = note.edited_text || note.original_formatted_text || "";
+              
+              if (!modeContent["summary"]) {
+                setIsLoadingMode(true);
+                // Simple summary - first 3 sentences
+                const sentences = baseText.match(/[^.!?]+[.!?]+/g) || [baseText];
+                const summary = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
+                setModeContent(prev => ({ ...prev, summary }));
+                if (isEditing) setEditedText(summary);
+                setIsLoadingMode(false);
+              } else {
+                if (isEditing) setEditedText(modeContent["summary"]);
+              }
+            }}
+            className={`px-3 py-2 text-sm flex items-center gap-1 transition-colors ${
+              activeMode === "summary" ? "bg-cyan-600 text-white" : "text-gray-300 hover:text-white"
+            }`}
+            title="Summary"
+          >
+            {isLoadingMode && activeMode === "summary" ? (
+              <Spinner className="w-4 h-4" />
+            ) : (
+              <BookOpen className="w-4 h-4" />
+            )}
+          </button>
+
+          {/* Translate mode */}
+          <button
+            onClick={async () => {
+              setActiveMode("translate");
+              const baseText = note.edited_text || note.original_formatted_text || "";
+              
+              if (!modeContent["translate"]) {
+                setIsLoadingMode(true);
+                try {
+                  const response = await fetch('/api/deepseek/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: baseText }),
+                  });
+                  const data = await response.json();
+                  const translated = data.translatedText || baseText;
+                  setModeContent(prev => ({ ...prev, translate: translated }));
+                  if (isEditing) setEditedText(translated);
+                } catch (error) {
+                  console.error('Translation failed:', error);
+                  setModeContent(prev => ({ ...prev, translate: baseText }));
+                }
+                setIsLoadingMode(false);
+              } else {
+                if (isEditing) setEditedText(modeContent["translate"]);
+              }
+            }}
+            className={`px-3 py-2 text-sm flex items-center gap-1 transition-colors ${
+              activeMode === "translate" ? "bg-cyan-600 text-white" : "text-gray-300 hover:text-white"
+            }`}
+            title="Translate"
+          >
+            {isLoadingMode && activeMode === "translate" ? (
+              <Spinner className="w-4 h-4" />
+            ) : (
+              <Languages className="w-4 h-4" />
             )}
           </button>
         </div>
@@ -342,9 +469,25 @@ export default function NoteDetailPage({
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={handleToggleStar}
+                          disabled={isStarring}
+                          className={
+                            note.is_starred
+                              ? "text-cyan-400 hover:text-cyan-300"
+                              : "text-gray-400 hover:text-cyan-400"
+                          }
+                          title={note.is_starred ? "Unstar note" : "Star note"}
+                        >
+                          <Star
+                            className={`w-4 h-4 ${note.is_starred ? "fill-cyan-400" : ""}`}
+                          />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => {
                             setIsEditing(true);
-                            if (isGmailMode) {
+                            if (activeMode === "email") {
                               setShareSubject(note.title || "Untitled Note");
                             }
                           }}
@@ -390,7 +533,7 @@ export default function NoteDetailPage({
             <CardContent>
               {isEditing ? (
                 <>
-                  {isGmailMode && (
+                  {activeMode === "email" && (
                     <div className="mb-3">
                       <label className="text-sm text-gray-400 block mb-1">
                         Email subject
@@ -424,7 +567,7 @@ export default function NoteDetailPage({
 
                   {isEditing ? (
                     <>
-                      {isGmailMode && (
+                      {activeMode === "email" && (
                         <div className="w-full">
                           <label className="text-sm text-gray-400 block mb-1">
                             Email subject
@@ -470,6 +613,22 @@ export default function NoteDetailPage({
                     </>
                   ) : (
                     <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleToggleStar}
+                        disabled={isStarring}
+                        className={`flex flex-col items-center gap-1 h-auto py-2 ${
+                          note.is_starred
+                            ? "text-cyan-400 hover:text-cyan-300"
+                            : "text-gray-400 hover:text-cyan-400"
+                        }`}
+                        title={note.is_starred ? "Unstar note" : "Star note"}
+                      >
+                        <Star
+                          className={`w-5 h-5 ${note.is_starred ? "fill-cyan-400" : ""}`}
+                        />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -583,8 +742,8 @@ export default function NoteDetailPage({
                       const subject = encodeURIComponent(subjectText);
                       const bodyText = isEditing
                         ? editedText
-                        : isGmailMode
-                        ? gmailBody || ""
+                        : activeMode === "email"
+                        ? modeContent["email"] || ""
                         : note.edited_text ||
                           note.original_formatted_text ||
                           "";
@@ -612,8 +771,8 @@ export default function NoteDetailPage({
                       const subject = encodeURIComponent(subjectText);
                       const bodyText = isEditing
                         ? editedText
-                        : isGmailMode
-                        ? gmailBody || ""
+                        : activeMode === "email"
+                        ? modeContent["email"] || ""
                         : note.edited_text ||
                           note.original_formatted_text ||
                           "";

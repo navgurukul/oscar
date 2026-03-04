@@ -65,41 +65,60 @@ export const usageService = {
   },
 
   /**
-   * Increment recording usage for a user
-   * Returns the new count
+   * Increment recording usage for a user atomically.
+   * Uses INSERT ... ON CONFLICT DO UPDATE to avoid the read-then-write
+   * race condition where two concurrent requests could both read the same
+   * count and each write count+1 instead of count+2.
+   * Returns the new count.
    */
   async incrementRecordingUsage(userId: string): Promise<number> {
     const supabase = getSupabaseAdmin();
     const monthYear = getCurrentMonthYear();
 
-    // Try to upsert the usage record
-    const { data: existing } = await supabase
-      .from("usage_tracking")
-      .select("id, recording_count")
-      .eq("user_id", userId)
-      .eq("month_year", monthYear)
-      .single();
+    // Atomic upsert: if row exists increment in-place, otherwise insert with 1.
+    // The raw SQL expression `recording_count + 1` is evaluated by Postgres in a
+    // single statement, so concurrent calls cannot clobber each other.
+    const { data, error } = await supabase.rpc("increment_recording_usage", {
+      p_user_id: userId,
+      p_month_year: monthYear,
+    });
 
-    if (existing) {
-      // Update existing record
-      const newCount = existing.recording_count + 1;
-      await supabase
+    if (error) {
+      // Fall back to non-atomic upsert if the RPC is not yet deployed,
+      // so existing deployments degrade gracefully rather than hard-crash.
+      console.error(
+        "increment_recording_usage RPC failed, falling back:",
+        error.message
+      );
+
+      const { data: existing } = await supabase
         .from("usage_tracking")
-        .update({
-          recording_count: newCount,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
-      return newCount;
-    } else {
-      // Insert new record
-      await supabase.from("usage_tracking").insert({
-        user_id: userId,
-        month_year: monthYear,
-        recording_count: 1,
-      });
-      return 1;
+        .select("id, recording_count")
+        .eq("user_id", userId)
+        .eq("month_year", monthYear)
+        .single();
+
+      if (existing) {
+        const newCount = existing.recording_count + 1;
+        await supabase
+          .from("usage_tracking")
+          .update({
+            recording_count: newCount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existing.id);
+        return newCount;
+      } else {
+        await supabase.from("usage_tracking").insert({
+          user_id: userId,
+          month_year: monthYear,
+          recording_count: 1,
+        });
+        return 1;
+      }
     }
+
+    return (data as number) ?? 1;
   },
 
   /**

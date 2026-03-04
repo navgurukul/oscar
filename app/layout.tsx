@@ -30,19 +30,27 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { session } = useAuth();
 
-  const shouldShowFooter = !(pathname === "/" && session) && pathname !== "/recording";
+  const isAuthenticated = !!session;
+  const isLandingPage = pathname === "/";
+  const isSettingsPage = pathname === "/settings";
+  
+  // Footer visibility rules:
+  // 1. Unauthenticated on landing page -> show footer
+  // 2. Authenticated only on settings page -> show footer
+  const shouldShowFooter = (!isAuthenticated && isLandingPage) || (isAuthenticated && isSettingsPage);
+  
 
   return (
-    <>
+    <div className="flex flex-col min-h-screen">
       <FloatingNavbar />
       <AuthEdgeButton />
       {children}
-      {shouldShowFooter && <Footer />}
+      {shouldShowFooter && <div className="mt-auto"><Footer /></div>}
       <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
         <HomeRecordingButton />
       </div>
       <Toaster />
-    </>
+    </div>
   );
 }
 
@@ -72,7 +80,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className="bg-slate-950 text-white antialiased font-sans pb-16">
+      <body className="bg-slate-950 text-white antialiased font-sans">
         <AuthProvider>
           <SubscriptionProvider>
             <LayoutContent>{children}</LayoutContent>

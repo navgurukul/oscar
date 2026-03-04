@@ -65,7 +65,7 @@ export default function Home() {
   return (
     <main className="w-full flex flex-col">
       {/* Hero Section with Lamp Effect */}
-      <section className="min-h-screen snap-start flex items-center justify-center py-8 px-4">
+      <section className="snap-start flex items-center justify-center">
         <LampContainer >
           <motion.div
             initial={{ opacity: 0.5, y: 100 }}

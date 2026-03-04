@@ -9,3 +9,14 @@ CREATE INDEX idx_notes_is_starred ON notes(is_starred) WHERE is_starred = true;
 
 -- Add comment for documentation
 COMMENT ON COLUMN notes.is_starred IS 'Whether the note is marked as a favorite/starred by the user';
+
+-- ============================================
+-- RLS UPDATE policy for notes table
+-- Required for starred toggle and note editing to work
+-- Run this in your Supabase SQL editor if not already applied
+-- ============================================
+CREATE POLICY "Users can update their own notes"
+  ON public.notes
+  FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);

@@ -14,6 +14,7 @@ export class STTService {
   private transcriptCallback: TranscriptCallback | null = null;
   private isRecordingActive: boolean = false;
   private restartInterval: NodeJS.Timeout | null = null;
+  private currentInterimText: string = ""; // For real-time display
 
   /**
    * Initialize the STT service
@@ -59,7 +60,21 @@ export class STTService {
 
       // Set up words update callback for real-time tracking
       this.sttInstance.setWordsUpdateCallback((words) => {
-        console.log("[STT] Words update:", words);
+        // words is an array of word objects with text and other metadata
+        if (words && words.length > 0) {
+          // Extract text from words and join
+          const interimText = words.map((w: unknown) => (w as { text?: string })?.text ?? String(w)).join(" ");
+          this.currentInterimText = interimText;
+          
+          // Immediately update callback for real-time display
+          if (this.transcriptCallback && this.isRecordingActive) {
+            // Combine accumulated + current interim
+            const fullText = this.accumulatedTranscript 
+              ? `${this.accumulatedTranscript} ${interimText}`
+              : interimText;
+            this.transcriptCallback(fullText.trim());
+          }
+        }
       });
     } catch (error) {
       console.error("[STT] Initialization error:", error);
@@ -180,6 +195,7 @@ export class STTService {
       transcript
     );
     this.accumulatedTranscript = merged;
+    this.currentInterimText = ""; // Clear interim since it's now finalized
 
     if (this.transcriptCallback) {
       this.transcriptCallback(merged);

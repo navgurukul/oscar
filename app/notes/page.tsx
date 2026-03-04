@@ -27,7 +27,6 @@ import { SquaresSubtract, Trash2, Search, Star } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
 import { getTimeBasedPrompt } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 
 type SortOption = "created" | "updated" | "length";
 
@@ -37,15 +36,14 @@ export default function NotesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [togglingStarId, setTogglingStarId] = useState<string | null>(null);
   const [contextPrompt, setContextPrompt] = useState("");
   const ITEMS_PER_PAGE = 5;
 
   // Filter and sort state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("created");
-  const [showOnlyStarred, setShowOnlyStarred] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showStarredOnly, setShowStarredOnly] = useState(false);
 
   useEffect(() => {
     loadNotes();
@@ -55,11 +53,16 @@ export default function NotesPage() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortBy, showOnlyStarred]);
+  }, [searchQuery, sortBy, showStarredOnly]);
 
   // Filter and sort notes
   const filteredNotes = useMemo(() => {
     let result = [...allNotes];
+
+    // Filter starred only
+    if (showStarredOnly) {
+      result = result.filter((note) => note.is_starred);
+    }
 
     // Filter by search query
     if (searchQuery.trim()) {
@@ -71,11 +74,6 @@ export default function NotesPage() {
         ).toLowerCase();
         return title.includes(query) || content.includes(query);
       });
-    }
-
-    // Filter by starred
-    if (showOnlyStarred) {
-      result = result.filter((note) => note.is_starred);
     }
 
     // Sort
@@ -104,7 +102,7 @@ export default function NotesPage() {
     });
 
     return result;
-  }, [allNotes, searchQuery, sortBy, showOnlyStarred]);
+  }, [allNotes, searchQuery, sortBy, showStarredOnly]);
 
   const totalPages = Math.ceil(filteredNotes.length / ITEMS_PER_PAGE);
 
@@ -138,32 +136,27 @@ export default function NotesPage() {
     setDeletingId(null);
   };
 
-  const handleToggleStar = async (
-    id: string,
-    currentStarred: boolean,
-    e: React.MouseEvent
-  ) => {
+  const handleToggleStar = async (note: DBNote, e: React.MouseEvent) => {
     e.stopPropagation();
-
+    const newStarred = !note.is_starred;
     // Optimistic update
     setAllNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_starred: !currentStarred } : n))
+      prev.map((n) => (n.id === note.id ? { ...n, is_starred: newStarred } : n))
     );
-    setTogglingStarId(id);
-
-    const { error } = await notesService.toggleStar(id, !currentStarred);
-
-    if (error) {
-      // Revert on error
+    const { data, error } = await notesService.toggleStar(note.id, newStarred);
+    if (error || !data) {
+      // Revert on failure
       setAllNotes((prev) =>
         prev.map((n) =>
-          n.id === id ? { ...n, is_starred: currentStarred } : n
+          n.id === note.id ? { ...n, is_starred: note.is_starred } : n
         )
       );
-      alert("Failed to update star. Please try again.");
+    } else {
+      // Sync with actual DB value
+      setAllNotes((prev) =>
+        prev.map((n) => (n.id === data.id ? { ...n, is_starred: data.is_starred } : n))
+      );
     }
-
-    setTogglingStarId(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -181,17 +174,14 @@ export default function NotesPage() {
     return text.length > 150 ? text.substring(0, 150) + "..." : text;
   };
 
-  const hasActiveFilters = searchQuery.trim() || showOnlyStarred;
+  const hasActiveFilters = searchQuery.trim() || showStarredOnly;
 
   const getEmptyMessage = () => {
     if (allNotes.length === 0) {
       return contextPrompt;
     }
-    if (showOnlyStarred && searchQuery.trim()) {
-      return "No starred notes match your search";
-    }
-    if (showOnlyStarred) {
-      return "No starred notes yet";
+    if (showStarredOnly && !searchQuery.trim()) {
+      return "No starred notes yet. Star a note to find it here quickly.";
     }
     if (searchQuery.trim()) {
       return `No notes found for "${searchQuery}"`;
@@ -321,9 +311,7 @@ export default function NotesPage() {
                 className="h-10 w-full pl-10 pr-4 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
               />
             </div>
-
-            {/* Sort Dropdown */}
-            <Select
+              <Select
               value={sortBy}
               onValueChange={(value) => setSortBy(value as SortOption)}
             >
@@ -337,20 +325,24 @@ export default function NotesPage() {
               </SelectContent>
             </Select>
 
-            {/* Starred Toggle */}
-            <Button
-              onClick={() => setShowOnlyStarred(!showOnlyStarred)}
-              className={`h-10 flex items-center justify-center gap-2 px-4 rounded-lg border transition-colors w-full md:w-auto ${
-                showOnlyStarred
-                  ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
-                  : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
+            {/* Starred filter toggle */}
+            <button
+              onClick={() => setShowStarredOnly((v) => !v)}
+              title={showStarredOnly ? "Show all notes" : "Show starred only"}
+              className={`h-10 px-3 flex items-center gap-1.5 rounded-lg border transition-colors text-sm font-medium ${
+                showStarredOnly
+                  ? "bg-cyan-500/20 border-cyan-500/60 text-cyan-400"
+                  : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/40"
               }`}
             >
               <Star
-                className={`w-4 h-4 ${showOnlyStarred ? "fill-cyan-500" : ""}`}
+                className={`w-4 h-4 ${showStarredOnly ? "fill-cyan-400 text-cyan-400" : ""}`}
               />
-              <span className="hidden md:inline font-normal">Starred</span>
-            </Button>
+              <span>Starred</span>
+            </button>
+
+            {/* Sort Dropdown */}
+          
           </div>
         )}
 
@@ -362,7 +354,7 @@ export default function NotesPage() {
               <button
                 onClick={() => {
                   setSearchQuery("");
-                  setShowOnlyStarred(false);
+                  setShowStarredOnly(false);
                 }}
                 className="text-cyan-500 hover:text-cyan-400 transition-colors"
               >
@@ -394,26 +386,17 @@ export default function NotesPage() {
                       <div className="flex items-center gap-1">
                         {/* Star Button */}
                         <button
-                          onClick={(e) =>
-                            handleToggleStar(note.id, note.is_starred, e)
-                          }
-                          disabled={togglingStarId === note.id}
+                          onClick={(e) => handleToggleStar(note, e)}
                           className={`p-2 transition-colors ${
                             note.is_starred
-                              ? "text-cyan-500"
-                              : "text-gray-500 hover:text-cyan-500"
+                              ? "text-cyan-400 hover:text-cyan-300"
+                              : "text-gray-500 hover:text-cyan-400"
                           }`}
                           title={note.is_starred ? "Unstar note" : "Star note"}
                         >
-                          {togglingStarId === note.id ? (
-                            <Spinner className="w-4 h-4" />
-                          ) : (
-                            <Star
-                              className={`w-4 h-4 ${
-                                note.is_starred ? "fill-cyan-500" : ""
-                              }`}
-                            />
-                          )}
+                          <Star
+                            className={`w-4 h-4 ${note.is_starred ? "fill-cyan-400" : ""}`}
+                          />
                         </button>
                         {/* Delete Button */}
                         <button

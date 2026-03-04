@@ -184,6 +184,7 @@ export interface DBWebhookEvent {
  * Razorpay webhook payload structure
  */
 export interface RazorpayWebhookPayload {
+  id: string; // Razorpay's unique event ID – use this as the idempotency key
   entity: "event";
   account_id: string;
   event: string;
