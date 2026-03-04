@@ -2,229 +2,163 @@ export default function PrivacyPolicyPage() {
   return (
     <main className="min-h-screen py-16 px-4 mt-16">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-6">
-          Privacy Policy
-        </h1>
-        <p className="text-gray-400 mb-8">Last updated: February 22, 2025</p>
+        <div className="text-center mb-12">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            Privacy Policy
+          </h1>
+          <p className="text-gray-400">Last updated: February 22, 2026</p>
+        </div>
 
         <div className="space-y-8 text-gray-300">
+          <p className="mb-8 text-base leading-relaxed">
+            Welcome to OSCAR (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). We are committed to protecting your privacy. This Privacy Policy explains what is collected, how it is used, and with whom it is shared when you use our voice note application. It may be revised from time to time. We will notify you of any changes by posting the new policy on this page and updating the &quot;Last updated&quot; date.
+          </p>
+
           <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              1. Introduction
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Information We Collect
             </h2>
-            <p>
-              Welcome to OSCAR (&quot;we,&quot; &quot;our,&quot; or
-              &quot;us&quot;). We are committed to protecting your privacy. This
-              Privacy Policy explains how we collect, use, disclose, and
-              safeguard your information when you use our voice note
-              application.
+            
+            <ul className="space-y-5 list-disc pl-6">
+              <li className="mb-4">
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Personal Information
+                </h3>
+                <p className="ml-6 text-base leading-relaxed">
+                  When you register, OSCAR only collects a valid email address and, if you sign in via Google or another OAuth provider, your name and profile picture as shared by that provider. We request only the minimum permissions needed — your name and email address.
+                </p>
+              </li>
+
+              <li className="mb-4">
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Voice and Content Data
+                </h3>
+                <p className="ml-6 text-base leading-relaxed">
+                  When you record a voice note, your audio is processed in real-time to generate a text transcription. OSCAR does not permanently store your audio recordings on our servers. The audio is discarded as soon as transcription is complete. Only the resulting transcribed and formatted text is saved to your account.
+                </p>
+              </li>
+
+              <li className="mb-4">
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Payment Information
+                </h3>
+                <p className="ml-6 text-base leading-relaxed">
+                  OSCAR does not directly collect payment information. Payments are processed through Razorpay (www.razorpay.com). As a result of this integration, some billing details such as your payment method type, billing address, and transaction amount may be visible to OSCAR through Razorpay&apos;s tools. Your full card details are never stored on our servers.
+                </p>
+              </li>
+
+              <li>
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Usage Data
+                </h3>
+                <p className="ml-6 text-base leading-relaxed">
+                  OSCAR also collects basic usage data such as recording count, duration, and feature interactions. This helps us understand how the product is being used and improve it over time.
+                </p>
+              </li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Third-Party Services
+            </h2>
+            
+            <ul className="space-y-5 list-disc pl-6">
+              <li className="mb-4">
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  DeepSeek
+                </h3>
+                <p className="ml-6 text-base leading-relaxed">
+                  For processing your voice recordings and formatting the resulting text, OSCAR uses APIs provided by DeepSeek. As a result, your transcribed text is transmitted to DeepSeek&apos;s servers during processing. DeepSeek is operated by a China-based company. Your data is not used to train their models. Further information can be found on the DeepSeek website. By using OSCAR, you consent to this transfer.
+                </p>
+              </li>
+
+              <li className="mb-4">
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Supabase
+                </h3>
+                <p className="ml-6 text-base leading-relaxed">
+                  For authentication, database, and file storage, OSCAR uses Supabase (www.supabase.com). Your account data and notes are stored on Supabase&apos;s servers, which encrypt data at rest.
+                </p>
+              </li>
+
+              <li className="mb-4">
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Razorpay
+                </h3>
+                <p className="ml-6 text-base leading-relaxed">
+                  For payment processing and subscription management, OSCAR uses Razorpay (www.razorpay.com). Their privacy policy governs how they handle your billing information.
+                </p>
+              </li>
+
+              <li>
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Cookies and Storage
+                </h3>
+                <p className="ml-6 text-base leading-relaxed">
+                  OSCAR sets cookies for authentication purposes and to enable essential platform functionality — specifically a session ID cookie, a session signature cookie to prevent tampering, and a cookie to identify the current logged-in user. OSCAR also uses browser local storage to save your app preferences.
+                </p>
+              </li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Use of Information
+            </h2>
+            <p className="text-base leading-relaxed">
+              The information collected is used solely to provide you the services you have subscribed to on OSCAR and to continually improve your experience. We do not sell your personal data to third parties. We do not display advertisements. If we send you any non-essential communications, you may opt out at any time.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              2. Information We Collect
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Data Retention, Deletion, and Export
             </h2>
-            <h3 className="text-xl font-semibold text-white mb-3">
-              2.1 Personal Information
-            </h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Email address (for account creation and authentication)</li>
-              <li>Name (if provided during OAuth authentication)</li>
-              <li>Profile information from OAuth providers (Google, etc.)</li>
-            </ul>
-
-            <h3 className="text-xl font-semibold text-white mb-3 mt-4">
-              2.2 Voice and Content Data
-            </h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>
-                Voice recordings (temporarily processed, not permanently stored
-                as audio)
-              </li>
-              <li>Transcribed text from your voice notes</li>
-              <li>Formatted notes and titles generated by AI</li>
-              <li>Custom vocabulary entries you create</li>
-              <li>Notes you save, star, or edit</li>
-            </ul>
-
-            <h3 className="text-xl font-semibold text-white mb-3 mt-4">
-              2.3 Payment Information
-            </h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>
-                Payment and billing information processed through Razorpay
-              </li>
-              <li>Subscription status and billing cycle information</li>
-              <li>We do not store credit card details on our servers</li>
-            </ul>
-
-            <h3 className="text-xl font-semibold text-white mb-3 mt-4">
-              2.4 Usage Data
-            </h3>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Recording usage statistics (count, duration)</li>
-              <li>Feature usage and interaction data</li>
-              <li>Feedback on AI formatting quality</li>
-              <li>Device and browser information</li>
-            </ul>
+            
+            <div className="space-y-4">
+              <p className="text-base leading-relaxed">
+                All notes created by you and stored on our servers will be retained for as long as your account remains active. Audio from your recordings is automatically discarded from our servers immediately after transcription — we do not retain your audio files.
+              </p>
+              
+              <p className="text-base leading-relaxed">
+                All content you create on OSCAR is private and not visible to other users. However, data stored on our servers is accessible to OSCAR&apos;s operators for the purposes of support and service maintenance.
+              </p>
+              
+              <p className="text-base leading-relaxed">
+                If you would like to export your notes and data, you can do so from the settings page of your account.
+              </p>
+              
+              <p className="text-base leading-relaxed">
+                If you would like to delete your account and associated data, you can do so from your account settings.
+              </p>
+            </div>
           </section>
 
           <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              3. How We Use Your Information
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Security
             </h2>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>To provide and maintain our voice note service</li>
-              <li>To process voice recordings into formatted text using AI</li>
-              <li>To manage your account and subscription</li>
-              <li>To process payments through Razorpay</li>
-              <li>To enforce usage limits based on your subscription tier</li>
-              <li>To improve our AI formatting algorithms</li>
-              <li>To send important service updates and notifications</li>
-              <li>To provide customer support</li>
-              <li>To comply with legal obligations</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              4. Third-Party Services
-            </h2>
-            <p className="mb-4">We use the following third-party services:</p>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>
-                <strong className="text-white">Supabase:</strong>{" "}
-                Authentication, database, and data storage
-              </li>
-              <li>
-                <strong className="text-white">DeepSeek:</strong> AI processing
-                for text formatting, translation, and title generation
-              </li>
-              <li>
-                <strong className="text-white">Razorpay:</strong> Payment
-                processing and subscription management
-              </li>
-              <li>
-                <strong className="text-white">OAuth Providers:</strong> Google
-                and other authentication providers
-              </li>
-            </ul>
-            <p className="mt-4">
-              Each service has its own privacy policy governing their use of
-              your data.
+            <p className="text-base leading-relaxed">
+              We implement appropriate technical and organizational measures to protect your data, including encryption at rest, secure authentication, and restricted access controls. In the event of a data breach that materially affects your personal information, we will notify you promptly. No method of transmission over the Internet is 100% secure, but we take your data seriously and work continuously to safeguard it.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              5. Voice Data Processing
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Children&apos;s Privacy
             </h2>
-            <p className="mb-4">
-              <strong className="text-white">Important:</strong> Your voice
-              recordings are processed in real-time to generate text
-              transcriptions. We do not permanently store your audio recordings
-              on our servers. The audio is:
-            </p>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Processed locally in your browser when possible</li>
-              <li>Converted to text immediately</li>
-              <li>Discarded after transcription is complete</li>
-              <li>Only the resulting text is saved to your account</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              6. Data Retention
-            </h2>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>
-                <strong className="text-white">Notes:</strong> Stored until you
-                delete them
-              </li>
-              <li>
-                <strong className="text-white">Account Data:</strong> Retained
-                while your account is active
-              </li>
-              <li>
-                <strong className="text-white">Usage Statistics:</strong>{" "}
-                Retained for service improvement
-              </li>
-              <li>
-                <strong className="text-white">Payment Records:</strong>{" "}
-                Retained as required by law
-              </li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              7. Your Rights
-            </h2>
-            <p className="mb-4">You have the right to:</p>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Access your personal data</li>
-              <li>Correct inaccurate data</li>
-              <li>Delete your data and account</li>
-              <li>Export your notes and data</li>
-              <li>Withdraw consent for data processing</li>
-              <li>Object to certain data processing activities</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              8. Data Security
-            </h2>
-            <p>
-              We implement appropriate technical and organizational measures to
-              protect your data, including encryption, secure authentication,
-              and access controls. However, no method of transmission over the
-              Internet is 100% secure.
+            <p className="text-base leading-relaxed">
+              Our service is not intended for children under 13. We do not knowingly collect data from children under 13.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              9. International Data Transfers
+            <h2 className="text-2xl font-bold text-white mb-6">
+              Contact Us
             </h2>
-            <p>
-              Your data may be transferred to and processed in countries other
-              than your country of residence. We ensure appropriate safeguards
-              are in place for such transfers.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              10. Children&apos;s Privacy
-            </h2>
-            <p>
-              Our service is not intended for children under 13. We do not
-              knowingly collect data from children under 13.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              11. Changes to This Policy
-            </h2>
-            <p>
-              We may update this Privacy Policy from time to time. We will
-              notify you of any changes by posting the new policy on this page
-              and updating the &quot;Last updated&quot; date.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-4">
-              12. Contact Us
-            </h2>
-            <p>
-              If you have questions about this Privacy Policy, please contact us
-              through the settings page or at the contact information provided
-              in our application.
+            <p className="text-base leading-relaxed">
+              If you have questions about this Privacy Policy, please contact us through the settings page or at the contact information provided in our application.
             </p>
           </section>
         </div>
