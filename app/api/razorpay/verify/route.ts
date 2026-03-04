@@ -65,6 +65,21 @@ export async function POST(request: NextRequest) {
         razorpay_subscription_id
       );
 
+      // Ownership check: the subscription must carry this user's ID in its
+      // metadata notes. Without this, a malicious user could supply another
+      // customer's subscription_id and have their own account upgraded.
+      const ownerUserId = razorpaySubscription.notes?.user_id;
+      if (!ownerUserId || ownerUserId !== user.id) {
+        console.error(
+          `Ownership mismatch: subscription ${razorpay_subscription_id} ` +
+            `belongs to user ${ownerUserId}, not ${user.id}`
+        );
+        return NextResponse.json(
+          { error: "Subscription does not belong to this account" },
+          { status: 403 }
+        );
+      }
+
       // Update subscription in database
       const { data: updatedSubscription, error: updateError } =
         await subscriptionService.updateFromRazorpaySubscription(

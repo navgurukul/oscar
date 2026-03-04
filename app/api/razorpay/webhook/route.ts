@@ -71,7 +71,10 @@ export async function POST(request: NextRequest) {
 
     // Parse webhook payload
     const payload: RazorpayWebhookPayload = JSON.parse(rawBody);
-    const eventId = `${payload.account_id}_${payload.created_at}`;
+    // Use Razorpay's own unique event ID as the idempotency key.
+    // The previous `account_id + created_at` composite had second-level
+    // granularity and could collide when two events fired in the same second.
+    const eventId = payload.id;
     const eventType = payload.event;
 
     console.log(`Processing webhook event: ${eventType} (${eventId})`);
