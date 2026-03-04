@@ -30,13 +30,18 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { session } = useAuth();
 
-  const shouldShowFooter = pathname === "/settings" && !!session;
-  // Don't add bottom padding on the logged-in home page — the hero is h-screen
-  // and pb-16 would make the body taller than the viewport, causing unwanted scroll.
-  const shouldAddBottomPadding = !(pathname === "/" && !!session);
+  const isAuthenticated = !!session;
+  const isLandingPage = pathname === "/";
+  const isSettingsPage = pathname === "/settings";
+  
+  // Footer visibility rules:
+  // 1. Unauthenticated on landing page -> show footer
+  // 2. Authenticated only on settings page -> show footer
+  const shouldShowFooter = (!isAuthenticated && isLandingPage) || (isAuthenticated && isSettingsPage);
+  
 
   return (
-    <div className={`flex flex-col min-h-screen${shouldAddBottomPadding ? " pb-16" : ""}`}>
+    <div className="flex flex-col min-h-screen">
       <FloatingNavbar />
       <AuthEdgeButton />
       {children}
