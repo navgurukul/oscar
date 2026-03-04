@@ -31,6 +31,8 @@ export interface DBNote {
   feedback_timestamp: string | null;
   // Soft delete metadata
   deleted_at: string | null;
+  // Starred/favorite
+  is_starred: boolean;
 }
 
 // Insert type for creating a new note
@@ -54,6 +56,8 @@ export interface DBNoteUpdate {
   feedback_timestamp?: string | null;
   // Soft delete metadata
   deleted_at?: string | null;
+  // Starred/favorite
+  is_starred?: boolean;
 }
 
 export interface FormattingResult {

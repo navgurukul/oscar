@@ -24,6 +24,7 @@ import {
   Languages,
   ListChecks,
   BookOpen,
+  Star,
 } from "lucide-react";
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
@@ -74,6 +75,9 @@ export default function NoteDetailPage({
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
   const [feedbackValue, setFeedbackValue] = useState<boolean | null>(null);
+
+  // Star state
+  const [isStarring, setIsStarring] = useState(false);
 
   useEffect(() => {
     const initializeParams = async () => {
@@ -201,6 +205,29 @@ export default function NoteDetailPage({
       });
     }
     setIsFeedbackSubmitting(false);
+  };
+
+  const handleToggleStar = async () => {
+    if (!note || isStarring) return;
+    const currentNote = note;
+    const newStarred = !currentNote.is_starred;
+    setIsStarring(true);
+    // Optimistic update
+    setNote((prev) => prev ? { ...prev, is_starred: newStarred } : prev);
+    const { data, error } = await notesService.toggleStar(currentNote.id, newStarred);
+    if (error || !data) {
+      // Revert on failure
+      setNote((prev) => prev ? { ...prev, is_starred: currentNote.is_starred } : prev);
+      toast({
+        title: "Error",
+        description: "Failed to update star. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      // Sync with actual DB value
+      setNote((prev) => prev ? { ...prev, is_starred: data.is_starred } : prev);
+    }
+    setIsStarring(false);
   };
 
   if (isLoading) {
@@ -442,6 +469,22 @@ export default function NoteDetailPage({
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={handleToggleStar}
+                          disabled={isStarring}
+                          className={
+                            note.is_starred
+                              ? "text-cyan-400 hover:text-cyan-300"
+                              : "text-gray-400 hover:text-cyan-400"
+                          }
+                          title={note.is_starred ? "Unstar note" : "Star note"}
+                        >
+                          <Star
+                            className={`w-4 h-4 ${note.is_starred ? "fill-cyan-400" : ""}`}
+                          />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => {
                             setIsEditing(true);
                             if (activeMode === "email") {
@@ -570,6 +613,22 @@ export default function NoteDetailPage({
                     </>
                   ) : (
                     <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleToggleStar}
+                        disabled={isStarring}
+                        className={`flex flex-col items-center gap-1 h-auto py-2 ${
+                          note.is_starred
+                            ? "text-cyan-400 hover:text-cyan-300"
+                            : "text-gray-400 hover:text-cyan-400"
+                        }`}
+                        title={note.is_starred ? "Unstar note" : "Star note"}
+                      >
+                        <Star
+                          className={`w-5 h-5 ${note.is_starred ? "fill-cyan-400" : ""}`}
+                        />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"

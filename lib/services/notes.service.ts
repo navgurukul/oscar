@@ -93,6 +93,34 @@ export const notesService = {
   },
 
   /**
+   * Toggle the starred status of a note
+   */
+  async toggleStar(
+    id: string,
+    isStarred: boolean
+  ): Promise<{ data: DBNote | null; error: Error | null }> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("notes")
+      .update({ is_starred: isStarred })
+      .eq("id", id)
+      .select();
+
+    if (error) return { data: null, error: error as Error };
+
+    // .select() returns an array; if empty, RLS blocked the update
+    const updated = data?.[0] ?? null;
+    if (!updated) {
+      return {
+        data: null,
+        error: new Error("Update failed: note not found or permission denied"),
+      };
+    }
+
+    return { data: updated, error: null };
+  },
+
+  /**
    * Get notes with feedback for analysis
    * Useful for reviewing AI formatting quality
    */
