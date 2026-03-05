@@ -11,6 +11,14 @@ import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { NoteActions } from "@/components/results/NoteActions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Copy,
   Download,
@@ -25,7 +33,9 @@ import {
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
 import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
+import { NOTE_FOLDER_PRESETS } from "@/lib/constants";
 
 // Lazy load the FeedbackWidget
 const FeedbackWidget = dynamic(
@@ -50,12 +60,18 @@ export default function NoteDetailPage({
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { isProUser } = useSubscriptionContext();
 
   const [note, setNote] = useState<DBNote | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editedText, setEditedText] = useState("");
+  const [folderInput, setFolderInput] = useState("");
+  const [availableFolders, setAvailableFolders] = useState<string[]>(
+    Array.from(NOTE_FOLDER_PRESETS)
+  );
+  const [isUpdatingFolder, setIsUpdatingFolder] = useState(false);
   const [showRawTranscript, setShowRawTranscript] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   // const [isSharing, setIsSharing] = useState(false);
@@ -86,12 +102,16 @@ export default function NoteDetailPage({
       const { data, error } = await notesService.getNoteById(id);
       if (error || !data) {
         router.push("/notes");
-      } else if (user && data.user_id !== user.id) {
-        // Ownership check
+      } else if (!user) {
+        // Shared notes are intended for multi-user sharing by link; require login.
+        router.push(`/auth?redirectTo=/notes/${id}`);
+      } else if (data.user_id !== user.id && !data.is_shared) {
+        // Ownership check: only allow other users to view when note is marked shared
         router.push("/notes");
       } else {
         setNote(data);
         setEditedText(data.edited_text || data.original_formatted_text);
+        setFolderInput((data.folder || "").trim());
         // Set existing feedback state
         if (data.feedback_helpful !== null) {
           setHasFeedbackSubmitted(true);
@@ -104,11 +124,25 @@ export default function NoteDetailPage({
     loadNote();
   }, [id, router, user]);
 
+  useEffect(() => {
+    const loadFolders = async () => {
+      if (isProUser) return;
+      const { data } = await notesService.getNotes();
+      const unique = new Set<string>(Array.from(NOTE_FOLDER_PRESETS));
+      for (const n of data || []) {
+        const f = typeof n.folder === "string" ? n.folder.trim() : "";
+        if (f) unique.add(f);
+      }
+      setAvailableFolders(Array.from(unique).sort((a, b) => a.localeCompare(b)));
+    };
+    loadFolders();
+  }, [isProUser]);
+
   const handleSaveEdit = async () => {
     if (!note) return;
     setIsSaving(true);
 
-    const { error } = await notesService.updateNote(note.id, {
+    const { error, data } = await notesService.updateNote(note.id, {
       edited_text: editedText,
     });
 
@@ -119,7 +153,10 @@ export default function NoteDetailPage({
         variant: "destructive",
       });
     } else {
-      setNote({ ...note, edited_text: editedText });
+      setNote({
+        ...(data || note),
+        edited_text: editedText,
+      });
       setIsEditing(false);
       toast({
         title: "Saved!",
@@ -127,6 +164,39 @@ export default function NoteDetailPage({
       });
     }
     setIsSaving(false);
+  };
+
+  const handleSetFolder = async (nextFolder: string | null) => {
+    if (!note) return;
+    const normalized = (nextFolder || "").trim() || null;
+    const previous = note.folder || null;
+
+    // Optimistic update
+    setNote({ ...note, folder: normalized });
+    setFolderInput(normalized || "");
+    setIsUpdatingFolder(true);
+
+    const { error } = await notesService.updateNote(note.id, {
+      folder: normalized,
+    });
+
+    if (error) {
+      setNote({ ...note, folder: previous });
+      setFolderInput((previous || "").trim());
+      toast({
+        title: "Error",
+        description: "Failed to update folder. Please try again.",
+        variant: "destructive",
+      });
+    } else if (normalized) {
+      setAvailableFolders((prev) => {
+        const set = new Set(prev);
+        set.add(normalized);
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+      });
+    }
+
+    setIsUpdatingFolder(false);
   };
 
   const handleCopy = async () => {
@@ -150,6 +220,41 @@ export default function NoteDetailPage({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportPdf = () => {
+    if (!note) return;
+    const text = note.edited_text || note.original_formatted_text;
+    const safeTitle = (note.title || "Untitled Note").replace(
+      /[<>&]/g,
+      (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] || c)
+    );
+    const safeBody = text.replace(
+      /[<>&]/g,
+      (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] || c)
+    );
+    const html = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charSet="utf-8" />
+    <title>${safeTitle}</title>
+  </head>
+  <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; white-space: pre-wrap;">
+    <h1>${safeTitle}</h1>
+    <p style="color:#6b7280; font-size: 12px; margin-bottom: 16px;">
+      ${formatDate(note.created_at)}
+    </p>
+    <div style="font-size: 14px; line-height: 1.6;">${safeBody}</div>
+  </body>
+</html>`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    // Users can choose "Save as PDF" in the print dialog
+    win.print();
   };
 
   const formatDate = (dateString: string) => {
@@ -301,6 +406,95 @@ export default function NoteDetailPage({
                   <p className="text-gray-400 text-sm">
                     {formatDate(note.created_at)}
                   </p>
+                    {isProUser && (
+                      <div className="mt-2 max-w-[260px]">
+                      <label className="text-xs text-gray-400 block mb-1">
+                        Folder
+                      </label>
+                      <Select
+                        value={(note.folder || "").trim() || "none"}
+                        onValueChange={async (value) => {
+                          if (value === "new") {
+                            const name = window.prompt(
+                              "New folder name (e.g. Work, Personal)"
+                            );
+                            if (!name) return;
+                            await handleSetFolder(name);
+                            return;
+                          }
+                          if (value === "none") {
+                            await handleSetFolder(null);
+                            return;
+                          }
+                          await handleSetFolder(value);
+                        }}
+                        disabled={isUpdatingFolder}
+                      >
+                        <SelectTrigger className="h-9 w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-md text-xs focus:ring-1 focus:ring-cyan-500">
+                          <SelectValue placeholder="Select folder" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
+                          <SelectItem value="none">No folder</SelectItem>
+                          <SelectItem value="new">+ New folder…</SelectItem>
+                          {availableFolders.map((folder) => (
+                            <SelectItem key={folder} value={folder}>
+                              {folder}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <button
+                    onClick={async () => {
+                      if (!note) return;
+                      const next = !note.is_shared;
+                      // Optimistic local update
+                      setNote({ ...note, is_shared: next });
+                      const { error } = await notesService.updateNote(note.id, {
+                        is_shared: next,
+                      });
+                      if (error) {
+                        // Revert on error
+                        setNote({ ...note, is_shared: !next });
+                        toast({
+                          title: "Error",
+                          description:
+                            "Failed to update sharing. Please try again.",
+                          variant: "destructive",
+                        });
+                      } else {
+                        toast({
+                          title: next ? "Note shared" : "Sharing removed",
+                          description: next
+                            ? "Other users can now view this note if they have the link."
+                            : "Only you can view this note.",
+                        });
+                      }
+                    }}
+                    className={`mt-2 inline-flex items-center px-2 py-1 rounded-full text-[11px] border transition-colors ${
+                      note.is_shared
+                        ? "border-cyan-500 text-cyan-200 bg-cyan-500/10"
+                        : "border-slate-700 text-gray-400 hover:border-cyan-500 hover:text-cyan-200"
+                    }`}
+                  >
+                    {note.is_shared ? "Shared note" : "Make this note shared"}
+                  </button>
+                  {note.is_shared && (
+                    <button
+                      onClick={async () => {
+                        const url = `${window.location.origin}/notes/${note.id}`;
+                        await navigator.clipboard.writeText(url);
+                        toast({
+                          title: "Link copied",
+                          description: "Share this link with another user.",
+                        });
+                      }}
+                      className="mt-2 ml-2 inline-flex items-center px-2 py-1 rounded-full text-[11px] border border-slate-700 text-gray-400 hover:border-cyan-500 hover:text-cyan-200 transition-colors"
+                    >
+                      Copy share link
+                    </button>
+                  )}
                 </div>
 
                 <div className="hidden md:flex items-center">
@@ -344,6 +538,7 @@ export default function NoteDetailPage({
                           size="sm"
                           onClick={() => {
                             setIsEditing(true);
+                          setFolderInput((note.folder || "").trim());
                             if (isGmailMode) {
                               setShareSubject(note.title || "Untitled Note");
                             }
@@ -461,6 +656,7 @@ export default function NoteDetailPage({
                           setEditedText(
                             note.edited_text || note.original_formatted_text
                           );
+                            setFolderInput((note.folder || "").trim());
                         }}
                         disabled={isSaving}
                         className="text-gray-400 hover:text-white flex flex-col items-center gap-1 h-auto py-2"
@@ -747,6 +943,10 @@ export default function NoteDetailPage({
           </AnimatePresence>
         </div>
       </div>
+      
+      {/* Restart / Continue Recording floating actions only for Pro users on notes page */}
+      {isProUser && <NoteActions />}
+
     </main>
   );
 }

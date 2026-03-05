@@ -12,11 +12,19 @@ import { aiService } from "@/lib/services/ai.service";
 import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
 import { NoteActions } from "@/components/results/NoteActions";
 import { Spinner } from "@/components/ui/spinner";
-import { ROUTES, UI_STRINGS } from "@/lib/constants";
+import { NOTE_FOLDER_PRESETS, ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import type { FeedbackReason } from "@/lib/types/note.types";
 import { Mail, MessageCircle, Share2, FileText } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Lazy load the NoteEditor component
 const NoteEditor = dynamic(
@@ -33,6 +41,7 @@ const NoteEditor = dynamic(
 export default function ResultsPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { isProUser } = useSubscriptionContext();
   const { isLoading, formattedNote, rawText, title, updateFormattedNote } =
     useNoteStorage();
 
@@ -52,6 +61,11 @@ export default function ResultsPage() {
   } = useAIEmailFormatting();
   const [isGmailMode, setIsGmailMode] = useState<boolean>(false);
   const [gmailBody, setGmailBody] = useState<string | null>(null);
+  const [folderInput, setFolderInput] = useState("");
+  const [availableFolders, setAvailableFolders] = useState<string[]>(
+    Array.from(NOTE_FOLDER_PRESETS)
+  );
+  const [isUpdatingFolder, setIsUpdatingFolder] = useState(false);
 
   // Language / translation state (post-recording)
   const [selectedLanguage, setSelectedLanguage] = useState<
@@ -77,6 +91,51 @@ export default function ResultsPage() {
       setNoteId(storedNoteId);
     }
   }, []);
+
+  useEffect(() => {
+    const loadFolderState = async () => {
+      if (isProUser || !noteId) return;
+      const [{ data: note }, { data: notes }] = await Promise.all([
+        notesService.getNoteById(noteId),
+        notesService.getNotes(),
+      ]);
+
+      setFolderInput((note?.folder || "").trim());
+
+      const unique = new Set<string>(Array.from(NOTE_FOLDER_PRESETS));
+      for (const n of notes || []) {
+        const f = typeof n.folder === "string" ? n.folder.trim() : "";
+        if (f) unique.add(f);
+      }
+      setAvailableFolders(Array.from(unique).sort((a, b) => a.localeCompare(b)));
+    };
+    loadFolderState();
+  }, [isProUser, noteId]);
+
+  const handleSetFolder = async (nextFolder: string | null) => {
+    if (!noteId) return;
+    const normalized = (nextFolder || "").trim() || null;
+    setFolderInput(normalized || "");
+    setIsUpdatingFolder(true);
+
+    const { error } = await notesService.updateNote(noteId, { folder: normalized });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update folder. Please try again.",
+        variant: "destructive",
+      });
+    } else if (normalized) {
+      setAvailableFolders((prev) => {
+        const set = new Set(prev);
+        set.add(normalized);
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+      });
+    }
+
+    setIsUpdatingFolder(false);
+  };
 
   useEffect(() => {
     if (formattedNote) {
@@ -401,6 +460,52 @@ export default function ResultsPage() {
             {UI_STRINGS.RESULTS_TITLE}
           </h1>
         </div>
+
+        {/* Folder selector (Pro only) */}
+        {isProUser && !!noteId && (
+          <div className="w-full max-w-[650px] flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-gray-400">Folder:</label>
+              <div className="min-w-[220px]">
+                <Select
+                  value={folderInput.trim() || "none"}
+                  onValueChange={async (value) => {
+                    if (value === "new") {
+                      const name = window.prompt(
+                        "New folder name (e.g. Work, Personal)"
+                      );
+                      if (!name) return;
+                      await handleSetFolder(name);
+                      return;
+                    }
+                    if (value === "none") {
+                      await handleSetFolder(null);
+                      return;
+                    }
+                    await handleSetFolder(value);
+                  }}
+                  disabled={isUpdatingFolder}
+                >
+                  <SelectTrigger className="h-10 w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-cyan-500">
+                    <SelectValue placeholder="Select folder" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
+                    <SelectItem value="none">No folder</SelectItem>
+                    <SelectItem value="new">+ New folder…</SelectItem>
+                    {availableFolders.map((folder) => (
+                      <SelectItem key={folder} value={folder}>
+                        {folder}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">
+              {isUpdatingFolder ? "Updating…" : ""}
+            </div>
+          </div>
+        )}
 
         {/* Language selector + Simple/Gmail mode toggle in one row */}
         <div className="w-full max-w-[650px] flex items-center justify-between gap-3">

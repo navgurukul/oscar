@@ -23,11 +23,15 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { SquaresSubtract, Trash2, Search, Star } from "lucide-react";
+import { SquaresSubtract, Trash2, Search, Star, Folder } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
 import { getTimeBasedPrompt } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
+import { NOTE_FOLDER_PRESETS } from "@/lib/constants";
+import { NoteActions } from "@/components/results/NoteActions";
+
 
 type SortOption = "created" | "updated" | "length";
 
@@ -45,7 +49,14 @@ export default function NotesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("created");
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
+  const [selectedFolder, setSelectedFolder] = useState<string>("all");
+  const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
+  const [movingNoteId, setMovingNoteId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const { isProUser } = useSubscriptionContext();
+
+  const normalizeFolderKey = (folder: string | null | undefined) =>
+    (folder || "").trim().toLowerCase();
 
   useEffect(() => {
     loadNotes();
@@ -55,8 +66,31 @@ export default function NotesPage() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortBy, showOnlyStarred]);
+  }, [searchQuery, sortBy, showOnlyStarred, selectedFolder]);
 
+  // ✅ FIX: isProUser (not !isProUser) — folders are a Pro feature
+  const folders = useMemo(() => {
+    const displayByKey = new Map<string, string>();
+    if (isProUser) return [];
+
+    // Add presets first
+    for (const preset of NOTE_FOLDER_PRESETS) {
+      const key = normalizeFolderKey(preset);
+      if (key) displayByKey.set(key, preset);
+    }
+
+    // ✅ NEW: Auto-create folders from API notes — if note has folder: "Ideas",
+    // "Ideas" folder is automatically added to the list
+    for (const note of allNotes) {
+      const raw = typeof note.folder === "string" ? note.folder.trim() : "";
+      const key = normalizeFolderKey(raw);
+      if (!key) continue;
+      if (!displayByKey.has(key)) displayByKey.set(key, raw);
+    }
+
+    return Array.from(displayByKey.values()).sort((a, b) => a.localeCompare(b));
+  }, [allNotes, isProUser]);
+  
   // Filter and sort notes
   const filteredNotes = useMemo(() => {
     let result = [...allNotes];
@@ -78,6 +112,19 @@ export default function NotesPage() {
       result = result.filter((note) => note.is_starred);
     }
 
+    // ✅ FIX: isProUser (not !isProUser) — folder filter is a Pro feature
+    if (isProUser && selectedFolder !== "all") {
+      if (selectedFolder === "none") {
+        // "Simple Notes" = notes with no folder (folder is null/empty)
+        result = result.filter((note) => !normalizeFolderKey(note.folder));
+      } else {
+        const selectedKey = normalizeFolderKey(selectedFolder);
+        result = result.filter(
+          (note) => normalizeFolderKey(note.folder) === selectedKey
+        );
+      }
+    }
+    
     // Sort
     result.sort((a, b) => {
       let comparison = 0;
@@ -104,7 +151,7 @@ export default function NotesPage() {
     });
 
     return result;
-  }, [allNotes, searchQuery, sortBy, showOnlyStarred]);
+  }, [allNotes, searchQuery, sortBy, showOnlyStarred, selectedFolder, isProUser]);
 
   const totalPages = Math.ceil(filteredNotes.length / ITEMS_PER_PAGE);
 
@@ -122,6 +169,31 @@ export default function NotesPage() {
       setAllNotes(data || []);
     }
     setIsLoading(false);
+  };
+
+  const handleMoveNoteToFolder = async (
+    id: string,
+    targetFolder: string | null
+  ) => {
+    // Optimistic update
+    setAllNotes((prev) =>
+      prev.map((note) =>
+        note.id === id ? { ...note, folder: targetFolder } : note
+      )
+    );
+    setMovingNoteId(id);
+
+    const { error } = await notesService.updateNote(id, {
+      folder: targetFolder,
+    });
+
+    if (error) {
+      // Revert on error by reloading notes list
+      await loadNotes();
+      alert("Failed to move note to folder. Please try again.");
+    }
+
+    setMovingNoteId(null);
   };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -181,8 +253,11 @@ export default function NotesPage() {
     return text.length > 150 ? text.substring(0, 150) + "..." : text;
   };
 
-  const hasActiveFilters = searchQuery.trim() || showOnlyStarred;
-
+  const hasActiveFilters =
+    searchQuery.trim() ||
+    showOnlyStarred ||
+    (isProUser && selectedFolder !== "all");
+    
   const getEmptyMessage = () => {
     if (allNotes.length === 0) {
       return contextPrompt;
@@ -193,10 +268,23 @@ export default function NotesPage() {
     if (showOnlyStarred) {
       return "No starred notes yet";
     }
+    // ✅ FIX: isProUser (not !isProUser)
+    if (isProUser && selectedFolder !== "all") {
+      if (selectedFolder === "none") return "No notes in Simple Notes";
+      return `No notes in "${selectedFolder}"`;
+    }
     if (searchQuery.trim()) {
       return `No notes found for "${searchQuery}"`;
     }
     return contextPrompt;
+  };
+
+  const getFolderSectionTitle = () => {
+    // ✅ FIX: isProUser (not !isProUser)
+    if (isProUser) return null;
+    if (selectedFolder === "all") return null;
+    if (selectedFolder === "none") return "Simple Notes";
+    return selectedFolder;
   };
 
   const renderPaginationItems = () => {
@@ -309,48 +397,144 @@ export default function NotesPage() {
 
         {/* Filter Bar */}
         {allNotes.length > 0 && (
-          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
-            {/* Search Input */}
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 z-10" />
-              <Input
-                type="text"
-                placeholder="Search notes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 w-full pl-10 pr-4 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
-              />
+          <div className="flex flex-col gap-3 mb-6">
+            {/* ✅ FIX: isProUser (not !isProUser) — folder tabs only for Pro */}
+            {isProUser && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setSelectedFolder("all")}
+                  onDragOver={(e) => {
+                    if (draggingNoteId) e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggingNoteId) {
+                      handleMoveNoteToFolder(draggingNoteId, null);
+                    }
+                    setDraggingNoteId(null);
+                  }}
+                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs border transition-colors ${
+                    selectedFolder === "all"
+                      ? "bg-cyan-600/20 border-cyan-500 text-cyan-200"
+                      : "bg-slate-900 border-slate-700 text-gray-300 hover:border-cyan-500 hover:text-cyan-200"
+                  }`}
+                >
+                  <Folder className="w-3 h-3" />
+                  <span>All</span>
+                </button>
+                <button
+                  onClick={() => setSelectedFolder("none")}
+                  onDragOver={(e) => {
+                    if (draggingNoteId) e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggingNoteId) {
+                      handleMoveNoteToFolder(draggingNoteId, null);
+                    }
+                    setDraggingNoteId(null);
+                  }}
+                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs border transition-colors ${
+                    selectedFolder === "none"
+                      ? "bg-cyan-600/20 border-cyan-500 text-cyan-200"
+                      : "bg-slate-900 border-slate-700 text-gray-300 hover:border-cyan-500 hover:text-cyan-200"
+                  }`}
+                >
+                  <Folder className="w-3 h-3" />
+                  <span>Simple Notes</span>
+                </button>
+                {/* ✅ NEW: Auto-generated folder tabs from API notes */}
+                {folders.map((folder) => (
+                  <button
+                    key={folder}
+                    onClick={() => setSelectedFolder(folder)}
+                    onDragOver={(e) => {
+                      if (draggingNoteId) e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (draggingNoteId) {
+                        handleMoveNoteToFolder(draggingNoteId, folder);
+                      }
+                      setDraggingNoteId(null);
+                    }}
+                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs border transition-colors ${
+                      selectedFolder === folder
+                        ? "bg-cyan-600/20 border-cyan-500 text-cyan-200"
+                        : "bg-slate-900 border-slate-700 text-gray-300 hover:border-cyan-500 hover:text-cyan-200"
+                    }`}
+                  >
+                    <Folder className="w-3 h-3" />
+                    <span>{folder}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+              {/* Search Input */}
+              <div className="relative flex-1 w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 z-10" />
+                <Input
+                  type="text"
+                  placeholder="Search notes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-10 w-full pl-10 pr-4 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
+                />
+              </div>
+
+              {/* Sort Dropdown */}
+              <Select
+                value={sortBy}
+                onValueChange={(value) => setSortBy(value as SortOption)}
+              >
+                <SelectTrigger className="h-10 w-full md:w-[160px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
+                  <SelectItem value="created">Date Created</SelectItem>
+                  <SelectItem value="updated">Date Updated</SelectItem>
+                  <SelectItem value="length">Length</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* ✅ FIX: Folder Filter Dropdown — Pro only */}
+              {isProUser && (
+                <Select
+                  value={selectedFolder}
+                  onValueChange={(value) => setSelectedFolder(value)}
+                >
+                  <SelectTrigger className="h-10 w-full md:w-[160px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
+                    <SelectValue placeholder="Folder" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
+                    <SelectItem value="all">All folders</SelectItem>
+                    <SelectItem value="none">Simple Notes</SelectItem>
+                    {folders.map((folder) => (
+                      <SelectItem key={folder} value={folder}>
+                        {folder}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {/* Starred Toggle */}
+              <Button
+                onClick={() => setShowOnlyStarred(!showOnlyStarred)}
+                className={`h-10 flex items-center justify-center gap-2 px-4 rounded-lg border transition-colors w-full md:w-auto ${
+                  showOnlyStarred
+                    ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
+                    : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
+                }`}
+              >
+                <Star
+                  className={`w-4 h-4 ${showOnlyStarred ? "fill-cyan-500" : ""}`}
+                />
+                <span className="hidden md:inline font-normal">Starred</span>
+              </Button>
             </div>
-
-            {/* Sort Dropdown */}
-            <Select
-              value={sortBy}
-              onValueChange={(value) => setSortBy(value as SortOption)}
-            >
-              <SelectTrigger className="h-10 w-full md:w-[180px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
-                <SelectItem value="created">Date Created</SelectItem>
-                <SelectItem value="updated">Date Updated</SelectItem>
-                <SelectItem value="length">Length</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Starred Toggle */}
-            <Button
-              onClick={() => setShowOnlyStarred(!showOnlyStarred)}
-              className={`h-10 flex items-center justify-center gap-2 px-4 rounded-lg border transition-colors w-full md:w-auto ${
-                showOnlyStarred
-                  ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
-                  : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
-              }`}
-            >
-              <Star
-                className={`w-4 h-4 ${showOnlyStarred ? "fill-cyan-500" : ""}`}
-              />
-              <span className="hidden md:inline font-normal">Starred</span>
-            </Button>
           </div>
         )}
 
@@ -363,6 +547,7 @@ export default function NotesPage() {
                 onClick={() => {
                   setSearchQuery("");
                   setShowOnlyStarred(false);
+                  setSelectedFolder("all");
                 }}
                 className="text-cyan-500 hover:text-cyan-400 transition-colors"
               >
@@ -372,12 +557,32 @@ export default function NotesPage() {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Folder section header when a specific folder is selected (Pro only) */}
+            {getFolderSectionTitle() && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-cyan-700/30 bg-slate-900">
+                <Folder className="w-4 h-4 text-cyan-400" />
+                <span className="text-sm font-medium text-white">
+                  {getFolderSectionTitle()}
+                </span>
+                <span className="text-xs text-gray-400">
+                  ({filteredNotes.length})
+                </span>
+              </div>
+            )}
+
             <div className="space-y-4 min-h-[400px]">
               {paginatedNotes.map((note) => (
                 <Card
                   key={note.id}
+                  draggable
+                  onDragStart={() => setDraggingNoteId(note.id)}
+                  onDragEnd={() => setDraggingNoteId((current) =>
+                    current === note.id ? null : current
+                  )}
                   onClick={() => router.push(`/notes/${note.id}`)}
-                  className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl cursor-pointer hover:border-cyan-700/60 transition-all hover:shadow-2xl group overflow-hidden"
+                  className={`bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl cursor-pointer hover:border-cyan-700/60 transition-all hover:shadow-2xl group overflow-hidden ${
+                    movingNoteId === note.id ? "opacity-60" : ""
+                  }`}
                 >
                   <CardHeader>
                     <div className="flex gap-6 justify-between items-start">
@@ -389,6 +594,12 @@ export default function NotesPage() {
                           <p className="text-gray-300 text-sm">
                             {formatDate(note.created_at)}
                           </p>
+                          {/* ✅ FIX: isProUser (not !isProUser) — show folder badge for Pro */}
+                          {isProUser && (note.folder || "").trim() && (
+                            <p className="text-xs text-cyan-400 mt-1">
+                              {(note.folder || "").trim()}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
@@ -485,6 +696,7 @@ export default function NotesPage() {
           </div>
         )}
       </div>
+    
     </main>
   );
 }

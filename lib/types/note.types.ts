@@ -21,6 +21,16 @@ export interface DBNote {
   id: string;
   user_id: string;
   title: string;
+  /**
+   * Optional folder name for organizing notes.
+   * Nullable/optional to stay compatible if the column doesn't exist yet.
+   */
+  folder?: string | null;
+  /**
+   * When true, this note is shared/collaborative and can be viewed by other users.
+   * Requires a matching boolean column in the database schema.
+   */
+  is_shared?: boolean;
   raw_text: string;
   original_formatted_text: string;
   edited_text: string | null;
@@ -36,15 +46,18 @@ export interface DBNote {
 export interface DBNoteInsert {
   user_id: string;
   title: string;
+  folder?: string | null;
   raw_text: string;
   original_formatted_text: string;
   edited_text?: string | null;
   is_starred?: boolean;
+  is_shared?: boolean;
 }
 
 // Update type for modifying a note
 export interface DBNoteUpdate {
   title?: string;
+  folder?: string | null;
   raw_text?: string;
   original_formatted_text?: string;
   edited_text?: string | null;
@@ -53,6 +66,7 @@ export interface DBNoteUpdate {
   feedback_reasons?: FeedbackReason[] | null;
   feedback_timestamp?: string | null;
   is_starred?: boolean;
+  is_shared?: boolean;
 }
 
 export interface FormattingResult {

@@ -152,6 +152,18 @@ export const UI_STRINGS = {
 } as const;
 
 /**
+ * Default folders for organizing notes (Pro feature).
+ * These show up in folder dropdowns even before any note uses them.
+ */
+export const NOTE_FOLDER_PRESETS = [
+  "Work",
+  "Personal",
+  "Meeting",
+  "Ideas",
+  "Other",
+] as const;
+
+/**
  * Processing screen steps
  */
 export const PROCESSING_STEPS = [

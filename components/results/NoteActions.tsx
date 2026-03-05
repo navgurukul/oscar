@@ -16,7 +16,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export function NoteActions() {
+export function NoteActions({
+  showContinueRecording = true,
+  showRestart = true,
+}: {
+  showContinueRecording?: boolean;
+  showRestart?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
@@ -48,27 +54,29 @@ export function NoteActions() {
   return (
     <TooltipProvider>
       <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 flex items-center justify-center gap-4 z-50">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <motion.div
-              whileHover={{ y: -5 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-            >
-              <Button
-                onClick={handleRecordAgain}
-                size="icon"
-                className="bg-slate-800 hover:bg-slate-700 text-white shadow-lg w-12 h-12 rounded-full"
+        {showRestart && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <motion.div
+                whileHover={{ y: -5 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
               >
-                <RotateCcw className="w-5 h-5" />
-              </Button>
-            </motion.div>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{UI_STRINGS.RECORD_AGAIN}</p>
-          </TooltipContent>
-        </Tooltip>
+                <Button
+                  onClick={handleRecordAgain}
+                  size="icon"
+                  className="bg-slate-800 hover:bg-slate-700 text-white shadow-lg w-12 h-12 rounded-full"
+                >
+                  <RotateCcw className="w-5 h-5" />
+                </Button>
+              </motion.div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{UI_STRINGS.RECORD_AGAIN}</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
 
-        {!hideContinueRecording && (
+        {showContinueRecording && !hideContinueRecording && (
           <Tooltip>
             <TooltipTrigger asChild>
               <motion.div
