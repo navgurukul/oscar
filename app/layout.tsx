@@ -33,11 +33,13 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const isAuthenticated = !!session;
   const isLandingPage = pathname === "/";
   const isSettingsPage = pathname === "/settings";
+  const isLegalPage = pathname === "/privacy" || pathname === "/terms" || pathname === "/refund-policy";
   
   // Footer visibility rules:
   // 1. Unauthenticated on landing page -> show footer
   // 2. Authenticated only on settings page -> show footer
-  const shouldShowFooter = (!isAuthenticated && isLandingPage) || (isAuthenticated && isSettingsPage);
+  // 3. Always show on legal/policy pages
+  const shouldShowFooter = (!isAuthenticated && isLandingPage) || (isAuthenticated && isSettingsPage) || isLegalPage;
   
 
   return (
