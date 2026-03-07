@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { notesService } from "@/lib/services/notes.service";
 import { Spinner } from "@/components/ui/spinner";
 import { NotesListSkeleton } from "@/components/shared/NotesListSkeleton";
+import { TrashSheet } from "@/components/notes/TrashSheet";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -41,8 +42,9 @@ export default function NotesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [togglingStarId, setTogglingStarId] = useState<string | null>(null);
   const [contextPrompt, setContextPrompt] = useState("");
+  const [trashCount, setTrashCount] = useState(0);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
   const ITEMS_PER_PAGE = 5;
 
   // Filter and sort state
@@ -53,6 +55,7 @@ export default function NotesPage() {
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
   const [movingNoteId, setMovingNoteId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showStarredOnly, setShowStarredOnly] = useState(false);
 
   const [showOnlyShared, setShowOnlyShared] = useState(false);
   const { isProUser } = useSubscriptionContext();
@@ -62,8 +65,16 @@ export default function NotesPage() {
 
   useEffect(() => {
     loadNotes();
+    loadTrashCount();
     setContextPrompt(getTimeBasedPrompt());
   }, []);
+
+  const loadTrashCount = async () => {
+    const { data, error } = await notesService.getTrashedNotes();
+    if (!error && data) {
+      setTrashCount(data.length);
+    }
+  };
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -89,6 +100,11 @@ export default function NotesPage() {
   const filteredNotes = useMemo(() => {
     let result = [...allNotes];
 
+    // Filter starred only
+    if (showStarredOnly) {
+      result = result.filter((note) => note.is_starred);
+    }
+
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
@@ -112,7 +128,7 @@ export default function NotesPage() {
     }
 
     // Apply folder filter when a specific folder is selected
-    if (!isProUser && selectedFolder !== "all") {
+    if (isProUser && selectedFolder !== "all") {
       if (selectedFolder === "none") {
         // "Simple Notes" = notes with no folder (folder is null/empty)
         result = result.filter((note) => !normalizeFolderKey(note.folder));
@@ -205,36 +221,38 @@ export default function NotesPage() {
       alert("Failed to delete note. Please try again.");
     } else {
       setAllNotes(allNotes.filter((note) => note.id !== id));
+      // Increment trash count
+      setTrashCount((prev) => prev + 1);
     }
     setDeletingId(null);
   };
 
-  const handleToggleStar = async (
-    id: string,
-    currentStarred: boolean,
-    e: React.MouseEvent
-  ) => {
-    e.stopPropagation();
+  const handleRestore = () => {
+    loadNotes();
+    loadTrashCount();
+  };
 
+  const handleToggleStar = async (note: DBNote, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newStarred = !note.is_starred;
     // Optimistic update
     setAllNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_starred: !currentStarred } : n))
+      prev.map((n) => (n.id === note.id ? { ...n, is_starred: newStarred } : n))
     );
-    setTogglingStarId(id);
-
-    const { error } = await notesService.toggleStar(id, !currentStarred);
-
-    if (error) {
-      // Revert on error
+    const { data, error } = await notesService.toggleStar(note.id, newStarred);
+    if (error || !data) {
+      // Revert on failure
       setAllNotes((prev) =>
         prev.map((n) =>
-          n.id === id ? { ...n, is_starred: currentStarred } : n
+          n.id === note.id ? { ...n, is_starred: note.is_starred } : n
         )
       );
-      alert("Failed to update star. Please try again.");
+    } else {
+      // Sync with actual DB value
+      setAllNotes((prev) =>
+        prev.map((n) => (n.id === data.id ? { ...n, is_starred: data.is_starred } : n))
+      );
     }
-
-    setTogglingStarId(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -256,7 +274,7 @@ export default function NotesPage() {
     searchQuery.trim() ||
     showOnlyStarred ||
     showOnlyShared ||
-    (!isProUser && selectedFolder !== "all");
+    (isProUser && selectedFolder !== "all");
   const hasFolderNotes = allNotes.some((note) =>
     normalizeFolderKey(note.folder)
   );
@@ -264,17 +282,14 @@ export default function NotesPage() {
     if (allNotes.length === 0) {
       return contextPrompt;
     }
-    if (showOnlyStarred && searchQuery.trim()) {
-      return "No starred notes match your search";
-    }
-    if (showOnlyStarred) {
-      return "No starred notes yet";
+    if (showStarredOnly && !searchQuery.trim()) {
+      return "No starred notes yet. Star a note to find it here quickly.";
     }
     if (showOnlyShared) {
       return "No shared notes yet";
     }
     // ✅ FIX: isProUser (not !isProUser)
-    if (!isProUser && selectedFolder !== "all") {
+    if (isProUser && selectedFolder !== "all") {
       if (selectedFolder === "none") return "No notes in Simple Notes";
       return `No notes in "${selectedFolder}"`;
     }
@@ -317,7 +332,7 @@ export default function NotesPage() {
                 {formatDate(note.created_at)}
               </p>
               {/* ✅ FIX: isProUser (not !isProUser) — show folder badge for Pro */}
-              {!isProUser && (note.folder || "").trim() && (
+              {isProUser && (note.folder || "").trim() && (
                 <p className="text-xs text-cyan-400 mt-1">
                   {(note.folder || "").trim()}
                 </p>
@@ -327,8 +342,7 @@ export default function NotesPage() {
           <div className="flex items-center gap-1">
             {/* Star Button */}
             <button
-              onClick={(e) => handleToggleStar(note.id, note.is_starred, e)}
-              disabled={togglingStarId === note.id}
+              onClick={(e) => handleToggleStar(note, e)}
               className={`p-2 transition-colors ${
                 note.is_starred
                   ? "text-cyan-500"
@@ -336,15 +350,11 @@ export default function NotesPage() {
               }`}
               title={note.is_starred ? "Unstar note" : "Star note"}
             >
-              {togglingStarId === note.id ? (
-                <Spinner className="w-4 h-4" />
-              ) : (
-                <Star
-                  className={`w-4 h-4 ${
-                    note.is_starred ? "fill-cyan-500" : ""
-                  }`}
-                />
-              )}
+              <Star
+                className={`w-4 h-4 ${
+                  note.is_starred ? "fill-cyan-500" : ""
+                }`}
+              />
             </button>
             {/* Delete Button */}
             <button
@@ -584,7 +594,7 @@ export default function NotesPage() {
               </Select>
 
               {/* Folder Filter Dropdown (can be shown/hidden) */}
-              { !isProUser && (
+              { isProUser && (
                 <Select
                   value={selectedFolder}
                   onValueChange={(value) => setSelectedFolder(value)}
@@ -634,8 +644,61 @@ export default function NotesPage() {
                 <span className="hidden md:inline font-normal">Shared</span>
               </Button>
             </div>
+              <Select
+              value={sortBy}
+              onValueChange={(value) => setSortBy(value as SortOption)}
+            >
+              <SelectTrigger className="h-10 w-full md:w-[180px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
+                <SelectItem value="created">Date Created</SelectItem>
+                <SelectItem value="updated">Date Updated</SelectItem>
+                <SelectItem value="length">Length</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Starred filter toggle */}
+            <button
+              onClick={() => setShowStarredOnly((v) => !v)}
+              title={showStarredOnly ? "Show all notes" : "Show starred only"}
+              className={`h-10 px-3 flex items-center gap-1.5 rounded-lg border transition-colors text-sm font-medium ${
+                showStarredOnly
+                  ? "bg-cyan-500/20 border-cyan-500/60 text-cyan-400"
+                  : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/40"
+              }`}
+            >
+              <Star
+                className={`w-4 h-4 ${showStarredOnly ? "fill-cyan-400 text-cyan-400" : ""}`}
+              />
+              <span>Starred</span>
+            </button>
+
+            {/* Sort Dropdown */}
+          
           </div>
         )}
+
+        {/* Trash Button - Bottom Right */}
+        <button
+          onClick={() => setIsTrashOpen(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center justify-center w-10 h-10 group"
+          title="View trash"
+        >
+          <Trash2 className="w-6 h-6 text-gray-400 group-hover:text-cyan-400 transition-all duration-300 group-hover:-translate-y-1" />
+          {trashCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-medium rounded-full shadow-md transition-all duration-300 group-hover:-translate-y-1">
+              {trashCount > 99 ? "99+" : trashCount}
+            </span>
+          )}
+        </button>
+
+        {/* Trash Sheet */}
+        <TrashSheet
+          open={isTrashOpen}
+          onOpenChange={setIsTrashOpen}
+          onRestore={handleRestore}
+        />
 
         {filteredNotes.length === 0 ? (
           <div className="text-center py-16 mt-16">
@@ -647,6 +710,7 @@ export default function NotesPage() {
                   setSearchQuery("");
                   setShowOnlyStarred(false);
                   setSelectedFolder("all");
+                  setShowStarredOnly(false);
                 }}
                 className="text-cyan-500 hover:text-cyan-400 transition-colors"
               >
@@ -670,7 +734,7 @@ export default function NotesPage() {
             )}
 
             <div className="space-y-4 min-h-[400px]">
-              {hasFolderNotes  ? (
+              {hasFolderNotes ? (
                 (() => {
                   const folderGroups = new Map<string, DBNote[]>();
                   const simpleNotes: DBNote[] = [];
@@ -730,7 +794,9 @@ export default function NotesPage() {
                   );
                 })()
               ) : (
-                paginatedNotes.map((note) => renderNoteCard(note))
+                <div className="space-y-3">
+                  {paginatedNotes.map((note) => renderNoteCard(note))}
+                </div>
               )}
             </div>
 

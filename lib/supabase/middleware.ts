@@ -54,10 +54,18 @@ export async function updateSession(request: NextRequest) {
 
   // Redirect logged in users away from auth page
   if (request.nextUrl.pathname === "/auth" && user) {
-    const redirectTo = request.nextUrl.searchParams.get("redirectTo") || "/";
+    const rawRedirectTo =
+      request.nextUrl.searchParams.get("redirectTo") || "/";
+    // Prevent open redirect: only allow relative paths that start with /
+    // and do not contain protocol schemes (e.g. //evil.com or javascript:)
+    const isSafeRedirect =
+      rawRedirectTo.startsWith("/") &&
+      !rawRedirectTo.startsWith("//") &&
+      !rawRedirectTo.toLowerCase().includes(":");
+    const safePath = isSafeRedirect ? rawRedirectTo : "/";
     const url = request.nextUrl.clone();
-    url.pathname = redirectTo;
-    url.searchParams.delete("redirectTo");
+    url.pathname = safePath;
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

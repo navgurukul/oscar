@@ -137,14 +137,21 @@ export const razorpayService = {
     const generatedSignature = crypto
       .createHmac("sha256", keySecret)
       .update(`${razorpayPaymentId}|${razorpaySubscriptionId}`)
-      .digest("hex");
+      .digest();
 
-    return generatedSignature === razorpaySignature;
+    const receivedSignature = Buffer.from(razorpaySignature, "hex");
+
+    // Use constant-time comparison to prevent timing attacks
+    if (generatedSignature.length !== receivedSignature.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(generatedSignature, receivedSignature);
   },
 
   /**
    * Verify webhook signature
    * Signature = HMAC-SHA256(request_body, webhook_secret)
+   * Uses constant-time comparison to prevent timing attacks
    */
   verifyWebhookSignature(body: string, signature: string): boolean {
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -156,9 +163,15 @@ export const razorpayService = {
     const generatedSignature = crypto
       .createHmac("sha256", webhookSecret)
       .update(body)
-      .digest("hex");
+      .digest();
 
-    return generatedSignature === signature;
+    const receivedSignature = Buffer.from(signature, "hex");
+
+    // Use constant-time comparison to prevent timing attacks
+    if (generatedSignature.length !== receivedSignature.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(generatedSignature, receivedSignature);
   },
 
   /**

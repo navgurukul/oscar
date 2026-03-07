@@ -39,6 +39,9 @@ export interface DBNote {
   feedback_helpful: boolean | null;
   feedback_reasons: FeedbackReason[] | null;
   feedback_timestamp: string | null;
+  // Soft delete metadata
+  deleted_at: string | null;
+  // Starred/favorite
   is_starred: boolean;
 }
 
@@ -65,6 +68,9 @@ export interface DBNoteUpdate {
   feedback_helpful?: boolean | null;
   feedback_reasons?: FeedbackReason[] | null;
   feedback_timestamp?: string | null;
+  // Soft delete metadata
+  deleted_at?: string | null;
+  // Starred/favorite
   is_starred?: boolean;
   is_shared?: boolean;
 }
