@@ -126,7 +126,7 @@ export default function NoteDetailPage({
 
   useEffect(() => {
     const loadFolders = async () => {
-      if (isProUser) return;
+      if (!isProUser) return;
       const { data } = await notesService.getNotes();
       const unique = new Set<string>(Array.from(NOTE_FOLDER_PRESETS));
       for (const n of data || []) {
@@ -136,7 +136,7 @@ export default function NoteDetailPage({
       setAvailableFolders(Array.from(unique).sort((a, b) => a.localeCompare(b)));
     };
     loadFolders();
-  }, [isProUser]);
+  }, [!isProUser]);
 
   const handleSaveEdit = async () => {
     if (!note) return;
@@ -406,7 +406,7 @@ export default function NoteDetailPage({
                   <p className="text-gray-400 text-sm">
                     {formatDate(note.created_at)}
                   </p>
-                    {isProUser && (
+                    {!isProUser && (
                       <div className="mt-2 max-w-[260px]">
                       <label className="text-xs text-gray-400 block mb-1">
                         Folder

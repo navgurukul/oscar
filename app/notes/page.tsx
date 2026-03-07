@@ -23,7 +23,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { SquaresSubtract, Trash2, Search, Star, Folder } from "lucide-react";
+import { SquaresSubtract, Trash2, Search, Star, Folder, Share2 } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
 import { getTimeBasedPrompt } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -53,6 +53,8 @@ export default function NotesPage() {
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
   const [movingNoteId, setMovingNoteId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const [showOnlyShared, setShowOnlyShared] = useState(false);
   const { isProUser } = useSubscriptionContext();
 
   const normalizeFolderKey = (folder: string | null | undefined) =>
@@ -66,21 +68,13 @@ export default function NotesPage() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortBy, showOnlyStarred, selectedFolder]);
+  }, [searchQuery, sortBy, showOnlyStarred, showOnlyShared, selectedFolder]);
 
-  // ✅ FIX: isProUser (not !isProUser) — folders are a Pro feature
   const folders = useMemo(() => {
     const displayByKey = new Map<string, string>();
     if (isProUser) return [];
 
-    // Add presets first
-    for (const preset of NOTE_FOLDER_PRESETS) {
-      const key = normalizeFolderKey(preset);
-      if (key) displayByKey.set(key, preset);
-    }
-
-    // ✅ NEW: Auto-create folders from API notes — if note has folder: "Ideas",
-    // "Ideas" folder is automatically added to the list
+    // Auto-create folders only from notes that actually exist
     for (const note of allNotes) {
       const raw = typeof note.folder === "string" ? note.folder.trim() : "";
       const key = normalizeFolderKey(raw);
@@ -112,8 +106,13 @@ export default function NotesPage() {
       result = result.filter((note) => note.is_starred);
     }
 
-    // ✅ FIX: isProUser (not !isProUser) — folder filter is a Pro feature
-    if (isProUser && selectedFolder !== "all") {
+    // Filter by shared
+    if (showOnlyShared) {
+      result = result.filter((note) => note.is_shared);
+    }
+
+    // Apply folder filter when a specific folder is selected
+    if (!isProUser && selectedFolder !== "all") {
       if (selectedFolder === "none") {
         // "Simple Notes" = notes with no folder (folder is null/empty)
         result = result.filter((note) => !normalizeFolderKey(note.folder));
@@ -151,7 +150,7 @@ export default function NotesPage() {
     });
 
     return result;
-  }, [allNotes, searchQuery, sortBy, showOnlyStarred, selectedFolder, isProUser]);
+  }, [allNotes, searchQuery, sortBy, showOnlyStarred, showOnlyShared, selectedFolder, isProUser]);
 
   const totalPages = Math.ceil(filteredNotes.length / ITEMS_PER_PAGE);
 
@@ -256,8 +255,11 @@ export default function NotesPage() {
   const hasActiveFilters =
     searchQuery.trim() ||
     showOnlyStarred ||
-    (isProUser && selectedFolder !== "all");
-    
+    showOnlyShared ||
+    (!isProUser && selectedFolder !== "all");
+  const hasFolderNotes = allNotes.some((note) =>
+    normalizeFolderKey(note.folder)
+  );
   const getEmptyMessage = () => {
     if (allNotes.length === 0) {
       return contextPrompt;
@@ -268,8 +270,11 @@ export default function NotesPage() {
     if (showOnlyStarred) {
       return "No starred notes yet";
     }
+    if (showOnlyShared) {
+      return "No shared notes yet";
+    }
     // ✅ FIX: isProUser (not !isProUser)
-    if (isProUser && selectedFolder !== "all") {
+    if (!isProUser && selectedFolder !== "all") {
       if (selectedFolder === "none") return "No notes in Simple Notes";
       return `No notes in "${selectedFolder}"`;
     }
@@ -286,6 +291,85 @@ export default function NotesPage() {
     if (selectedFolder === "none") return "Simple Notes";
     return selectedFolder;
   };
+
+  // Reusable renderer for a single note card
+  const renderNoteCard = (note: DBNote) => (
+    <Card
+      key={note.id}
+      draggable
+      onDragStart={() => setDraggingNoteId(note.id)}
+      onDragEnd={() =>
+        setDraggingNoteId((current) => (current === note.id ? null : current))
+      }
+      onClick={() => router.push(`/notes/${note.id}`)}
+      className={`bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl cursor-pointer hover:border-cyan-700/60 transition-all hover:shadow-2xl group overflow-hidden ${
+        movingNoteId === note.id ? "opacity-60" : ""
+      }`}
+    >
+      <CardHeader>
+        <div className="flex gap-6 justify-between items-start">
+          <div className="flex-1 min-w-0">
+            <div className="mb-2">
+              <h2 className="text-xl font-semibold text-white truncate">
+                {note.title || "Untitled Note"}
+              </h2>
+              <p className="text-gray-300 text-sm">
+                {formatDate(note.created_at)}
+              </p>
+              {/* ✅ FIX: isProUser (not !isProUser) — show folder badge for Pro */}
+              {!isProUser && (note.folder || "").trim() && (
+                <p className="text-xs text-cyan-400 mt-1">
+                  {(note.folder || "").trim()}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            {/* Star Button */}
+            <button
+              onClick={(e) => handleToggleStar(note.id, note.is_starred, e)}
+              disabled={togglingStarId === note.id}
+              className={`p-2 transition-colors ${
+                note.is_starred
+                  ? "text-cyan-500"
+                  : "text-gray-500 hover:text-cyan-500"
+              }`}
+              title={note.is_starred ? "Unstar note" : "Star note"}
+            >
+              {togglingStarId === note.id ? (
+                <Spinner className="w-4 h-4" />
+              ) : (
+                <Star
+                  className={`w-4 h-4 ${
+                    note.is_starred ? "fill-cyan-500" : ""
+                  }`}
+                />
+              )}
+            </button>
+            {/* Delete Button */}
+            <button
+              onClick={(e) => handleDelete(note.id, e)}
+              disabled={deletingId === note.id}
+              className="p-2 text-gray-500 hover:text-white transition-colors"
+              title="Delete note"
+            >
+              {deletingId === note.id ? (
+                <Spinner className="w-4 h-4" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+        </div>
+        <Separator className="w-24 h-0.5 bg-cyan-500" />
+      </CardHeader>
+      <CardContent>
+        <p className="text-md text-start text-gray-400 line-clamp-2">
+          {getPreview(note)}
+        </p>
+      </CardContent>
+    </Card>
+  );
 
   const renderPaginationItems = () => {
     const items = [];
@@ -398,8 +482,8 @@ export default function NotesPage() {
         {/* Filter Bar */}
         {allNotes.length > 0 && (
           <div className="flex flex-col gap-3 mb-6">
-            {/* ✅ FIX: isProUser (not !isProUser) — folder tabs only for Pro */}
-            {isProUser && (
+            {/* Folder tabs (can be shown/hidden) */}
+            { isProUser && (
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setSelectedFolder("all")}
@@ -499,8 +583,8 @@ export default function NotesPage() {
                 </SelectContent>
               </Select>
 
-              {/* ✅ FIX: Folder Filter Dropdown — Pro only */}
-              {isProUser && (
+              {/* Folder Filter Dropdown (can be shown/hidden) */}
+              { !isProUser && (
                 <Select
                   value={selectedFolder}
                   onValueChange={(value) => setSelectedFolder(value)}
@@ -520,6 +604,8 @@ export default function NotesPage() {
                 </Select>
               )}
 
+           
+
               {/* Starred Toggle */}
               <Button
                 onClick={() => setShowOnlyStarred(!showOnlyStarred)}
@@ -533,6 +619,19 @@ export default function NotesPage() {
                   className={`w-4 h-4 ${showOnlyStarred ? "fill-cyan-500" : ""}`}
                 />
                 <span className="hidden md:inline font-normal">Starred</span>
+              </Button>
+
+              {/* Shared Toggle */}
+              <Button
+                onClick={() => setShowOnlyShared(!showOnlyShared)}
+                className={`h-10 flex items-center justify-center gap-2 px-4 rounded-lg border transition-colors w-full md:w-auto ${
+                  showOnlyShared
+                    ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
+                    : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
+                }`}
+              >
+                <Share2 className="w-4 h-4" />
+                <span className="hidden md:inline font-normal">Shared</span>
               </Button>
             </div>
           </div>
@@ -571,85 +670,68 @@ export default function NotesPage() {
             )}
 
             <div className="space-y-4 min-h-[400px]">
-              {paginatedNotes.map((note) => (
-                <Card
-                  key={note.id}
-                  draggable
-                  onDragStart={() => setDraggingNoteId(note.id)}
-                  onDragEnd={() => setDraggingNoteId((current) =>
-                    current === note.id ? null : current
-                  )}
-                  onClick={() => router.push(`/notes/${note.id}`)}
-                  className={`bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl cursor-pointer hover:border-cyan-700/60 transition-all hover:shadow-2xl group overflow-hidden ${
-                    movingNoteId === note.id ? "opacity-60" : ""
-                  }`}
-                >
-                  <CardHeader>
-                    <div className="flex gap-6 justify-between items-start">
-                      <div className="flex-1 min-w-0">
-                        <div className="mb-2">
-                          <h2 className="text-xl font-semibold text-white truncate">
-                            {note.title || "Untitled Note"}
-                          </h2>
-                          <p className="text-gray-300 text-sm">
-                            {formatDate(note.created_at)}
-                          </p>
-                          {/* ✅ FIX: isProUser (not !isProUser) — show folder badge for Pro */}
-                          {isProUser && (note.folder || "").trim() && (
-                            <p className="text-xs text-cyan-400 mt-1">
-                              {(note.folder || "").trim()}
-                            </p>
-                          )}
+              {hasFolderNotes  ? (
+                (() => {
+                  const folderGroups = new Map<string, DBNote[]>();
+                  const simpleNotes: DBNote[] = [];
+
+                  paginatedNotes.forEach((note) => {
+                    const key = normalizeFolderKey(note.folder);
+                    if (!key) {
+                      // folder null/empty -> simple card (no folder group)
+                      simpleNotes.push(note);
+                    } else {
+                      const existing = folderGroups.get(key) || [];
+                      existing.push(note);
+                      folderGroups.set(key, existing);
+                    }
+                  });
+
+                  return (
+                    <>
+                      {Array.from(folderGroups.entries()).map(
+                        ([key, notes]) => {
+                          const displayName =
+                            (notes[0].folder || "").trim() || "Folder";
+
+                          return (
+                            <Card
+                              key={key}
+                              className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl overflow-hidden"
+                            >
+                              <CardHeader className="py-3 px-4">
+                                <div className="flex items-center gap-2">
+                                  <Folder className="w-4 h-4 text-cyan-400" />
+                                  <span className="text-sm font-medium text-white">
+                                    {displayName}
+                                  </span>
+                                  <span className="text-xs text-gray-400">
+                                    ({notes.length})
+                                  </span>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="pt-0 pb-4 px-3">
+                                <div className="space-y-3">
+                                  {notes.map((note) => renderNoteCard(note))}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        }
+                      )}
+
+                      {/* Notes with folder = null/empty stay as simple cards */}
+                      {simpleNotes.length > 0 && (
+                        <div className="space-y-3">
+                          {simpleNotes.map((note) => renderNoteCard(note))}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {/* Star Button */}
-                        <button
-                          onClick={(e) =>
-                            handleToggleStar(note.id, note.is_starred, e)
-                          }
-                          disabled={togglingStarId === note.id}
-                          className={`p-2 transition-colors ${
-                            note.is_starred
-                              ? "text-cyan-500"
-                              : "text-gray-500 hover:text-cyan-500"
-                          }`}
-                          title={note.is_starred ? "Unstar note" : "Star note"}
-                        >
-                          {togglingStarId === note.id ? (
-                            <Spinner className="w-4 h-4" />
-                          ) : (
-                            <Star
-                              className={`w-4 h-4 ${
-                                note.is_starred ? "fill-cyan-500" : ""
-                              }`}
-                            />
-                          )}
-                        </button>
-                        {/* Delete Button */}
-                        <button
-                          onClick={(e) => handleDelete(note.id, e)}
-                          disabled={deletingId === note.id}
-                          className="p-2 text-gray-500 hover:text-white transition-colors"
-                          title="Delete note"
-                        >
-                          {deletingId === note.id ? (
-                            <Spinner className="w-4 h-4" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                    <Separator className="w-24 h-0.5 bg-cyan-500" />
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-md text-start text-gray-400 line-clamp-2">
-                      {getPreview(note)}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
+                      )}
+                    </>
+                  );
+                })()
+              ) : (
+                paginatedNotes.map((note) => renderNoteCard(note))
+              )}
             </div>
 
             {/* Pagination Controls */}
