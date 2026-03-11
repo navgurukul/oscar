@@ -13,7 +13,6 @@ interface Transcription {
 }
 
 type TonePreset = "none" | "professional" | "casual" | "friendly";
-type AuthView = "login" | "signup";
 
 // ── Persistent store helpers ──────────────────────────────────────────────────
 
@@ -43,119 +42,70 @@ async function saveSetting<T>(key: string, value: T): Promise<void> {
 // ── Auth Screen ───────────────────────────────────────────────────────────────
 
 function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
-  const [view, setView] = useState<AuthView>("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [oauthState, setOauthState] = useState<{ verifier: string; url: string } | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Listen for OAuth callback deep links
+  // Poll for session when OAuth is in progress
   useEffect(() => {
-    const handleDeepLink = async (event: { payload: string }) => {
-      const url = event.payload;
-      console.log("[auth] Received deep link:", url);
-
-      // Parse the URL to extract tokens
-      // Format: oscar://auth/callback#access_token=xxx&refresh_token=xxx&...
-      if (url.startsWith("oscar://auth/callback")) {
-        const hashIndex = url.indexOf("#");
-        if (hashIndex === -1) {
-          setError("Invalid authentication response");
-          return;
-        }
-
-        const hashParams = new URLSearchParams(url.slice(hashIndex + 1));
-        const accessToken = hashParams.get("access_token");
-        const refreshToken = hashParams.get("refresh_token");
-
-        if (!accessToken) {
-          setError("Authentication failed: no access token received");
-          return;
-        }
-
-        setLoading(true);
+    if (oauthState) {
+      // Start polling for session
+      pollingRef.current = setInterval(async () => {
         try {
-          // Set the session in Supabase
-          const { data, error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken || "",
-          });
-
-          if (sessionError) throw sessionError;
-          if (data.session) {
-            onAuth(data.session);
-          } else {
-            setError("Failed to establish session");
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            // Session found, stop polling and authenticate
+            if (pollingRef.current) {
+              clearInterval(pollingRef.current);
+              pollingRef.current = null;
+            }
+            setOauthState(null);
+            setLoading(false);
+            onAuth(session);
           }
-        } catch (err: unknown) {
-          console.error("[auth] Session error:", err);
-          setError((err as Error).message);
-        } finally {
-          setLoading(false);
+        } catch (err) {
+          console.warn("[auth] Polling error:", err);
         }
-      }
-    };
+      }, 1000);
 
-    // Listen for deep link events from Tauri
-    const unlisten = listen<string>("deep-link", handleDeepLink);
+      // Stop polling after 5 minutes
+      const timeout = setTimeout(() => {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        setOauthState(null);
+        setLoading(false);
+        setError("Authentication timed out. Please try again.");
+      }, 5 * 60 * 1000);
 
-    // Also check for any pending deep link on mount
-    invoke<string | null>("get_pending_deep_link").then((url) => {
-      if (url) {
-        handleDeepLink({ payload: url });
-      }
-    }).catch(console.warn);
-
-    return () => {
-      unlisten.then((f) => f());
-    };
-  }, [onAuth]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setMessage("");
-    setLoading(true);
-
-    try {
-      if (view === "login") {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        if (data.session) onAuth(data.session);
-      } else {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        setMessage("Check your email to confirm your account, then log in.");
-        setView("login");
-      }
-    } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
+      return () => {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+        }
+        clearTimeout(timeout);
+      };
     }
-  };
+  }, [oauthState, onAuth]);
 
   const signInWithGoogle = async () => {
     setError("");
     setLoading(true);
 
     try {
-      // Use the custom URL scheme for the callback
-      const redirectTo = "oscar://auth/callback";
-
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo,
-          skipBrowserRedirect: true, // We'll handle the redirect manually
+          redirectTo: "http://localhost:3000/auth/callback?desktop=true",
+          skipBrowserRedirect: true,
         },
       });
 
       if (oauthError) throw oauthError;
 
       if (data?.url) {
-        // Open the OAuth URL in the user's browser
+        setOauthState({ verifier: "", url: data.url });
         await openUrl(data.url);
       } else {
         throw new Error("No OAuth URL returned");
@@ -171,14 +121,18 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
     <div className="permissions-overlay">
       <div className="permissions-card">
         <p className="permissions-label">OSCAR</p>
-        <h2 className="permissions-title">{view === "login" ? "Sign in" : "Create account"}</h2>
+        <h2 className="permissions-title">Sign in</h2>
         <p className="permissions-description">
-          {view === "login"
-            ? "Sign in to sync your dictionary and enable AI editing."
-            : "Create a free account to get started with OSCAR."}
+          Sign in with Google to sync your dictionary and enable AI editing.
         </p>
 
-        {/* Google Sign In Button */}
+        {error && <p className="auth-error">{error}</p>}
+        {oauthState && (
+          <p className="auth-message">
+            Waiting for authentication... Please complete the sign-in in your browser.
+          </p>
+        )}
+
         <button
           type="button"
           className="google-signin-btn"
@@ -203,60 +157,8 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          Continue with Google
+          {loading ? "Opening browser..." : "Continue with Google"}
         </button>
-
-        <div className="auth-divider">
-          <span>or</span>
-        </div>
-
-        <form onSubmit={handleSubmit} className="auth-form">
-          <div className="auth-field">
-            <label>Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              autoFocus
-            />
-          </div>
-          <div className="auth-field">
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              minLength={6}
-            />
-          </div>
-
-          {error && <p className="auth-error">{error}</p>}
-          {message && <p className="auth-message">{message}</p>}
-
-          <button type="submit" className="perm-continue-btn active" disabled={loading}>
-            {loading ? "Loading..." : view === "login" ? "Sign in" : "Create account"}
-          </button>
-        </form>
-
-        <p className="auth-switch">
-          {view === "login" ? (
-            <>Don't have an account?{" "}
-              <button className="auth-switch-btn" onClick={() => { setView("signup"); setError(""); }}>
-                Sign up
-              </button>
-            </>
-          ) : (
-            <>Already have an account?{" "}
-              <button className="auth-switch-btn" onClick={() => { setView("login"); setError(""); }}>
-                Sign in
-              </button>
-            </>
-          )}
-        </p>
       </div>
     </div>
   );
@@ -421,6 +323,50 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Deep link handler for OAuth callback ────────────────────────────────────
+
+  useEffect(() => {
+    // Handle deep link URL
+    const handleDeepLink = (url: string) => {
+      console.log("[deep-link] Received:", url);
+      
+      // Parse the deep link URL
+      if (url.startsWith("oscar://auth/callback")) {
+        const urlObj = new URL(url);
+        const error = urlObj.searchParams.get("error");
+        
+        if (error) {
+          console.error("[deep-link] Auth error:", error);
+        }
+      }
+    };
+
+    // Check for pending deep link on mount (for when app was closed and opened via deep link)
+    const checkPendingDeepLink = async () => {
+      try {
+        const pendingUrl = await invoke<string | null>("get_pending_deep_link");
+        if (pendingUrl) {
+          handleDeepLink(pendingUrl);
+        }
+      } catch (err) {
+        console.warn("[deep-link] Failed to get pending deep link:", err);
+      }
+    };
+
+    // Listen for deep link events (when app is already running)
+    const unlistenDeepLink = listen<string>("deep-link", (event) => {
+      handleDeepLink(event.payload);
+    });
+
+    // Check for pending deep link
+    checkPendingDeepLink();
+
+    return () => {
+      unlistenDeepLink.then((f) => f());
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -9,7 +9,7 @@
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-figtree), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: var(--font-size-base, 16px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -17,20 +17,7 @@ body {
 
 /* Define actual font families */
 :root {
-  /* Default font stack - Figtree for body/UI */
-  --font-sans: var(--font-figtree), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  
-  /* Specific font fallbacks */
-  --font-figtree-fallback: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-eb-garamond-fallback: 'EB Garamond', Georgia, serif;
-}
-
-/* Font mapping helpers */
-.font-figtree {
-  --font-sans: var(--font-figtree-fallback);
-}
-.font-eb-garamond {
-  font-family: var(--font-eb-garamond-fallback);
+  /* Font variables are set via Next.js font loaders in layout.tsx */
 }
 
 /* Text size mapping on the root element */
@@ -51,6 +38,7 @@ html.text-size-lg {
   }
   h1, h2, h3 {
     letter-spacing: -0.01em;
+    font-family: var(--font-eb-garamond), Georgia, serif;
   }
   /* Global spacing for headings and paragraphs */
   h1, h2, h3, h4, h5, h6, p {

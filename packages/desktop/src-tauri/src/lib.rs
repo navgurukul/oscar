@@ -5,6 +5,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use tauri::{Emitter, Manager};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_store::StoreExt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
@@ -13,7 +14,7 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 static PENDING_DEEP_LINK: Mutex<Option<String>> = Mutex::new(None);
 
-/// Set a pending deep link URL (called from macOS URL handler)
+/// Set a pending deep link URL (called from deep link plugin)
 pub fn set_pending_deep_link(url: String) {
     if let Ok(mut pending) = PENDING_DEEP_LINK.lock() {
         *pending = Some(url);
@@ -285,6 +286,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(Mutex::new(AppState {
             whisper_context: None,
         }))
@@ -298,6 +300,22 @@ pub fn run() {
             get_pending_deep_link,
         ])
         .setup(move |app| {
+            let app_handle = app.handle().clone();
+
+            // Set up deep link handler
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    let url_str = url.to_string();
+                    log::info!("Deep link received: {}", url_str);
+                    
+                    // Store the deep link
+                    set_pending_deep_link(url_str.clone());
+                    
+                    // Emit to frontend
+                    let _ = app_handle.emit("deep-link", url_str);
+                }
+            });
+
             // Right Ctrl as hold-to-record hotkey (avoids conflicts on both macOS & Windows)
             let shortcut = Shortcut::new(
                 Some(Modifiers::CONTROL),

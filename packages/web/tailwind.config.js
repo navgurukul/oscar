@@ -10,9 +10,14 @@ module.exports = {
   	extend: {
   		fontFamily: {
   			sans: [
-  				'var(--font-sans)',
+  				'var(--font-figtree)',
   				'system-ui',
   				'sans-serif'
+  			],
+  			serif: [
+  				'var(--font-eb-garamond)',
+  				'Georgia',
+  				'serif'
   			],
   			mono: [
   				'ui-monospace',
