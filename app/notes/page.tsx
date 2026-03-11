@@ -8,6 +8,7 @@ import { NotesListSkeleton } from "@/components/shared/NotesListSkeleton";
 import { TrashSheet } from "@/components/notes/TrashSheet";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/lib/contexts/AuthContext";
 import {
   Select,
   SelectContent,
@@ -33,6 +34,7 @@ type SortOption = "created" | "updated" | "length";
 
 export default function NotesPage() {
   const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const [allNotes, setAllNotes] = useState<DBNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,10 +51,18 @@ export default function NotesPage() {
   const [showStarredOnly, setShowStarredOnly] = useState(false);
 
   useEffect(() => {
-    loadNotes();
-    loadTrashCount();
     setContextPrompt(getTimeBasedPrompt());
   }, []);
+
+  // Load notes only once auth state is settled and we have a user.
+  // This prevents fetching with a stale session immediately after OAuth redirects.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) return;
+    loadNotes();
+    loadTrashCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user?.id]);
 
   const loadTrashCount = async () => {
     const { data, error } = await notesService.getTrashedNotes();

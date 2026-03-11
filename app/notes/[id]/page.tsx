@@ -52,7 +52,7 @@ export default function NoteDetailPage({
 }) {
   const [id, setId] = useState<string | null>(null);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
   const [note, setNote] = useState<DBNote | null>(null);
@@ -90,6 +90,11 @@ export default function NoteDetailPage({
   useEffect(() => {
     const loadNote = async () => {
       if (!id) return;
+      if (authLoading) return;
+      if (!user) {
+        router.push(`/auth?redirectTo=${encodeURIComponent(`/notes/${id}`)}`);
+        return;
+      }
       setIsLoading(true);
       const { data, error } = await notesService.getNoteById(id);
       if (error || !data) {
@@ -110,7 +115,7 @@ export default function NoteDetailPage({
     };
 
     loadNote();
-  }, [id, router, user]);
+  }, [id, router, user, authLoading]);
 
   const handleSaveEdit = async () => {
     if (!note) return;
