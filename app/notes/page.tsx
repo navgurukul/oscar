@@ -47,6 +47,10 @@ export default function NotesPage() {
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const ITEMS_PER_PAGE = 5;
 
+  // Toggle to show/hide all folder UI inside Notes (hidden by default)
+  // Click "Show folders" button in the filter bar to reveal folder UI.
+  const [showFolders, setShowFolders] = useState(false);
+  
   // Filter and sort state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("created");
@@ -81,9 +85,17 @@ export default function NotesPage() {
     setCurrentPage(1);
   }, [searchQuery, sortBy, showOnlyStarred, showOnlyShared, selectedFolder]);
 
+  // If folder UI is hidden, keep folder filter at "All" so users don't get stuck
+  // with an invisible folder filter applied.
+  useEffect(() => {
+    if (!showFolders && selectedFolder !== "all") {
+      setSelectedFolder("all");
+    }
+  }, [showFolders, selectedFolder]);
+
   const folders = useMemo(() => {
     const displayByKey = new Map<string, string>();
-    if (isProUser) return [];
+    if (!isProUser) return [];
 
     // Auto-create folders only from notes that actually exist
     for (const note of allNotes) {
@@ -94,7 +106,7 @@ export default function NotesPage() {
     }
 
     return Array.from(displayByKey.values()).sort((a, b) => a.localeCompare(b));
-  }, [allNotes, isProUser]);
+  }, [allNotes, !isProUser]);
   
   // Filter and sort notes
   const filteredNotes = useMemo(() => {
@@ -128,7 +140,7 @@ export default function NotesPage() {
     }
 
     // Apply folder filter when a specific folder is selected
-    if (isProUser && selectedFolder !== "all") {
+    if (!isProUser && selectedFolder !== "all") {
       if (selectedFolder === "none") {
         // "Simple Notes" = notes with no folder (folder is null/empty)
         result = result.filter((note) => !normalizeFolderKey(note.folder));
@@ -166,7 +178,7 @@ export default function NotesPage() {
     });
 
     return result;
-  }, [allNotes, searchQuery, sortBy, showOnlyStarred, showOnlyShared, selectedFolder, isProUser]);
+  }, [allNotes, searchQuery, sortBy, showOnlyStarred, showOnlyShared, selectedFolder, !isProUser]);
 
   const totalPages = Math.ceil(filteredNotes.length / ITEMS_PER_PAGE);
 
@@ -274,7 +286,7 @@ export default function NotesPage() {
     searchQuery.trim() ||
     showOnlyStarred ||
     showOnlyShared ||
-    (isProUser && selectedFolder !== "all");
+    (!isProUser && selectedFolder !== "all");
   const hasFolderNotes = allNotes.some((note) =>
     normalizeFolderKey(note.folder)
   );
@@ -289,7 +301,7 @@ export default function NotesPage() {
       return "No shared notes yet";
     }
     // ✅ FIX: isProUser (not !isProUser)
-    if (isProUser && selectedFolder !== "all") {
+    if (!isProUser && selectedFolder !== "all") {
       if (selectedFolder === "none") return "No notes in Simple Notes";
       return `No notes in "${selectedFolder}"`;
     }
@@ -301,7 +313,7 @@ export default function NotesPage() {
 
   const getFolderSectionTitle = () => {
     // ✅ FIX: isProUser (not !isProUser)
-    if (isProUser) return null;
+    if (!isProUser) return null;
     if (selectedFolder === "all") return null;
     if (selectedFolder === "none") return "Simple Notes";
     return selectedFolder;
@@ -331,12 +343,6 @@ export default function NotesPage() {
               <p className="text-gray-300 text-sm">
                 {formatDate(note.created_at)}
               </p>
-              {/* ✅ FIX: isProUser (not !isProUser) — show folder badge for Pro */}
-              {isProUser && (note.folder || "").trim() && (
-                <p className="text-xs text-cyan-400 mt-1">
-                  {(note.folder || "").trim()}
-                </p>
-              )}
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -493,7 +499,7 @@ export default function NotesPage() {
         {allNotes.length > 0 && (
           <div className="flex flex-col gap-3 mb-6">
             {/* Folder tabs (can be shown/hidden) */}
-            { isProUser && (
+            {!isProUser && showFolders && (
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setSelectedFolder("all")}
@@ -593,8 +599,25 @@ export default function NotesPage() {
                 </SelectContent>
               </Select>
 
+              {/* Folders toggle (keeps main UI clean by default) */}
+              {!isProUser && (
+                <Button
+                  onClick={() => setShowFolders((v) => !v)}
+                  className={`h-10 flex items-center justify-center gap-2 px-4 rounded-lg border transition-colors w-full md:w-auto ${
+                    showFolders
+                      ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
+                      : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Folder className="w-4 h-4" />
+                  <span className="hidden md:inline font-normal">
+                    {showFolders ? "Hide folders" : "Show folders"}
+                  </span>
+                </Button>
+              )}
+
               {/* Folder Filter Dropdown (can be shown/hidden) */}
-              { isProUser && (
+              {!isProUser && showFolders && (
                 <Select
                   value={selectedFolder}
                   onValueChange={(value) => setSelectedFolder(value)}
@@ -644,35 +667,8 @@ export default function NotesPage() {
                 <span className="hidden md:inline font-normal">Shared</span>
               </Button>
             </div>
-              <Select
-              value={sortBy}
-              onValueChange={(value) => setSortBy(value as SortOption)}
-            >
-              <SelectTrigger className="h-10 w-full md:w-[180px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
-                <SelectItem value="created">Date Created</SelectItem>
-                <SelectItem value="updated">Date Updated</SelectItem>
-                <SelectItem value="length">Length</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Starred filter toggle */}
-            <button
-              onClick={() => setShowStarredOnly((v) => !v)}
-              title={showStarredOnly ? "Show all notes" : "Show starred only"}
-              className={`h-10 px-3 flex items-center gap-1.5 rounded-lg border transition-colors text-sm font-medium ${
-                showStarredOnly
-                  ? "bg-cyan-500/20 border-cyan-500/60 text-cyan-400"
-                  : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/40"
-              }`}
-            >
-              <Star
-                className={`w-4 h-4 ${showStarredOnly ? "fill-cyan-400 text-cyan-400" : ""}`}
-              />
-              <span>Starred</span>
-            </button>
+          
+ 
 
             {/* Sort Dropdown */}
           
@@ -721,7 +717,7 @@ export default function NotesPage() {
         ) : (
           <div className="space-y-4">
             {/* Folder section header when a specific folder is selected (Pro only) */}
-            {getFolderSectionTitle() && (
+            {showFolders && getFolderSectionTitle() && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-cyan-700/30 bg-slate-900">
                 <Folder className="w-4 h-4 text-cyan-400" />
                 <span className="text-sm font-medium text-white">
@@ -734,7 +730,7 @@ export default function NotesPage() {
             )}
 
             <div className="space-y-4 min-h-[400px]">
-              {hasFolderNotes ? (
+              {showFolders && hasFolderNotes ? (
                 (() => {
                   const folderGroups = new Map<string, DBNote[]>();
                   const simpleNotes: DBNote[] = [];
