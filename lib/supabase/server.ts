@@ -8,6 +8,14 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Make auth cookies persistent so users stay signed in across browser restarts.
+      // (Without maxAge, cookies may be treated as session cookies.)
+      cookieOptions: {
+        path: "/",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+      },
       cookies: {
         getAll() {
           return cookieStore.getAll();

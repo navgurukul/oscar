@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Spinner } from "@/components/ui/spinner";
 
-export default function PostCallbackPage() {
+function PostCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams?.get("next") ?? "/";
@@ -45,15 +45,19 @@ export default function PostCallbackPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (error) {
+    return <div className="text-sm text-red-400">{error}</div>;
+  }
+
+  return null;
+}
+
+export default function PostCallbackPage() {
   return (
     <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-black">
-      {error ? (
-        <div className="text-sm text-red-400">{error}</div>
-      ) : (
-        <Spinner className="text-cyan-500" />
-      )}
+      <Suspense fallback={<Spinner className="text-cyan-500" />}>
+        <PostCallbackContent />
+      </Suspense>
     </main>
   );
 }
-
-
