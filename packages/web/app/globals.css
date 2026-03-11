@@ -17,20 +17,20 @@ body {
 
 /* Define actual font families */
 :root {
-  /* Default font stack */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  /* Default font stack - Figtree for body/UI */
+  --font-sans: var(--font-figtree), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   
-  /* Specific font variables (if you have these fonts loaded) */
-  --font-roboto: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Specific font fallbacks */
+  --font-figtree-fallback: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-eb-garamond-fallback: 'EB Garamond', Georgia, serif;
 }
 
-/* Font mapping helpers: these set --font-sans to a concrete font variable */
-.font-roboto {
-  --font-sans: var(--font-roboto);
+/* Font mapping helpers */
+.font-figtree {
+  --font-sans: var(--font-figtree-fallback);
 }
-.font-inter {
-  --font-sans: var(--font-inter);
+.font-eb-garamond {
+  font-family: var(--font-eb-garamond-fallback);
 }
 
 /* Text size mapping on the root element */

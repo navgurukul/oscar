@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Voice Flow needs microphone access to record and transcribe your voice.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Voice Flow may use camera for future features.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Voice Flow needs this to paste transcribed text into other applications.</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.souvikdeb.oscar</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>oscar</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

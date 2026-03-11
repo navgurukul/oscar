@@ -1,6 +1,6 @@
 "use client";
 
-import { Roboto, Inter } from "next/font/google";
+import { Figtree, EB_Garamond } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import Script from "next/script";
 import { usePathname } from "next/navigation";
@@ -12,17 +12,17 @@ import { AuthProvider, useAuth } from "@/lib/contexts/AuthContext";
 import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
 import "./globals.css";
 
-const roboto = Roboto({
+const figtree = Figtree({
   subsets: ["latin"],
-  weight: ["400", "700"],
-  variable: "--font-roboto",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-figtree",
   display: "swap",
 });
 
-const inter = Inter({
+const ebGaramond = EB_Garamond({
   subsets: ["latin"],
-  weight: ["400", "700"],
-  variable: "--font-inter",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-eb-garamond",
   display: "swap",
 });
 
@@ -62,7 +62,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${roboto.variable} ${inter.variable} font-inter`}
+      className={`${figtree.variable} ${ebGaramond.variable}`}
     >
       <head>
         {/* Load ONNX Runtime Web from CDN to avoid bundling issues and fix 'onnxruntime' missing error */}
