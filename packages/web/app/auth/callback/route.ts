@@ -18,7 +18,12 @@ export async function GET(request: Request) {
         // Redirect to the desktop app with a success indicator
         return NextResponse.redirect("oscar://auth/callback?success=true");
       }
-      return NextResponse.redirect(`${origin}${next}`);
+      // Important: after server-side code exchange, the browser Supabase client may
+      // still have a stale session until it re-syncs. Redirect through a small
+      // client page that forces a session read/refresh before entering the app.
+      return NextResponse.redirect(
+        `${origin}/auth/post-callback?next=${encodeURIComponent(next)}`
+      );
     }
   }
 
