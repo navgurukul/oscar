@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { notesService } from "@/lib/services/notes.service";
 import { Spinner } from "@/components/ui/spinner";
 import { NotesListSkeleton } from "@/components/shared/NotesListSkeleton";
+import { TrashSheet } from "@/components/notes/TrashSheet";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/lib/contexts/AuthContext";
 import {
   Select,
   SelectContent,
@@ -32,11 +34,14 @@ type SortOption = "created" | "updated" | "length";
 
 export default function NotesPage() {
   const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const [allNotes, setAllNotes] = useState<DBNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [contextPrompt, setContextPrompt] = useState("");
+  const [trashCount, setTrashCount] = useState(0);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
   const ITEMS_PER_PAGE = 5;
 
   // Filter and sort state
@@ -46,9 +51,25 @@ export default function NotesPage() {
   const [showStarredOnly, setShowStarredOnly] = useState(false);
 
   useEffect(() => {
-    loadNotes();
     setContextPrompt(getTimeBasedPrompt());
   }, []);
+
+  // Load notes only once auth state is settled and we have a user.
+  // This prevents fetching with a stale session immediately after OAuth redirects.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) return;
+    loadNotes();
+    loadTrashCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user?.id]);
+
+  const loadTrashCount = async () => {
+    const { data, error } = await notesService.getTrashedNotes();
+    if (!error && data) {
+      setTrashCount(data.length);
+    }
+  };
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -132,8 +153,15 @@ export default function NotesPage() {
       alert("Failed to delete note. Please try again.");
     } else {
       setAllNotes(allNotes.filter((note) => note.id !== id));
+      // Increment trash count
+      setTrashCount((prev) => prev + 1);
     }
     setDeletingId(null);
+  };
+
+  const handleRestore = () => {
+    loadNotes();
+    loadTrashCount();
   };
 
   const handleToggleStar = async (note: DBNote, e: React.MouseEvent) => {
@@ -345,6 +373,27 @@ export default function NotesPage() {
           
           </div>
         )}
+
+        {/* Trash Button - Bottom Right */}
+        <button
+          onClick={() => setIsTrashOpen(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center justify-center w-10 h-10 group"
+          title="View trash"
+        >
+          <Trash2 className="w-6 h-6 text-gray-400 group-hover:text-cyan-400 transition-all duration-300 group-hover:-translate-y-1" />
+          {trashCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-medium rounded-full shadow-md transition-all duration-300 group-hover:-translate-y-1">
+              {trashCount > 99 ? "99+" : trashCount}
+            </span>
+          )}
+        </button>
+
+        {/* Trash Sheet */}
+        <TrashSheet
+          open={isTrashOpen}
+          onOpenChange={setIsTrashOpen}
+          onRestore={handleRestore}
+        />
 
         {filteredNotes.length === 0 ? (
           <div className="text-center py-16 mt-16">

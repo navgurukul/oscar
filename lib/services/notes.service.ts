@@ -137,4 +137,48 @@ export const notesService = {
 
     return { data, error: error as Error | null };
   },
+
+  /**
+   * Get all soft-deleted (trashed) notes for the current user
+   */
+  async getTrashedNotes(): Promise<{
+    data: DBNote[] | null;
+    error: Error | null;
+  }> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("notes")
+      .select("*")
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false });
+
+    return { data, error: error as Error | null };
+  },
+
+  /**
+   * Restore a soft-deleted note by clearing deleted_at
+   */
+  async restoreNote(
+    id: string
+  ): Promise<{ data: DBNote | null; error: Error | null }> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("notes")
+      .update({ deleted_at: null, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single();
+
+    return { data, error: error as Error | null };
+  },
+
+  /**
+   * Permanently delete a note (hard delete)
+   */
+  async permanentDelete(id: string): Promise<{ error: Error | null }> {
+    const supabase = getSupabase();
+    const { error } = await supabase.from("notes").delete().eq("id", id);
+
+    return { error: error as Error | null };
+  },
 };
