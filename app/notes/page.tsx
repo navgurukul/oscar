@@ -25,10 +25,15 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { SquaresSubtract, Trash2, Search, Star } from "lucide-react";
+import { SquaresSubtract, Trash2, Search, Star, Folder, Share2 } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
 import { getTimeBasedPrompt } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
+import { NOTE_FOLDER_PRESETS } from "@/lib/constants";
+import { NoteActions } from "@/components/results/NoteActions";
+
 
 type SortOption = "created" | "updated" | "length";
 
@@ -44,11 +49,25 @@ export default function NotesPage() {
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const ITEMS_PER_PAGE = 5;
 
+  // Toggle to show/hide all folder UI inside Notes (hidden by default)
+  // Click "Show folders" button in the filter bar to reveal folder UI.
+  const [showFolders, setShowFolders] = useState(false);
+  
   // Filter and sort state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("created");
+  const [showOnlyStarred, setShowOnlyStarred] = useState(false);
+  const [selectedFolder, setSelectedFolder] = useState<string>("all");
+  const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
+  const [movingNoteId, setMovingNoteId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [showStarredOnly, setShowStarredOnly] = useState(false);
+
+  const [showOnlyShared, setShowOnlyShared] = useState(false);
+  const { isProUser } = useSubscriptionContext();
+
+  const normalizeFolderKey = (folder: string | null | undefined) =>
+    (folder || "").trim().toLowerCase();
 
   useEffect(() => {
     setContextPrompt(getTimeBasedPrompt());
@@ -74,8 +93,31 @@ export default function NotesPage() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortBy, showStarredOnly]);
+  }, [searchQuery, sortBy, showOnlyStarred, showOnlyShared, selectedFolder]);
 
+  // If folder UI is hidden, keep folder filter at "All" so users don't get stuck
+  // with an invisible folder filter applied.
+  useEffect(() => {
+    if (!showFolders && selectedFolder !== "all") {
+      setSelectedFolder("all");
+    }
+  }, [showFolders, selectedFolder]);
+
+  const folders = useMemo(() => {
+    const displayByKey = new Map<string, string>();
+    if (!isProUser) return [];
+
+    // Auto-create folders only from notes that actually exist
+    for (const note of allNotes) {
+      const raw = typeof note.folder === "string" ? note.folder.trim() : "";
+      const key = normalizeFolderKey(raw);
+      if (!key) continue;
+      if (!displayByKey.has(key)) displayByKey.set(key, raw);
+    }
+
+    return Array.from(displayByKey.values()).sort((a, b) => a.localeCompare(b));
+  }, [allNotes, !isProUser]);
+  
   // Filter and sort notes
   const filteredNotes = useMemo(() => {
     let result = [...allNotes];
@@ -97,6 +139,29 @@ export default function NotesPage() {
       });
     }
 
+    // Filter by starred
+    if (showOnlyStarred) {
+      result = result.filter((note) => note.is_starred);
+    }
+
+    // Filter by shared
+    if (showOnlyShared) {
+      result = result.filter((note) => note.is_shared);
+    }
+
+    // Apply folder filter when a specific folder is selected
+    if (!isProUser && selectedFolder !== "all") {
+      if (selectedFolder === "none") {
+        // "Simple Notes" = notes with no folder (folder is null/empty)
+        result = result.filter((note) => !normalizeFolderKey(note.folder));
+      } else {
+        const selectedKey = normalizeFolderKey(selectedFolder);
+        result = result.filter(
+          (note) => normalizeFolderKey(note.folder) === selectedKey
+        );
+      }
+    }
+    
     // Sort
     result.sort((a, b) => {
       let comparison = 0;
@@ -123,7 +188,7 @@ export default function NotesPage() {
     });
 
     return result;
-  }, [allNotes, searchQuery, sortBy, showStarredOnly]);
+  }, [allNotes, searchQuery, sortBy, showOnlyStarred, showOnlyShared, selectedFolder, !isProUser]);
 
   const totalPages = Math.ceil(filteredNotes.length / ITEMS_PER_PAGE);
 
@@ -141,6 +206,31 @@ export default function NotesPage() {
       setAllNotes(data || []);
     }
     setIsLoading(false);
+  };
+
+  const handleMoveNoteToFolder = async (
+    id: string,
+    targetFolder: string | null
+  ) => {
+    // Optimistic update
+    setAllNotes((prev) =>
+      prev.map((note) =>
+        note.id === id ? { ...note, folder: targetFolder } : note
+      )
+    );
+    setMovingNoteId(id);
+
+    const { error } = await notesService.updateNote(id, {
+      folder: targetFolder,
+    });
+
+    if (error) {
+      // Revert on error by reloading notes list
+      await loadNotes();
+      alert("Failed to move note to folder. Please try again.");
+    }
+
+    setMovingNoteId(null);
   };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -202,8 +292,14 @@ export default function NotesPage() {
     return text.length > 150 ? text.substring(0, 150) + "..." : text;
   };
 
-  const hasActiveFilters = searchQuery.trim() || showStarredOnly;
-
+  const hasActiveFilters =
+    searchQuery.trim() ||
+    showOnlyStarred ||
+    showOnlyShared ||
+    (!isProUser && selectedFolder !== "all");
+  const hasFolderNotes = allNotes.some((note) =>
+    normalizeFolderKey(note.folder)
+  );
   const getEmptyMessage = () => {
     if (allNotes.length === 0) {
       return contextPrompt;
@@ -211,11 +307,95 @@ export default function NotesPage() {
     if (showStarredOnly && !searchQuery.trim()) {
       return "No starred notes yet. Star a note to find it here quickly.";
     }
+    if (showOnlyShared) {
+      return "No shared notes yet";
+    }
+    // ✅ FIX: isProUser (not !isProUser)
+    if (!isProUser && selectedFolder !== "all") {
+      if (selectedFolder === "none") return "No notes in Simple Notes";
+      return `No notes in "${selectedFolder}"`;
+    }
     if (searchQuery.trim()) {
       return `No notes found for "${searchQuery}"`;
     }
     return contextPrompt;
   };
+
+  const getFolderSectionTitle = () => {
+    // ✅ FIX: isProUser (not !isProUser)
+    if (!isProUser) return null;
+    if (selectedFolder === "all") return null;
+    if (selectedFolder === "none") return "Simple Notes";
+    return selectedFolder;
+  };
+
+  // Reusable renderer for a single note card
+  const renderNoteCard = (note: DBNote) => (
+    <Card
+      key={note.id}
+      draggable
+      onDragStart={() => setDraggingNoteId(note.id)}
+      onDragEnd={() =>
+        setDraggingNoteId((current) => (current === note.id ? null : current))
+      }
+      onClick={() => router.push(`/notes/${note.id}`)}
+      className={`bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl cursor-pointer hover:border-cyan-700/60 transition-all hover:shadow-2xl group overflow-hidden ${
+        movingNoteId === note.id ? "opacity-60" : ""
+      }`}
+    >
+      <CardHeader>
+        <div className="flex gap-6 justify-between items-start">
+          <div className="flex-1 min-w-0">
+            <div className="mb-2">
+              <h2 className="text-xl font-semibold text-white truncate">
+                {note.title || "Untitled Note"}
+              </h2>
+              <p className="text-gray-300 text-sm">
+                {formatDate(note.created_at)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            {/* Star Button */}
+            <button
+              onClick={(e) => handleToggleStar(note, e)}
+              className={`p-2 transition-colors ${
+                note.is_starred
+                  ? "text-cyan-500"
+                  : "text-gray-500 hover:text-cyan-500"
+              }`}
+              title={note.is_starred ? "Unstar note" : "Star note"}
+            >
+              <Star
+                className={`w-4 h-4 ${
+                  note.is_starred ? "fill-cyan-500" : ""
+                }`}
+              />
+            </button>
+            {/* Delete Button */}
+            <button
+              onClick={(e) => handleDelete(note.id, e)}
+              disabled={deletingId === note.id}
+              className="p-2 text-gray-500 hover:text-white transition-colors"
+              title="Delete note"
+            >
+              {deletingId === note.id ? (
+                <Spinner className="w-4 h-4" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+        </div>
+        <Separator className="w-24 h-0.5 bg-cyan-500" />
+      </CardHeader>
+      <CardContent>
+        <p className="text-md text-start text-gray-400 line-clamp-2">
+          {getPreview(note)}
+        </p>
+      </CardContent>
+    </Card>
+  );
 
   const renderPaginationItems = () => {
     const items = [];
@@ -327,47 +507,178 @@ export default function NotesPage() {
 
         {/* Filter Bar */}
         {allNotes.length > 0 && (
-          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
-            {/* Search Input */}
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 z-10" />
-              <Input
-                type="text"
-                placeholder="Search notes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 w-full pl-10 pr-4 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
-              />
-            </div>
-              <Select
-              value={sortBy}
-              onValueChange={(value) => setSortBy(value as SortOption)}
-            >
-              <SelectTrigger className="h-10 w-full md:w-[180px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
-                <SelectItem value="created">Date Created</SelectItem>
-                <SelectItem value="updated">Date Updated</SelectItem>
-                <SelectItem value="length">Length</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col gap-3 mb-6">
+            {/* Folder tabs (can be shown/hidden) */}
+            {!isProUser && showFolders && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setSelectedFolder("all")}
+                  onDragOver={(e) => {
+                    if (draggingNoteId) e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggingNoteId) {
+                      handleMoveNoteToFolder(draggingNoteId, null);
+                    }
+                    setDraggingNoteId(null);
+                  }}
+                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs border transition-colors ${
+                    selectedFolder === "all"
+                      ? "bg-cyan-600/20 border-cyan-500 text-cyan-200"
+                      : "bg-slate-900 border-slate-700 text-gray-300 hover:border-cyan-500 hover:text-cyan-200"
+                  }`}
+                >
+                  <Folder className="w-3 h-3" />
+                  <span>All</span>
+                </button>
+                <button
+                  onClick={() => setSelectedFolder("none")}
+                  onDragOver={(e) => {
+                    if (draggingNoteId) e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggingNoteId) {
+                      handleMoveNoteToFolder(draggingNoteId, null);
+                    }
+                    setDraggingNoteId(null);
+                  }}
+                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs border transition-colors ${
+                    selectedFolder === "none"
+                      ? "bg-cyan-600/20 border-cyan-500 text-cyan-200"
+                      : "bg-slate-900 border-slate-700 text-gray-300 hover:border-cyan-500 hover:text-cyan-200"
+                  }`}
+                >
+                  <Folder className="w-3 h-3" />
+                  <span>Simple Notes</span>
+                </button>
+                {/* ✅ NEW: Auto-generated folder tabs from API notes */}
+                {folders.map((folder) => (
+                  <button
+                    key={folder}
+                    onClick={() => setSelectedFolder(folder)}
+                    onDragOver={(e) => {
+                      if (draggingNoteId) e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (draggingNoteId) {
+                        handleMoveNoteToFolder(draggingNoteId, folder);
+                      }
+                      setDraggingNoteId(null);
+                    }}
+                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs border transition-colors ${
+                      selectedFolder === folder
+                        ? "bg-cyan-600/20 border-cyan-500 text-cyan-200"
+                        : "bg-slate-900 border-slate-700 text-gray-300 hover:border-cyan-500 hover:text-cyan-200"
+                    }`}
+                  >
+                    <Folder className="w-3 h-3" />
+                    <span>{folder}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
-            {/* Starred filter toggle */}
-            <button
-              onClick={() => setShowStarredOnly((v) => !v)}
-              title={showStarredOnly ? "Show all notes" : "Show starred only"}
-              className={`h-10 px-3 flex items-center gap-1.5 rounded-lg border transition-colors text-sm font-medium ${
-                showStarredOnly
-                  ? "bg-cyan-500/20 border-cyan-500/60 text-cyan-400"
-                  : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/40"
-              }`}
-            >
-              <Star
-                className={`w-4 h-4 ${showStarredOnly ? "fill-cyan-400 text-cyan-400" : ""}`}
-              />
-              <span>Starred</span>
-            </button>
+            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+              {/* Search Input */}
+              <div className="relative flex-1 w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 z-10" />
+                <Input
+                  type="text"
+                  placeholder="Search notes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-10 w-full pl-10 pr-4 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
+                />
+              </div>
+
+              {/* Sort Dropdown */}
+              <Select
+                value={sortBy}
+                onValueChange={(value) => setSortBy(value as SortOption)}
+              >
+                <SelectTrigger className="h-10 w-full md:w-[160px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
+                  <SelectItem value="created">Date Created</SelectItem>
+                  <SelectItem value="updated">Date Updated</SelectItem>
+                  <SelectItem value="length">Length</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Folders toggle (keeps main UI clean by default) */}
+              {!isProUser && (
+                <Button
+                  onClick={() => setShowFolders((v) => !v)}
+                  className={`h-10 flex items-center justify-center gap-2 px-4 rounded-lg border transition-colors w-full md:w-auto ${
+                    showFolders
+                      ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
+                      : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Folder className="w-4 h-4" />
+                  <span className="hidden md:inline font-normal">
+                    {showFolders ? "Hide folders" : "Show folders"}
+                  </span>
+                </Button>
+              )}
+
+              {/* Folder Filter Dropdown (can be shown/hidden) */}
+              {!isProUser && showFolders && (
+                <Select
+                  value={selectedFolder}
+                  onValueChange={(value) => setSelectedFolder(value)}
+                >
+                  <SelectTrigger className="h-10 w-full md:w-[160px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
+                    <SelectValue placeholder="Folder" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
+                    <SelectItem value="all">All folders</SelectItem>
+                    <SelectItem value="none">Simple Notes</SelectItem>
+                    {folders.map((folder) => (
+                      <SelectItem key={folder} value={folder}>
+                        {folder}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+           
+
+              {/* Starred Toggle */}
+              <Button
+                onClick={() => setShowOnlyStarred(!showOnlyStarred)}
+                className={`h-10 flex items-center justify-center gap-2 px-4 rounded-lg border transition-colors w-full md:w-auto ${
+                  showOnlyStarred
+                    ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
+                    : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
+                }`}
+              >
+                <Star
+                  className={`w-4 h-4 ${showOnlyStarred ? "fill-cyan-500" : ""}`}
+                />
+                <span className="hidden md:inline font-normal">Starred</span>
+              </Button>
+
+              {/* Shared Toggle */}
+              <Button
+                onClick={() => setShowOnlyShared(!showOnlyShared)}
+                className={`h-10 flex items-center justify-center gap-2 px-4 rounded-lg border transition-colors w-full md:w-auto ${
+                  showOnlyShared
+                    ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-500"
+                    : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-white"
+                }`}
+              >
+                <Share2 className="w-4 h-4" />
+                <span className="hidden md:inline font-normal">Shared</span>
+              </Button>
+            </div>
+          
+ 
 
             {/* Sort Dropdown */}
           
@@ -403,6 +714,8 @@ export default function NotesPage() {
               <button
                 onClick={() => {
                   setSearchQuery("");
+                  setShowOnlyStarred(false);
+                  setSelectedFolder("all");
                   setShowStarredOnly(false);
                 }}
                 className="text-cyan-500 hover:text-cyan-400 transition-colors"
@@ -413,64 +726,84 @@ export default function NotesPage() {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Folder section header when a specific folder is selected (Pro only) */}
+            {showFolders && getFolderSectionTitle() && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-cyan-700/30 bg-slate-900">
+                <Folder className="w-4 h-4 text-cyan-400" />
+                <span className="text-sm font-medium text-white">
+                  {getFolderSectionTitle()}
+                </span>
+                <span className="text-xs text-gray-400">
+                  ({filteredNotes.length})
+                </span>
+              </div>
+            )}
+
             <div className="space-y-4 min-h-[400px]">
-              {paginatedNotes.map((note) => (
-                <Card
-                  key={note.id}
-                  onClick={() => router.push(`/notes/${note.id}`)}
-                  className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl cursor-pointer hover:border-cyan-700/60 transition-all hover:shadow-2xl group overflow-hidden"
-                >
-                  <CardHeader>
-                    <div className="flex gap-6 justify-between items-start">
-                      <div className="flex-1 min-w-0">
-                        <div className="mb-2">
-                          <h2 className="text-xl font-semibold text-white truncate">
-                            {note.title || "Untitled Note"}
-                          </h2>
-                          <p className="text-gray-300 text-sm">
-                            {formatDate(note.created_at)}
-                          </p>
+              {showFolders && hasFolderNotes ? (
+                (() => {
+                  const folderGroups = new Map<string, DBNote[]>();
+                  const simpleNotes: DBNote[] = [];
+
+                  paginatedNotes.forEach((note) => {
+                    const key = normalizeFolderKey(note.folder);
+                    if (!key) {
+                      // folder null/empty -> simple card (no folder group)
+                      simpleNotes.push(note);
+                    } else {
+                      const existing = folderGroups.get(key) || [];
+                      existing.push(note);
+                      folderGroups.set(key, existing);
+                    }
+                  });
+
+                  return (
+                    <>
+                      {Array.from(folderGroups.entries()).map(
+                        ([key, notes]) => {
+                          const displayName =
+                            (notes[0].folder || "").trim() || "Folder";
+
+                          return (
+                            <Card
+                              key={key}
+                              className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl overflow-hidden"
+                            >
+                              <CardHeader className="py-3 px-4">
+                                <div className="flex items-center gap-2">
+                                  <Folder className="w-4 h-4 text-cyan-400" />
+                                  <span className="text-sm font-medium text-white">
+                                    {displayName}
+                                  </span>
+                                  <span className="text-xs text-gray-400">
+                                    ({notes.length})
+                                  </span>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="pt-0 pb-4 px-3">
+                                <div className="space-y-3">
+                                  {notes.map((note) => renderNoteCard(note))}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        }
+                      )}
+
+                      {/* Notes with folder = null/empty stay as simple cards */}
+                      {simpleNotes.length > 0 && (
+                        <div className="space-y-3">
+                          {simpleNotes.map((note) => renderNoteCard(note))}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {/* Star Button */}
-                        <button
-                          onClick={(e) => handleToggleStar(note, e)}
-                          className={`p-2 transition-colors ${
-                            note.is_starred
-                              ? "text-cyan-400 hover:text-cyan-300"
-                              : "text-gray-500 hover:text-cyan-400"
-                          }`}
-                          title={note.is_starred ? "Unstar note" : "Star note"}
-                        >
-                          <Star
-                            className={`w-4 h-4 ${note.is_starred ? "fill-cyan-400" : ""}`}
-                          />
-                        </button>
-                        {/* Delete Button */}
-                        <button
-                          onClick={(e) => handleDelete(note.id, e)}
-                          disabled={deletingId === note.id}
-                          className="p-2 text-gray-500 hover:text-white transition-colors"
-                          title="Delete note"
-                        >
-                          {deletingId === note.id ? (
-                            <Spinner className="w-4 h-4" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                    <Separator className="w-24 h-0.5 bg-cyan-500" />
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-md text-start text-gray-400 line-clamp-2">
-                      {getPreview(note)}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
+                      )}
+                    </>
+                  );
+                })()
+              ) : (
+                <div className="space-y-3">
+                  {paginatedNotes.map((note) => renderNoteCard(note))}
+                </div>
+              )}
             </div>
 
             {/* Pagination Controls */}
@@ -517,6 +850,7 @@ export default function NotesPage() {
           </div>
         )}
       </div>
+    
     </main>
   );
 }
