@@ -17,7 +17,7 @@ applications:
             - echo "RAZORPAY_PLAN_MONTHLY=$RAZORPAY_PLAN_MONTHLY" >> .env.production
             - echo "RAZORPAY_PLAN_YEARLY=$RAZORPAY_PLAN_YEARLY" >> .env.production
             - echo "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY" >> .env.production
-            - pnpm build
+            - npx next build
       artifacts:
         baseDirectory: .next
         files:
