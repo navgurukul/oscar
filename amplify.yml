@@ -7,22 +7,22 @@ frontend:
         - pnpm install
     build:
       commands:
-        - echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" >> .env.production
-        - echo "RAZORPAY_KEY_SECRET=$RAZORPAY_KEY_SECRET" >> .env.production
-        - echo "RAZORPAY_WEBHOOK_SECRET=$RAZORPAY_WEBHOOK_SECRET" >> .env.production
-        - echo "RAZORPAY_KEY_ID=$RAZORPAY_KEY_ID" >> .env.production
-        - echo "RAZORPAY_PLAN_MONTHLY=$RAZORPAY_PLAN_MONTHLY" >> .env.production
-        - echo "RAZORPAY_PLAN_YEARLY=$RAZORPAY_PLAN_YEARLY" >> .env.production
-        - echo "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY" >> .env.production
-        - pnpm run build
+        - echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" >> packages/web/.env.production
+        - echo "RAZORPAY_KEY_SECRET=$RAZORPAY_KEY_SECRET" >> packages/web/.env.production
+        - echo "RAZORPAY_WEBHOOK_SECRET=$RAZORPAY_WEBHOOK_SECRET" >> packages/web/.env.production
+        - echo "RAZORPAY_KEY_ID=$RAZORPAY_KEY_ID" >> packages/web/.env.production
+        - echo "RAZORPAY_PLAN_MONTHLY=$RAZORPAY_PLAN_MONTHLY" >> packages/web/.env.production
+        - echo "RAZORPAY_PLAN_YEARLY=$RAZORPAY_PLAN_YEARLY" >> packages/web/.env.production
+        - echo "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY" >> packages/web/.env.production
+        - cd packages/web && pnpm build
   artifacts:
-    baseDirectory: .next
+    baseDirectory: packages/web/.next
     files:
       - "**/*"
   cache:
     paths:
       - .pnpm-store/**/*
-      - .next/cache/**/*
+      - packages/web/.next/cache/**/*
   # Lambda SSR Runtime Environment Variables
   # These are required for Next.js API routes and server components
   environment:
