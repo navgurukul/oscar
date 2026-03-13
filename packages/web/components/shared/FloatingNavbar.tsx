@@ -13,7 +13,7 @@ export function FloatingNavbar() {
         >
           <div className="relative w-7 h-7 sm:w-9 sm:h-9 flex-shrink-0">
             <Image
-              src="/OSCARICON.png"
+              src="/OSCAR_DARK_LOGO.png"
               alt="OSCAR Logo"
               fill
               className="object-contain"

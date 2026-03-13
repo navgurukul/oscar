@@ -77,7 +77,7 @@ export default function Home() {
             }}
             className="mt-8 text-center px-4"
           >
-            <p className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-4xl font-medium tracking-tight text-transparent md:text-7xl">
+            <div className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-4xl font-medium tracking-tight text-transparent md:text-7xl">
               <LayoutTextFlip
                 text="Bring your ideas to light."
                 words={[
@@ -88,7 +88,7 @@ export default function Home() {
                 ]}
                 duration={3000}
               />
-            </p>
+            </div>
             <p className="mt-10 text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
               Turn messy voice notes into clean text. Instantly.
             </p>

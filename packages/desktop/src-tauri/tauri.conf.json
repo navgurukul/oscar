@@ -36,7 +36,8 @@
     "targets": "all",
     "macOS": {
       "entitlements": "entitlements.plist",
-      "infoPlist": "Info.plist"
+      "infoPlist": "Info.plist",
+      "minimumSystemVersion": "10.15"
     },
     "icon": [
       "icons/32x32.png",

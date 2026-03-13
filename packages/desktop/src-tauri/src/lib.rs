@@ -33,6 +33,48 @@ struct TranscriptionResult {
     error: Option<String>,
 }
 
+// ── Whisper: Model Download ───────────────────────────────────────────────────
+
+#[tauri::command]
+fn download_whisper_model(
+    url: String,
+    path: String,
+) -> Result<String, String> {
+    use std::io::Write;
+    
+    // Create parent directories if they don't exist
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
+    }
+    
+    // Download the file using blocking client
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| e.to_string())?;
+    
+    let response = client
+        .get(&url)
+        .send()
+        .map_err(|e| format!("Download failed: {}", e))?;
+    
+    if !response.status().is_success() {
+        return Err(format!("Download failed with status: {}", response.status()));
+    }
+    
+    let bytes = response
+        .bytes()
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+    
+    let mut file = std::fs::File::create(&path)
+        .map_err(|e| format!("Failed to create file: {}", e))?;
+    
+    file.write_all(&bytes)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+    
+    Ok(format!("Downloaded {} bytes to {}", bytes.len(), path))
+}
+
 // ── Whisper: Load Model ───────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -100,7 +142,7 @@ fn transcribe_audio(
     })
 }
 
-// ── AI Text Enhancement (via backend proxy) ─────────────────────────────────
+// ── AI Text Enhancement ──────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 struct ProxyResponse {
@@ -108,23 +150,127 @@ struct ProxyResponse {
     error: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct DeepSeekResponse {
+    choices: Option<Vec<DeepSeekChoice>>,
+    error: Option<DeepSeekError>,
+}
+
+#[derive(Deserialize)]
+struct DeepSeekChoice {
+    message: DeepSeekMessage,
+}
+
+#[derive(Deserialize)]
+struct DeepSeekMessage {
+    content: String,
+}
+
+#[derive(Deserialize)]
+struct DeepSeekError {
+    message: String,
+}
+
 #[tauri::command]
 fn enhance_text(
     text: String,
     tone: String,
-    edge_function_url: String,
-    jwt: String,
+    edge_function_url: Option<String>,
+    jwt: Option<String>,
+    api_key: Option<String>,
 ) -> Result<String, String> {
-    if edge_function_url.is_empty() {
-        return Err("No Edge Function URL configured".to_string());
-    }
-    if jwt.is_empty() {
-        return Err("No auth token — please sign in".to_string());
-    }
     if text.trim().is_empty() {
         return Ok(text);
     }
 
+    // If user provided their own API key, call DeepSeek directly
+    if let Some(key) = api_key {
+        return enhance_with_deepseek(text, tone, &key);
+    }
+
+    // Otherwise, use the Supabase Edge Function (requires auth)
+    let url = edge_function_url.ok_or("No Edge Function URL configured")?;
+    let token = jwt.ok_or("No auth token — please sign in or provide an API key")?;
+    
+    enhance_with_edge_function(text, tone, &url, &token)
+}
+
+fn enhance_with_deepseek(text: String, tone: String, api_key: &str) -> Result<String, String> {
+    #[derive(Serialize)]
+    struct DeepSeekRequest {
+        model: String,
+        messages: Vec<DeepSeekMessageReq>,
+        temperature: f32,
+        max_tokens: i32,
+    }
+
+    #[derive(Serialize)]
+    struct DeepSeekMessageReq {
+        role: String,
+        content: String,
+    }
+
+    let tone_instruction = match tone.as_str() {
+        "professional" => "Make this text more professional and polished",
+        "casual" => "Make this text more casual and conversational",
+        "friendly" => "Make this text warmer and friendlier",
+        _ => "Clean up this text while preserving its original meaning",
+    };
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = client
+        .post("https://api.deepseek.com/chat/completions")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&DeepSeekRequest {
+            model: "deepseek-chat".to_string(),
+            messages: vec![
+                DeepSeekMessageReq {
+                    role: "system".to_string(),
+                    content: tone_instruction.to_string(),
+                },
+                DeepSeekMessageReq {
+                    role: "user".to_string(),
+                    content: text,
+                },
+            ],
+            temperature: 0.3,
+            max_tokens: 2000,
+        })
+        .send()
+        .map_err(|e| format!("DeepSeek API request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
+        return Err(format!("DeepSeek API error {}: {}", status, body));
+    }
+
+    let parsed: DeepSeekResponse = response
+        .json()
+        .map_err(|e| format!("Failed to parse DeepSeek response: {}", e))?;
+
+    if let Some(err) = parsed.error {
+        return Err(format!("DeepSeek API error: {}", err.message));
+    }
+
+    parsed
+        .choices
+        .and_then(|choices| choices.into_iter().next())
+        .map(|choice| choice.message.content)
+        .ok_or_else(|| "Empty response from DeepSeek API".to_string())
+}
+
+fn enhance_with_edge_function(
+    text: String,
+    tone: String,
+    edge_function_url: &str,
+    jwt: &str,
+) -> Result<String, String> {
     #[derive(Serialize)]
     struct Body {
         text: String,
@@ -137,7 +283,7 @@ fn enhance_text(
         .map_err(|e| e.to_string())?;
 
     let response = client
-        .post(&edge_function_url)
+        .post(edge_function_url)
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", jwt))
         .json(&Body { text: text.clone(), tone })
@@ -291,6 +437,7 @@ pub fn run() {
             whisper_context: None,
         }))
         .invoke_handler(tauri::generate_handler![
+            download_whisper_model,
             load_whisper_model,
             transcribe_audio,
             paste_transcription,

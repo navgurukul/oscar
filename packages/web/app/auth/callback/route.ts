@@ -11,12 +11,14 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data.session) {
       // If this is a desktop app flow, redirect back to the desktop app via deep link
+      // with the session tokens so the desktop app can establish its own session
       if (isDesktopFlow) {
-        // Redirect to the desktop app with a success indicator
-        return NextResponse.redirect("oscar://auth/callback?success=true");
+        const { access_token, refresh_token, expires_in } = data.session;
+        const redirectUrl = `oscar://auth/callback?success=true&access_token=${encodeURIComponent(access_token)}&refresh_token=${encodeURIComponent(refresh_token)}&expires_in=${expires_in}`;
+        return NextResponse.redirect(redirectUrl);
       }
       // Important: after server-side code exchange, the browser Supabase client may
       // still have a stale session until it re-syncs. Redirect through a small
