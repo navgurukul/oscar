@@ -290,3 +290,19 @@ html.text-size-lg {
     opacity: 0;
   }
 }
+
+/* Waveform animation for login screen */
+@keyframes waveform {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scaleY(1.2);
+  }
+}
+
+.animate-waveform {
+  animation: waveform 1.2s ease-in-out infinite;
+}

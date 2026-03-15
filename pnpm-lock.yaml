@@ -43,6 +43,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      lucide-react:
+        specifier: ^0.562.0
+        version: 0.562.0(react@19.2.4)
       motion:
         specifier: ^12.35.2
         version: 12.35.2(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -143,6 +146,15 @@ importers:
       '@tabler/icons-react':
         specifier: ^3.36.1
         version: 3.40.0(react@19.2.4)
+      '@tsparticles/engine':
+        specifier: ^3.9.1
+        version: 3.9.1
+      '@tsparticles/react':
+        specifier: ^3.0.0
+        version: 3.0.0(@tsparticles/engine@3.9.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@tsparticles/slim':
+        specifier: ^3.9.1
+        version: 3.9.1
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

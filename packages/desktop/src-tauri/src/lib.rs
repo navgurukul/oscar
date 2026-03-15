@@ -9,6 +9,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_store::StoreExt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+use tokio::io::AsyncWriteExt;
 
 // ── Deep Link State ───────────────────────────────────────────────────────────
 
@@ -35,44 +36,79 @@ struct TranscriptionResult {
 
 // ── Whisper: Model Download ───────────────────────────────────────────────────
 
+#[derive(Clone, Serialize)]
+struct DownloadProgress {
+    downloaded: u64,
+    total: u64,
+    percentage: u8,
+}
+
 #[tauri::command]
-fn download_whisper_model(
+async fn download_whisper_model(
     url: String,
     path: String,
+    app: tauri::AppHandle,
 ) -> Result<String, String> {
-    use std::io::Write;
-    
     // Create parent directories if they don't exist
     if let Some(parent) = std::path::Path::new(&path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
     }
     
-    // Download the file using blocking client
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(300))
+    // Download the file using async client with progress
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(600))
         .build()
         .map_err(|e| e.to_string())?;
     
     let response = client
         .get(&url)
         .send()
+        .await
         .map_err(|e| format!("Download failed: {}", e))?;
     
     if !response.status().is_success() {
         return Err(format!("Download failed with status: {}", response.status()));
     }
     
-    let bytes = response
-        .bytes()
-        .map_err(|e| format!("Failed to read response: {}", e))?;
+    let total_size = response.content_length().unwrap_or(0);
     
-    let mut file = std::fs::File::create(&path)
+    // Create the file for async writing
+    let mut file = tokio::fs::File::create(&path)
+        .await
         .map_err(|e| format!("Failed to create file: {}", e))?;
     
-    file.write_all(&bytes)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    // Stream the response and write chunks with progress
+    let mut downloaded: u64 = 0;
+    let mut stream = response.bytes_stream();
     
-    Ok(format!("Downloaded {} bytes to {}", bytes.len(), path))
+    use futures_util::StreamExt;
+    
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("Failed to read chunk: {}", e))?;
+        
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| format!("Failed to write file: {}", e))?;
+        
+        downloaded += chunk.len() as u64;
+        
+        // Emit progress event
+        let percentage = if total_size > 0 {
+            ((downloaded as f64 / total_size as f64) * 100.0) as u8
+        } else {
+            0
+        };
+        
+        let _ = app.emit("download-progress", DownloadProgress {
+            downloaded,
+            total: total_size,
+            percentage,
+        });
+    }
+    
+    file.flush().await.map_err(|e| format!("Failed to flush file: {}", e))?;
+    
+    Ok(format!("Downloaded {} bytes to {}", downloaded, path))
 }
 
 // ── Whisper: Load Model ───────────────────────────────────────────────────────
@@ -172,7 +208,7 @@ struct DeepSeekError {
 }
 
 #[tauri::command]
-fn enhance_text(
+async fn enhance_text(
     text: String,
     tone: String,
     edge_function_url: Option<String>,
@@ -185,17 +221,17 @@ fn enhance_text(
 
     // If user provided their own API key, call DeepSeek directly
     if let Some(key) = api_key {
-        return enhance_with_deepseek(text, tone, &key);
+        return enhance_with_deepseek(text, tone, &key).await;
     }
 
     // Otherwise, use the Supabase Edge Function (requires auth)
     let url = edge_function_url.ok_or("No Edge Function URL configured")?;
     let token = jwt.ok_or("No auth token — please sign in or provide an API key")?;
     
-    enhance_with_edge_function(text, tone, &url, &token)
+    enhance_with_edge_function(text, tone, &url, &token).await
 }
 
-fn enhance_with_deepseek(text: String, tone: String, api_key: &str) -> Result<String, String> {
+async fn enhance_with_deepseek(text: String, tone: String, api_key: &str) -> Result<String, String> {
     #[derive(Serialize)]
     struct DeepSeekRequest {
         model: String,
@@ -217,7 +253,7 @@ fn enhance_with_deepseek(text: String, tone: String, api_key: &str) -> Result<St
         _ => "Clean up this text while preserving its original meaning",
     };
 
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
@@ -242,16 +278,18 @@ fn enhance_with_deepseek(text: String, tone: String, api_key: &str) -> Result<St
             max_tokens: 2000,
         })
         .send()
+        .await
         .map_err(|e| format!("DeepSeek API request failed: {}", e))?;
 
     if !response.status().is_success() {
         let status = response.status();
-        let body = response.text().unwrap_or_default();
+        let body = response.text().await.unwrap_or_default();
         return Err(format!("DeepSeek API error {}: {}", status, body));
     }
 
     let parsed: DeepSeekResponse = response
         .json()
+        .await
         .map_err(|e| format!("Failed to parse DeepSeek response: {}", e))?;
 
     if let Some(err) = parsed.error {
@@ -265,7 +303,7 @@ fn enhance_with_deepseek(text: String, tone: String, api_key: &str) -> Result<St
         .ok_or_else(|| "Empty response from DeepSeek API".to_string())
 }
 
-fn enhance_with_edge_function(
+async fn enhance_with_edge_function(
     text: String,
     tone: String,
     edge_function_url: &str,
@@ -277,7 +315,7 @@ fn enhance_with_edge_function(
         tone: String,
     }
 
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
@@ -288,16 +326,18 @@ fn enhance_with_edge_function(
         .header("Authorization", format!("Bearer {}", jwt))
         .json(&Body { text: text.clone(), tone })
         .send()
+        .await
         .map_err(|e| format!("Request to Edge Function failed: {}", e))?;
 
     if !response.status().is_success() {
         let status = response.status();
-        let body = response.text().unwrap_or_default();
+        let body = response.text().await.unwrap_or_default();
         return Err(format!("Edge Function error {}: {}", status, body));
     }
 
     let parsed: ProxyResponse = response
         .json()
+        .await
         .map_err(|e| format!("Failed to parse Edge Function response: {}", e))?;
 
     if let Some(err) = parsed.error {

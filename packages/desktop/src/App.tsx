@@ -8,7 +8,14 @@ import type { User, Session } from "@supabase/supabase-js";
 import { supabase, SUPABASE_URL } from "./supabase";
 import { SparklesCore } from "@/components/ui/sparkles";
 import { Cover } from "@/components/ui/cover";
+import { Navigation } from "./components/Navigation";
+import { RecordTab } from "./components/RecordTab";
+import { VocabularySection } from "./components/VocabularySection";
+import { BillingSection } from "./components/BillingSection";
+import { SettingsTab } from "./components/SettingsTab";
 import "./App.css";
+
+type TabType = "record" | "vocabulary" | "billing" | "settings";
 
 interface Transcription {
   text: string;
@@ -485,36 +492,48 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
 const MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
 const MODEL_PATH = ".oscar/models/ggml-base.bin";
 
+interface DownloadProgress {
+  downloaded: number;
+  total: number;
+  percentage: number;
+}
+
 function SetupScreen({ onComplete }: { onComplete: () => void }) {
   const [step, setStep] = useState<"download" | "apikey" | "loading">("download");
-  const [downloadStatus, setDownloadStatus] = useState("");
+  const [, setDownloadStatus] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState<DownloadProgress | null>(null);
 
   const downloadModel = async () => {
     setStep("loading");
-    setDownloadStatus("Preparing your setup...");
+    setProgress({ downloaded: 0, total: 1, percentage: 0 });
+    
+    // Set up progress listener
+    const unlisten = await listen<DownloadProgress>("download-progress", (event) => {
+      setProgress(event.payload);
+    });
     
     try {
       // Get the home directory and construct full path
       const home = await homeDir();
       const fullPath = `${home}/${MODEL_PATH}`;
       
-      setDownloadStatus("Downloading the magic...");
-      
-      // Download the model
+      // Download the model (async, with progress events)
       await invoke("download_whisper_model", {
         url: MODEL_URL,
         path: fullPath,
       });
       
-      setDownloadStatus("Almost there...");
+      unlisten();
+      setDownloadStatus("Download complete!");
       
       // Move to API key step
       setTimeout(() => {
         setStep("apikey");
       }, 500);
     } catch (err) {
+      unlisten();
       setError(`Something went wrong: ${err}`);
       setStep("download");
     }
@@ -549,10 +568,21 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
               </div>
 
               <h1 className="split-title">Warming up the engines...</h1>
+              <p className="split-description">
+                Downloading the speech recognition model. This happens entirely on your device — just a quick one-time setup.
+              </p>
               
               <div className="setup-loading">
-                <div className="setup-spinner"></div>
-                <p className="setup-status">{downloadStatus}</p>
+                {/* Progress bar */}
+                <div className="download-progress-container">
+                  <div className="download-progress-bar">
+                    <div 
+                      className="download-progress-fill" 
+                      style={{ width: `${progress?.percentage || 0}%` }}
+                    />
+                  </div>
+                </div>
+                
                 {error && <p className="setup-error">{error}</p>}
               </div>
             </div>
@@ -672,7 +702,6 @@ function App() {
   const [hotkeyWarning, setHotkeyWarning] = useState("");
 
   // Settings panel
-  const [showSettings, setShowSettings] = useState(false);
   const [whisperModelPath, setWhisperModelPath] = useState("");
   const [autoPaste, setAutoPaste] = useState(true);
 
@@ -682,8 +711,7 @@ function App() {
 
   // Personal dictionary (local state; synced to Supabase when logged in)
   const [dictWords, setDictWords] = useState<string[]>([]);
-  const [newWord, setNewWord] = useState("");
-  const [dictSyncing, setDictSyncing] = useState(false);
+  const [, setDictSyncing] = useState(false);
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -932,33 +960,6 @@ function App() {
 
   // ── Dictionary helpers ─────────────────────────────────────────────────────
 
-  const addWord = async () => {
-    const word = newWord.trim();
-    if (!word || dictWordsRef.current.includes(word)) return;
-    const updated = [...dictWordsRef.current, word];
-    dictWordsRef.current = updated;
-    setDictWords(updated);
-    setNewWord("");
-    await saveSetting("dictWords", updated);
-
-    // Sync to Supabase if logged in
-    if (user) {
-      await supabase.from("user_dictionary").insert({ user_id: user.id, word });
-    }
-  };
-
-  const removeWord = async (word: string) => {
-    const updated = dictWordsRef.current.filter((w) => w !== word);
-    dictWordsRef.current = updated;
-    setDictWords(updated);
-    await saveSetting("dictWords", updated);
-
-    // Sync to Supabase if logged in
-    if (user) {
-      await supabase.from("user_dictionary").delete().eq("user_id", user.id).eq("word", word);
-    }
-  };
-
   const buildInitialPrompt = () => {
     if (dictWordsRef.current.length === 0) return undefined;
     return dictWordsRef.current.join(", ");
@@ -1180,6 +1181,9 @@ function App() {
     await supabase.auth.signOut();
   };
 
+  // ── Tab state ──────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<TabType>("record");
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (authLoading) return null;
@@ -1190,274 +1194,88 @@ function App() {
   if (!setupComplete) return <SetupScreen onComplete={handleSetupComplete} />;
 
   return (
-    <div className="app">
-      <header className="header">
-        <div className="header-brand">
-          <div className="brand-icon">
-            <img src="/OSCAR_DARK_LOGO.png" alt="OSCAR" width="24" height="24" />
-          </div>
-          <div>
-            <h1>OSCAR</h1>
-            <span className="subtitle">Local voice transcription</span>
-          </div>
-        </div>
-        <div className="header-actions-right">
-          <span className="user-email">{user.email}</span>
-          <button className="icon-btn" onClick={handleSignOut} title="Sign out">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" x2="9" y1="12" y2="12"/>
-            </svg>
-          </button>
-          <button className="settings-btn" onClick={() => setShowSettings(!showSettings)} title="Settings">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-          </button>
-        </div>
-      </header>
+    <div className="app-modern">
+      <Navigation
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onSignOut={handleSignOut}
+        userEmail={user.email || ""}
+      />
 
-      {/* ── Settings Panel ──────────────────────────────────────────────────── */}
-      {showSettings && (
-        <div className="settings-panel">
-          <h3>Settings</h3>
+      <main className="main-area">
+        {activeTab === "record" && (
+          <RecordTab
+            isRecording={isRecording}
+            isProcessing={isProcessing}
+            whisperLoaded={whisperLoaded}
+            transcript={transcript}
+            aiEditing={aiEditing}
+            tonePreset={tonePreset}
+            dictWords={dictWords}
+            status={status}
+            hotkeyWarning={hotkeyWarning}
+            onStartRecording={startRecording}
+            onStopRecording={stopRecording}
+            onCopyTranscript={copyToClipboard}
+            onClearTranscript={clearTranscript}
+            onToggleAiEditing={() => {
+              const newValue = !aiEditing;
+              aiEditingRef.current = newValue;
+              setAiEditing(newValue);
+              saveSetting("aiEditing", newValue);
+            }}
+            onToneChange={(t) => {
+              tonePresetRef.current = t;
+              setTonePreset(t);
+              saveSetting("tonePreset", t);
+            }}
+          />
+        )}
 
-          {/* Hotkey */}
-          <div className="settings-section">
-            <h4>Hotkey Behaviour</h4>
-            <label className="toggle-label">
-              <input
-                type="checkbox"
-                checked={autoPaste}
-                onChange={(e) => {
-                  autoPasteRef.current = e.target.checked;
-                  setAutoPaste(e.target.checked);
-                  saveSetting("autoPaste", e.target.checked);
-                }}
-              />
-              Auto-paste into active app after transcription
-            </label>
-            <p className="help-text">
-              Hold <kbd>Ctrl</kbd>+<kbd>Space</kbd> in any app to start recording. Release to transcribe.
-              Requires <strong>Accessibility</strong> &amp; <strong>Input Monitoring</strong> permissions
-              in System Settings &rarr; Privacy &amp; Security.
-            </p>
-          </div>
+        {activeTab === "vocabulary" && (
+          <VocabularySection userId={user.id} />
+        )}
 
-          {/* Whisper model */}
-          <div className="settings-section">
-            <h4>Whisper Model</h4>
-            <div className="model-input">
-              <label>Model Path:</label>
-              <input
-                type="text"
-                value={whisperModelPath}
-                onChange={(e) => setWhisperModelPath(e.target.value)}
-                placeholder="/path/to/ggml-base.bin"
-              />
-              <button onClick={loadWhisperModel} disabled={!whisperModelPath}>Load</button>
-              <span className={`status-indicator ${whisperLoaded ? "loaded" : "missing"}`}>
-                {whisperLoaded ? "✓" : "✗"}
-              </span>
-            </div>
-            <p className="help-text">
-              Recommended: <code>ggml-small.bin</code> from{" "}
-              <a href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank" rel="noopener">
-                HuggingFace
-              </a>
-            </p>
-          </div>
+        {activeTab === "billing" && (
+          <BillingSection userId={user.id} userEmail={user.email || ""} />
+        )}
 
-          {/* AI editing */}
-          <div className="settings-section">
-            <h4>AI Auto-Editing</h4>
-            <label className="toggle-label">
-              <input
-                type="checkbox"
-                checked={aiEditing}
-                onChange={(e) => {
-                  aiEditingRef.current = e.target.checked;
-                  setAiEditing(e.target.checked);
-                  saveSetting("aiEditing", e.target.checked);
-                }}
-              />
-              Enable AI editing (removes filler words, fixes grammar)
-            </label>
-            <p className="help-text">
-              AI editing calls the Supabase Edge Function. You must be signed in.
-              The endpoint is auto-derived from your{" "}<code>VITE_SUPABASE_URL</code>.
-            </p>
-
-            {/* Tone presets */}
-            <div className="tone-presets">
-              <label className="tone-label">Tone preset:</label>
-              <div className="tone-buttons">
-                {(["none", "professional", "casual", "friendly"] as TonePreset[]).map((t) => (
-                  <button
-                    key={t}
-                    className={`tone-btn ${tonePreset === t ? "active" : ""}`}
-                    onClick={() => {
-                      tonePresetRef.current = t;
-                      setTonePreset(t);
-                      saveSetting("tonePreset", t);
-                    }}
-                  >
-                    {t === "none" ? "None" : t.charAt(0).toUpperCase() + t.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Personal dictionary */}
-          <div className="settings-section">
-            <h4>
-              Personal Dictionary
-              {dictSyncing && <span className="sync-badge">syncing…</span>}
-            </h4>
-            <p className="help-text">
-              Add names, brand names, or technical terms so Whisper recognises them correctly.
-              Words sync across devices when you're signed in.
-            </p>
-            <div className="dict-input-row">
-              <input
-                type="text"
-                value={newWord}
-                onChange={(e) => setNewWord(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addWord()}
-                placeholder="e.g. Souvik, ggml, XCFramework"
-              />
-              <button onClick={addWord} disabled={!newWord.trim()}>Add</button>
-            </div>
-            {dictWords.length > 0 && (
-              <div className="dict-tags">
-                {dictWords.map((word) => (
-                  <span key={word} className="dict-tag">
-                    {word}
-                    <button className="dict-tag-remove" onClick={() => removeWord(word)}>✕</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Status bar ──────────────────────────────────────────────────────── */}
-      <div className="status-bar">
-        <span
-          className={`status-dot ${
-            isRecording ? "recording" : isProcessing ? "processing" : whisperLoaded ? "ready" : "error"
-          }`}
-        />
-        <span className="status-text">{status}</span>
-      </div>
-
-      {hotkeyWarning && (
-        <div className="permission-warning">
-          <span>Hotkey unavailable:</span> {hotkeyWarning}
-          <button className="dismiss-btn" onClick={() => setHotkeyWarning("")}>✕</button>
-        </div>
-      )}
-
-      {/* ── Main content ────────────────────────────────────────────────────── */}
-      <div className="main-content">
-        <div className="mic-section">
-          <div className="mic-ring-outer">
-            <div className={`mic-ring-inner ${isRecording ? "recording" : ""}`}>
-              <button
-                className={`mic-button ${isRecording ? "recording" : ""} ${!whisperLoaded ? "disabled" : ""}`}
-                onClick={isRecording ? stopRecording : startRecording}
-                disabled={!whisperLoaded || isProcessing}
-                title={isRecording ? "Stop recording" : "Start recording"}
-              >
-                {isProcessing ? (
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="spin">
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                  </svg>
-                ) : isRecording ? (
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="6" width="12" height="12" rx="2"/>
-                  </svg>
-                ) : (
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                    <line x1="12" x2="12" y1="19" y2="22"/>
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
-          <p className="mic-hint">
-            {isRecording
-              ? "Recording — tap to stop"
-              : isProcessing
-              ? "Processing..."
-              : "Hold Ctrl+Space anywhere · or tap"}
-          </p>
-
-          {/* Active-feature badges */}
-          <div className="feature-badges">
-            <div className={`whisper-badge ${whisperLoaded ? "loaded" : "missing"}`}>
-              <span className="whisper-dot" />
-              Whisper {whisperLoaded ? "ready" : "not loaded"}
-            </div>
-            {aiEditing && (
-              <div className="feature-badge ai">
-                ✨ AI{tonePreset !== "none" ? ` · ${tonePreset}` : ""}
-              </div>
-            )}
-            {dictWords.length > 0 && (
-              <div className="feature-badge dict">
-                📖 {dictWords.length} word{dictWords.length !== 1 ? "s" : ""}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="output-section">
-          <div className="output-header">
-            <span>Transcript</span>
-            {transcript && (
-              <div className="header-actions">
-                <button className="icon-btn" onClick={copyToClipboard} title="Copy">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-                  </svg>
-                  Copy
-                </button>
-                <button className="icon-btn destructive" onClick={clearTranscript} title="Clear">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 6h18"/>
-                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
-                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-                  </svg>
-                  Clear
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="content-area">
-            {transcript ? (
-              <p className="text-content">{transcript}</p>
-            ) : (
-              <div className="placeholder">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{marginBottom: "12px", opacity: 0.3}}>
-                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                  <line x1="12" x2="12" y1="19" y2="22"/>
-                </svg>
-                <span>Your transcription will appear here...</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+        {activeTab === "settings" && (
+          <SettingsTab
+            whisperModelPath={whisperModelPath}
+            autoPaste={autoPaste}
+            aiEditing={aiEditing}
+            tonePreset={tonePreset}
+            userApiKey={userApiKey}
+            whisperLoaded={whisperLoaded}
+            onModelPathChange={setWhisperModelPath}
+            onLoadModel={loadWhisperModel}
+            onAutoPasteChange={(value) => {
+              autoPasteRef.current = value;
+              setAutoPaste(value);
+              saveSetting("autoPaste", value);
+            }}
+            onAiEditingChange={(value) => {
+              aiEditingRef.current = value;
+              setAiEditing(value);
+              saveSetting("aiEditing", value);
+            }}
+            onTonePresetChange={(t) => {
+              tonePresetRef.current = t;
+              setTonePreset(t);
+              saveSetting("tonePreset", t);
+            }}
+            onApiKeyChange={setUserApiKey}
+            onSaveApiKey={() => saveSetting("userApiKey", userApiKey)}
+            onClearData={() => {
+              if (confirm("This will clear all local data including settings. Continue?")) {
+                localStorage.clear();
+                window.location.reload();
+              }
+            }}
+          />
+        )}
+      </main>
     </div>
   );
 }

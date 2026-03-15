@@ -9,17 +9,17 @@ export function FloatingNavbar() {
       <div className="pt-8 pl-8 pb-4 flex items-center justify-between w-full ">
         <Link
           href={ROUTES.HOME}
-          className="flex items-center gap-2 font-bold text-white text-base sm:text-lg hover:opacity-80 transition-opacity group min-w-0"
+          className="flex items-center gap-2 hover:opacity-80 transition-opacity group min-w-0"
         >
           <div className="relative w-7 h-7 sm:w-9 sm:h-9 flex-shrink-0">
             <Image
-              src="/OSCAR_DARK_LOGO.png"
+              src="/OSCAR_LIGHT_LOGO.png"
               alt="OSCAR Logo"
               fill
               className="object-contain"
             />
           </div>
-          <span className="text-white transition-all duration-300 leading-none truncate">
+          <span className="text-lg font-semibold text-gray-900 tracking-tight leading-none truncate">
             {UI_STRINGS.APP_NAME}
           </span>
         </Link>
