@@ -35,4 +35,26 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+
+  // Build optimizations for better chunking
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React core - stable, rarely changes
+          "vendor-react": ["react", "react-dom"],
+          // Animation libraries - heavy but can be cached separately
+          "vendor-animation": ["motion", "@tsparticles/react", "@tsparticles/engine", "@tsparticles/slim"],
+          // Supabase - database client
+          "vendor-supabase": ["@supabase/supabase-js"],
+          // Tauri APIs - platform specific
+          "vendor-tauri": ["@tauri-apps/api", "@tauri-apps/plugin-deep-link", "@tauri-apps/plugin-global-shortcut", "@tauri-apps/plugin-opener", "@tauri-apps/plugin-process", "@tauri-apps/plugin-store", "@tauri-apps/plugin-updater"],
+          // Icons and utilities - frequently used across app
+          "vendor-ui": ["lucide-react", "clsx", "tailwind-merge"],
+        },
+      },
+    },
+    // Increase warning limit slightly since we're now splitting chunks
+    chunkSizeWarningLimit: 400,
+  },
 }));

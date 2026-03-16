@@ -9,12 +9,14 @@ import { supabase, SUPABASE_URL } from "./supabase";
 import { SparklesCore } from "@/components/ui/sparkles";
 import { Cover } from "@/components/ui/cover";
 import { Navigation } from "./components/Navigation";
-import { RecordTab } from "./components/RecordTab";
-
+import { Header } from "./components/Header";
+import { NotesTab } from "./components/NotesTab";
 import { SettingsTab } from "./components/SettingsTab";
+import { UpdateNotification } from "./components/UpdateNotification";
+import { useUpdater } from "./hooks/useUpdater";
 import "./App.css";
 
-type TabType = "record" | "vocabulary" | "billing" | "settings";
+type TabType = "notes" | "vocabulary" | "billing" | "settings";
 
 interface Transcription {
   text: string;
@@ -698,13 +700,13 @@ function App() {
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [userApiKey, setUserApiKey] = useState<string>("");
 
-  // Recording & processing
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState("");
+  // Recording & processing (global hotkey functionality)
+  const [_isRecording, setIsRecording] = useState(false);
+  const [_transcript, setTranscript] = useState("");
   const [whisperLoaded, setWhisperLoaded] = useState(false);
-  const [status, setStatus] = useState("Initializing...");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [hotkeyWarning, setHotkeyWarning] = useState("");
+  const [_status, setStatus] = useState("Initializing...");
+  const [_isProcessing, setIsProcessing] = useState(false);
+  const [_hotkeyWarning, setHotkeyWarning] = useState("");
 
   // Settings panel
   const [whisperModelPath, setWhisperModelPath] = useState("");
@@ -715,7 +717,7 @@ function App() {
   const [tonePreset, setTonePreset] = useState<TonePreset>("none");
 
   // Personal dictionary (local state; synced to Supabase when logged in)
-  const [dictWords, setDictWords] = useState<string[]>([]);
+  const [_dictWords, setDictWords] = useState<string[]>([]);
   const [, setDictSyncing] = useState(false);
 
   // Refs
@@ -729,6 +731,20 @@ function App() {
   const tonePresetRef = useRef<TonePreset>("none");
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
+
+  // Auto-updater
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const updater = useUpdater();
+
+  // Check for updates on startup
+  useEffect(() => {
+    // Delay check to not block initial load
+    const timer = setTimeout(() => {
+      updater.checkForUpdates();
+    }, 3000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Supabase auth listener ─────────────────────────────────────────────────
 
@@ -1005,45 +1021,7 @@ function App() {
     }
   };
 
-  // ── Manual button recording ────────────────────────────────────────────────
-
-  const startRecording = async () => {
-    if (!whisperLoaded) {
-      setStatus("Please load the Whisper model first.");
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/webm";
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      mediaRecorder.onstop = () => processAudio(stream, false);
-
-      mediaRecorder.start(100);
-      setIsRecording(true);
-      isRecordingRef.current = true;
-      setStatus("Recording... Speak now");
-      invoke("show_recording_pill").catch(console.warn);
-    } catch (e) {
-      setStatus(`Error: Could not access microphone — ${e}`);
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      isRecordingRef.current = false;
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      invoke("hide_recording_pill").catch(console.warn);
-    }
-  };
-
-  // ── Audio processing (shared) ──────────────────────────────────────────────
+  // ── Audio processing (shared by hotkey recording) ───────────────────────────
 
   const processAudio = async (stream: MediaStream, shouldPaste: boolean) => {
     const chunkCount = audioChunksRef.current.length;
@@ -1158,19 +1136,6 @@ function App() {
     stream.getTracks().forEach((t) => t.stop());
   };
 
-  // ── Transcript actions ─────────────────────────────────────────────────────
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(transcript);
-    setStatus("Copied to clipboard!");
-    setTimeout(() => setStatus("Done!"), 2000);
-  };
-
-  const clearTranscript = () => {
-    setTranscript("");
-    setStatus("Ready! Hold Ctrl+Space anywhere to record.");
-  };
-
   const handlePermissionsContinue = async () => {
     await saveSetting("permissionsDone", true);
     setPermissionsShown(true);
@@ -1187,7 +1152,7 @@ function App() {
   };
 
   // ── Tab state ──────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<TabType>("record");
+  const [activeTab, setActiveTab] = useState<TabType>("notes");
 
   // ── Subscription state ─────────────────────────────────────────────────────
   const [isProUser, setIsProUser] = useState(false);
@@ -1233,36 +1198,17 @@ function App() {
       />
 
       <main className="main-area">
-        {activeTab === "record" && (
-          <RecordTab
-            isRecording={isRecording}
-            isProcessing={isProcessing}
-            whisperLoaded={whisperLoaded}
-            transcript={transcript}
-            aiEditing={aiEditing}
-            tonePreset={tonePreset}
-            dictWords={dictWords}
-            status={status}
-            hotkeyWarning={hotkeyWarning}
-            onStartRecording={startRecording}
-            onStopRecording={stopRecording}
-            onCopyTranscript={copyToClipboard}
-            onClearTranscript={clearTranscript}
-            onToggleAiEditing={() => {
-              const newValue = !aiEditing;
-              aiEditingRef.current = newValue;
-              setAiEditing(newValue);
-              saveSetting("aiEditing", newValue);
-            }}
-            onToneChange={(t) => {
-              tonePresetRef.current = t;
-              setTonePreset(t);
-              saveSetting("tonePreset", t);
-            }}
-          />
-        )}
+        <Header
+          userEmail={user.email || ""}
+          onSignOut={handleSignOut}
+          onSettingsClick={() => setActiveTab("settings")}
+        />
+        <div className="main-area-content">
+          {activeTab === "notes" && user && (
+            <NotesTab userId={user.id} />
+          )}
 
-        {activeTab === "settings" && (
+          {activeTab === "settings" && (
           <SettingsTab
             whisperModelPath={whisperModelPath}
             autoPaste={autoPaste}
@@ -1299,7 +1245,23 @@ function App() {
             onSignOut={handleSignOut}
           />
         )}
+        </div>
       </main>
+
+      {/* Update notification */}
+      {!updateDismissed && (
+        <UpdateNotification
+          updateAvailable={updater.updateAvailable}
+          downloading={updater.downloading}
+          downloadProgress={updater.downloadProgress}
+          readyToInstall={updater.readyToInstall}
+          error={updater.error}
+          updateInfo={updater.updateInfo}
+          onDownload={updater.downloadAndInstall}
+          onInstall={updater.installAndRelaunch}
+          onDismiss={() => setUpdateDismissed(true)}
+        />
+      )}
     </div>
   );
 }

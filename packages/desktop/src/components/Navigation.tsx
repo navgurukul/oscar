@@ -1,7 +1,7 @@
 import React from "react";
-import { Home, Settings, Crown, Sparkles } from "lucide-react";
+import { Settings, Crown, Sparkles, FileText } from "lucide-react";
 
-type TabType = "record" | "vocabulary" | "billing" | "settings";
+type TabType = "notes" | "vocabulary" | "billing" | "settings";
 
 interface NavigationProps {
   activeTab: TabType;
@@ -14,12 +14,11 @@ interface NavigationProps {
 export function Navigation({ 
   activeTab, 
   onTabChange, 
-  userEmail,
   isProUser = false,
   onUpgradeClick
 }: NavigationProps) {
   const navItems: { id: TabType; label: string; icon: React.ElementType }[] = [
-    { id: "record", label: "Home", icon: Home },
+    { id: "notes", label: "Notes", icon: FileText },
   ];
 
   const handleUpgrade = () => {
@@ -35,7 +34,7 @@ export function Navigation({
     <nav className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-brand">
-          <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width={32} height={32} />
+          <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width={34} height={34} />
           <span>OSCAR</span>
         </div>
       </div>
@@ -50,9 +49,9 @@ export function Navigation({
               className={`nav-item ${isActive ? "active" : ""}`}
               onClick={() => onTabChange(item.id)}
             >
-              <Icon size={20} />
+              <Icon size={16} />
               <span>{item.label}</span>
-              {isActive && <div className="nav-indicator" />}
+              {/* {isActive && <div className="nav-indicator" />} */}
             </button>
           );
         })}
@@ -78,13 +77,8 @@ export function Navigation({
           </div>
         )}
 
-        <div className="user-info">
-          <span className="user-email" title={userEmail}>
-            {userEmail}
-          </span>
-        </div>
         <button 
-          className={`settings-footer-btn ${activeTab === "settings" ? "active" : ""}`} 
+          className={`nav-item ${activeTab === "settings" ? "active" : ""}`} 
           onClick={() => onTabChange("settings")}
         >
           <Settings size={16} />

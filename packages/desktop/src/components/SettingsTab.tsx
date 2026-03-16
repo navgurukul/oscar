@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderOpen, Keyboard, Sparkles, Trash2, CreditCard, BookOpen, User, Shield, Download, FileText, AlertTriangle, LogOut } from "lucide-react";
+import { CreditCard, BookOpen, User, Shield, LogOut, AlertTriangle, Download, FileText, Trash2 } from "lucide-react";
 
 type TonePreset = "none" | "professional" | "casual" | "friendly";
 type SettingsTabType = "billing" | "vocabulary" | "account" | "privacy";
@@ -24,30 +24,26 @@ interface SettingsTabProps {
 }
 
 export function SettingsTab({
-  whisperModelPath,
-  autoPaste,
-  aiEditing,
-  tonePreset,
-  userApiKey,
-  whisperLoaded,
-  onModelPathChange,
-  onLoadModel,
-  onAutoPasteChange,
-  onAiEditingChange,
-  onTonePresetChange,
-  onApiKeyChange,
-  onSaveApiKey,
+  whisperModelPath: _whisperModelPath,
+  autoPaste: _autoPaste,
+  aiEditing: _aiEditing,
+  tonePreset: _tonePreset,
+  userApiKey: _userApiKey,
+  whisperLoaded: _whisperLoaded,
+  onModelPathChange: _onModelPathChange,
+  onLoadModel: _onLoadModel,
+  onAutoPasteChange: _onAutoPasteChange,
+  onAiEditingChange: _onAiEditingChange,
+  onTonePresetChange: _onTonePresetChange,
+  onApiKeyChange: _onApiKeyChange,
+  onSaveApiKey: _onSaveApiKey,
   onClearData,
   userEmail,
   onSignOut,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabType>("billing");
-  const toneOptions: { value: TonePreset; label: string }[] = [
-    { value: "none", label: "None" },
-    { value: "professional", label: "Professional" },
-    { value: "casual", label: "Casual" },
-    { value: "friendly", label: "Friendly" },
-  ];
+  // Tone options available for future use
+  void _tonePreset;
 
   const tabs: { id: SettingsTabType; label: string; icon: React.ElementType }[] = [
     { id: "billing", label: "Plans & Billing", icon: CreditCard },

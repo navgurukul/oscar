@@ -15,6 +15,15 @@
       "desktop": {
         "schemes": ["oscar"]
       }
+    },
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://www.oscar.app/tauri/updates.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   },
   "app": {
