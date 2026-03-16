@@ -1,6 +1,8 @@
-import { FolderOpen, Keyboard, Sparkles, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { FolderOpen, Keyboard, Sparkles, Trash2, CreditCard, BookOpen, User, Shield, Download, FileText, AlertTriangle } from "lucide-react";
 
 type TonePreset = "none" | "professional" | "casual" | "friendly";
+type SettingsTabType = "billing" | "vocabulary" | "account" | "privacy";
 
 interface SettingsTabProps {
   whisperModelPath: string;
@@ -17,6 +19,7 @@ interface SettingsTabProps {
   onApiKeyChange: (key: string) => void;
   onSaveApiKey: () => void;
   onClearData: () => void;
+  userEmail?: string;
 }
 
 export function SettingsTab({
@@ -34,7 +37,9 @@ export function SettingsTab({
   onApiKeyChange,
   onSaveApiKey,
   onClearData,
+  userEmail,
 }: SettingsTabProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTabType>("billing");
   const toneOptions: { value: TonePreset; label: string }[] = [
     { value: "none", label: "None" },
     { value: "professional", label: "Professional" },
@@ -42,129 +47,188 @@ export function SettingsTab({
     { value: "friendly", label: "Friendly" },
   ];
 
+  const tabs: { id: SettingsTabType; label: string; icon: React.ElementType }[] = [
+    { id: "billing", label: "Plans & Billing", icon: CreditCard },
+    { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
+    { id: "account", label: "Account", icon: User },
+    { id: "privacy", label: "Data & Privacy", icon: Shield },
+  ];
+
   return (
     <div className="settings-tab">
       <h2 className="settings-tab-title">Settings</h2>
 
-      <div className="settings-grid">
-        {/* Model Settings */}
-        <div className="settings-card">
-          <div className="settings-card-header">
-            <FolderOpen size={20} />
-            <h3>Whisper Model</h3>
-          </div>
-          <p className="settings-card-description">
-            Configure the speech recognition model path.
-          </p>
-          <div className="model-input-modern">
-            <input
-              type="text"
-              value={whisperModelPath}
-              onChange={(e) => onModelPathChange(e.target.value)}
-              placeholder="/path/to/ggml-base.bin"
-            />
-            <button 
-              onClick={onLoadModel} 
-              disabled={!whisperModelPath}
-              className={whisperLoaded ? "loaded" : ""}
+      {/* Sub-tabs */}
+      <div className="settings-subtabs">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              className={`subtab-btn ${isActive ? "active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
             >
-              {whisperLoaded ? "Loaded" : "Load"}
+              <Icon size={16} />
+              <span>{tab.label}</span>
             </button>
-          </div>
-          <p className="settings-hint">
-            Recommended: ggml-small.bin from HuggingFace
-          </p>
-        </div>
+          );
+        })}
+      </div>
 
-        {/* Hotkey Settings */}
-        <div className="settings-card">
-          <div className="settings-card-header">
-            <Keyboard size={20} />
-            <h3>Hotkey</h3>
-          </div>
-          <p className="settings-card-description">
-            Configure global hotkey behavior.
-          </p>
-          <label className="toggle-setting">
-            <input
-              type="checkbox"
-              checked={autoPaste}
-              onChange={(e) => onAutoPasteChange(e.target.checked)}
-            />
-            <span>Auto-paste into active app after transcription</span>
-          </label>
-          <p className="settings-hint">
-            Hold <kbd>Ctrl</kbd>+<kbd>Space</kbd> in any app to start recording.
-            Requires Accessibility & Input Monitoring permissions.
-          </p>
-        </div>
-
-        {/* AI Settings */}
-        <div className="settings-card">
-          <div className="settings-card-header">
-            <Sparkles size={20} />
-            <h3>AI Enhancement</h3>
-          </div>
-          <p className="settings-card-description">
-            Configure AI editing and enhancement options.
-          </p>
-          
-          <label className="toggle-setting">
-            <input
-              type="checkbox"
-              checked={aiEditing}
-              onChange={(e) => onAiEditingChange(e.target.checked)}
-            />
-            <span>Enable AI editing (removes filler words, fixes grammar)</span>
-          </label>
-
-          {aiEditing && (
-            <div className="tone-setting">
-              <span>Default tone preset:</span>
-              <div className="tone-buttons-modern">
-                {toneOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    className={tonePreset === option.value ? "active" : ""}
-                    onClick={() => onTonePresetChange(option.value)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+      {/* Tab Content */}
+      <div className="settings-content">
+        {/* Plans & Billing Tab */}
+        {activeTab === "billing" && (
+          <div className="settings-section">
+            <div className="settings-card">
+              <div className="settings-card-header">
+                <CreditCard size={20} />
+                <h3>Subscription</h3>
+              </div>
+              <p className="settings-card-description">
+                Manage your subscription and billing information.
+              </p>
+              <div className="billing-info">
+                <p className="billing-note">
+                  Visit the web app to manage your subscription, view billing history, and update payment methods.
+                </p>
+                <button 
+                  className="billing-cta-btn"
+                  onClick={() => window.open("https://oscarai.app/settings", "_blank")}
+                >
+                  Open Billing Portal
+                </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          <div className="api-key-section">
-            <label>DeepSeek API Key (optional)</label>
-            <div className="api-key-input">
-              <input
-                type="password"
-                value={userApiKey}
-                onChange={(e) => onApiKeyChange(e.target.value)}
-                placeholder="sk-..."
-              />
-              <button onClick={onSaveApiKey}>Save</button>
+        {/* Vocabulary Tab */}
+        {activeTab === "vocabulary" && (
+          <div className="settings-section">
+            <div className="settings-card">
+              <div className="settings-card-header">
+                <BookOpen size={20} />
+                <h3>Personal Dictionary</h3>
+              </div>
+              <p className="settings-card-description">
+                Manage words and phrases to improve transcription accuracy.
+              </p>
+              <div className="vocabulary-info">
+                <p className="vocabulary-note">
+                  Your vocabulary helps OSCAR recognize custom words, names, and industry-specific terms.
+                </p>
+                <button 
+                  className="vocabulary-cta-btn"
+                  onClick={() => window.open("https://oscarai.app/settings", "_blank")}
+                >
+                  Manage Vocabulary
+                </button>
+              </div>
             </div>
-            <p className="settings-hint">
-              Leave blank to use OSCAR&apos;s AI service. Your key is stored locally.
-            </p>
           </div>
-        </div>
+        )}
 
-        {/* Data Management */}
-        <div className="settings-card danger">
-          <div className="settings-card-header">
-            <Trash2 size={20} />
-            <h3>Data Management</h3>
+        {/* Account Tab */}
+        {activeTab === "account" && (
+          <div className="settings-section">
+            <div className="settings-card">
+              <div className="settings-card-header">
+                <User size={20} />
+                <h3>Profile Information</h3>
+              </div>
+              <p className="settings-card-description">
+                View your account details
+              </p>
+              <div className="account-info">
+                <div className="account-field">
+                  <label>Email Address</label>
+                  <span className="account-value">{userEmail || "Not available"}</span>
+                </div>
+                <p className="account-note">
+                  You signed in with Google. To change your email or password, update your Google account settings.
+                </p>
+              </div>
+            </div>
+
+            <div className="settings-card danger">
+              <div className="settings-card-header">
+                <AlertTriangle size={20} />
+                <h3>Delete Account</h3>
+              </div>
+              <p className="settings-card-description">
+                Permanently delete your account and all associated data
+              </p>
+              <button 
+                className="delete-account-btn"
+                onClick={() => window.open("https://oscarai.app/settings", "_blank")}
+              >
+                Delete Account
+              </button>
+            </div>
           </div>
-          <p className="settings-card-description">
-            Clear local data and reset settings.
-          </p>
-          <button className="clear-data-btn" onClick={onClearData}>
-            Clear All Local Data
-          </button>
-        </div>
+        )}
+
+        {/* Data & Privacy Tab */}
+        {activeTab === "privacy" && (
+          <div className="settings-section">
+            <div className="settings-card">
+              <div className="settings-card-header">
+                <Download size={20} />
+                <h3>Export Your Data</h3>
+              </div>
+              <p className="settings-card-description">
+                Download a copy of all your personal data
+              </p>
+              <div className="export-info">
+                <p className="export-note">
+                  Request an export of your notes, vocabulary, and account information.
+                </p>
+                <button 
+                  className="export-cta-btn"
+                  onClick={() => window.open("https://oscarai.app/settings", "_blank")}
+                >
+                  Request Data Export
+                </button>
+              </div>
+            </div>
+
+            <div className="settings-card">
+              <div className="settings-card-header">
+                <FileText size={20} />
+                <h3>Legal & Compliance</h3>
+              </div>
+              <p className="settings-card-description">
+                Review our terms and policies
+              </p>
+              <div className="legal-links">
+                <a href="https://oscarai.app/privacy" target="_blank" rel="noopener noreferrer" className="legal-link">
+                  Privacy Policy
+                </a>
+                <a href="https://oscarai.app/terms" target="_blank" rel="noopener noreferrer" className="legal-link">
+                  Terms of Service
+                </a>
+                <a href="https://oscarai.app/refund-policy" target="_blank" rel="noopener noreferrer" className="legal-link">
+                  Refund Policy
+                </a>
+              </div>
+            </div>
+
+            <div className="settings-card danger">
+              <div className="settings-card-header">
+                <Trash2 size={20} />
+                <h3>Clear All Data</h3>
+              </div>
+              <p className="settings-card-description">
+                Delete all local data while keeping your account
+              </p>
+              <button className="clear-data-btn" onClick={onClearData}>
+                Clear All Local Data
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

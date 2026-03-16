@@ -1,9 +1,13 @@
 "use client";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 
 export function FloatingNavbar() {
+  const pathname = usePathname();
+  const isAuthPage = pathname === ROUTES.AUTH || pathname === ROUTES.PRICING;
+
   return (
     <nav className="fixed top-0 z-50 w-full ">
       <div className="pt-8 pl-8 pb-4 flex items-center justify-between w-full ">
@@ -13,13 +17,15 @@ export function FloatingNavbar() {
         >
           <div className="relative w-7 h-7 sm:w-9 sm:h-9 flex-shrink-0">
             <Image
-              src="/OSCAR_LIGHT_LOGO.png"
+              src={isAuthPage ? "/OSCAR_LIGHT_LOGO.png" : "/OSCAR_DARK_LOGO.png"}
               alt="OSCAR Logo"
               fill
               className="object-contain"
             />
           </div>
-          <span className="text-lg font-semibold text-gray-900 tracking-tight leading-none truncate">
+          <span className={`text-lg font-semibold tracking-tight leading-none truncate ${
+            isAuthPage ? "text-gray-900" : "text-white"
+          }`}>
             {UI_STRINGS.APP_NAME}
           </span>
         </Link>

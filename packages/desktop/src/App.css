@@ -1838,6 +1838,70 @@ kbd {
   border-top: 1px solid #f1f5f9;
 }
 
+/* Upgrade Card in Sidebar */
+.upgrade-card {
+  background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  color: #ffffff;
+}
+
+.upgrade-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.upgrade-card-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.upgrade-card-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.upgrade-card-description {
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.upgrade-card-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: none;
+  border-radius: 8px;
+  color: #0891b2;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.upgrade-card-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+}
+
 .user-info {
   margin-bottom: 12px;
 }
@@ -3037,6 +3101,173 @@ kbd {
 
 .clear-data-btn:hover {
   background: #b91c1c;
+}
+
+/* Settings Subtabs */
+.settings-subtabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.subtab-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.subtab-btn:hover {
+  background: #f8fafc;
+  color: #475569;
+}
+
+.subtab-btn.active {
+  background: #f0f9ff;
+  border-color: #06b6d4;
+  color: #0891b2;
+}
+
+/* Settings Content */
+.settings-content {
+  min-height: 400px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Billing Section */
+.billing-info,
+.vocabulary-info,
+.export-info {
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.billing-note,
+.vocabulary-note,
+.export-note {
+  font-size: 0.9375rem;
+  color: #64748b;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.billing-cta-btn,
+.vocabulary-cta-btn,
+.export-cta-btn {
+  padding: 12px 24px;
+  background: #0891b2;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.billing-cta-btn:hover,
+.vocabulary-cta-btn:hover,
+.export-cta-btn:hover {
+  background: #0e7490;
+}
+
+/* Account Section */
+.account-info {
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.account-field {
+  margin-bottom: 16px;
+}
+
+.account-field label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.account-value {
+  display: block;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.9375rem;
+  color: #1e293b;
+}
+
+.account-note {
+  font-size: 0.875rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.delete-account-btn {
+  padding: 12px 24px;
+  background: #dc2626;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.delete-account-btn:hover {
+  background: #b91c1c;
+}
+
+/* Legal Links */
+.legal-links {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.legal-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  color: #374151;
+  text-decoration: none;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.legal-link:hover {
+  background: #f1f5f9;
+  color: #0891b2;
+}
+
+.legal-link::after {
+  content: "→";
+  color: #94a3b8;
 }
 
 /* ═════════════════════════════════════════════════════════════════════════════

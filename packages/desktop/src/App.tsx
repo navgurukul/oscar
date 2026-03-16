@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
@@ -78,6 +78,21 @@ function StepIndicator({ currentStep }: { currentStep: "signin" | "permissions" 
   );
 }
 
+// ── Memoized Sparkles Background ───────────────────────────────────────────────
+
+const MemoizedSparkles = memo(() => (
+  <div className="sparkles-container">
+    <SparklesCore
+      background="transparent"
+      minSize={0.4}
+      maxSize={1}
+      particleDensity={100}
+      className="w-full h-full"
+      particleColor="#FFFFFF"
+    />
+  </div>
+));
+
 // ── Cover Showcase ─────────────────────────────────────────────────────────────
 
 function CoverShowcase() {
@@ -93,16 +108,7 @@ function CoverShowcase() {
 
   return (
     <div className="cover-showcase">
-      <div className="sparkles-container">
-        <SparklesCore
-          background="transparent"
-          minSize={0.4}
-          maxSize={1}
-          particleDensity={100}
-          className="w-full h-full"
-          particleColor="#FFFFFF"
-        />
-      </div>
+      <MemoizedSparkles />
 
       {/* Slide 1: Speed */}
       <div className={`cover-slide ${currentSlide === 0 ? 'active' : ''}`}>
@@ -1184,6 +1190,31 @@ function App() {
   // ── Tab state ──────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabType>("record");
 
+  // ── Subscription state ─────────────────────────────────────────────────────
+  const [isProUser, setIsProUser] = useState(false);
+
+  // Fetch subscription status when user changes
+  useEffect(() => {
+    if (!user) return;
+    
+    const fetchSubscription = async () => {
+      try {
+        const { data } = await supabase
+          .from("subscriptions")
+          .select("status")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        
+        setIsProUser(data?.status === "active");
+      } catch (e) {
+        console.error("Failed to fetch subscription:", e);
+        setIsProUser(false);
+      }
+    };
+    
+    fetchSubscription();
+  }, [user]);
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (authLoading) return null;
@@ -1200,6 +1231,7 @@ function App() {
         onTabChange={setActiveTab}
         onSignOut={handleSignOut}
         userEmail={user.email || ""}
+        isProUser={isProUser}
       />
 
       <main className="main-area">
@@ -1273,6 +1305,7 @@ function App() {
                 window.location.reload();
               }
             }}
+            userEmail={user?.email}
           />
         )}
       </main>

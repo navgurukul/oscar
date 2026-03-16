@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { BookOpen, CreditCard, Loader2 } from "lucide-react";
+import { BookOpen, CreditCard, User, Shield, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,6 +27,20 @@ const VocabularySection = dynamic(
 
 const BillingSection = dynamic(
   () => import("@/components/settings/BillingSection"),
+  {
+    loading: () => <SectionSkeleton />,
+  }
+);
+
+const AccountSection = dynamic(
+  () => import("@/components/settings/AccountSection"),
+  {
+    loading: () => <SectionSkeleton />,
+  }
+);
+
+const DataPrivacySection = dynamic(
+  () => import("@/components/settings/DataPrivacySection"),
   {
     loading: () => <SectionSkeleton />,
   }
@@ -59,7 +73,7 @@ export default function SettingsPage() {
     refetch,
   } = useSubscriptionContext();
 
-  const [activeTab, setActiveTab] = useState("vocabulary");
+  const [activeTab, setActiveTab] = useState("billing");
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -83,7 +97,7 @@ export default function SettingsPage() {
         <div className="mb-8 mt-5">
           <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
           <p className="text-gray-400">
-            Manage your vocabulary, subscription, and billing
+            Manage your account, subscription, vocabulary, and privacy settings
           </p>
         </div>
 
@@ -94,8 +108,10 @@ export default function SettingsPage() {
               <SelectValue placeholder="Choose section" />
             </SelectTrigger>
             <SelectContent className="bg-slate-900 border-cyan-700/30 font-bold text-white">
+              <SelectItem value="billing">Plans & Billing</SelectItem>
               <SelectItem value="vocabulary">Vocabulary</SelectItem>
-              <SelectItem value="billing">Billing</SelectItem>
+              <SelectItem value="account">Account</SelectItem>
+              <SelectItem value="privacy">Data & Privacy</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -110,6 +126,13 @@ export default function SettingsPage() {
           {/* Desktop Tab List */}
           <TabsList className="hidden md:flex md:flex-col h-fit w-48 bg-slate-900 border border-cyan-700/30 p-2">
             <TabsTrigger
+              value="billing"
+              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white py-2 font-semibold"
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              Plans & Billing
+            </TabsTrigger>
+            <TabsTrigger
               value="vocabulary"
               className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white py-2 font-semibold"
             >
@@ -117,20 +140,23 @@ export default function SettingsPage() {
               Vocabulary
             </TabsTrigger>
             <TabsTrigger
-              value="billing"
+              value="account"
               className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white py-2 font-semibold"
             >
-              <CreditCard className="w-4 h-4 mr-2" />
-              Billing
+              <User className="w-4 h-4 mr-2" />
+              Account
+            </TabsTrigger>
+            <TabsTrigger
+              value="privacy"
+              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white py-2 font-semibold"
+            >
+              <Shield className="w-4 h-4 mr-2" />
+              Data & Privacy
             </TabsTrigger>
           </TabsList>
 
           {/* Tab Content - Conditional rendering for optimization */}
           <div className="flex-1">
-            {activeTab === "vocabulary" && (
-              <VocabularySection userId={user.id} isProUser={isProUser} />
-            )}
-
             {activeTab === "billing" && (
               <BillingSection
                 status={
@@ -147,6 +173,14 @@ export default function SettingsPage() {
                 onRefetch={refetch}
               />
             )}
+
+            {activeTab === "vocabulary" && (
+              <VocabularySection userId={user.id} isProUser={isProUser} />
+            )}
+
+            {activeTab === "account" && <AccountSection />}
+
+            {activeTab === "privacy" && <DataPrivacySection />}
           </div>
         </Tabs>
       </div>
