@@ -59,19 +59,19 @@ cat << 'EOF'
   "platforms": {
     "darwin-x86_64": {
       "signature": "",
-      "url": "https://www.oscar.app/tauri/oscar_VERSION_x64.dmg"
+      "url": "https://oscar.samyarth.org/tauri/oscar_VERSION_x64.dmg"
     },
     "darwin-aarch64": {
       "signature": "",
-      "url": "https://www.oscar.app/tauri/oscar_VERSION_aarch64.dmg"
+      "url": "https://oscar.samyarth.org/tauri/oscar_VERSION_aarch64.dmg"
     },
     "linux-x86_64": {
       "signature": "",
-      "url": "https://www.oscar.app/tauri/oscar_VERSION_amd64.AppImage"
+      "url": "https://oscar.samyarth.org/tauri/oscar_VERSION_amd64.AppImage"
     },
     "windows-x86_64": {
       "signature": "",
-      "url": "https://www.oscar.app/tauri/oscar_VERSION_x64-setup.exe"
+      "url": "https://oscar.samyarth.org/tauri/oscar_VERSION_x64-setup.exe"
     }
   }
 }

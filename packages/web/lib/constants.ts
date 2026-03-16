@@ -192,6 +192,7 @@ export const ROUTES = {
   SETTINGS: "/settings",
   BILLING: "/billing",
   PRICING: "/pricing",
+  DOWNLOAD: "/download",
 } as const;
 
 /**

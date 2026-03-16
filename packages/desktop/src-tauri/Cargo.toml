@@ -1,12 +1,12 @@
 [package]
-name = "voiceapp"
+name = "oscar"
 version = "0.1.0"
 description = "Voice to Text Desktop App"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "voiceapp_lib"
+name = "oscar_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
