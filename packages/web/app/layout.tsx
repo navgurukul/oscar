@@ -33,11 +33,15 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const isAuthenticated = !!session;
   const isLandingPage = pathname === "/";
   const isSettingsPage = pathname === "/settings";
+  const isDownloadPage = pathname === "/download";
   
   // Footer visibility rules:
   // 1. Unauthenticated on landing page -> show footer
   // 2. Authenticated only on settings page -> show footer
   const shouldShowFooter = (!isAuthenticated && isLandingPage) || (isAuthenticated && isSettingsPage);
+  
+  // Hide recording button on download page
+  const shouldShowRecordingButton = !isDownloadPage;
   
 
   return (
@@ -46,9 +50,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       <AuthEdgeButton />
       {children}
       {shouldShowFooter && <div className="mt-auto"><Footer /></div>}
-      <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
-        <HomeRecordingButton />
-      </div>
+      {shouldShowRecordingButton && (
+        <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
+          <HomeRecordingButton />
+        </div>
+      )}
       <Toaster />
     </div>
   );

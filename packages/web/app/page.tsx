@@ -8,7 +8,7 @@ import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain } from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency } from "@/lib/constants";
 import type { BillingCycle } from "@/lib/types/subscription.types";
@@ -95,11 +95,12 @@ export default function Home() {
             {!session && (
               <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
                 <Button
-                  onClick={handleViewPricing}
+                  onClick={() => router.push("/download")}
                   size="lg"
                   className="bg-cyan-500 hover:bg-cyan-600 text-white px-8 py-6 text-lg"
                 >
-                  Start Free - No Credit Card
+                  <Download className="w-5 h-5 mr-2" />
+                  Download
                 </Button>
                 <Button
                   onClick={() => {
