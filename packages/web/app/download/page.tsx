@@ -7,12 +7,14 @@ import { Download, Apple, Monitor, Laptop, Check } from "lucide-react";
 // Platform type definition
 type Platform = "mac-intel" | "mac-silicon" | "windows" | "linux" | null;
 
-// Download configuration
+// Download configuration - GitHub Releases
+const GITHUB_RELEASE_BASE = "https://github.com/navgurukul/oscar/releases/download/v0.1.0";
+
 const DOWNLOAD_URLS = {
-  "mac-intel": "/tauri/oscar_0.1.0_x64.dmg",
-  "mac-silicon": "/tauri/oscar_0.1.0_aarch64.dmg",
-  windows: "/tauri/oscar_0.1.0_x64-setup.exe",
-  linux: "/tauri/oscar_0.1.0_amd64.AppImage",
+  "mac-intel": `${GITHUB_RELEASE_BASE}/oscar_0.1.0_x64.dmg`,
+  "mac-silicon": `${GITHUB_RELEASE_BASE}/oscar_0.1.0_aarch64.dmg`,
+  windows: `${GITHUB_RELEASE_BASE}/oscar_0.1.0_x64-setup.exe`,
+  linux: `${GITHUB_RELEASE_BASE}/oscar_0.1.0_amd64.AppImage`,
 };
 
 const PLATFORM_INFO = {
@@ -96,12 +98,7 @@ export default function DownloadPage() {
   const triggerDownload = (platform: Platform) => {
     if (!platform) return;
     const url = DOWNLOAD_URLS[platform];
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = url.split("/").pop() || "";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    window.open(url, "_blank");
   };
 
   const handleManualDownload = () => {
