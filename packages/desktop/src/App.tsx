@@ -10,8 +10,7 @@ import { SparklesCore } from "@/components/ui/sparkles";
 import { Cover } from "@/components/ui/cover";
 import { Navigation } from "./components/Navigation";
 import { RecordTab } from "./components/RecordTab";
-import { VocabularySection } from "./components/VocabularySection";
-import { BillingSection } from "./components/BillingSection";
+
 import { SettingsTab } from "./components/SettingsTab";
 import "./App.css";
 
@@ -1228,8 +1227,7 @@ function App() {
     <div className="app-modern">
       <Navigation
         activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onSignOut={handleSignOut}
+        onTabChange={(tab) => setActiveTab(tab)}
         userEmail={user.email || ""}
         isProUser={isProUser}
       />
@@ -1262,14 +1260,6 @@ function App() {
               saveSetting("tonePreset", t);
             }}
           />
-        )}
-
-        {activeTab === "vocabulary" && (
-          <VocabularySection userId={user.id} />
-        )}
-
-        {activeTab === "billing" && (
-          <BillingSection userId={user.id} userEmail={user.email || ""} />
         )}
 
         {activeTab === "settings" && (
@@ -1306,6 +1296,7 @@ function App() {
               }
             }}
             userEmail={user?.email}
+            onSignOut={handleSignOut}
           />
         )}
       </main>

@@ -13,6 +13,7 @@
 - [label.tsx](file://packages/web/components/ui/label.tsx)
 - [switch.tsx](file://packages/web/components/ui/switch.tsx)
 - [tooltip.tsx](file://packages/web/components/ui/tooltip.tsx)
+- [alert-dialog.tsx](file://packages/web/components/ui/alert-dialog.tsx)
 - [lib.ts](file://packages/web/components/ui/lib.ts)
 - [Navigation.tsx](file://packages/desktop/src/components/Navigation.tsx)
 - [RecordTab.tsx](file://packages/desktop/src/components/RecordTab.tsx)
@@ -26,14 +27,11 @@
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive documentation for new desktop application components
-- Integrated Navigation sidebar component with tab-based routing
-- Documented RecordTab for audio recording and transcription functionality
-- Added VocabularySection for custom vocabulary management
-- Documented BillingSection for subscription and usage tracking
-- Added SettingsTab with multi-panel configuration interface
-- Updated component architecture to include desktop-specific patterns
-- Enhanced design system integration with new component specifications
+- Added comprehensive documentation for the new AlertDialog component built on Radix UI primitives
+- Integrated AlertDialog into the core component catalog with complete API coverage
+- Documented modal dialog functionality for confirmation dialogs and user verification flows
+- Added usage examples demonstrating destructive action patterns and confirmation workflows
+- Updated component architecture to include comprehensive modal dialog patterns
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -50,7 +48,7 @@
 12. [Appendices](#appendices)
 
 ## Introduction
-This document describes OSCAR's UI component library, focusing on reusable React components and the underlying design system. The library emphasizes composability, accessibility, and theme consistency using Radix UI primitives and Tailwind CSS. It covers the component catalog (buttons, inputs, cards, selects, textareas), supporting form field utilities, shared layout components (floating navbar and footer), and new desktop application components including Navigation, RecordTab, VocabularySection, BillingSection, and SettingsTab. Guidance is provided for responsive design, accessibility, theming, animations, customization, and integration patterns across both web and desktop applications.
+This document describes OSCAR's UI component library, focusing on reusable React components and the underlying design system. The library emphasizes composability, accessibility, and theme consistency using Radix UI primitives and Tailwind CSS. It covers the component catalog (buttons, inputs, cards, selects, textareas, alert dialogs), supporting form field utilities, shared layout components (floating navbar and footer), and new desktop application components including Navigation, RecordTab, VocabularySection, BillingSection, and SettingsTab. Guidance is provided for responsive design, accessibility, theming, animations, customization, and integration patterns across both web and desktop applications.
 
 ## Project Structure
 The UI components are organized under components/ui and components/shared for web, with dedicated desktop components in packages/desktop/src/components. The desktop application includes specialized components for audio recording, vocabulary management, billing, and settings. A centralized design system configuration exists in Tailwind CSS and global styles with utilities for class merging and component composition.
@@ -69,6 +67,7 @@ FLD["field.tsx"]
 LBL["label.tsx"]
 SW["switch.tsx"]
 TIP["tooltip.tsx"]
+AD["alert-dialog.tsx"]
 end
 subgraph "Desktop Components"
 NAV["Navigation.tsx"]
@@ -93,6 +92,7 @@ FLD --> LIB
 LBL --> LIB
 SW --> LIB
 TIP --> LIB
+AD --> LIB
 NAV --> LIB
 RT --> LIB
 VS --> LIB
@@ -108,6 +108,7 @@ FLD --> TW
 LBL --> TW
 SW --> TW
 TIP --> TW
+AD --> TW
 NAV --> TW
 RT --> TW
 VS --> TW
@@ -128,6 +129,7 @@ CSS --> TW
 - [label.tsx:1-27](file://packages/web/components/ui/label.tsx#L1-L27)
 - [switch.tsx:1-30](file://packages/web/components/ui/switch.tsx#L1-L30)
 - [tooltip.tsx:1-33](file://packages/web/components/ui/tooltip.tsx#L1-L33)
+- [alert-dialog.tsx:1-142](file://packages/web/components/ui/alert-dialog.tsx#L1-L142)
 - [Navigation.tsx:1-62](file://packages/desktop/src/components/Navigation.tsx#L1-L62)
 - [RecordTab.tsx:1-177](file://packages/desktop/src/components/RecordTab.tsx#L1-L177)
 - [VocabularySection.tsx:1-323](file://packages/desktop/src/components/VocabularySection.tsx#L1-L323)
@@ -149,6 +151,7 @@ CSS --> TW
 - [label.tsx:1-27](file://packages/web/components/ui/label.tsx#L1-L27)
 - [switch.tsx:1-30](file://packages/web/components/ui/switch.tsx#L1-L30)
 - [tooltip.tsx:1-33](file://packages/web/components/ui/tooltip.tsx#L1-L33)
+- [alert-dialog.tsx:1-142](file://packages/web/components/ui/alert-dialog.tsx#L1-L142)
 - [Navigation.tsx:1-62](file://packages/desktop/src/components/Navigation.tsx#L1-L62)
 - [RecordTab.tsx:1-177](file://packages/desktop/src/components/RecordTab.tsx#L1-L177)
 - [VocabularySection.tsx:1-323](file://packages/desktop/src/components/VocabularySection.tsx#L1-L323)
@@ -219,6 +222,16 @@ This section documents the primary UI components and their capabilities, props, 
   - Animations: fade and slide transitions via data-[state] and data-[side]
   - Example usage: see [tooltip.tsx:8-32](file://packages/web/components/ui/tooltip.tsx#L8-L32)
 
+- **AlertDialog (Radix UI)**
+  - **Updated** Added comprehensive modal dialog functionality for confirmation dialogs and user verification flows
+  - Primitives: Root, Trigger, Portal, Overlay, Content, Header, Footer, Title, Description, Action, Cancel
+  - Features: backdrop overlay, centered modal, smooth animations, accessible focus management
+  - Props: Content accepts className; Action and Cancel inherit buttonVariants; Title/Description support text styling
+  - Animations: fade and zoom transitions via data-[state] attributes
+  - Accessibility: Modal semantics, focus trapping, escape key handling, ARIA attributes
+  - Use cases: Confirmation dialogs, destructive actions, user verification, critical warnings
+  - Example usage: see [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127)
+
 - **Shared Layout Components**
   - Floating Navbar: fixed top bar with logo and branding
   - Footer: legal links and copyright
@@ -234,6 +247,7 @@ This section documents the primary UI components and their capabilities, props, 
 - [label.tsx:13-26](file://packages/web/components/ui/label.tsx#L13-L26)
 - [switch.tsx:8-29](file://packages/web/components/ui/switch.tsx#L8-L29)
 - [tooltip.tsx:8-32](file://packages/web/components/ui/tooltip.tsx#L8-L32)
+- [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127)
 - [FloatingNavbar.tsx:6-30](file://packages/web/components/shared/FloatingNavbar.tsx#L6-L30)
 - [Footer.tsx:4-39](file://packages/web/components/shared/Footer.tsx#L4-L39)
 
@@ -434,6 +448,7 @@ CSSROOT["globals.css<br/>CSS variables, base styles, layers"]
 BTN["Button<br/>cva variants + sizes"]
 SEL["Select<br/>Radix UI + icons"]
 FLD["Field<br/>Form composition utilities"]
+AD["AlertDialog<br/>Confirmation dialogs"]
 NAV["Navigation<br/>Sidebar + routing"]
 RT["RecordTab<br/>Audio + transcription"]
 VS["VocabularySection<br/>CRUD + limits"]
@@ -442,6 +457,7 @@ STS["SettingsTab<br/>Multi-panel config"]
 CN --> BTN
 CN --> SEL
 CN --> FLD
+CN --> AD
 CN --> NAV
 CN --> RT
 CN --> VS
@@ -450,6 +466,7 @@ CN --> STS
 TWCFG --> BTN
 TWCFG --> SEL
 TWCFG --> FLD
+TWCFG --> AD
 TWCFG --> NAV
 TWCFG --> RT
 TWCFG --> VS
@@ -465,6 +482,7 @@ CSSROOT --> TWCFG
 - [button.tsx:7-49](file://packages/web/components/ui/button.tsx#L7-L49)
 - [select.tsx:73-98](file://packages/web/components/ui/select.tsx#L73-L98)
 - [field.tsx:57-79](file://packages/web/components/ui/field.tsx#L57-L79)
+- [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127)
 - [Navigation.tsx:13-19](file://packages/desktop/src/components/Navigation.tsx#L13-L19)
 - [RecordTab.tsx:23-39](file://packages/desktop/src/components/RecordTab.tsx#L23-L39)
 - [VocabularySection.tsx:19-40](file://packages/desktop/src/components/VocabularySection.tsx#L19-L40)
@@ -502,6 +520,41 @@ Button --> buttonVariants : "uses"
 **Section sources**
 - [button.tsx:7-49](file://packages/web/components/ui/button.tsx#L7-L49)
 - [button.tsx:51-73](file://packages/web/components/ui/button.tsx#L51-L73)
+
+### AlertDialog Component
+- **Implementation pattern**: Radix UI AlertDialog primitives with Tailwind CSS styling
+- **Primitives**: Root, Trigger, Portal, Overlay, Content, Header, Footer, Title, Description, Action, Cancel
+- **State management**: Open/close state via data-[state] attributes; automatic focus management
+- **Animations**: Fade and zoom transitions; slide-in/slide-out effects
+- **Accessibility**: Modal semantics, focus trapping, escape key handling, ARIA attributes
+- **Integration**: Action buttons inherit buttonVariants for consistent styling
+- **Usage patterns**: Confirmation dialogs, destructive actions, user verification flows
+
+```mermaid
+sequenceDiagram
+participant U as "User"
+participant AD as "AlertDialog"
+participant A as "Action Button"
+participant C as "Cancel Button"
+U->>AD : Click Trigger
+AD->>AD : Open Dialog (data-state=open)
+AD->>A : Action Button (destructive)
+AD->>C : Cancel Button (outline)
+U->>A : Click Action
+A->>AD : Close Dialog
+AD->>U : Execute Action
+U->>C : Click Cancel
+C->>AD : Close Dialog
+AD->>U : No Action Taken
+```
+
+**Diagram sources**
+- [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127)
+- [alert-dialog.tsx:130-141](file://packages/web/components/ui/alert-dialog.tsx#L130-L141)
+
+**Section sources**
+- [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127)
+- [alert-dialog.tsx:130-141](file://packages/web/components/ui/alert-dialog.tsx#L130-L141)
 
 ### Navigation Component
 - **Implementation pattern**: icon-driven sidebar with active state management
@@ -642,6 +695,12 @@ The desktop application follows specific integration patterns for complex workfl
 - Each tab corresponds to a specific component (RecordTab, VocabularySection, BillingSection, SettingsTab)
 - User authentication state affects available navigation options
 
+### AlertDialog Integration Patterns
+- **Confirmation dialogs**: Use AlertDialog for destructive actions like account deletion
+- **User verification**: Implement verification flows before critical operations
+- **Consistent styling**: Action buttons inherit buttonVariants for uniform appearance
+- **Accessibility**: Proper focus management and ARIA attributes maintained
+
 ### State Management Patterns
 - **Local state**: Simple UI state (active tabs, form inputs)
 - **Global state**: Complex application state (user data, subscription info)
@@ -656,6 +715,7 @@ The desktop application follows specific integration patterns for complex workfl
 
 **Section sources**
 - [Navigation.tsx:13-19](file://packages/desktop/src/components/Navigation.tsx#L13-L19)
+- [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127)
 - [RecordTab.tsx:23-39](file://packages/desktop/src/components/RecordTab.tsx#L23-L39)
 - [VocabularySection.tsx:19-40](file://packages/desktop/src/components/VocabularySection.tsx#L19-L40)
 - [BillingSection.tsx:28-43](file://packages/desktop/src/components/BillingSection.tsx#L28-L43)
@@ -665,7 +725,7 @@ The desktop application follows specific integration patterns for complex workfl
 - **Component dependencies**
   - All UI components depend on cn() from lib.ts for class merging
   - Tailwind utilities derive from tailwind.config.js and globals.css
-  - Radix UI primitives power Select, Tooltip, Switch, and Label
+  - Radix UI primitives power Select, Tooltip, Switch, Label, and AlertDialog
   - Desktop components integrate with external libraries (Lucide icons, Tauri plugins)
 - **Desktop-specific dependencies**
   - Supabase for database operations
@@ -690,6 +750,7 @@ FLD["field.tsx"]
 LBL["label.tsx"]
 SW["switch.tsx"]
 TIP["tooltip.tsx"]
+AD["alert-dialog.tsx"]
 NAV["Navigation.tsx"]
 RT["RecordTab.tsx"]
 VS["VocabularySection.tsx"]
@@ -704,6 +765,7 @@ LIB --> FLD
 LIB --> LBL
 LIB --> SW
 LIB --> TIP
+LIB --> AD
 LIB --> NAV
 LIB --> RT
 LIB --> VS
@@ -718,6 +780,7 @@ TW --> FLD
 TW --> LBL
 TW --> SW
 TW --> TIP
+TW --> AD
 TW --> NAV
 TW --> RT
 TW --> VS
@@ -743,6 +806,7 @@ STS --> TAURI
 - [label.tsx](file://packages/web/components/ui/label.tsx#L7)
 - [switch.tsx](file://packages/web/components/ui/switch.tsx#L6)
 - [tooltip.tsx](file://packages/web/components/ui/tooltip.tsx#L6)
+- [alert-dialog.tsx](file://packages/web/components/ui/alert-dialog.tsx#L4)
 - [Navigation.tsx:1-2](file://packages/desktop/src/components/Navigation.tsx#L1-L2)
 - [RecordTab.tsx](file://packages/desktop/src/components/RecordTab.tsx#L1)
 - [VocabularySection.tsx](file://packages/desktop/src/components/VocabularySection.tsx#L3)
@@ -762,6 +826,7 @@ STS --> TAURI
 - [label.tsx](file://packages/web/components/ui/label.tsx#L7)
 - [switch.tsx](file://packages/web/components/ui/switch.tsx#L6)
 - [tooltip.tsx](file://packages/web/components/ui/tooltip.tsx#L6)
+- [alert-dialog.tsx](file://packages/web/components/ui/alert-dialog.tsx#L4)
 - [Navigation.tsx:1-2](file://packages/desktop/src/components/Navigation.tsx#L1-L2)
 - [RecordTab.tsx](file://packages/desktop/src/components/RecordTab.tsx#L1)
 - [VocabularySection.tsx](file://packages/desktop/src/components/VocabularySection.tsx#L3)
@@ -777,6 +842,7 @@ STS --> TAURI
 - **Optimize database queries** in desktop components (batch operations, caching)
 - **Implement proper loading states** for async operations (vocabulary, billing data)
 - **Use memoization** for expensive calculations (usage percentages, date formatting)
+- **AlertDialog animations**: Smooth fade and zoom transitions; consider disabling for low-power devices
 
 ## Troubleshooting Guide
 - **Button disabled state not working**
@@ -791,6 +857,15 @@ STS --> TAURI
 - **Tooltip not appearing**
   - Wrap content with TooltipProvider and ensure TooltipTrigger is used
   - Reference: [tooltip.tsx:8-32](file://packages/web/components/ui/tooltip.tsx#L8-L32)
+- **AlertDialog not opening**
+  - Verify AlertDialogTrigger is wrapped around actionable element
+  - Check that Root component wraps the entire dialog structure
+  - Ensure Portal is rendering in DOM
+  - Reference: [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127)
+- **AlertDialog action buttons not styled**
+  - Confirm Action and Cancel components inherit buttonVariants
+  - Verify variant prop is passed correctly
+  - Reference: [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127)
 - **Navigation tab not changing**
   - Verify onTabChange handler is properly passed and called
   - Check activeTab prop binding
@@ -820,6 +895,7 @@ STS --> TAURI
 - [select.tsx:70-99](file://packages/web/components/ui/select.tsx#L70-L99)
 - [field.tsx:186-231](file://packages/web/components/ui/field.tsx#L186-L231)
 - [tooltip.tsx:8-32](file://packages/web/components/ui/tooltip.tsx#L8-L32)
+- [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127)
 - [Navigation.tsx:30-46](file://packages/desktop/src/components/Navigation.tsx#L30-L46)
 - [RecordTab.tsx:68-72](file://packages/desktop/src/components/RecordTab.tsx#L68-L72)
 - [VocabularySection.tsx:36-71](file://packages/desktop/src/components/VocabularySection.tsx#L36-L71)
@@ -829,7 +905,7 @@ STS --> TAURI
 - [tailwind.config.js:22-74](file://tailwind.config.js#L22-L74)
 
 ## Conclusion
-OSCAR's UI component library combines Radix UI primitives with Tailwind CSS to deliver accessible, theme-consistent, and customizable components across both web and desktop applications. The design system emphasizes composability, clear state handling, and responsive behavior. The addition of desktop-specific components (Navigation, RecordTab, VocabularySection, BillingSection, SettingsTab) demonstrates the library's extensibility and ability to handle complex application workflows. By leveraging the provided utilities and patterns, teams can build consistent interfaces while maintaining flexibility for customization and advanced use cases in both environments.
+OSCAR's UI component library combines Radix UI primitives with Tailwind CSS to deliver accessible, theme-consistent, and customizable components across both web and desktop applications. The design system emphasizes composability, clear state handling, and responsive behavior. The addition of the AlertDialog component significantly enhances the library's capability to handle confirmation dialogs and user verification flows with comprehensive accessibility and animation support. The integration of desktop-specific components (Navigation, RecordTab, VocabularySection, BillingSection, SettingsTab) demonstrates the library's extensibility and ability to handle complex application workflows. By leveraging the provided utilities and patterns, teams can build consistent interfaces while maintaining flexibility for customization and advanced use cases in both environments.
 
 ## Appendices
 
@@ -838,49 +914,55 @@ OSCAR's UI component library combines Radix UI primitives with Tailwind CSS to d
 - **Prefer container queries and @media utilities sparingly**; rely on component variants when possible
 - **Test breakpoints across mobile, tablet, and desktop layouts**
 - **Desktop components should adapt to different screen sizes** while maintaining functionality
+- **AlertDialog**: Centered modal with max-width constraints; responsive padding and spacing
 
 ### Accessibility Compliance
 - **Buttons**: ensure focus-visible rings and disabled states
 - **Inputs/Labels**: pair labels with inputs for screen readers
 - **Select/Tooltip/Switch**: use Radix UI primitives for native keyboard and ARIA support
+- **AlertDialog**: modal semantics, focus trapping, escape key handling, ARIA attributes
 - **Navigation**: ensure keyboard navigation and screen reader compatibility
 - **RecordTab**: provide proper ARIA labels for recording status
 - **VocabularySection**: ensure form validation feedback is accessible
 - **BillingSection**: provide clear usage information for assistive technologies
 - **SettingsTab**: ensure proper heading hierarchy and navigation landmarks
-- References: [button.tsx:8-49](file://packages/web/components/ui/button.tsx#L8-L49), [label.tsx:13-26](file://packages/web/components/ui/label.tsx#L13-L26), [select.tsx:15-33](file://packages/web/components/ui/select.tsx#L15-L33), [tooltip.tsx:14-32](file://packages/web/components/ui/tooltip.tsx#L14-L32), [switch.tsx:12-26](file://packages/web/components/ui/switch.tsx#L12-L26), [Navigation.tsx:13-19](file://packages/desktop/src/components/Navigation.tsx#L13-L19), [RecordTab.tsx:23-39](file://packages/desktop/src/components/RecordTab.tsx#L23-L39), [VocabularySection.tsx:19-40](file://packages/desktop/src/components/VocabularySection.tsx#L19-L40), [BillingSection.tsx:28-43](file://packages/desktop/src/components/BillingSection.tsx#L28-L43), [SettingsTab.tsx:25-42](file://packages/desktop/src/components/SettingsTab.tsx#L25-L42)
+- References: [button.tsx:8-49](file://packages/web/components/ui/button.tsx#L8-L49), [label.tsx:13-26](file://packages/web/components/ui/label.tsx#L13-L26), [select.tsx:15-33](file://packages/web/components/ui/select.tsx#L15-L33), [tooltip.tsx:14-32](file://packages/web/components/ui/tooltip.tsx#L14-L32), [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127), [Navigation.tsx:13-19](file://packages/desktop/src/components/Navigation.tsx#L13-L19), [RecordTab.tsx:23-39](file://packages/desktop/src/components/RecordTab.tsx#L23-L39), [VocabularySection.tsx:19-40](file://packages/desktop/src/components/VocabularySection.tsx#L19-L40), [BillingSection.tsx:28-43](file://packages/desktop/src/components/BillingSection.tsx#L28-L43), [SettingsTab.tsx:25-42](file://packages/desktop/src/components/SettingsTab.tsx#L25-L42)
 
 ### Theming Support
 - **Centralized tokens via CSS variables** in :root and .dark
 - **Tailwind theme.extend mirrors CSS variables** for color and radius scales
 - **Use variant props to align with theme**; avoid hardcoding colors outside tokens
+- **AlertDialog Action buttons inherit buttonVariants** for consistent styling
 - **Desktop components should respect system theme preferences**
 - **Consistent iconography using Lucide React** across all components
-- References: [globals.css:65-117](file://app/globals.css#L65-L117), [tailwind.config.js:22-74](file://tailwind.config.js#L22-L74)
+- References: [globals.css:65-117](file://app/globals.css#L65-L117), [tailwind.config.js:22-74](file://tailwind.config.js#L22-L74), [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127)
 
 ### Animation and Transitions
 - **Accordion-like transitions defined via keyframes** and animation shortcuts
 - **Tooltip and Select use data-[state] and data-[side]** for smooth enter/exit animations
+- **AlertDialog uses fade and zoom transitions** with slide-in/slide-out effects
 - **RecordTab includes spin animations** for loading states
 - **Navigation provides smooth active state transitions**
 - **Desktop components should balance visual feedback with performance**
-- References: [tailwind.config.js:75-96](file://tailwind.config.js#L75-L96), [select.tsx:73-98](file://packages/web/components/ui/select.tsx#L73-L98), [tooltip.tsx:17-29](file://packages/web/components/ui/tooltip.tsx#L17-L29), [RecordTab.tsx:74-76](file://packages/desktop/src/components/RecordTab.tsx#L74-L76), [Navigation.tsx:35-42](file://packages/desktop/src/components/Navigation.tsx#L35-L42)
+- References: [tailwind.config.js:75-96](file://tailwind.config.js#L75-L96), [select.tsx:73-98](file://packages/web/components/ui/select.tsx#L73-L98), [tooltip.tsx:17-29](file://packages/web/components/ui/tooltip.tsx#L17-L29), [alert-dialog.tsx:30-46](file://packages/web/components/ui/alert-dialog.tsx#L30-L46), [RecordTab.tsx:74-76](file://packages/desktop/src/components/RecordTab.tsx#L74-L76), [Navigation.tsx:35-42](file://packages/desktop/src/components/Navigation.tsx#L35-L42)
 
 ### Cross-Browser Compatibility
 - **Use Tailwind utilities and Radix UI primitives** for consistent behavior across browsers
 - **Validate focus styles and keyboard interactions** on target browsers
 - **Avoid vendor-prefixed CSS**; rely on Tailwind's autoprefixing via PostCSS
 - **Desktop application requires Tauri runtime compatibility**
+- **AlertDialog animations**: Smooth transitions supported across modern browsers
 - **External integrations should handle browser differences gracefully**
 
 ### Integration Patterns
 - **Compose Field with Input/Select/Textarea/Label** for forms
-- **Use Button variants to communicate intent**; pair destructive actions with confirmation
+- **Use Button variants to communicate intent**; pair destructive actions with AlertDialog
 - **Combine Tooltip with actionable elements** for contextual help
+- **AlertDialog for destructive actions**: Confirmation dialogs with proper styling inheritance
 - **Desktop components should follow separation of concerns** between UI and business logic
 - **Use callback patterns for state management** across component boundaries
 - **Implement proper error handling** for external API integrations
-- References: [field.tsx:10-244](file://packages/web/components/ui/field.tsx#L10-L244), [button.tsx:10-48](file://packages/web/components/ui/button.tsx#L10-L48), [tooltip.tsx:14-32](file://packages/web/components/ui/tooltip.tsx#L14-L32), [Navigation.tsx:13-19](file://packages/desktop/src/components/Navigation.tsx#L13-L19), [RecordTab.tsx:23-39](file://packages/desktop/src/components/RecordTab.tsx#L23-L39), [VocabularySection.tsx:19-40](file://packages/desktop/src/components/VocabularySection.tsx#L19-L40), [BillingSection.tsx:28-43](file://packages/desktop/src/components/BillingSection.tsx#L28-L43), [SettingsTab.tsx:25-42](file://packages/desktop/src/components/SettingsTab.tsx#L25-L42)
+- References: [field.tsx:10-244](file://packages/web/components/ui/field.tsx#L10-L244), [button.tsx:10-48](file://packages/web/components/ui/button.tsx#L10-L48), [tooltip.tsx:14-32](file://packages/web/components/ui/tooltip.tsx#L14-L32), [alert-dialog.tsx:101-127](file://packages/web/components/ui/alert-dialog.tsx#L101-L127), [Navigation.tsx:13-19](file://packages/desktop/src/components/Navigation.tsx#L13-L19), [RecordTab.tsx:23-39](file://packages/desktop/src/components/RecordTab.tsx#L23-L39), [VocabularySection.tsx:19-40](file://packages/desktop/src/components/VocabularySection.tsx#L19-L40), [BillingSection.tsx:28-43](file://packages/desktop/src/components/BillingSection.tsx#L28-L43), [SettingsTab.tsx:25-42](file://packages/desktop/src/components/SettingsTab.tsx#L25-L42)
 
 ### Desktop-Specific Considerations
 - **State persistence** across application restarts
@@ -890,3 +972,4 @@ OSCAR's UI component library combines Radix UI primitives with Tailwind CSS to d
 - **External service coordination** with web application features
 - **Performance optimization** for real-time audio processing
 - **Security considerations** for user data and API keys
+- **AlertDialog accessibility**: Proper focus management and ARIA attributes for confirmation flows

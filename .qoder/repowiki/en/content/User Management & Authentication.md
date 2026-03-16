@@ -12,33 +12,38 @@
 - [components/shared/AuthEdgeButton.tsx](file://packages/web/components/shared/AuthEdgeButton.tsx)
 - [app/layout.tsx](file://packages/web/app/layout.tsx)
 - [app/settings/page.tsx](file://packages/web/app/settings/page.tsx)
+- [components/settings/AccountSection.tsx](file://packages/web/components/settings/AccountSection.tsx)
+- [components/settings/BillingSection.tsx](file://packages/web/components/settings/BillingSection.tsx)
+- [components/settings/DataPrivacySection.tsx](file://packages/web/components/settings/DataPrivacySection.tsx)
+- [components/settings/VocabularySection.tsx](file://packages/web/components/settings/VocabularySection.tsx)
 - [lib/constants.ts](file://packages/web/lib/constants.ts)
 - [tauri.conf.json](file://packages/desktop/src-tauri/tauri.conf.json)
 </cite>
 
 ## Update Summary
 **Changes Made**
-- Added comprehensive documentation for desktop deep link OAuth flow
-- Updated authentication architecture to include hybrid web/desktop authentication
-- Enhanced OAuth callback route documentation with desktop-specific handling
-- Added Tauri deep-link plugin configuration details
-- Updated authentication flow diagrams to reflect desktop integration
+- Added comprehensive documentation for the new AccountSection component with profile management, password management, and secure account deletion processes
+- Enhanced settings page integration with dynamic loading for account management features
+- Updated authentication architecture to include dedicated account management workflows
+- Added detailed account deletion process documentation with security considerations
+- Enhanced user data management capabilities with profile information display and password management guidance
 
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
-5. [Desktop Deep Link Integration](#desktop-deep-link-integration)
-6. [Detailed Component Analysis](#detailed-component-analysis)
-7. [Dependency Analysis](#dependency-analysis)
-8. [Performance Considerations](#performance-considerations)
-9. [Troubleshooting Guide](#troubleshooting-guide)
-10. [Migration and Best Practices](#migration-and-best-practices)
-11. [Conclusion](#conclusion)
+5. [Enhanced Account Management System](#enhanced-account-management-system)
+6. [Desktop Deep Link Integration](#desktop-deep-link-integration)
+7. [Detailed Component Analysis](#detailed-component-analysis)
+8. [Dependency Analysis](#dependency-analysis)
+9. [Performance Considerations](#performance-considerations)
+10. [Troubleshooting Guide](#troubleshooting-guide)
+11. [Migration and Best Practices](#migration-and-best-practices)
+12. [Conclusion](#conclusion)
 
 ## Introduction
-This document explains the user management and authentication system built with Supabase and integrated into a Next.js application with hybrid support for both web and desktop contexts. The system now features substantial improvements with a deep link OAuth flow specifically designed for desktop applications using Tauri, enabling seamless authentication across platforms. It covers client-side and server-side Supabase configurations, OAuth-based authentication flows, session handling, middleware-driven automatic session refresh, and authentication protection. The documentation includes the authentication edge button, social login integration, desktop deep link handling, security considerations (including JWT handling and session expiration), troubleshooting guidance, performance optimization, and migration notes.
+This document explains the user management and authentication system built with Supabase and integrated into a Next.js application with hybrid support for both web and desktop contexts. The system now features substantial improvements with a comprehensive account management system including profile management, password management guidance, and secure account deletion processes. It covers client-side and server-side Supabase configurations, OAuth-based authentication flows, session handling, middleware-driven automatic session refresh, and authentication protection. The documentation includes the authentication edge button, social login integration, desktop deep link handling, enhanced account management workflows, security considerations (including JWT handling and session expiration), troubleshooting guidance, performance optimization, and migration notes.
 
 ## Project Structure
 The authentication system spans client-side UI, server-side routes, Supabase client abstractions, middleware, and desktop integration. Key areas include:
@@ -48,6 +53,7 @@ The authentication system spans client-side UI, server-side routes, Supabase cli
 - Middleware for session refresh and route protection
 - Authentication context for React components
 - Authentication edge button for quick access
+- Enhanced settings page with dedicated account management sections
 - Tauri deep-link plugin configuration for desktop integration
 
 ```mermaid
@@ -57,32 +63,43 @@ A["Auth UI<br/>packages/web/app/auth/page.tsx"]
 B["Auth Context<br/>packages/web/lib/contexts/AuthContext.tsx"]
 C["Edge Button<br/>packages/web/components/shared/AuthEdgeButton.tsx"]
 D["Layout<br/>packages/web/app/layout.tsx"]
+E["Settings Page<br/>packages/web/app/settings/page.tsx"]
+end
+subgraph "Account Management"
+F["Account Section<br/>packages/web/components/settings/AccountSection.tsx"]
+G["Billing Section<br/>packages/web/components/settings/BillingSection.tsx"]
+H["Data Privacy Section<br/>packages/web/components/settings/DataPrivacySection.tsx"]
+I["Vocabulary Section<br/>packages/web/components/settings/VocabularySection.tsx"]
 end
 subgraph "Supabase Abstractions"
-E["Browser Client<br/>packages/web/lib/supabase/client.ts"]
-F["Server Client<br/>packages/web/lib/supabase/server.ts"]
+J["Browser Client<br/>packages/web/lib/supabase/client.ts"]
+K["Server Client<br/>packages/web/lib/supabase/server.ts"]
 end
 subgraph "Middleware"
-G["Next.js Middleware<br/>packages/web/middleware.ts"]
-H["Session Update<br/>packages/web/lib/supabase/middleware.ts"]
+L["Next.js Middleware<br/>packages/web/middleware.ts"]
+M["Session Update<br/>packages/web/lib/supabase/middleware.ts"]
 end
 subgraph "Server Route"
-I["OAuth Callback<br/>packages/web/app/auth/callback/route.ts"]
+N["OAuth Callback<br/>packages/web/app/auth/callback/route.ts"]
 end
 subgraph "Desktop Integration"
-J["Tauri Config<br/>packages/desktop/src-tauri/tauri.conf.json"]
-K["Deep Link Handler<br/>Desktop App"]
+O["Tauri Config<br/>packages/desktop/src-tauri/tauri.conf.json"]
+P["Deep Link Handler<br/>Desktop App"]
 end
 A --> B
 C --> B
 D --> B
-B --> E
-G --> H
-H --> F
-A --> I
-I --> H
-I --> J
-J --> K
+B --> J
+E --> F
+E --> G
+E --> H
+E --> I
+L --> M
+M --> K
+A --> N
+N --> M
+N --> O
+O --> P
 ```
 
 **Diagram sources**
@@ -90,6 +107,8 @@ J --> K
 - [packages/web/lib/contexts/AuthContext.tsx:1-104](file://packages/web/lib/contexts/AuthContext.tsx#L1-L104)
 - [packages/web/components/shared/AuthEdgeButton.tsx:1-208](file://packages/web/components/shared/AuthEdgeButton.tsx#L1-L208)
 - [packages/web/app/layout.tsx:1-92](file://packages/web/app/layout.tsx#L1-L92)
+- [packages/web/app/settings/page.tsx:1-190](file://packages/web/app/settings/page.tsx#L1-L190)
+- [packages/web/components/settings/AccountSection.tsx:1-156](file://packages/web/components/settings/AccountSection.tsx#L1-L156)
 - [packages/web/lib/supabase/client.ts:1-34](file://packages/web/lib/supabase/client.ts#L1-L34)
 - [packages/web/lib/supabase/server.ts:1-37](file://packages/web/lib/supabase/server.ts#L1-L37)
 - [packages/web/middleware.ts:1-21](file://packages/web/middleware.ts#L1-L21)
@@ -102,6 +121,8 @@ J --> K
 - [packages/web/lib/contexts/AuthContext.tsx:1-104](file://packages/web/lib/contexts/AuthContext.tsx#L1-L104)
 - [packages/web/components/shared/AuthEdgeButton.tsx:1-208](file://packages/web/components/shared/AuthEdgeButton.tsx#L1-L208)
 - [packages/web/app/layout.tsx:1-92](file://packages/web/app/layout.tsx#L1-L92)
+- [packages/web/app/settings/page.tsx:1-190](file://packages/web/app/settings/page.tsx#L1-L190)
+- [packages/web/components/settings/AccountSection.tsx:1-156](file://packages/web/components/settings/AccountSection.tsx#L1-L156)
 - [packages/web/lib/supabase/client.ts:1-34](file://packages/web/lib/supabase/client.ts#L1-L34)
 - [packages/web/lib/supabase/server.ts:1-37](file://packages/web/lib/supabase/server.ts#L1-L37)
 - [packages/web/middleware.ts:1-21](file://packages/web/middleware.ts#L1-L21)
@@ -116,6 +137,8 @@ J --> K
 - OAuth callback route: Exchanges the OAuth code for a session and supports both web and desktop flows.
 - Middleware: Refreshes session cookies on every request and enforces route protection.
 - Auth edge button: A responsive floating control for sign-in/sign-out and navigation to profile-related pages.
+- Enhanced settings page: Dynamic loading of account management sections including profile, billing, vocabulary, and privacy.
+- Account section: Dedicated component for profile information display, password management guidance, and secure account deletion.
 - Tauri deep-link plugin: Handles custom scheme authentication for desktop applications.
 
 Key responsibilities:
@@ -123,6 +146,8 @@ Key responsibilities:
 - Social login via Google OAuth with desktop deep link support
 - Automatic session refresh and route protection
 - Hybrid authentication flow handling for web and desktop contexts
+- Comprehensive account management with profile, billing, vocabulary, and privacy sections
+- Secure account deletion processes with user confirmation
 - Desktop application integration through custom URI schemes
 
 **Section sources**
@@ -132,10 +157,12 @@ Key responsibilities:
 - [packages/web/app/auth/callback/route.ts:1-40](file://packages/web/app/auth/callback/route.ts#L1-L40)
 - [packages/web/lib/supabase/middleware.ts:1-81](file://packages/web/lib/supabase/middleware.ts#L1-L81)
 - [packages/web/components/shared/AuthEdgeButton.tsx:1-208](file://packages/web/components/shared/AuthEdgeButton.tsx#L1-L208)
+- [packages/web/app/settings/page.tsx:1-190](file://packages/web/app/settings/page.tsx#L1-L190)
+- [packages/web/components/settings/AccountSection.tsx:1-156](file://packages/web/components/settings/AccountSection.tsx#L1-L156)
 - [packages/desktop/src-tauri/tauri.conf.json:12-19](file://packages/desktop/src-tauri/tauri.conf.json#L12-L19)
 
 ## Architecture Overview
-The system uses Supabase Auth with OAuth and has been enhanced with desktop deep link integration. The hybrid flow supports both web and desktop contexts:
+The system uses Supabase Auth with OAuth and has been enhanced with desktop deep link integration and comprehensive account management capabilities. The hybrid flow supports both web and desktop contexts with dedicated account management sections:
 - Client triggers Google OAuth via the context.
 - Supabase redirects to Google for consent.
 - Google redirects back to the app's OAuth callback with an authorization code.
@@ -144,6 +171,7 @@ The system uses Supabase Auth with OAuth and has been enhanced with desktop deep
 - For desktop: Redirect to custom URI scheme with session tokens.
 - Middleware ensures subsequent requests carry the latest session.
 - Protected routes redirect unauthenticated users to the login page.
+- Enhanced settings page provides dynamic loading of account management sections.
 
 ```mermaid
 sequenceDiagram
@@ -178,6 +206,58 @@ end
 - [packages/web/lib/supabase/client.ts:12-25](file://packages/web/lib/supabase/client.ts#L12-L25)
 - [packages/web/app/auth/callback/route.ts:4-39](file://packages/web/app/auth/callback/route.ts#L4-L39)
 - [packages/web/lib/supabase/middleware.ts:4-80](file://packages/web/lib/supabase/middleware.ts#L4-L80)
+
+## Enhanced Account Management System
+The system now includes a comprehensive account management section that provides users with complete control over their account information and security:
+
+### Account Section Features
+- **Profile Information Management**: Displays user email and unique user ID with read-only fields
+- **Password Management**: Provides guidance for password changes through Google account settings
+- **Secure Account Deletion**: Implements a two-step confirmation process with comprehensive data deletion warnings
+- **Responsive Design**: Adapts to different screen sizes with card-based layout and appropriate spacing
+
+### Account Deletion Process
+The account deletion process follows strict security protocols:
+1. User initiates deletion from the Account Section
+2. Confirmation dialog displays comprehensive data loss information
+3. User confirms deletion through AlertDialog
+4. System processes deletion request with loading states
+5. User receives feedback through toast notifications
+6. Support-based deletion process (currently implemented as TODO)
+
+### Settings Page Integration
+The settings page dynamically loads account management sections with:
+- Lazy loading for improved performance
+- Skeleton loading states during component initialization
+- Tab-based navigation for different account management areas
+- Responsive design with mobile dropdown and desktop tabs
+
+```mermaid
+flowchart TD
+Start(["Account Section"]) --> Profile["Profile Information Card"]
+Start --> Password["Password Management Card"]
+Start --> Delete["Account Deletion Card"]
+Profile --> Email["Display Email Address"]
+Profile --> UserId["Display User ID"]
+Password --> GoogleInfo["Google Account Info"]
+Password --> ExternalLink["External Link to Google Settings"]
+Delete --> AlertDialog["Confirmation Dialog"]
+AlertDialog --> Confirm["User Confirms Deletion"]
+AlertDialog --> Cancel["User Cancels Deletion"]
+Confirm --> Loading["Show Loading State"]
+Loading --> Success["Success Toast"]
+Loading --> Error["Error Toast"]
+Cancel --> End["Return to Settings"]
+Success --> End
+Error --> End
+```
+
+**Diagram sources**
+- [packages/web/components/settings/AccountSection.tsx:47-152](file://packages/web/components/settings/AccountSection.tsx#L47-L152)
+
+**Section sources**
+- [packages/web/components/settings/AccountSection.tsx:1-156](file://packages/web/components/settings/AccountSection.tsx#L1-L156)
+- [packages/web/app/settings/page.tsx:1-190](file://packages/web/app/settings/page.tsx#L1-L190)
 
 ## Desktop Deep Link Integration
 The authentication system now supports desktop applications through Tauri's deep link plugin. This enables seamless authentication experiences across platforms:
@@ -356,24 +436,74 @@ Decide --> |No| GoAuth["push '/auth'"]
 - [packages/web/components/shared/AuthEdgeButton.tsx:1-208](file://packages/web/components/shared/AuthEdgeButton.tsx#L1-L208)
 - [packages/web/lib/constants.ts:186-195](file://packages/web/lib/constants.ts#L186-L195)
 
-### Settings Page Integration
-- Purpose: Demonstrate protected route behavior and user-dependent rendering.
+### Enhanced Settings Page Integration
+- Purpose: Demonstrate protected route behavior and user-dependent rendering with dynamic loading of account management sections.
 - Behavior:
   - Redirects to auth with a return-to parameter if not authenticated.
-  - Renders tabs for vocabulary and billing sections.
+  - Dynamically loads account, billing, vocabulary, and privacy sections.
+  - Implements skeleton loading states for improved user experience.
+  - Provides responsive tab-based navigation.
 
 ```mermaid
 flowchart TD
 Enter(["SettingsPage"]) --> CheckAuth{"!user and !authLoading?"}
 CheckAuth --> |Yes| Redirect["router.push('/auth?redirectTo=/settings')"]
 CheckAuth --> |No| Render["Render Settings UI"]
+Render --> Tabs["Tabs Navigation"]
+Tabs --> Account["Account Section (Lazy Loaded)"]
+Tabs --> Billing["Billing Section (Lazy Loaded)"]
+Tabs --> Vocabulary["Vocabulary Section (Lazy Loaded)"]
+Tabs --> Privacy["Privacy Section (Lazy Loaded)"]
+Account --> Skeleton["SectionSkeleton Loading"]
+Billing --> Skeleton
+Vocabulary --> Skeleton
+Privacy --> Skeleton
 ```
 
 **Diagram sources**
-- [packages/web/app/settings/page.tsx:64-69](file://packages/web/app/settings/page.tsx#L64-L69)
+- [packages/web/app/settings/page.tsx:60-189](file://packages/web/app/settings/page.tsx#L60-L189)
 
 **Section sources**
-- [packages/web/app/settings/page.tsx:1-156](file://packages/web/app/settings/page.tsx#L1-L156)
+- [packages/web/app/settings/page.tsx:1-190](file://packages/web/app/settings/page.tsx#L1-L190)
+
+### Account Section Component
+- Purpose: Provide comprehensive account management capabilities including profile information, password management, and secure account deletion.
+- Key features:
+  - Profile information display with email and user ID
+  - Password management guidance for Google OAuth users
+  - Secure account deletion with confirmation dialog
+  - Responsive card-based design with appropriate styling
+  - Toast notifications for user feedback
+
+```mermaid
+classDiagram
+class AccountSection {
++user : User|null
++toast : Toast
++isDeleting : boolean
++handleDeleteAccount()
+}
+class ProfileCard {
++email : string
++userId : string
+}
+class PasswordCard {
++googleInfo : string
+}
+class DeleteCard {
++alertDialog : AlertDialog
++confirmDeletion()
+}
+AccountSection --> ProfileCard : "displays"
+AccountSection --> PasswordCard : "guides"
+AccountSection --> DeleteCard : "handles"
+```
+
+**Diagram sources**
+- [packages/web/components/settings/AccountSection.tsx:23-156](file://packages/web/components/settings/AccountSection.tsx#L23-L156)
+
+**Section sources**
+- [packages/web/components/settings/AccountSection.tsx:1-156](file://packages/web/components/settings/AccountSection.tsx#L1-L156)
 
 ## Dependency Analysis
 - Client-side depends on the browser Supabase client and the auth context.
@@ -381,6 +511,7 @@ CheckAuth --> |No| Render["Render Settings UI"]
 - Middleware depends on the server client and Next.js cookies API.
 - Auth UI and edge button depend on the auth context.
 - Settings page depends on the auth context and constants for routing.
+- Account section depends on auth context, toast notifications, and alert dialogs.
 - Desktop integration depends on Tauri deep-link plugin configuration.
 
 ```mermaid
@@ -392,6 +523,9 @@ MW["Middleware<br/>packages/web/lib/supabase/middleware.ts"] --> SClient["Server
 CB["Callback<br/>packages/web/app/auth/callback/route.ts"] --> MW
 Layout["Layout<br/>packages/web/app/layout.tsx"] --> Btn
 Settings["Settings<br/>packages/web/app/settings/page.tsx"] --> Ctx
+Settings --> Account["Account Section<br/>packages/web/components/settings/AccountSection.tsx"]
+Account --> Ctx
+Account --> Toast["Toast Notifications"]
 Tauri["Tauri Config<br/>packages/desktop/src-tauri/tauri.conf.json"] --> CB
 ```
 
@@ -404,7 +538,8 @@ Tauri["Tauri Config<br/>packages/desktop/src-tauri/tauri.conf.json"] --> CB
 - [packages/web/lib/supabase/server.ts:1-37](file://packages/web/lib/supabase/server.ts#L1-L37)
 - [packages/web/app/auth/callback/route.ts:1-40](file://packages/web/app/auth/callback/route.ts#L1-L40)
 - [packages/web/app/layout.tsx:1-92](file://packages/web/app/layout.tsx#L1-L92)
-- [packages/web/app/settings/page.tsx:1-156](file://packages/web/app/settings/page.tsx#L1-L156)
+- [packages/web/app/settings/page.tsx:1-190](file://packages/web/app/settings/page.tsx#L1-L190)
+- [packages/web/components/settings/AccountSection.tsx:1-156](file://packages/web/components/settings/AccountSection.tsx#L1-L156)
 - [packages/desktop/src-tauri/tauri.conf.json:12-19](file://packages/desktop/src-tauri/tauri.conf.json#L12-L19)
 
 **Section sources**
@@ -417,7 +552,8 @@ Tauri["Tauri Config<br/>packages/desktop/src-tauri/tauri.conf.json"] --> CB
 - [packages/web/app/auth/page.tsx:1-274](file://packages/web/app/auth/page.tsx#L1-L274)
 - [packages/web/components/shared/AuthEdgeButton.tsx:1-208](file://packages/web/components/shared/AuthEdgeButton.tsx#L1-L208)
 - [packages/web/app/layout.tsx:1-92](file://packages/web/app/layout.tsx#L1-L92)
-- [packages/web/app/settings/page.tsx:1-156](file://packages/web/app/settings/page.tsx#L1-L156)
+- [packages/web/app/settings/page.tsx:1-190](file://packages/web/app/settings/page.tsx#L1-L190)
+- [packages/web/components/settings/AccountSection.tsx:1-156](file://packages/web/components/settings/AccountSection.tsx#L1-L156)
 - [packages/desktop/src-tauri/tauri.conf.json:1-51](file://packages/desktop/src-tauri/tauri.conf.json#L1-L51)
 
 ## Performance Considerations
@@ -428,6 +564,8 @@ Tauri["Tauri Config<br/>packages/desktop/src-tauri/tauri.conf.json"] --> CB
 - Avoid unnecessary re-renders by memoizing callbacks in the auth context.
 - Optimize desktop deep link handling to minimize authentication latency.
 - Cache session tokens securely in desktop applications for reduced authentication frequency.
+- Implement skeleton loading states for dynamic components to improve perceived performance.
+- Use lazy loading for account management sections to reduce initial bundle size.
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -447,6 +585,14 @@ Common issues and resolutions:
   - Ensure Tauri deep-link plugin is properly configured with custom scheme 'oscar'.
   - Verify desktop app can handle `oscar://` URI scheme.
   - Check that session tokens are properly extracted from deep link parameters.
+- Account section not loading
+  - Verify dynamic import is properly configured in settings page.
+  - Check that AccountSection component is exported correctly.
+  - Ensure auth context is available when component mounts.
+- Account deletion not working
+  - Check that AlertDialog is properly imported and configured.
+  - Verify toast notifications are working correctly.
+  - Ensure account deletion API endpoint is implemented.
 
 **Section sources**
 - [packages/web/app/auth/callback/route.ts:1-40](file://packages/web/app/auth/callback/route.ts#L1-L40)
@@ -454,6 +600,8 @@ Common issues and resolutions:
 - [packages/web/components/shared/AuthEdgeButton.tsx:23-24](file://packages/web/components/shared/AuthEdgeButton.tsx#L23-L24)
 - [packages/web/middleware.ts:8-20](file://packages/web/middleware.ts#L8-L20)
 - [packages/desktop/src-tauri/tauri.conf.json:12-19](file://packages/desktop/src-tauri/tauri.conf.json#L12-L19)
+- [packages/web/app/settings/page.tsx:35-40](file://packages/web/app/settings/page.tsx#L35-L40)
+- [packages/web/components/settings/AccountSection.tsx:116-150](file://packages/web/components/settings/AccountSection.tsx#L116-L150)
 
 ## Migration and Best Practices
 - Environment variables
@@ -468,10 +616,13 @@ Common issues and resolutions:
   - Enforce row-level security policies on the backend and validate permissions server-side where sensitive operations occur.
   - Limit sensitive operations to authenticated users and use protected routes.
   - Securely store desktop session tokens and implement proper token rotation.
+  - Implement proper validation for account deletion requests.
+  - Use confirmation dialogs for destructive operations.
 - User data protection
   - Never log tokens or session details.
   - Sanitize user metadata and avoid storing sensitive data in user_metadata.
   - Implement proper error handling for desktop authentication failures.
+  - Ensure account deletion processes follow GDPR compliance guidelines.
 - Desktop integration
   - Configure Tauri deep-link plugin with appropriate custom schemes.
   - Handle desktop-specific authentication flows separately from web flows.
@@ -481,6 +632,8 @@ Common issues and resolutions:
   - When changing OAuth providers, update the provider name and any required query parameters in the auth context.
   - When introducing new UI controls that require authentication, gate them using the auth context and redirect logic.
   - For desktop applications, implement proper deep link handling and token management.
+  - When adding new account management features, ensure proper integration with existing settings page structure.
+  - Implement proper loading states and error handling for dynamic components.
 
 ## Conclusion
-The authentication system leverages Supabase Auth with Google OAuth, a robust middleware-driven session refresh mechanism, and a centralized auth context for React components. The system has been substantially enhanced with desktop deep link integration through Tauri, enabling seamless authentication across web and desktop contexts. The hybrid approach provides secure, seamless user management with automatic session handling, route protection, and desktop-specific authentication flows. Following the best practices and troubleshooting guidance ensures reliable operation and maintainability across all supported platforms.
+The authentication system leverages Supabase Auth with Google OAuth, a robust middleware-driven session refresh mechanism, and a centralized auth context for React components. The system has been substantially enhanced with desktop deep link integration through Tauri, enabling seamless authentication across web and desktop contexts. The new comprehensive account management system provides users with complete control over their account information, including profile management, password guidance, and secure account deletion processes. The hybrid approach provides secure, seamless user management with automatic session handling, route protection, desktop-specific authentication flows, and enhanced account management capabilities. Following the best practices and troubleshooting guidance ensures reliable operation and maintainability across all supported platforms.

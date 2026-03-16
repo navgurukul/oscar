@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderOpen, Keyboard, Sparkles, Trash2, CreditCard, BookOpen, User, Shield, Download, FileText, AlertTriangle } from "lucide-react";
+import { FolderOpen, Keyboard, Sparkles, Trash2, CreditCard, BookOpen, User, Shield, Download, FileText, AlertTriangle, LogOut } from "lucide-react";
 
 type TonePreset = "none" | "professional" | "casual" | "friendly";
 type SettingsTabType = "billing" | "vocabulary" | "account" | "privacy";
@@ -20,6 +20,7 @@ interface SettingsTabProps {
   onSaveApiKey: () => void;
   onClearData: () => void;
   userEmail?: string;
+  onSignOut: () => void;
 }
 
 export function SettingsTab({
@@ -38,6 +39,7 @@ export function SettingsTab({
   onSaveApiKey,
   onClearData,
   userEmail,
+  onSignOut,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabType>("billing");
   const toneOptions: { value: TonePreset; label: string }[] = [
@@ -150,6 +152,20 @@ export function SettingsTab({
                   You signed in with Google. To change your email or password, update your Google account settings.
                 </p>
               </div>
+            </div>
+
+            <div className="settings-card">
+              <div className="settings-card-header">
+                <LogOut size={20} />
+                <h3>Sign Out</h3>
+              </div>
+              <p className="settings-card-description">
+                Sign out of your account on this device
+              </p>
+              <button className="sign-out-settings-btn" onClick={onSignOut}>
+                <LogOut size={16} />
+                Sign out
+              </button>
             </div>
 
             <div className="settings-card danger">

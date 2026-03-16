@@ -1765,8 +1765,7 @@ kbd {
 }
 
 .sidebar-header {
-  padding: 24px 20px;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 48px 20px 24px;
 }
 
 .sidebar-brand {
@@ -1933,6 +1932,56 @@ kbd {
 .sign-out-btn:hover {
   background: #f1f5f9;
   color: #475569;
+}
+
+.settings-footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.settings-footer-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+.settings-footer-btn.active {
+  background: #f0f9ff;
+  border-color: #06b6d4;
+  color: #0891b2;
+}
+
+.sign-out-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sign-out-settings-btn:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
 }
 
 /* ── Main Area ────────────────────────────────────────────────────────────── */

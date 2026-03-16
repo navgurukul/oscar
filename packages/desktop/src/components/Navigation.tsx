@@ -1,12 +1,11 @@
 import React from "react";
-import { Mic, BookOpen, CreditCard, Settings, LogOut, Crown, Sparkles } from "lucide-react";
+import { Home, Settings, Crown, Sparkles } from "lucide-react";
 
 type TabType = "record" | "vocabulary" | "billing" | "settings";
 
 interface NavigationProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
-  onSignOut: () => void;
   userEmail: string;
   isProUser?: boolean;
   onUpgradeClick?: () => void;
@@ -15,24 +14,20 @@ interface NavigationProps {
 export function Navigation({ 
   activeTab, 
   onTabChange, 
-  onSignOut, 
   userEmail,
   isProUser = false,
   onUpgradeClick
 }: NavigationProps) {
   const navItems: { id: TabType; label: string; icon: React.ElementType }[] = [
-    { id: "record", label: "Record", icon: Mic },
-    { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
-    { id: "billing", label: "Billing", icon: CreditCard },
-    { id: "settings", label: "Settings", icon: Settings },
+    { id: "record", label: "Home", icon: Home },
   ];
 
   const handleUpgrade = () => {
     if (onUpgradeClick) {
       onUpgradeClick();
     } else {
-      // Default behavior: navigate to billing tab
-      onTabChange("billing");
+      // Default behavior: navigate to settings tab (billing is inside settings)
+      onTabChange("settings");
     }
   };
 
@@ -88,9 +83,12 @@ export function Navigation({
             {userEmail}
           </span>
         </div>
-        <button className="sign-out-btn" onClick={onSignOut}>
-          <LogOut size={16} />
-          <span>Sign out</span>
+        <button 
+          className={`settings-footer-btn ${activeTab === "settings" ? "active" : ""}`} 
+          onClick={() => onTabChange("settings")}
+        >
+          <Settings size={16} />
+          <span>Settings</span>
         </button>
       </div>
     </nav>
