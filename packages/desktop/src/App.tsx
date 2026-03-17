@@ -259,7 +259,7 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: "http://localhost:3000/auth/desktop-callback",
+          redirectTo: `${import.meta.env.VITE_WEB_APP_URL || "http://localhost:3000"}/auth/desktop-callback`,
           skipBrowserRedirect: true,
         },
       });
@@ -1190,7 +1190,7 @@ function App() {
   if (!setupComplete) return <SetupScreen onComplete={handleSetupComplete} />;
 
   return (
-    <div className="app-modern">
+    <div className="flex min-h-screen font-['Figtree',-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] bg-slate-100 text-slate-800">
       <Navigation
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}
@@ -1198,13 +1198,13 @@ function App() {
         isProUser={isProUser}
       />
 
-      <main className="main-area">
+      <main className="flex-1 ml-[calc(240px-16px)] mt-14 min-h-[calc(100vh-56px)] overflow-y-auto flex flex-col bg-white rounded-tl-2xl shadow-[-1px_-1px_0_0_#e2e8f0] border-r border-b border-slate-200">
         <Header
           userEmail={user.email || ""}
           onSignOut={handleSignOut}
           onSettingsClick={() => setActiveTab("settings")}
         />
-        <div className="main-area-content">
+        <div className="flex-1 flex flex-col">
           {activeTab === "notes" && user && (
             <NotesTab userId={user.id} />
           )}

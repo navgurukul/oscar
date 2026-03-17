@@ -19,7 +19,7 @@
     "updater": {
       "pubkey": "",
       "endpoints": [
-        "https://oscar.samyarth.org/tauri/updates.json"
+        "https://github.com/navgurukul/oscar/releases/latest/download/updates.json"
       ],
       "windows": {
         "installMode": "passive"

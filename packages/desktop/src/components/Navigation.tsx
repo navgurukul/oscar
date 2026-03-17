@@ -31,39 +31,41 @@ export function Navigation({
   };
 
   return (
-    <nav className="sidebar">
-      <div className="sidebar-nav">
+    <nav className="w-60 bg-white flex flex-col fixed h-[calc(100vh-56px)] top-14 z-[100]">
+      <div className="flex-1 py-5 px-3 flex flex-col gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
             <button
               key={item.id}
-              className={`nav-item ${isActive ? "active" : ""}`}
+              className={`flex items-center gap-3 py-3 px-4 rounded-[10px] border-none bg-transparent text-slate-500 text-[0.9375rem] font-medium cursor-pointer transition-all duration-200 relative hover:bg-slate-50 hover:text-slate-700 ${isActive ? "bg-sky-50 text-cyan-600" : ""}`}
               onClick={() => onTabChange(item.id)}
             >
               <Icon size={16} />
               <span>{item.label}</span>
-              {/* {isActive && <div className="nav-indicator" />} */}
             </button>
           );
         })}
       </div>
 
-      <div className="sidebar-footer">
+      <div className="p-4 border-t border-slate-100">
         {/* Upgrade to Pro Card - only shown for free users */}
         {!isProUser && (
-          <div className="upgrade-card">
-            <div className="upgrade-card-header">
-              <div className="upgrade-card-icon">
+          <div className="bg-gradient-to-br from-cyan-600 to-cyan-500 rounded-xl p-4 mb-4 text-white">
+            <div className="flex items-center gap-2 mb-2.5">
+              <div className="w-6 h-6 rounded-md bg-white/20 flex items-center justify-center text-white">
                 <Sparkles size={16} />
               </div>
-              <span className="upgrade-card-title">OSCAR Pro</span>
+              <span className="text-[0.9375rem] font-semibold text-white">OSCAR Pro</span>
             </div>
-            <p className="upgrade-card-description">
+            <p className="text-[0.8125rem] text-white/85 leading-relaxed mb-3">
               Upgrade to Pro for unlimited recordings, vocabulary entries, and priority AI processing.
             </p>
-            <button className="upgrade-card-btn" onClick={handleUpgrade}>
+            <button 
+              className="flex items-center justify-center gap-1.5 w-full py-2.5 px-3.5 bg-white border-none rounded-lg text-cyan-600 text-sm font-semibold cursor-pointer transition-all duration-200 hover:bg-white/95 hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(6,182,212,0.3)]"
+              onClick={handleUpgrade}
+            >
               <Crown size={14} />
               Upgrade to Pro
             </button>
@@ -71,7 +73,7 @@ export function Navigation({
         )}
 
         <button 
-          className={`nav-item ${activeTab === "settings" ? "active" : ""}`} 
+          className={`flex items-center gap-3 py-3 px-4 rounded-[10px] border-none bg-transparent text-slate-500 text-[0.9375rem] font-medium cursor-pointer transition-all duration-200 relative hover:bg-slate-50 hover:text-slate-700 ${activeTab === "settings" ? "bg-sky-50 text-cyan-600" : ""}`}
           onClick={() => onTabChange("settings")}
         >
           <Settings size={16} />
