@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { SparklesCore } from "@/components/ui/sparkles";
-import { Download, Apple, Monitor, Laptop, Check } from "lucide-react";
+import { Check } from "lucide-react";
 
 // Platform type definition
 type Platform = "mac-intel" | "mac-silicon" | "windows" | "linux" | null;
@@ -10,47 +10,15 @@ type Platform = "mac-intel" | "mac-silicon" | "windows" | "linux" | null;
 // Download configuration - GitHub Releases
 const GITHUB_RELEASE_BASE = "https://github.com/navgurukul/oscar/releases/download/v0.1.0";
 
-const DOWNLOAD_URLS = {
+const DOWNLOAD_URLS: Record<Exclude<Platform, null>, string> = {
   "mac-intel": `${GITHUB_RELEASE_BASE}/oscar_0.1.0_x64.dmg`,
   "mac-silicon": `${GITHUB_RELEASE_BASE}/oscar_0.1.0_aarch64.dmg`,
   windows: `${GITHUB_RELEASE_BASE}/oscar_0.1.0_x64-setup.exe`,
   linux: `${GITHUB_RELEASE_BASE}/oscar_0.1.0_amd64.AppImage`,
 };
 
-const PLATFORM_INFO = {
-  "mac-intel": {
-    name: "Intel Mac",
-    icon: Apple,
-    description: "For Macs with Intel processors",
-    fileSize: "~150 MB",
-    extension: ".dmg",
-  },
-  "mac-silicon": {
-    name: "Apple Silicon",
-    icon: Apple,
-    description: "For Macs with M1, M2, or M3 chips",
-    fileSize: "~150 MB",
-    extension: ".dmg",
-  },
-  windows: {
-    name: "Windows",
-    icon: Monitor,
-    description: "Windows 10 or later",
-    fileSize: "~120 MB",
-    extension: ".exe",
-  },
-  linux: {
-    name: "Linux",
-    icon: Laptop,
-    description: "Most Linux distributions",
-    fileSize: "~130 MB",
-    extension: ".AppImage",
-  },
-};
-
 export default function DownloadPage() {
   const [detectedPlatform, setDetectedPlatform] = useState<Platform>(null);
-  const [downloadStarted, setDownloadStarted] = useState(false);
   const hasDownloaded = useRef(false);
 
   useEffect(() => {
@@ -82,16 +50,10 @@ export default function DownloadPage() {
     const platform = detectPlatform();
     setDetectedPlatform(platform);
 
-    // Auto-start download after brief delay (only once)
-    if (platform) {
-      const timer = setTimeout(() => {
-        if (!hasDownloaded.current) {
-          hasDownloaded.current = true;
-          triggerDownload(platform);
-          setDownloadStarted(true);
-        }
-      }, 500);
-      return () => clearTimeout(timer);
+    // Immediately start download
+    if (platform && !hasDownloaded.current) {
+      hasDownloaded.current = true;
+      triggerDownload(platform);
     }
   }, []);
 
@@ -104,13 +66,8 @@ export default function DownloadPage() {
   const handleManualDownload = () => {
     if (detectedPlatform) {
       triggerDownload(detectedPlatform);
-      setDownloadStarted(true);
     }
   };
-
-  const PlatformIcon = detectedPlatform
-    ? PLATFORM_INFO[detectedPlatform].icon
-    : Download;
 
   return (
     <main className="min-h-screen flex flex-col md:flex-row bg-[#fafafa]">
@@ -119,32 +76,24 @@ export default function DownloadPage() {
         <div className="w-full max-w-sm text-center">
           {/* Success Icon */}
           <div className="w-16 h-16 bg-cyan-500/10 rounded-full flex items-center justify-center mb-6 mx-auto">
-            {downloadStarted ? (
-              <Check className="w-8 h-8 text-cyan-500" />
-            ) : (
-              <PlatformIcon className="w-8 h-8 text-cyan-500" />
-            )}
+            <Check className="w-8 h-8 text-cyan-500" />
           </div>
 
           <h1 className="text-2xl md:text-3xl font-semibold text-gray-900 mb-3 tracking-tight leading-tight">
-            {downloadStarted ? "Download started" : "Preparing download..."}
+            Download started
           </h1>
 
           <p className="text-[0.95rem] text-gray-500 mb-8 leading-relaxed">
-            {downloadStarted
-              ? "Thanks for downloading OSCAR!"
-              : "Detecting your platform..."}
+            Thanks for downloading OSCAR!
           </p>
 
           {/* Manual download link */}
-          {downloadStarted && (
-            <button
-              onClick={handleManualDownload}
-              className="text-sm text-cyan-600 hover:text-cyan-700 underline underline-offset-2"
-            >
-              Download didn&apos;t start? Click here
-            </button>
-          )}
+          <button
+            onClick={handleManualDownload}
+            className="text-sm text-cyan-600 hover:text-cyan-700 underline underline-offset-2"
+          >
+            Download didn&apos;t start? Click here
+          </button>
         </div>
       </div>
 
