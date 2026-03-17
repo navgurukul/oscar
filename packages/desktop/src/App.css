@@ -3373,11 +3373,13 @@ kbd {
   align-items: center;
   justify-content: space-between;
   padding: 12px 24px;
+  padding-left: 80px; /* Space for macOS traffic lights */
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
   position: sticky;
   top: 0;
   z-index: 50;
+  -webkit-app-region: drag; /* Enable window dragging */
 }
 
 .app-header-left {
@@ -3404,6 +3406,7 @@ kbd {
   border-radius: 24px;
   cursor: pointer;
   transition: background 0.2s ease;
+  -webkit-app-region: no-drag; /* Allow clicking on interactive elements */
 }
 
 .profile-trigger:hover {
@@ -3453,6 +3456,7 @@ kbd {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
   z-index: 100;
   animation: dropdown-fade-in 0.15s ease;
+  -webkit-app-region: no-drag; /* Allow clicking on dropdown */
 }
 
 @keyframes dropdown-fade-in {
