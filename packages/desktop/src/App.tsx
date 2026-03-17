@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
+import { getVersion } from "@tauri-apps/api/app";
 import { load } from "@tauri-apps/plugin-store";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { User, Session } from "@supabase/supabase-js";
@@ -736,6 +737,14 @@ function App() {
   // Auto-updater
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const updater = useUpdater();
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  // Fetch app version on mount
+  useEffect(() => {
+    getVersion()
+      .then((v) => setAppVersion(v))
+      .catch(() => setAppVersion("0.1.0"));
+  }, []);
 
   // Check for updates on startup
   useEffect(() => {
@@ -1206,6 +1215,19 @@ function App() {
           onTabChange={(tab) => setActiveTab(tab)}
           userEmail={user.email || ""}
           isProUser={isProUser}
+          appVersion={appVersion}
+          updaterState={{
+            checking: updater.checking,
+            updateAvailable: updater.updateAvailable,
+            downloading: updater.downloading,
+            downloadProgress: updater.downloadProgress,
+            readyToInstall: updater.readyToInstall,
+            error: updater.error,
+            updateInfo: updater.updateInfo,
+          }}
+          onCheckForUpdates={updater.checkForUpdates}
+          onDownloadUpdate={updater.downloadAndInstall}
+          onInstallUpdate={updater.installAndRelaunch}
         />
 
         {/* Center: content + bottom gutter */}

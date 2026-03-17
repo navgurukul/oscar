@@ -1,8 +1,18 @@
 import React from "react";
-import { Settings, Crown, Sparkles, FileText } from "lucide-react";
+import { Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle } from "lucide-react";
 import oscarLogo from "/OSCAR_LIGHT_LOGO.png";
 
 type TabType = "notes" | "vocabulary" | "billing" | "settings";
+
+interface UpdaterState {
+  checking: boolean;
+  updateAvailable: boolean;
+  downloading: boolean;
+  downloadProgress: number;
+  readyToInstall: boolean;
+  error: string | null;
+  updateInfo: { version: string; currentVersion: string; date?: string; body?: string } | null;
+}
 
 interface NavigationProps {
   activeTab: TabType;
@@ -10,13 +20,23 @@ interface NavigationProps {
   userEmail: string;
   isProUser?: boolean;
   onUpgradeClick?: () => void;
+  appVersion: string | null;
+  updaterState?: UpdaterState;
+  onCheckForUpdates?: () => void;
+  onDownloadUpdate?: () => void;
+  onInstallUpdate?: () => void;
 }
 
 export function Navigation({ 
   activeTab, 
   onTabChange, 
   isProUser = false,
-  onUpgradeClick
+  onUpgradeClick,
+  appVersion,
+  updaterState,
+  onCheckForUpdates,
+  onDownloadUpdate,
+  onInstallUpdate
 }: NavigationProps) {
   const navItems: { id: TabType; label: string; icon: React.ElementType }[] = [
     { id: "notes", label: "Notes", icon: FileText },
@@ -34,8 +54,8 @@ export function Navigation({
   return (
     <nav className="w-60 bg-white flex flex-col flex-shrink-0">
       {/* Brand section - fixed at top, draggable for macOS */}
-      <div className="py-4 px-5 flex items-center gap-2.5 [-webkit-app-region:drag]">
-        <img src={oscarLogo} alt="OSCAR" width={28} height={28} className="[-webkit-app-region:no-drag]" />
+      <div className="pb-4 px-5 flex items-center gap-2.5 [-webkit-app-region:drag]">
+        <img src={oscarLogo} alt="OSCAR" width={36} height={36} className="[-webkit-app-region:no-drag]" />
         <span className="text-base font-semibold text-slate-800 [-webkit-app-region:no-drag]">OSCAR</span>
       </div>
 
@@ -86,7 +106,122 @@ export function Navigation({
           <Settings size={16} />
           <span>Settings</span>
         </button>
+
+        {/* Version indicator */}
+        {appVersion && (
+          <div className="mt-3 pt-3 border-t border-slate-100">
+            <VersionIndicator
+              version={appVersion}
+              updaterState={updaterState}
+              onCheckForUpdates={onCheckForUpdates}
+              onDownloadUpdate={onDownloadUpdate}
+              onInstallUpdate={onInstallUpdate}
+            />
+          </div>
+        )}
       </div>
     </nav>
+  );
+}
+
+// Version indicator component
+function VersionIndicator({
+  version,
+  updaterState,
+  onCheckForUpdates,
+  onDownloadUpdate,
+  onInstallUpdate,
+}: {
+  version: string;
+  updaterState?: UpdaterState;
+  onCheckForUpdates?: () => void;
+  onDownloadUpdate?: () => void;
+  onInstallUpdate?: () => void;
+}) {
+  const getStatusIcon = () => {
+    if (!updaterState) {
+      return <Cloud size={12} className="text-slate-400" />;
+    }
+    if (updaterState.checking) {
+      return <Loader2 size={12} className="text-slate-400 animate-spin" />;
+    }
+    if (updaterState.readyToInstall) {
+      return <Download size={12} className="text-emerald-500" />;
+    }
+    if (updaterState.downloading) {
+      return <Loader2 size={12} className="text-cyan-500 animate-spin" />;
+    }
+    if (updaterState.updateAvailable) {
+      return <RefreshCw size={12} className="text-cyan-500" />;
+    }
+    if (updaterState.error) {
+      return <AlertCircle size={12} className="text-amber-500" />;
+    }
+    return <Check size={12} className="text-emerald-500" />;
+  };
+
+  const getStatusText = () => {
+    if (!updaterState) {
+      return "Check for updates";
+    }
+    if (updaterState.checking) {
+      return "Checking...";
+    }
+    if (updaterState.readyToInstall) {
+      return "Click to restart";
+    }
+    if (updaterState.downloading) {
+      return `Downloading ${updaterState.downloadProgress}%`;
+    }
+    if (updaterState.updateAvailable && updaterState.updateInfo) {
+      return `v${updaterState.updateInfo.version} available`;
+    }
+    if (updaterState.error) {
+      return "Check failed";
+    }
+    return "Up to date";
+  };
+
+  const handleClick = () => {
+    if (!updaterState) {
+      onCheckForUpdates?.();
+      return;
+    }
+    if (updaterState.readyToInstall) {
+      onInstallUpdate?.();
+      return;
+    }
+    if (updaterState.updateAvailable && !updaterState.downloading) {
+      onDownloadUpdate?.();
+      return;
+    }
+    if (!updaterState.checking && !updaterState.downloading) {
+      onCheckForUpdates?.();
+    }
+  };
+
+  const isClickable = !updaterState?.checking && !updaterState?.downloading;
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={!isClickable}
+      className={`w-full flex items-center gap-2 py-2 px-3 rounded-lg border-none bg-transparent text-xs transition-all duration-200 ${
+        isClickable
+          ? "cursor-pointer hover:bg-slate-50"
+          : "cursor-default"
+      }`}
+    >
+      {getStatusIcon()}
+      <span className="text-slate-500">v{version}</span>
+      <span className="text-slate-400">·</span>
+      <span className={`${
+        updaterState?.updateAvailable || updaterState?.readyToInstall
+          ? "text-cyan-600 font-medium"
+          : "text-slate-400"
+      }`}>
+        {getStatusText()}
+      </span>
+    </button>
   );
 }
