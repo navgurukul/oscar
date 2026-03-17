@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { LogOut, Settings, ChevronDown } from "lucide-react";
-import oscarLogo from "/OSCAR_LIGHT_LOGO.png";
 
 interface HeaderProps {
   userEmail?: string;
@@ -32,14 +31,7 @@ export function Header({ userEmail, onSignOut, onSettingsClick }: HeaderProps) {
   };
 
   return (
-    <header className="flex items-center justify-between py-3 px-6 pl-20 bg-white h-14 flex-shrink-0 [webkit-app-region:drag]">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 [webkit-app-region:no-drag]">
-          <img src={oscarLogo} alt="OSCAR" width={28} height={28} />
-          <span className="text-[0.9375rem] font-semibold text-slate-900 tracking-tight">OSCAR</span>
-        </div>
-      </div>
-
+    <header className="flex items-center justify-end py-3 px-6 bg-white h-14 flex-shrink-0 [-webkit-app-region:drag]">
       <div className="flex items-center gap-3 relative" ref={dropdownRef}>
         <button
           className="flex items-center gap-2 py-1 px-2 pl-1 bg-transparent border-none rounded-3xl cursor-pointer transition-colors duration-200 [webkit-app-region:no-drag] hover:bg-slate-50"

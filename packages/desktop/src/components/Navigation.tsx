@@ -1,5 +1,6 @@
 import React from "react";
 import { Settings, Crown, Sparkles, FileText } from "lucide-react";
+import oscarLogo from "/OSCAR_LIGHT_LOGO.png";
 
 type TabType = "notes" | "vocabulary" | "billing" | "settings";
 
@@ -32,7 +33,13 @@ export function Navigation({
 
   return (
     <nav className="w-60 bg-white flex flex-col flex-shrink-0">
-      <div className="flex-1 py-5 px-3 flex flex-col gap-1">
+      {/* Brand section - fixed at top, draggable for macOS */}
+      <div className="py-4 px-5 flex items-center gap-2.5 [-webkit-app-region:drag]">
+        <img src={oscarLogo} alt="OSCAR" width={28} height={28} className="[-webkit-app-region:no-drag]" />
+        <span className="text-base font-semibold text-slate-800 [-webkit-app-region:no-drag]">OSCAR</span>
+      </div>
+
+      <div className="flex-1 py-2 px-3 flex flex-col gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
