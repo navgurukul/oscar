@@ -1,5 +1,6 @@
 import React from "react";
 import { Settings, Crown, Sparkles, FileText } from "lucide-react";
+import oscarLogo from "/OSCAR_LIGHT_LOGO.png";
 
 type TabType = "notes" | "vocabulary" | "billing" | "settings";
 
@@ -34,7 +35,7 @@ export function Navigation({
     <nav className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-brand">
-          <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width={34} height={34} />
+          <img src={oscarLogo} alt="OSCAR" width={34} height={34} />
           <span>OSCAR</span>
         </div>
       </div>
