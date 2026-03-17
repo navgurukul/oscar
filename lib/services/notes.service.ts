@@ -3,6 +3,9 @@ import type {
   DBNote,
   DBNoteInsert,
   DBNoteUpdate,
+  DBFolder,
+  DBFolderInsert,
+  DBFolderUpdate,
 } from "@/lib/types/note.types";
 
 /**
@@ -77,6 +80,16 @@ export const notesService = {
       .single();
 
     return { data, error: error as Error | null };
+  },
+
+  /**
+   * Move a note to a folder (or remove from folder with null)
+   */
+  async moveNoteToFolder(
+    id: string,
+    folderId: string | null
+  ): Promise<{ data: DBNote | null; error: Error | null }> {
+    return this.updateNote(id, { folder_id: folderId });
   },
 
   /**
@@ -180,5 +193,75 @@ export const notesService = {
     const { error } = await supabase.from("notes").delete().eq("id", id);
 
     return { error: error as Error | null };
+  },
+
+  // ------------- Folders -------------
+  async getFolders(): Promise<{ data: DBFolder[] | null; error: Error | null }> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("folders")
+      .select("*")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true });
+    return { data, error: error as Error | null };
+    },
+
+  async createFolder(
+    folder: DBFolderInsert
+  ): Promise<{ data: DBFolder | null; error: Error | null }> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("folders")
+      .insert(folder)
+      .select()
+      .single();
+    return { data, error: error as Error | null };
+  },
+
+  async updateFolder(
+    id: string,
+    updates: DBFolderUpdate
+  ): Promise<{ data: DBFolder | null; error: Error | null }> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("folders")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single();
+    return { data, error: error as Error | null };
+  },
+
+  async deleteFolder(id: string): Promise<{ error: Error | null }> {
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from("folders")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
+    return { error: error as Error | null };
+  },
+
+  // ------------- Sharing -------------
+  async enableShare(
+    id: string
+  ): Promise<{ data: DBNote | null; error: Error | null }> {
+    const g = globalThis as unknown as {
+      crypto?: { randomUUID?: () => string };
+    };
+    const token =
+      g.crypto && typeof g.crypto.randomUUID === "function"
+        ? g.crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    return this.updateNote(id, { share_enabled: true, share_token: token });
+  },
+
+  async disableShare(
+    id: string
+  ): Promise<{ data: DBNote | null; error: Error | null }> {
+    return this.updateNote(id, {
+      share_enabled: false,
+      share_token: null,
+      share_expires_at: null,
+    });
   },
 };

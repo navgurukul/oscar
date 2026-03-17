@@ -33,6 +33,11 @@ export interface DBNote {
   deleted_at: string | null;
   // Starred/favorite
   is_starred: boolean;
+  // Optional: folder and sharing
+  folder_id?: string | null;
+  share_enabled?: boolean | null;
+  share_token?: string | null;
+  share_expires_at?: string | null;
 }
 
 // Insert type for creating a new note
@@ -42,6 +47,10 @@ export interface DBNoteInsert {
   raw_text: string;
   original_formatted_text: string;
   edited_text?: string | null;
+  folder_id?: string | null;
+  share_enabled?: boolean | null;
+  share_token?: string | null;
+  share_expires_at?: string | null;
 }
 
 // Update type for modifying a note
@@ -58,6 +67,11 @@ export interface DBNoteUpdate {
   deleted_at?: string | null;
   // Starred/favorite
   is_starred?: boolean;
+  // Folder and sharing
+  folder_id?: string | null;
+  share_enabled?: boolean | null;
+  share_token?: string | null;
+  share_expires_at?: string | null;
 }
 
 export interface FormattingResult {
@@ -79,4 +93,23 @@ export interface FeedbackSubmission {
   noteId: string;
   helpful: boolean;
   reasons?: FeedbackReason[];
+}
+
+// Folder types
+export interface DBFolder {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface DBFolderInsert {
+  name: string;
+}
+
+export interface DBFolderUpdate {
+  name?: string;
+  deleted_at?: string | null;
 }
