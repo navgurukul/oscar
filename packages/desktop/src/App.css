@@ -3437,6 +3437,20 @@ kbd {
   gap: 12px;
 }
 
+.app-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.app-header-brand span {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
 .app-header-right {
   display: flex;
   align-items: center;
