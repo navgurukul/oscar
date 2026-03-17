@@ -1190,64 +1190,80 @@ function App() {
   if (!setupComplete) return <SetupScreen onComplete={handleSetupComplete} />;
 
   return (
-    <div className="flex min-h-screen font-['Figtree',-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] bg-slate-100 text-slate-800">
-      <Navigation
-        activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab)}
+    <div className="h-screen bg-white overflow-hidden flex flex-col font-['Figtree',-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] text-slate-800">
+      {/* Header - flows in layout, not fixed */}
+      <Header
         userEmail={user.email || ""}
-        isProUser={isProUser}
+        onSignOut={handleSignOut}
+        onSettingsClick={() => setActiveTab("settings")}
       />
 
-      <main className="flex-1 ml-[calc(240px-16px)] mt-14 min-h-[calc(100vh-56px)] overflow-y-auto flex flex-col bg-white rounded-tl-2xl shadow-[-1px_-1px_0_0_#e2e8f0] border-r border-b border-slate-200">
-        <Header
+      {/* Body area: sidebar + content + right gutter */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar - flows in layout, not fixed */}
+        <Navigation
+          activeTab={activeTab}
+          onTabChange={(tab) => setActiveTab(tab)}
           userEmail={user.email || ""}
-          onSignOut={handleSignOut}
-          onSettingsClick={() => setActiveTab("settings")}
+          isProUser={isProUser}
         />
-        <div className="flex-1 flex flex-col">
-          {activeTab === "notes" && user && (
-            <NotesTab userId={user.id} />
-          )}
 
-          {activeTab === "settings" && (
-          <SettingsTab
-            whisperModelPath={whisperModelPath}
-            autoPaste={autoPaste}
-            aiEditing={aiEditing}
-            tonePreset={tonePreset}
-            userApiKey={userApiKey}
-            whisperLoaded={whisperLoaded}
-            onModelPathChange={setWhisperModelPath}
-            onLoadModel={loadWhisperModel}
-            onAutoPasteChange={(value) => {
-              autoPasteRef.current = value;
-              setAutoPaste(value);
-              saveSetting("autoPaste", value);
-            }}
-            onAiEditingChange={(value) => {
-              aiEditingRef.current = value;
-              setAiEditing(value);
-              saveSetting("aiEditing", value);
-            }}
-            onTonePresetChange={(t) => {
-              tonePresetRef.current = t;
-              setTonePreset(t);
-              saveSetting("tonePreset", t);
-            }}
-            onApiKeyChange={setUserApiKey}
-            onSaveApiKey={() => saveSetting("userApiKey", userApiKey)}
-            onClearData={() => {
-              if (confirm("This will clear all local data including settings. Continue?")) {
-                localStorage.clear();
-                window.location.reload();
-              }
-            }}
-            userEmail={user?.email}
-            onSignOut={handleSignOut}
-          />
-        )}
+        {/* Center: content + bottom gutter */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Main scrollable content */}
+          <main className="flex-1 overflow-y-auto bg-slate-50 rounded-tl-2xl">
+              <div className="flex-1 flex flex-col">
+                {activeTab === "notes" && user && (
+                  <NotesTab userId={user.id} />
+                )}
+
+                {activeTab === "settings" && (
+                  <SettingsTab
+                    whisperModelPath={whisperModelPath}
+                    autoPaste={autoPaste}
+                    aiEditing={aiEditing}
+                    tonePreset={tonePreset}
+                    userApiKey={userApiKey}
+                    whisperLoaded={whisperLoaded}
+                    onModelPathChange={setWhisperModelPath}
+                    onLoadModel={loadWhisperModel}
+                    onAutoPasteChange={(value) => {
+                      autoPasteRef.current = value;
+                      setAutoPaste(value);
+                      saveSetting("autoPaste", value);
+                    }}
+                    onAiEditingChange={(value) => {
+                      aiEditingRef.current = value;
+                      setAiEditing(value);
+                      saveSetting("aiEditing", value);
+                    }}
+                    onTonePresetChange={(t) => {
+                      tonePresetRef.current = t;
+                      setTonePreset(t);
+                      saveSetting("tonePreset", t);
+                    }}
+                    onApiKeyChange={setUserApiKey}
+                    onSaveApiKey={() => saveSetting("userApiKey", userApiKey)}
+                    onClearData={() => {
+                      if (confirm("This will clear all local data including settings. Continue?")) {
+                        localStorage.clear();
+                        window.location.reload();
+                      }
+                    }}
+                    userEmail={user?.email}
+                    onSignOut={handleSignOut}
+                  />
+                )}
+              </div>
+            </main>
+
+          {/* Bottom gutter */}
+          <div className="h-3 bg-white flex-shrink-0" />
         </div>
-      </main>
+
+        {/* Right gutter */}
+        <div className="w-3 bg-white flex-shrink-0" />
+      </div>
 
       {/* Update notification */}
       {!updateDismissed && (

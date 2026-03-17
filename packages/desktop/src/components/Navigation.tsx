@@ -31,7 +31,7 @@ export function Navigation({
   };
 
   return (
-    <nav className="w-60 bg-white flex flex-col fixed h-[calc(100vh-56px)] top-14 z-[100]">
+    <nav className="w-60 bg-white flex flex-col flex-shrink-0">
       <div className="flex-1 py-5 px-3 flex flex-col gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;

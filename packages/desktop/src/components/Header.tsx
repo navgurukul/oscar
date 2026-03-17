@@ -32,7 +32,7 @@ export function Header({ userEmail, onSignOut, onSettingsClick }: HeaderProps) {
   };
 
   return (
-    <header className="flex items-center justify-between py-3 px-6 pl-20 bg-white fixed top-0 left-0 right-0 h-14 z-50 [webkit-app-region:drag]">
+    <header className="flex items-center justify-between py-3 px-6 pl-20 bg-white h-14 flex-shrink-0 [webkit-app-region:drag]">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 [webkit-app-region:no-drag]">
           <img src={oscarLogo} alt="OSCAR" width={28} height={28} />
