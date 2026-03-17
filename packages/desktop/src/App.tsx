@@ -259,7 +259,7 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: "http://localhost:3000/auth/desktop-callback",
+          redirectTo: `${import.meta.env.VITE_WEB_APP_URL || "http://localhost:3000"}/auth/desktop-callback",
           skipBrowserRedirect: true,
         },
       });

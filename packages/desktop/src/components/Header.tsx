@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { LogOut, Settings, ChevronDown } from "lucide-react";
+import oscarLogo from "/OSCAR_LIGHT_LOGO.png";
 
 interface HeaderProps {
   userEmail?: string;
@@ -33,7 +34,10 @@ export function Header({ userEmail, onSignOut, onSettingsClick }: HeaderProps) {
   return (
     <header className="app-header">
       <div className="app-header-left">
-        {/* Left side can be used for breadcrumbs or page title if needed */}
+        <div className="app-header-brand">
+          <img src={oscarLogo} alt="OSCAR" width={28} height={28} />
+          <span>OSCAR</span>
+        </div>
       </div>
 
       <div className="app-header-right" ref={dropdownRef}>
