@@ -5,19 +5,19 @@
   "platforms": {
     "darwin-x86_64": {
       "signature": "",
-      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.0/oscar_0.2.0_x64.dmg"
+      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.0/OSCAR_0.2.0_x64.dmg"
     },
     "darwin-aarch64": {
       "signature": "",
-      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.0/oscar_0.2.0_aarch64.dmg"
+      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.0/OSCAR_0.2.0_aarch64.dmg"
     },
     "linux-x86_64": {
       "signature": "",
-      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.0/oscar_0.2.0_amd64.AppImage"
+      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.0/OSCAR_0.2.0_amd64.AppImage"
     },
     "windows-x86_64": {
       "signature": "",
-      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.0/oscar_0.2.0_x64-setup.exe"
+      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.0/OSCAR_0.2.0_x64-setup.exe"
     }
   }
 }
