@@ -1,8 +1,8 @@
 import React from "react";
-import { Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle } from "lucide-react";
+import { Home, Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle } from "lucide-react";
 import oscarLogo from "/OSCAR_LIGHT_LOGO.png";
 
-type TabType = "notes" | "vocabulary" | "billing" | "settings";
+type TabType = "home" | "notes" | "vocabulary" | "billing" | "settings";
 
 interface UpdaterState {
   checking: boolean;
@@ -39,6 +39,7 @@ export function Navigation({
   onInstallUpdate
 }: NavigationProps) {
   const navItems: { id: TabType; label: string; icon: React.ElementType }[] = [
+    { id: "home", label: "Home", icon: Home },
     { id: "notes", label: "Notes", icon: FileText },
   ];
 

@@ -1,4 +1,5 @@
-import { Mic, Square } from "lucide-react";
+import { Mic } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface HomeTabProps {
   userName: string;
@@ -7,13 +8,6 @@ interface HomeTabProps {
   onToggleRecording: () => void;
   recordingTime: number;
   totalNotes?: number;
-}
-
-// Format seconds to MM:SS
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
 // Simple app icon SVGs
@@ -58,6 +52,21 @@ const AppIcons = {
       <path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.014-4.49-4.49S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.02 3.019 3.02h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.355 3.019 3.019 3.019h3.117V8.981H8.148zM8.172 24c-2.489 0-4.515-2.014-4.515-4.49s2.014-4.49 4.49-4.49h4.588v4.441c0 2.503-2.047 4.539-4.563 4.539zm-.024-7.51a3.023 3.023 0 0 0-3.019 3.019c0 1.665 1.365 3.019 3.044 3.019 1.705 0 3.093-1.376 3.093-3.068v-2.97H8.148zm7.704 0h-.098c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h.098c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.49-4.49 4.49zm-.098-7.509c-1.665 0-3.019 1.355-3.019 3.019s1.355 3.019 3.019 3.019h.098c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-.098z"/>
     </svg>
   ),
+  GitHub: () => (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" opacity="0.5">
+      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+    </svg>
+  ),
+  Zoom: () => (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" opacity="0.5">
+      <path d="M24 12c0 6.627-5.373 12-12 12S0 18.627 0 12 5.373 0 12 0s12 5.373 12 12zM4.865 8.39v5.655c.007 1.17.957 2.112 2.127 2.112h6.894l2.37 2.373v-2.373h.488c1.17 0 2.121-.942 2.121-2.112v-5.66c0-1.17-.95-2.112-2.12-2.112H6.991c-1.17 0-2.12.943-2.126 2.117z"/>
+    </svg>
+  ),
+  Spotify: () => (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" opacity="0.5">
+      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+    </svg>
+  ),
 };
 
 function HomeTab({
@@ -73,37 +82,10 @@ function HomeTab({
 
   return (
     <div className="home-container">
-      <div className="home-content">
+      {/* Top Section: Greeting, Stats, Shortcut */}
+      <div className="home-top-section">
         {/* Greeting */}
         <h1 className="home-greeting">{greeting}</h1>
-
-        {/* Record Button */}
-        <div className="home-record-wrapper">
-          {isRecording && <div className="home-record-ripple" />}
-          <button
-            className={`home-record-btn ${isRecording ? "recording" : ""}`}
-            onClick={onToggleRecording}
-            aria-label={isRecording ? "Stop recording" : "Start recording"}
-          >
-            {isRecording ? (
-              <Square size={40} fill="white" />
-            ) : (
-              <Mic size={48} />
-            )}
-          </button>
-        </div>
-
-        {/* Recording Timer */}
-        <div className={`home-timer ${isRecording ? "active" : ""}`}>
-          {formatTime(recordingTime)}
-        </div>
-
-        {/* Instruction Text */}
-        <p className="home-instruction">
-          {isRecording
-            ? "Recording... Tap to stop"
-            : "Tap the microphone to start recording"}
-        </p>
 
         {/* Minimal Stats */}
         {typeof totalNotes === "number" && (
@@ -126,8 +108,29 @@ function HomeTab({
             <AppIcons.Discord />
             <AppIcons.Teams />
             <AppIcons.Figma />
+            <AppIcons.GitHub />
+            <AppIcons.Zoom />
+            <AppIcons.Spotify />
           </div>
           <p className="home-works-everywhere">Works everywhere</p>
+        </div>
+      </div>
+
+      {/* Bottom Section: Record Button */}
+      <div className="fixed bottom-6 sm:bottom-10 left-60 right-0 z-50 flex justify-center pointer-events-none">
+        <div className="pointer-events-auto">
+          <motion.div
+            whileHover={{ y: -5 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+          >
+            <button
+              // onClick={handleStartRecording}
+              // size="lg"
+              className="w-16 h-16 flex items-center justify-center sm:w-20 sm:h-20 rounded-full text-white bg-cyan-600 shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <Mic className="w-6 h-6 sm:w-8 sm:h-8 " />
+            </button>
+          </motion.div>
         </div>
       </div>
     </div>

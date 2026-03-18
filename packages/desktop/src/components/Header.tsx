@@ -42,7 +42,6 @@ export function Header({ userEmail, onSignOut, onSettingsClick }: HeaderProps) {
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-600 to-cyan-500 text-white flex items-center justify-center text-xs font-semibold uppercase shrink-0">
             <span>{getInitials(userEmail)}</span>
           </div>
-          <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
         </button>
 
         {isDropdownOpen && (
@@ -68,7 +67,7 @@ export function Header({ userEmail, onSignOut, onSettingsClick }: HeaderProps) {
                 <span>Settings</span>
               </button>
               <button
-                className="flex items-center gap-2.5 w-full py-2.5 px-3 bg-transparent border-none rounded-lg text-sm font-medium text-red-600 cursor-pointer transition-colors duration-150 text-left hover:bg-red-50"
+                className="flex items-center gap-2.5 w-full py-2.5 px-3 bg-transparent border-none rounded-lg text-sm font-medium text-slate-700 cursor-pointer transition-colors duration-150 text-left hover:bg-slate-50"
                 onClick={() => {
                   setIsDropdownOpen(false);
                   onSignOut?.();

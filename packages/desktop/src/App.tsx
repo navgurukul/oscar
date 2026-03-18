@@ -15,10 +15,11 @@ import { NotesTab } from "./components/NotesTab";
 import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
+import HomeTab from "./components/HomeTab";
 import oscarLogo from "/OSCAR_LIGHT_LOGO.png";
 import "./App.css";
 
-type TabType = "notes" | "vocabulary" | "billing" | "settings";
+type TabType = "home" | "notes" | "vocabulary" | "billing" | "settings";
 
 interface Transcription {
   text: string;
@@ -703,7 +704,7 @@ function App() {
   const [userApiKey, setUserApiKey] = useState<string>("");
 
   // Recording & processing (global hotkey functionality)
-  const [_isRecording, setIsRecording] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [_transcript, setTranscript] = useState("");
   const [whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
@@ -1162,7 +1163,7 @@ function App() {
   };
 
   // ── Tab state ──────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<TabType>("notes");
+  const [activeTab, setActiveTab] = useState<TabType>("home");
 
   // ── Subscription state ─────────────────────────────────────────────────────
   const [isProUser, setIsProUser] = useState(false);
@@ -1235,6 +1236,22 @@ function App() {
           {/* Main scrollable content */}
           <main className="flex-1 overflow-y-auto bg-slate-50 rounded-tl-2xl">
               <div className="flex-1 flex flex-col">
+                {activeTab === "home" && user && (
+                  <HomeTab
+                    userName={user.user_metadata?.full_name || ""}
+                    userId={user.id}
+                    isRecording={isRecording}
+                    onToggleRecording={() => {
+                      if (isRecording) {
+                        stopHotkeyRecording();
+                      } else {
+                        startHotkeyRecording();
+                      }
+                    }}
+                    recordingTime={0}
+                  />
+                )}
+
                 {activeTab === "notes" && user && (
                   <NotesTab userId={user.id} />
                 )}
