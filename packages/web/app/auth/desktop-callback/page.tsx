@@ -3,48 +3,66 @@
 import { useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Spinner } from "@/components/ui/spinner";
+import { createClient } from "@/lib/supabase/client";
 
 function DesktopCallbackContent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Get tokens from URL fragment (after #) - this is where Supabase puts them
-    const hash = window.location.hash.substring(1); // Remove the # prefix
-    const params = new URLSearchParams(hash);
-    
-    // Get state from query params (it was added to redirectTo URL)
-    const queryParams = new URLSearchParams(window.location.search);
-    const desktopState = queryParams.get("desktop_state");
-    
-    const accessToken = params.get("access_token");
-    const refreshToken = params.get("refresh_token");
-    const expiresIn = params.get("expires_in");
-    const error = params.get("error");
-    const errorDescription = params.get("error_description");
+    async function handleCallback() {
+      // Get tokens from URL fragment (after #) - this is where Supabase puts them
+      const hash = window.location.hash.substring(1); // Remove the # prefix
+      const params = new URLSearchParams(hash);
+      
+      // Get state from query params (it was added to redirectTo URL)
+      const queryParams = new URLSearchParams(window.location.search);
+      const desktopState = queryParams.get("desktop_state");
+      
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
+      const expiresIn = params.get("expires_in");
+      const error = params.get("error");
+      const errorDescription = params.get("error_description");
 
-    if (error) {
-      // Redirect to desktop app with error
-      window.location.href = `oscar://auth/callback?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(errorDescription || "")}`;
-      return;
+      if (error) {
+        // Redirect to desktop app with error
+        window.location.href = `oscar://auth/callback?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(errorDescription || "")}`;
+        return;
+      }
+
+      if (accessToken && refreshToken) {
+        // Establish web session before redirecting to desktop app
+        // This ensures both apps end up authenticated
+        try {
+          const supabase = createClient();
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+        } catch (err) {
+          // Log error but don't break the desktop flow
+          console.error("Failed to establish web session:", err);
+        }
+
+        // Redirect to desktop app with tokens (include state for validation)
+        const redirectUrl = `oscar://auth/callback?success=true&access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&expires_in=${expiresIn || "3600"}${desktopState ? `&state=${encodeURIComponent(desktopState)}` : ""}`;
+        window.location.href = redirectUrl;
+        return;
+      }
+
+      // If no tokens in fragment, check if there's a code in query params (authorization code flow)
+      const code = searchParams.get("code");
+      if (code) {
+        // Let the server handle it via the regular callback route (pass state for validation)
+        window.location.href = `/auth/callback?code=${encodeURIComponent(code)}&desktop=true${desktopState ? `&desktop_state=${encodeURIComponent(desktopState)}` : ""}`;
+        return;
+      }
+
+      // No tokens or code - something went wrong
+      window.location.href = "oscar://auth/callback?error=no_tokens";
     }
 
-    if (accessToken && refreshToken) {
-      // Redirect to desktop app with tokens (include state for validation)
-      const redirectUrl = `oscar://auth/callback?success=true&access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&expires_in=${expiresIn || "3600"}${desktopState ? `&state=${encodeURIComponent(desktopState)}` : ""}`;
-      window.location.href = redirectUrl;
-      return;
-    }
-
-    // If no tokens in fragment, check if there's a code in query params (authorization code flow)
-    const code = searchParams.get("code");
-    if (code) {
-      // Let the server handle it via the regular callback route (pass state for validation)
-      window.location.href = `/auth/callback?code=${encodeURIComponent(code)}&desktop=true${desktopState ? `&desktop_state=${encodeURIComponent(desktopState)}` : ""}`;
-      return;
-    }
-
-    // No tokens or code - something went wrong
-    window.location.href = "oscar://auth/callback?error=no_tokens";
+    handleCallback();
   }, [searchParams]);
 
   return (
