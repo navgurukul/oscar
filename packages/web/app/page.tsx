@@ -97,10 +97,10 @@ export default function Home() {
                 <Button
                   onClick={() => router.push("/download")}
                   size="lg"
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-8 py-6 text-lg"
+                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-10 py-7 text-xl font-semibold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-105"
                 >
-                  <Download className="w-5 h-5 mr-2" />
-                  Download
+                  <Download className="w-6 h-6 mr-3" />
+                  Download Free
                 </Button>
                 <Button
                   onClick={() => {
@@ -108,7 +108,7 @@ export default function Home() {
                   }}
                   size="lg"
                   variant="outline"
-                  className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 px-8 py-6 text-lg"
+                  className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300 px-10 py-7 text-lg transition-all duration-300"
                 >
                   See How It Works
                 </Button>

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, Suspense, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui/spinner";
 import { createClient } from "@/lib/supabase/client";
 
 function DesktopCallbackContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function handleCallback() {
@@ -21,12 +23,16 @@ function DesktopCallbackContent() {
       const accessToken = params.get("access_token");
       const refreshToken = params.get("refresh_token");
       const expiresIn = params.get("expires_in");
-      const error = params.get("error");
+      const authError = params.get("error");
       const errorDescription = params.get("error_description");
 
-      if (error) {
-        // Redirect to desktop app with error
-        window.location.href = `oscar://auth/callback?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(errorDescription || "")}`;
+      if (authError) {
+        // Trigger deep link to desktop app with error
+        window.location.href = `oscar://auth/callback?error=${encodeURIComponent(authError)}&error_description=${encodeURIComponent(errorDescription || "")}`;
+        // Navigate browser to auth page with error after a short delay
+        setTimeout(() => {
+          router.replace(`/auth?error=${encodeURIComponent(authError)}`);
+        }, 500);
         return;
       }
 
@@ -40,13 +46,24 @@ function DesktopCallbackContent() {
             refresh_token: refreshToken,
           });
         } catch (err) {
-          // Log error but don't break the desktop flow
+          // Log error and redirect to auth with error
           console.error("Failed to establish web session:", err);
+          const errorMessage = err instanceof Error ? err.message : "Failed to establish session";
+          setError(errorMessage);
+          router.replace(`/auth?error=${encodeURIComponent(errorMessage)}`);
+          return;
         }
 
-        // Redirect to desktop app with tokens (include state for validation)
-        const redirectUrl = `oscar://auth/callback?success=true&access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&expires_in=${expiresIn || "3600"}${desktopState ? `&state=${encodeURIComponent(desktopState)}` : ""}`;
-        window.location.href = redirectUrl;
+        // Trigger deep link to desktop app with tokens (include state for validation)
+        // Note: This opens the desktop app but browser stays on this page
+        const deepLinkUrl = `oscar://auth/callback?success=true&access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&expires_in=${expiresIn || "3600"}${desktopState ? `&state=${encodeURIComponent(desktopState)}` : ""}`;
+        window.location.href = deepLinkUrl;
+        
+        // After triggering deep link, navigate browser to home page
+        // Small delay to give OS time to process the deep link
+        setTimeout(() => {
+          router.replace("/");
+        }, 500);
         return;
       }
 
@@ -60,10 +77,14 @@ function DesktopCallbackContent() {
 
       // No tokens or code - something went wrong
       window.location.href = "oscar://auth/callback?error=no_tokens";
+      // Navigate browser to auth page with error
+      setTimeout(() => {
+        router.replace("/auth?error=no_tokens");
+      }, 500);
     }
 
     handleCallback();
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-black">

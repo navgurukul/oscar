@@ -3,12 +3,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
-import { Download } from "lucide-react";
 
 export function FloatingNavbar() {
   const pathname = usePathname();
   const isAuthPage = pathname === ROUTES.AUTH || pathname === ROUTES.PRICING || pathname === ROUTES.DOWNLOAD;
-  const isLandingPage = pathname === ROUTES.HOME;
 
   return (
     <nav className="fixed top-0 z-50 w-full ">
@@ -31,17 +29,6 @@ export function FloatingNavbar() {
             {UI_STRINGS.APP_NAME}
           </span>
         </Link>
-        
-        {/* Download link - only show on landing page */}
-        {isLandingPage && (
-          <Link
-            href={ROUTES.DOWNLOAD}
-            className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            <span className="text-sm font-medium hidden sm:inline">Download App</span>
-          </Link>
-        )}
       </div>
     </nav>
   );
