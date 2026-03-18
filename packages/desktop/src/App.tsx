@@ -52,6 +52,9 @@ async function saveSetting<T>(key: string, value: T): Promise<void> {
   }
 }
 
+// Module-level storage for OAuth state validation
+let pendingOAuthState: string | null = null;
+
 // ── Step Indicator ────────────────────────────────────────────────────────────
 
 function StepIndicator({ currentStep }: { currentStep: "signin" | "permissions" | "setup" }) {
@@ -204,10 +207,10 @@ function CoverShowcase() {
 
 // ── Auth Screen ───────────────────────────────────────────────────────────────
 
-function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
+function AuthScreen({ onAuth, authError }: { onAuth: (session: Session) => void; authError?: string | null }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [oauthState, setOauthState] = useState<{ verifier: string; url: string } | null>(null);
+  const [oauthState, setOauthState] = useState<{ verifier: string; url: string; state: string } | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Poll for session when OAuth is in progress
@@ -257,10 +260,13 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
     setLoading(true);
 
     try {
+      const state = crypto.randomUUID();
+      pendingOAuthState = state;
+      const webAppUrl = import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org";
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: "https://oscar.samyarth.org/auth/desktop-callback",
+          redirectTo: `${webAppUrl}/auth/desktop-callback?desktop_state=${encodeURIComponent(state)}`,
           skipBrowserRedirect: true,
         },
       });
@@ -268,7 +274,7 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
       if (oauthError) throw oauthError;
 
       if (data?.url) {
-        setOauthState({ verifier: "", url: data.url });
+        setOauthState({ verifier: "", url: data.url, state });
         await openUrl(data.url);
       } else {
         throw new Error("No OAuth URL returned");
@@ -299,7 +305,7 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
               Write faster in every app using your voice. Sign in with Google to sync your dictionary and enable AI editing.
             </p>
 
-            {error && <p className="auth-error">{error}</p>}
+            {(error || authError) && <p className="auth-error">{error || authError}</p>}
             {oauthState && (
               <p className="auth-message">
                 Waiting for authentication... Please complete the sign-in in your browser.
@@ -696,6 +702,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // First-run gates
   const [permissionsShown, setPermissionsShown] = useState<boolean | null>(null);
@@ -782,13 +789,15 @@ function App() {
   useEffect(() => {
     // Handle deep link URL
     const handleDeepLink = async (url: string) => {
-      console.log("[deep-link] Received:", url);
+      const safeUrl = url.split("?")[0].split("#")[0];
+      console.log("[deep-link] Received deep link:", safeUrl);
       
       // Parse the deep link URL
       if (url.startsWith("oscar://auth/callback")) {
         const urlObj = new URL(url);
         const error = urlObj.searchParams.get("error");
         const success = urlObj.searchParams.get("success");
+        const incomingState = urlObj.searchParams.get("state");
         let accessToken = urlObj.searchParams.get("access_token");
         let refreshToken = urlObj.searchParams.get("refresh_token");
         
@@ -801,9 +810,18 @@ function App() {
         
         if (error) {
           console.error("[deep-link] Auth error:", error);
+          setAuthError("Authentication failed. Please try again.");
         }
         
         if (accessToken && refreshToken) {
+          // Validate state to prevent token injection attacks
+          if (pendingOAuthState && incomingState !== pendingOAuthState) {
+            console.warn("[deep-link] State mismatch - ignoring potentially malicious deep link");
+            setAuthError("Security validation failed. Please try signing in again.");
+            return;
+          }
+          pendingOAuthState = null; // Clear after use
+          
           console.log("[deep-link] Setting session with tokens...");
           
           // Set the session using the tokens from the web app
@@ -813,7 +831,8 @@ function App() {
           });
           
           if (sessionError) {
-            console.error("[deep-link] Failed to set session:", sessionError);
+            console.error("[deep-link] Failed to set session:", sessionError.message);
+            setAuthError("Sign-in failed. Please try again.");
           } else if (data.session) {
             console.log("[deep-link] Session established successfully");
             setSession(data.session);
@@ -1192,7 +1211,7 @@ function App() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (authLoading) return null;
-  if (!user) return <AuthScreen onAuth={(s) => { setSession(s); sessionRef.current = s; setUser(s.user); }} />;
+  if (!user) return <AuthScreen onAuth={(s) => { setSession(s); sessionRef.current = s; setUser(s.user); setAuthError(null); }} authError={authError} />;
   if (permissionsShown === null) return null;
   if (!permissionsShown) return <PermissionsScreen onContinue={handlePermissionsContinue} />;
   if (setupComplete === null) return null;

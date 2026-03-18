@@ -12,6 +12,10 @@ function DesktopCallbackContent() {
     const hash = window.location.hash.substring(1); // Remove the # prefix
     const params = new URLSearchParams(hash);
     
+    // Get state from query params (it was added to redirectTo URL)
+    const queryParams = new URLSearchParams(window.location.search);
+    const desktopState = queryParams.get("desktop_state");
+    
     const accessToken = params.get("access_token");
     const refreshToken = params.get("refresh_token");
     const expiresIn = params.get("expires_in");
@@ -25,8 +29,8 @@ function DesktopCallbackContent() {
     }
 
     if (accessToken && refreshToken) {
-      // Redirect to desktop app with tokens
-      const redirectUrl = `oscar://auth/callback?success=true&access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&expires_in=${expiresIn || "3600"}`;
+      // Redirect to desktop app with tokens (include state for validation)
+      const redirectUrl = `oscar://auth/callback?success=true&access_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&expires_in=${expiresIn || "3600"}${desktopState ? `&state=${encodeURIComponent(desktopState)}` : ""}`;
       window.location.href = redirectUrl;
       return;
     }
@@ -34,8 +38,8 @@ function DesktopCallbackContent() {
     // If no tokens in fragment, check if there's a code in query params (authorization code flow)
     const code = searchParams.get("code");
     if (code) {
-      // Let the server handle it via the regular callback route
-      window.location.href = `/auth/callback?code=${encodeURIComponent(code)}&desktop=true`;
+      // Let the server handle it via the regular callback route (pass state for validation)
+      window.location.href = `/auth/callback?code=${encodeURIComponent(code)}&desktop=true${desktopState ? `&desktop_state=${encodeURIComponent(desktopState)}` : ""}`;
       return;
     }
 

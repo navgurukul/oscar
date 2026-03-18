@@ -8,6 +8,8 @@ export async function GET(request: Request) {
   
   // Check if this is a desktop app auth flow
   const isDesktopFlow = searchParams.get("desktop") === "true";
+  // Get desktop_state from query params for state validation
+  const desktopState = searchParams.get("desktop_state");
 
   if (code) {
     const supabase = await createClient();
@@ -17,7 +19,7 @@ export async function GET(request: Request) {
       // with the session tokens so the desktop app can establish its own session
       if (isDesktopFlow) {
         const { access_token, refresh_token, expires_in } = data.session;
-        const redirectUrl = `oscar://auth/callback?success=true&access_token=${encodeURIComponent(access_token)}&refresh_token=${encodeURIComponent(refresh_token)}&expires_in=${expires_in}`;
+        const redirectUrl = `oscar://auth/callback?success=true&access_token=${encodeURIComponent(access_token)}&refresh_token=${encodeURIComponent(refresh_token)}&expires_in=${expires_in}${desktopState ? `&state=${encodeURIComponent(desktopState)}` : ""}`;
         return NextResponse.redirect(redirectUrl);
       }
       // Important: after server-side code exchange, the browser Supabase client may
