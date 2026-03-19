@@ -9,6 +9,7 @@ import {
   useMemo,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { storageService } from "@/lib/services/storage.service";
 import type { User, Session } from "@supabase/supabase-js";
 
 interface AuthContextType {
@@ -45,6 +46,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
+
+      // Clear any note-related sessionStorage on sign-out to prevent cross-user carryover
+      if (_event === "SIGNED_OUT") {
+        storageService.clearNote();
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -75,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    storageService.clearNote();
     await supabase.auth.signOut();
   }, [supabase.auth]);
 

@@ -30,6 +30,7 @@ import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
+ 
 
 // Lazy load the FeedbackWidget
 const FeedbackWidget = dynamic(
@@ -52,8 +53,9 @@ export default function NoteDetailPage({
 }) {
   const [id, setId] = useState<string | null>(null);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+ 
 
   const [note, setNote] = useState<DBNote | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -70,6 +72,7 @@ export default function NoteDetailPage({
   const [activeMode, setActiveMode] = useState<"normal" | "email" | "translate" | "summary" | "bullets">("normal");
   const [modeContent, setModeContent] = useState<Record<string, string>>({});
   const [isLoadingMode, setIsLoadingMode] = useState(false);
+ 
 
   // Feedback state
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
@@ -90,6 +93,11 @@ export default function NoteDetailPage({
   useEffect(() => {
     const loadNote = async () => {
       if (!id) return;
+      if (authLoading) return;
+      if (!user) {
+        router.push(`/auth?redirectTo=${encodeURIComponent(`/notes/${id}`)}`);
+        return;
+      }
       setIsLoading(true);
       const { data, error } = await notesService.getNoteById(id);
       if (error || !data) {
@@ -100,6 +108,7 @@ export default function NoteDetailPage({
       } else {
         setNote(data);
         setEditedText(data.edited_text || data.original_formatted_text);
+        // derive share link on demand when needed
         // Set existing feedback state
         if (data.feedback_helpful !== null) {
           setHasFeedbackSubmitted(true);
@@ -110,7 +119,9 @@ export default function NoteDetailPage({
     };
 
     loadNote();
-  }, [id, router, user]);
+  }, [id, router, user, authLoading]);
+
+ 
 
   const handleSaveEdit = async () => {
     if (!note) return;
@@ -230,6 +241,8 @@ export default function NoteDetailPage({
     setIsStarring(false);
   };
 
+ 
+
   if (isLoading) {
     return (
       <main className="flex flex-col items-center px-4 pt-8 pb-24">
@@ -264,7 +277,7 @@ export default function NoteDetailPage({
         </div> */}
         <div className="w-10" />
 
-        <div className="flex bg-slate-800 border border-slate-700 rounded-lg overflow-hidden ml-auto mr-2 gap-0.5">
+        <div className="flex bg-slate-800 border border-slate-700 rounded-lg overflow-x-auto ml-auto mr-2 gap-0.5 max-w-full">
           {/* Normal mode */}
           <button
             onClick={() => {
@@ -503,6 +516,9 @@ export default function NoteDetailPage({
                         >
                           <Copy className="w-4 h-4" />
                         </Button>
+                       
+                        
+                        
                         <Button
                           variant="ghost"
                           size="sm"
@@ -555,7 +571,7 @@ export default function NoteDetailPage({
                   />
                 </>
               ) : (
-                <div className="text-md text-start text-gray-300 whitespace-pre-wrap">
+                <div className="text-md text-start text-gray-300 whitespace-pre-wrap break-words">
                   {displayText}
                 </div>
               )}
@@ -700,6 +716,24 @@ export default function NoteDetailPage({
                   </button>
                 </div>
                 <Separator className="bg-cyan-700/30" />
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                 
+                  <button
+                    onClick={async () => {
+                      const url = `${window.location.origin}/notes/${note.id}`;
+                      try {
+                        await navigator.clipboard.writeText(url);
+                        toast({ title: "Private link copied" });
+                      } catch {
+                        toast({ title: "Copy failed", description: url });
+                      }
+                    }}
+                    className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-white rounded-lg border border-cyan-700/30"
+                  >
+                    Copy Private Link
+                  </button>
+                </div>
 
                 {/* Subject input */}
                 <div className="mt-4">
