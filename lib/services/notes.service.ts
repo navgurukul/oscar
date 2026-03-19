@@ -93,6 +93,16 @@ export const notesService = {
   },
 
   /**
+   * Set a simple text category on a note (folder column)
+   */
+  async setNoteCategory(
+    id: string,
+    category: string | null
+  ): Promise<{ data: DBNote | null; error: Error | null }> {
+    return this.updateNote(id, { folder: category });
+  },
+
+  /**
    * Soft delete a note by setting deleted_at
    */
   async deleteNote(id: string): Promise<{ error: Error | null }> {

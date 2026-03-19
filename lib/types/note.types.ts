@@ -34,10 +34,13 @@ export interface DBNote {
   // Starred/favorite
   is_starred: boolean;
   // Optional: folder and sharing
+  folder?: string | null;
   folder_id?: string | null;
   share_enabled?: boolean | null;
   share_token?: string | null;
   share_expires_at?: string | null;
+  // Optional: simple sharing flag if using boolean in DB
+  is_shared?: boolean | null;
 }
 
 // Insert type for creating a new note
@@ -47,10 +50,12 @@ export interface DBNoteInsert {
   raw_text: string;
   original_formatted_text: string;
   edited_text?: string | null;
+  folder?: string | null;
   folder_id?: string | null;
   share_enabled?: boolean | null;
   share_token?: string | null;
   share_expires_at?: string | null;
+  is_shared?: boolean | null;
 }
 
 // Update type for modifying a note
@@ -68,10 +73,12 @@ export interface DBNoteUpdate {
   // Starred/favorite
   is_starred?: boolean;
   // Folder and sharing
+  folder?: string | null;
   folder_id?: string | null;
   share_enabled?: boolean | null;
   share_token?: string | null;
   share_expires_at?: string | null;
+  is_shared?: boolean | null;
 }
 
 export interface FormattingResult {
