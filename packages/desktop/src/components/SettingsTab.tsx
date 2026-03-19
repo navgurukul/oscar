@@ -56,7 +56,7 @@ export function SettingsTab({
     <div className="settings-tab">
       <h2 className="settings-tab-title">Settings</h2>
 
-      {/* Sub-tabs */}
+      {/* Sub-tabs - Apple Segmented Control */}
       <div className="settings-subtabs">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -67,7 +67,7 @@ export function SettingsTab({
               className={`subtab-btn ${isActive ? "active" : ""}`}
               onClick={() => setActiveTab(tab.id)}
             >
-              <Icon size={16} />
+              <Icon size={14} />
               <span>{tab.label}</span>
             </button>
           );
@@ -75,13 +75,13 @@ export function SettingsTab({
       </div>
 
       {/* Tab Content */}
-      <div className="settings-content">
+      <div className="settings-content" key={activeTab}>
         {/* Plans & Billing Tab */}
         {activeTab === "billing" && (
           <div className="settings-section">
             <div className="settings-card">
               <div className="settings-card-header">
-                <CreditCard size={20} />
+                <CreditCard size={18} />
                 <h3>Subscription</h3>
               </div>
               <p className="settings-card-description">
@@ -107,7 +107,7 @@ export function SettingsTab({
           <div className="settings-section">
             <div className="settings-card">
               <div className="settings-card-header">
-                <BookOpen size={20} />
+                <BookOpen size={18} />
                 <h3>Personal Dictionary</h3>
               </div>
               <p className="settings-card-description">
@@ -133,7 +133,7 @@ export function SettingsTab({
           <div className="settings-section">
             <div className="settings-card">
               <div className="settings-card-header">
-                <User size={20} />
+                <User size={18} />
                 <h3>Profile Information</h3>
               </div>
               <p className="settings-card-description">
@@ -152,21 +152,21 @@ export function SettingsTab({
 
             <div className="settings-card">
               <div className="settings-card-header">
-                <LogOut size={20} />
+                <LogOut size={18} />
                 <h3>Sign Out</h3>
               </div>
               <p className="settings-card-description">
                 Sign out of your account on this device
               </p>
               <button className="sign-out-settings-btn" onClick={onSignOut}>
-                <LogOut size={16} />
+                <LogOut size={14} />
                 Sign out
               </button>
             </div>
 
             <div className="settings-card danger">
               <div className="settings-card-header">
-                <AlertTriangle size={20} />
+                <AlertTriangle size={18} />
                 <h3>Delete Account</h3>
               </div>
               <p className="settings-card-description">
@@ -187,7 +187,7 @@ export function SettingsTab({
           <div className="settings-section">
             <div className="settings-card">
               <div className="settings-card-header">
-                <Download size={20} />
+                <Download size={18} />
                 <h3>Export Your Data</h3>
               </div>
               <p className="settings-card-description">
@@ -208,7 +208,7 @@ export function SettingsTab({
 
             <div className="settings-card">
               <div className="settings-card-header">
-                <FileText size={20} />
+                <FileText size={18} />
                 <h3>Legal & Compliance</h3>
               </div>
               <p className="settings-card-description">
@@ -229,7 +229,7 @@ export function SettingsTab({
 
             <div className="settings-card danger">
               <div className="settings-card-header">
-                <Trash2 size={20} />
+                <Trash2 size={18} />
                 <h3>Clear All Data</h3>
               </div>
               <p className="settings-card-description">

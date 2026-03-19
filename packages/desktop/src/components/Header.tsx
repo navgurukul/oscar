@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { LogOut, Settings, ChevronDown } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 
 interface HeaderProps {
   userEmail?: string;

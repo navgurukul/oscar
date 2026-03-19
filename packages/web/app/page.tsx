@@ -435,7 +435,7 @@ export default function Home() {
                     )}
                     {currency === "USD" && (
                       <p className="text-xs text-gray-500 mt-2">
-                        Charged in INR (₹{billingCycle === "monthly" ? "249" : "1999"})
+                        Charged in INR (₹{billingCycle === "monthly" ? PRICING.MONTHLY : PRICING.YEARLY})
                       </p>
                     )}
                   </div>

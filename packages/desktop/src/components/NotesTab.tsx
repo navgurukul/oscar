@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { Search, Star, Trash2, Loader2, SquaresSubtract, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Star, Trash2, Loader2, SquaresSubtract, FileText, ChevronLeft, ChevronRight, Mic, Square } from "lucide-react";
+import { motion } from "framer-motion";
 import { notesService } from "../services/notes.service";
 import { NoteCard } from "./NoteCard";
 import { TrashPanel } from "./TrashPanel";
@@ -10,9 +11,19 @@ type SortOption = "created" | "updated" | "length";
 interface NotesTabProps {
   // userId available for future use (e.g., filtering by user)
   userId: string;
+  isRecording: boolean;
+  onToggleRecording: () => void;
+  recordingTime: number;
 }
 
-export function NotesTab({ userId }: NotesTabProps) {
+// Format recording time as MM:SS
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime }: NotesTabProps) {
   const [allNotes, setAllNotes] = useState<DBNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -409,6 +420,37 @@ export function NotesTab({ userId }: NotesTabProps) {
             )}
           </div>
         )}
+      </div>
+
+      {/* Bottom Section: Record Button */}
+      <div className="fixed bottom-6 sm:bottom-10 left-60 right-0 z-50 flex justify-center pointer-events-none">
+        <div className="pointer-events-auto">
+          <motion.div
+            whileHover={{ y: -5 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="flex flex-col items-center gap-2"
+          >
+            {isRecording && (
+              <div className="text-sm font-mono text-rose-600 font-medium">
+                {formatTime(recordingTime)}
+              </div>
+            )}
+            <button
+              onClick={onToggleRecording}
+              className={`w-16 h-16 flex items-center justify-center sm:w-20 sm:h-20 rounded-full text-white shadow-lg hover:shadow-xl transition-all duration-200 ${
+                isRecording
+                  ? "bg-rose-600 hover:bg-rose-700 animate-pulse"
+                  : "bg-cyan-600 hover:bg-cyan-700"
+              }`}
+            >
+              {isRecording ? (
+                <Square className="w-6 h-6 sm:w-8 sm:h-8" fill="currentColor" />
+              ) : (
+                <Mic className="w-6 h-6 sm:w-8 sm:h-8" />
+              )}
+            </button>
+          </motion.div>
+        </div>
       </div>
     </div>
   );

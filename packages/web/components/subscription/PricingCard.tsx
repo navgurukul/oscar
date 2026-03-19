@@ -95,7 +95,7 @@ export function PricingCard({
           {!isFree && currency === "USD" && (
             <p className="text-xs text-gray-500 mt-2">
               Charged in INR (₹
-              {currency === "USD" && billingCycle === "monthly" ? "99" : "990"})
+              {billingCycle === "monthly" ? PRICING.MONTHLY : PRICING.YEARLY})
             </p>
           )}
         </div>
