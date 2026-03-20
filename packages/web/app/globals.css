@@ -9,7 +9,7 @@
 }
 
 body {
-  font-family: var(--font-figtree), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
   font-size: var(--font-size-base, 16px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -17,33 +17,26 @@ body {
 
 /* Define actual font families */
 :root {
-  /* Font variables are set via Next.js font loaders in layout.tsx */
+  /* Default font stack */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  
+  /* Specific font variables */
+  --font-roboto: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-/* Text size mapping on the root element */
-html.text-size-sm {
-  --font-size-base: 14px;
+/* Font mapping helpers: these set --font-sans to a concrete font variable */
+.font-roboto {
+  --font-sans: var(--font-roboto);
 }
-html.text-size-md {
-  --font-size-base: 16px;
-}
-html.text-size-lg {
-  --font-size-base: 18px;
+.font-inter {
+  --font-sans: var(--font-inter);
 }
 
 @layer base {
   html {
     scroll-behavior: smooth;
-    scroll-snap-type: y proximity;
-  }
-  h1, h2, h3 {
-    letter-spacing: -0.01em;
-    font-family: var(--font-eb-garamond), Georgia, serif;
-  }
-  /* Global spacing for headings and paragraphs */
-  h1, h2, h3, h4, h5, h6, p {
-    margin-top: 8px;
-    margin-bottom: 8px;
+    scroll-snap-type: y mandatory;
   }
 
   ::selection {
