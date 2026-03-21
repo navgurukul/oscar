@@ -104,8 +104,8 @@ jobs:
           RUST_BACKTRACE: "1"
           CFLAGS: ${{ matrix.cflags }}
           CXXFLAGS: ${{ matrix.cflags }}
-        # updater → .app.tar.gz (silent auto-update); dmg → installer for download page
-        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles updater,dmg
+        # app → .app.tar.gz (silent auto-update via createUpdaterArtifacts); dmg → installer
+        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles app,dmg
 
       - name: Sign bundles
         working-directory: packages/desktop
