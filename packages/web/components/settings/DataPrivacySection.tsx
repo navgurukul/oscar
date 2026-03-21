@@ -29,10 +29,20 @@ export default function DataPrivacySection() {
   const handleExportData = async () => {
     setIsExporting(true);
     try {
-      // TODO: Implement data export API
+      const response = await fetch("/api/user/export-data");
+      if (!response.ok) throw new Error("Export failed");
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `oscar-data-export-${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
       toast({
-        title: "Export requested",
-        description: "Your data export is being prepared. You will receive an email when it's ready.",
+        title: "Export ready",
+        description: "Your data has been downloaded.",
       });
     } catch {
       toast({
@@ -47,7 +57,9 @@ export default function DataPrivacySection() {
 
   const handleClearAllData = async () => {
     try {
-      // TODO: Implement clear all data API
+      const response = await fetch("/api/user/clear-data", { method: "DELETE" });
+      if (!response.ok) throw new Error("Clear failed");
+
       toast({
         title: "Data cleared",
         description: "All your notes and vocabulary have been deleted.",

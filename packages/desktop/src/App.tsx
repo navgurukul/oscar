@@ -1289,6 +1289,7 @@ function App() {
                       }
                     }}
                     userEmail={user?.email}
+                    userId={user?.id}
                     onSignOut={handleSignOut}
                   />
                 )}

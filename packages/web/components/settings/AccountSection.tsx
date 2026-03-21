@@ -28,10 +28,12 @@ export default function AccountSection() {
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
     try {
-      // TODO: Implement account deletion API
+      const response = await fetch("/api/user/delete-account", { method: "DELETE" });
+      if (!response.ok) throw new Error("Deletion failed");
+
       toast({
-        title: "Account deletion requested",
-        description: "Please contact support to complete account deletion.",
+        title: "Account deleted",
+        description: "Your account and all data have been permanently deleted.",
       });
     } catch {
       toast({

@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { CreditCard, BookOpen, User, Shield, LogOut, AlertTriangle, Download, FileText, Trash2 } from "lucide-react";
+import {
+  CreditCard, BookOpen, User, Shield, LogOut, AlertTriangle,
+  Download, FileText, Trash2, ExternalLink, Mail, Lock,
+} from "lucide-react";
+import { BillingSection } from "./BillingSection";
+import { VocabularySection } from "./VocabularySection";
 
 type TonePreset = "none" | "professional" | "casual" | "friendly";
 type SettingsTabType = "billing" | "vocabulary" | "account" | "privacy";
@@ -20,7 +25,29 @@ interface SettingsTabProps {
   onSaveApiKey: () => void;
   onClearData: () => void;
   userEmail?: string;
+  userId?: string;
   onSignOut: () => void;
+}
+
+const NAV_ITEMS: {
+  id: SettingsTabType;
+  label: string;
+  icon: React.ElementType;
+}[] = [
+  { id: "billing",    label: "Plans & Billing", icon: CreditCard },
+  { id: "vocabulary", label: "Vocabulary",       icon: BookOpen   },
+  { id: "account",    label: "Account",          icon: User       },
+  { id: "privacy",    label: "Data & Privacy",   icon: Shield     },
+];
+
+function getInitials(email?: string): string {
+  if (!email) return "?";
+  const local = email.split("@")[0];
+  const parts = local.split(/[._\-+]/);
+  return parts
+    .slice(0, 2)
+    .map((p) => (p[0] ?? "").toUpperCase())
+    .join("") || (email[0]?.toUpperCase() ?? "?");
 }
 
 export function SettingsTab({
@@ -39,205 +66,243 @@ export function SettingsTab({
   onSaveApiKey: _onSaveApiKey,
   onClearData,
   userEmail,
+  userId,
   onSignOut,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabType>("billing");
-  // Tone options available for future use
+  const [clearConfirm, setClearConfirm] = useState(false);
+
   void _tonePreset;
 
-  const tabs: { id: SettingsTabType; label: string; icon: React.ElementType }[] = [
-    { id: "billing", label: "Plans & Billing", icon: CreditCard },
-    { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
-    { id: "account", label: "Account", icon: User },
-    { id: "privacy", label: "Data & Privacy", icon: Shield },
-  ];
-
   return (
-    <div className="settings-tab">
-      <h2 className="settings-tab-title">Settings</h2>
+    <div className="st-layout">
+      {/* ── Left navigation sidebar ── */}
+      <aside className="st-sidebar">
+        <p className="st-sidebar-label">Settings</p>
 
-      {/* Sub-tabs - Apple Segmented Control */}
-      <div className="settings-subtabs">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              className={`subtab-btn ${isActive ? "active" : ""}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <Icon size={14} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+        <nav className="st-nav">
+          {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+            const isActive = activeTab === id;
+            return (
+              <button
+                key={id}
+                className={`st-nav-btn${isActive ? " active" : ""}`}
+                onClick={() => setActiveTab(id)}
+              >
+                <span className="st-nav-ico">
+                  <Icon size={15} />
+                </span>
+                {label}
+              </button>
+            );
+          })}
+        </nav>
 
-      {/* Tab Content */}
-      <div className="settings-content" key={activeTab}>
-        {/* Plans & Billing Tab */}
+        <div className="st-sidebar-spacer" />
+
+        {/* Version / app info */}
+        <p className="st-sidebar-footer">OSCAR AI</p>
+      </aside>
+
+      {/* ── Right content panel ── */}
+      <div className="st-panel" key={activeTab}>
+
+        {/* ── Plans & Billing ── */}
         {activeTab === "billing" && (
-          <div className="settings-section">
-            <div className="settings-card">
-              <div className="settings-card-header">
-                <CreditCard size={18} />
-                <h3>Subscription</h3>
-              </div>
-              <p className="settings-card-description">
-                Manage your subscription and billing information.
-              </p>
-              <div className="billing-info">
-                <p className="billing-note">
-                  Visit the web app to manage your subscription, view billing history, and update payment methods.
-                </p>
-                <button 
-                  className="billing-cta-btn"
-                  onClick={() => window.open("https://oscarai.app/settings", "_blank")}
-                >
-                  Open Billing Portal
-                </button>
+          userId && userEmail ? (
+            <BillingSection userId={userId} userEmail={userEmail} />
+          ) : (
+            <div className="st-content">
+              <h2 className="st-content-title">Plans & Billing</h2>
+              <div className="st-empty-state">
+                <CreditCard size={32} />
+                <p>Sign in to manage your subscription.</p>
               </div>
             </div>
-          </div>
+          )
         )}
 
-        {/* Vocabulary Tab */}
+        {/* ── Vocabulary ── */}
         {activeTab === "vocabulary" && (
-          <div className="settings-section">
-            <div className="settings-card">
-              <div className="settings-card-header">
-                <BookOpen size={18} />
-                <h3>Personal Dictionary</h3>
-              </div>
-              <p className="settings-card-description">
-                Manage words and phrases to improve transcription accuracy.
-              </p>
-              <div className="vocabulary-info">
-                <p className="vocabulary-note">
-                  Your vocabulary helps OSCAR recognize custom words, names, and industry-specific terms.
-                </p>
-                <button 
-                  className="vocabulary-cta-btn"
-                  onClick={() => window.open("https://oscarai.app/settings", "_blank")}
-                >
-                  Manage Vocabulary
-                </button>
+          userId ? (
+            <VocabularySection userId={userId} />
+          ) : (
+            <div className="st-content">
+              <h2 className="st-content-title">Vocabulary</h2>
+              <div className="st-empty-state">
+                <BookOpen size={32} />
+                <p>Sign in to manage your vocabulary.</p>
               </div>
             </div>
-          </div>
+          )
         )}
 
-        {/* Account Tab */}
+        {/* ── Account ── */}
         {activeTab === "account" && (
-          <div className="settings-section">
-            <div className="settings-card">
-              <div className="settings-card-header">
-                <User size={18} />
-                <h3>Profile Information</h3>
-              </div>
-              <p className="settings-card-description">
-                View your account details
-              </p>
-              <div className="account-info">
-                <div className="account-field">
-                  <label>Email Address</label>
-                  <span className="account-value">{userEmail || "Not available"}</span>
+          <div className="st-content">
+            <h2 className="st-content-title">Account</h2>
+
+            {/* Profile card */}
+            <div className="st-card">
+              <div className="st-card-hd">
+                <span className="st-ico-pill">
+                  <User size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title">Profile</h3>
+                  <p className="st-card-desc">Your account details</p>
                 </div>
-                <p className="account-note">
-                  You signed in with Google. To change your email or password, update your Google account settings.
-                </p>
+              </div>
+
+              <div className="st-profile-row">
+                <div className="st-avatar">
+                  {getInitials(userEmail)}
+                </div>
+                <div className="st-profile-info">
+                  <span className="st-profile-email">
+                    <Mail size={13} />
+                    {userEmail || "No email address"}
+                  </span>
+                  <span className="st-profile-note">
+                    <Lock size={11} />
+                    Signed in with Google
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="settings-card">
-              <div className="settings-card-header">
-                <LogOut size={18} />
-                <h3>Sign Out</h3>
+            {/* Sign out card */}
+            <div className="st-card">
+              <div className="st-card-hd">
+                <span className="st-ico-pill st-ico-pill--neutral">
+                  <LogOut size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title">Sign Out</h3>
+                  <p className="st-card-desc">Sign out of your account on this device</p>
+                </div>
               </div>
-              <p className="settings-card-description">
-                Sign out of your account on this device
-              </p>
-              <button className="sign-out-settings-btn" onClick={onSignOut}>
+              <button className="st-btn-muted" onClick={onSignOut}>
                 <LogOut size={14} />
                 Sign out
               </button>
             </div>
 
-            <div className="settings-card danger">
-              <div className="settings-card-header">
-                <AlertTriangle size={18} />
-                <h3>Delete Account</h3>
+            {/* Delete account card */}
+            <div className="st-card st-card-danger">
+              <div className="st-card-hd">
+                <span className="st-ico-pill st-ico-pill--danger">
+                  <AlertTriangle size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title st-title-danger">Delete Account</h3>
+                  <p className="st-card-desc">Permanently delete your account and all associated data</p>
+                </div>
               </div>
-              <p className="settings-card-description">
-                Permanently delete your account and all associated data
-              </p>
-              <button 
-                className="delete-account-btn"
+              <button
+                className="st-btn-danger-ghost"
                 onClick={() => window.open("https://oscarai.app/settings", "_blank")}
               >
+                <AlertTriangle size={14} />
                 Delete Account
               </button>
             </div>
           </div>
         )}
 
-        {/* Data & Privacy Tab */}
+        {/* ── Data & Privacy ── */}
         {activeTab === "privacy" && (
-          <div className="settings-section">
-            <div className="settings-card">
-              <div className="settings-card-header">
-                <Download size={18} />
-                <h3>Export Your Data</h3>
-              </div>
-              <p className="settings-card-description">
-                Download a copy of all your personal data
-              </p>
-              <div className="export-info">
-                <p className="export-note">
-                  Request an export of your notes, vocabulary, and account information.
-                </p>
-                <button 
-                  className="export-cta-btn"
-                  onClick={() => window.open("https://oscarai.app/settings", "_blank")}
-                >
-                  Request Data Export
-                </button>
-              </div>
-            </div>
+          <div className="st-content">
+            <h2 className="st-content-title">Data & Privacy</h2>
 
-            <div className="settings-card">
-              <div className="settings-card-header">
-                <FileText size={18} />
-                <h3>Legal & Compliance</h3>
+            {/* Export card */}
+            <div className="st-card">
+              <div className="st-card-hd">
+                <span className="st-ico-pill">
+                  <Download size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title">Export Your Data</h3>
+                  <p className="st-card-desc">
+                    Download a copy of your notes, vocabulary, and account information
+                  </p>
+                </div>
               </div>
-              <p className="settings-card-description">
-                Review our terms and policies
-              </p>
-              <div className="legal-links">
-                <a href="https://oscarai.app/privacy" target="_blank" rel="noopener noreferrer" className="legal-link">
-                  Privacy Policy
-                </a>
-                <a href="https://oscarai.app/terms" target="_blank" rel="noopener noreferrer" className="legal-link">
-                  Terms of Service
-                </a>
-                <a href="https://oscarai.app/refund-policy" target="_blank" rel="noopener noreferrer" className="legal-link">
-                  Refund Policy
-                </a>
-              </div>
-            </div>
-
-            <div className="settings-card danger">
-              <div className="settings-card-header">
-                <Trash2 size={18} />
-                <h3>Clear All Data</h3>
-              </div>
-              <p className="settings-card-description">
-                Delete all local data while keeping your account
-              </p>
-              <button className="clear-data-btn" onClick={onClearData}>
-                Clear All Local Data
+              <button
+                className="st-btn-primary"
+                onClick={() => window.open("https://oscarai.app/settings", "_blank")}
+              >
+                <Download size={14} />
+                Request Data Export
               </button>
+            </div>
+
+            {/* Legal links card */}
+            <div className="st-card">
+              <div className="st-card-hd">
+                <span className="st-ico-pill st-ico-pill--neutral">
+                  <FileText size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title">Legal & Compliance</h3>
+                  <p className="st-card-desc">Review our terms and policies</p>
+                </div>
+              </div>
+              <div className="st-legal-list">
+                {[
+                  { label: "Privacy Policy",   href: "https://oscarai.app/privacy" },
+                  { label: "Terms of Service", href: "https://oscarai.app/terms" },
+                  { label: "Refund Policy",    href: "https://oscarai.app/refund-policy" },
+                ].map(({ label, href }) => (
+                  <a
+                    key={href}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="st-legal-link"
+                  >
+                    {label}
+                    <ExternalLink size={12} />
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* Clear data card */}
+            <div className="st-card st-card-danger">
+              <div className="st-card-hd">
+                <span className="st-ico-pill st-ico-pill--danger">
+                  <Trash2 size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title st-title-danger">Clear All Data</h3>
+                  <p className="st-card-desc">
+                    Delete all local data while keeping your account active
+                  </p>
+                </div>
+              </div>
+
+              {clearConfirm ? (
+                <div className="st-confirm-row">
+                  <span className="st-confirm-msg">This cannot be undone. Are you sure?</span>
+                  <div className="st-confirm-btns">
+                    <button className="st-btn-ghost" onClick={() => setClearConfirm(false)}>
+                      Cancel
+                    </button>
+                    <button
+                      className="st-btn-danger"
+                      onClick={() => { setClearConfirm(false); onClearData(); }}
+                    >
+                      Yes, clear data
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button className="st-btn-danger-ghost" onClick={() => setClearConfirm(true)}>
+                  <Trash2 size={14} />
+                  Clear All Local Data
+                </button>
+              )}
             </div>
           </div>
         )}
