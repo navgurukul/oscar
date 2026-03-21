@@ -1111,7 +1111,7 @@ function App() {
 
   // ── Audio processing (shared by hotkey recording) ───────────────────────────
 
-  const processAudio = async (stream: MediaStream, shouldPaste: boolean, targetApp?: string) => {
+  const processAudio = async (_stream: MediaStream, shouldPaste: boolean, targetApp?: string) => {
     console.log("[process] processAudio called — shouldPaste:", shouldPaste, "targetApp:", JSON.stringify(targetApp));
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
