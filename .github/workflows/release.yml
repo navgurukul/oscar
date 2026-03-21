@@ -19,7 +19,7 @@ jobs:
           - target: x86_64-apple-darwin
             label: macos-intel
 
-    runs-on: macos-latest   # ARM M-series — aarch64 native, x86_64 cross-compiled
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
@@ -47,25 +47,59 @@ jobs:
           workspaces: './packages/desktop/src-tauri -> target'
           key: ${{ matrix.target }}
 
-      - name: Install frontend dependencies
+      - name: Install dependencies
         run: pnpm install
 
+      - name: Build frontend
+        working-directory: packages/desktop
+        run: pnpm build
+
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        working-directory: packages/desktop
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          projectPath: packages/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: 'OSCAR ${{ github.ref_name }}'
-          releaseBody: 'Bug fixes and improvements. Download the .dmg for your Mac below.'
-          releaseDraft: false
-          prerelease: false
-          args: --target ${{ matrix.target }}
+        run: pnpm tauri build --target ${{ matrix.target }}
 
-  # After both builds finish, generate and upload updates.json with signatures
+      - name: Upload release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Create or get the release
+          RELEASE=$(curl -sL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO/releases/tags/$TAG")
+
+          RELEASE_ID=$(echo "$RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(curl -sL -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"$TAG\",\"name\":\"OSCAR $TAG\",\"body\":\"Bug fixes and improvements.\",\"draft\":false,\"prerelease\":false}" \
+              "https://api.github.com/repos/$REPO/releases" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          fi
+
+          UPLOAD_URL="https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets"
+
+          # Find and upload .dmg and .sig files
+          BUNDLE_DIR="packages/desktop/src-tauri/target/$TARGET/release/bundle/dmg"
+          for FILE in "$BUNDLE_DIR"/*.dmg "$BUNDLE_DIR"/*.dmg.sig; do
+            [ -f "$FILE" ] || continue
+            NAME=$(basename "$FILE")
+            echo "Uploading $NAME..."
+            curl -sL -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$FILE" \
+              "$UPLOAD_URL?name=$NAME"
+          done
+
+  # After both builds, generate updates.json with real signatures
   updater:
     needs: release
     permissions:
@@ -102,41 +136,42 @@ jobs:
           }
 
           ARM_URL=$(get_url "aarch64.*\.dmg$")
-          X86_URL=$(get_url "x86_64.*\.dmg$|_x64.*\.dmg$")
-          ARM_SIG=$(get_sig "aarch64.*\.dmg\.sig$")
-          X86_SIG=$(get_sig "x86_64.*\.dmg\.sig$|_x64.*\.dmg\.sig$")
+          X86_URL=$(get_url "x86_64.*\.dmg$|x64.*\.dmg$")
+          ARM_SIG=$(get_sig "aarch64.*\.sig$")
+          X86_SIG=$(get_sig "x86_64.*\.sig$|x64.*\.sig$")
+
+          echo "ARM: $ARM_URL"
+          echo "X86: $X86_URL"
 
           python3 -c "
-          import json, sys
+          import json
           print(json.dumps({
             'version': '$VERSION',
             'notes': 'Bug fixes and improvements.',
             'pub_date': '$PUB_DATE',
             'platforms': {
-              'darwin-aarch64': {'signature': '''$ARM_SIG'''.strip(), 'url': '$ARM_URL'},
-              'darwin-x86_64':  {'signature': '''$X86_SIG'''.strip(), 'url': '$X86_URL'},
+              'darwin-aarch64': {'signature': r'''$ARM_SIG'''.strip(), 'url': '$ARM_URL'},
+              'darwin-x86_64':  {'signature': r'''$X86_SIG'''.strip(), 'url': '$X86_URL'},
             }
           }, indent=2))
           " > updates.json
 
           cat updates.json
 
-          # Delete old updates.json asset if it exists
+          # Delete old updates.json if exists
           OLD_ID=$(echo "$ASSETS" | python3 -c "
           import sys,json
           for a in json.load(sys.stdin).get('assets',[]):
               if a['name']=='updates.json': print(a['id']); break
-          ")
+          " 2>/dev/null)
           [ -n "$OLD_ID" ] && curl -sL -X DELETE \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             "https://api.github.com/repos/$REPO/releases/assets/$OLD_ID"
 
           # Upload fresh updates.json
-          UPLOAD_URL=$(echo "$ASSETS" | python3 -c "
-          import sys,json; print(json.load(sys.stdin)['upload_url'].split('{')[0])")
-
+          RELEASE_ID=$(echo "$ASSETS" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
           curl -sL -X POST \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Content-Type: application/json" \
             --data-binary @updates.json \
-            "${UPLOAD_URL}?name=updates.json"
+            "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=updates.json"
