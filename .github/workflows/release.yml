@@ -64,12 +64,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           RUST_BACKTRACE: "1"
-          # Per-arch compiler flags (set in matrix above).
-          # aarch64: pins to baseline ARMv8-A to skip i8mm SIMD paths in ggml.
-          # x86_64:  empty — no special flags needed.
           CFLAGS: ${{ matrix.cflags }}
           CXXFLAGS: ${{ matrix.cflags }}
-        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }}
+        # Build both dmg (for initial download) and app (for silent auto-update via .app.tar.gz)
+        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles app,dmg
 
       - name: Sign bundles
         working-directory: packages/desktop
@@ -78,16 +76,19 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TARGET: ${{ matrix.target }}
         run: |
-          BUNDLE_DIR="src-tauri/target/$TARGET/release/bundle/dmg"
-          for DMG in "$BUNDLE_DIR"/*.dmg; do
-            [ -f "$DMG" ] || continue
-            echo "Signing $DMG..."
-            ../../node_modules/.bin/tauri signer sign "$DMG" \
+          sign_file() {
+            local FILE="$1"
+            [ -f "$FILE" ] || return
+            echo "Signing $FILE..."
+            ../../node_modules/.bin/tauri signer sign "$FILE" \
               --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
               ${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:+--password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"}
-            echo "Signature written to $DMG.sig"
-            cat "$DMG.sig"
-          done
+            echo "→ $(basename "$FILE").sig"
+          }
+          # Sign the .app.tar.gz (used by auto-updater for silent install)
+          for F in src-tauri/target/$TARGET/release/bundle/macos/*.app.tar.gz; do sign_file "$F"; done
+          # Sign the .dmg (used for initial download page)
+          for F in src-tauri/target/$TARGET/release/bundle/dmg/*.dmg; do sign_file "$F"; done
 
       - name: Upload release assets
         env:
@@ -114,18 +115,22 @@ jobs:
 
           UPLOAD_URL="https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets"
 
-          # Upload .dmg and .sig files (skip if already exists)
-          BUNDLE_DIR="packages/desktop/src-tauri/target/$TARGET/release/bundle/dmg"
-          for FILE in "$BUNDLE_DIR"/*.dmg "$BUNDLE_DIR"/*.dmg.sig; do
-            [ -f "$FILE" ] || continue
-            NAME=$(basename "$FILE")
+          upload_file() {
+            local FILE="$1"
+            [ -f "$FILE" ] || return
+            local NAME=$(basename "$FILE")
             echo "Uploading $NAME..."
             curl -sL -X POST \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Content-Type: application/octet-stream" \
               --data-binary @"$FILE" \
               "$UPLOAD_URL?name=$NAME"
-          done
+          }
+          BASE="packages/desktop/src-tauri/target/$TARGET/release/bundle"
+          # Upload .app.tar.gz + .sig (for auto-updater)
+          for F in "$BASE"/macos/*.app.tar.gz "$BASE"/macos/*.app.tar.gz.sig; do upload_file "$F"; done
+          # Upload .dmg + .sig (for download page)
+          for F in "$BASE"/dmg/*.dmg "$BASE"/dmg/*.dmg.sig; do upload_file "$F"; done
 
   # After both builds, generate updates.json with real signatures
   updater:
@@ -163,10 +168,11 @@ jobs:
             [ -n "$URL" ] && curl -sL "$URL" || echo ""
           }
 
-          ARM_URL=$(get_url "aarch64.*\.dmg$")
-          X86_URL=$(get_url "x86_64.*\.dmg$|x64.*\.dmg$")
-          ARM_SIG=$(get_sig "aarch64.*\.sig$")
-          X86_SIG=$(get_sig "x86_64.*\.sig$|x64.*\.sig$")
+          # Use .app.tar.gz for auto-updater (supports silent install on macOS)
+          ARM_URL=$(get_url "aarch64.*\.app\.tar\.gz$")
+          X86_URL=$(get_url "x64.*\.app\.tar\.gz$|x86_64.*\.app\.tar\.gz$")
+          ARM_SIG=$(get_sig "aarch64.*\.app\.tar\.gz\.sig$")
+          X86_SIG=$(get_sig "x64.*\.app\.tar\.gz\.sig$|x86_64.*\.app\.tar\.gz\.sig$")
 
           echo "ARM: $ARM_URL"
           echo "X86: $X86_URL"
