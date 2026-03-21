@@ -16,7 +16,6 @@ import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
-import oscarLogo from "/OSCAR_LIGHT_LOGO.png";
 import "./App.css";
 
 type TabType = "home" | "notes" | "vocabulary" | "billing" | "settings";
@@ -288,7 +287,7 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
           <div className="split-content">
             <div className="brand-header">
               {/* <div className="brand-icon-small"> */}
-                <img src={oscarLogo} alt="OSCAR" width="36" height="36" />
+                <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width="36" height="36" />
               {/* </div> */}
               <span className="brand-name">OSCAR</span>
             </div>
@@ -408,7 +407,7 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
         <div className="split-left">
           <div className="split-content">
             <div className="brand-header">
-              <img src={oscarLogo} alt="OSCAR" width="36" height="36" />
+              <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width="36" height="36" />
               <span className="brand-name">OSCAR</span>
             </div>
 
@@ -573,7 +572,7 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
           <div className="split-left">
             <div className="split-content">
               <div className="brand-header">
-                <img src={oscarLogo} alt="OSCAR" width="36" height="36" />
+                <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width="36" height="36" />
                 <span className="brand-name">OSCAR</span>
               </div>
 
@@ -613,7 +612,7 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
           <div className="split-left">
             <div className="split-content">
               <div className="brand-header">
-                <img src={oscarLogo} alt="OSCAR" width="36" height="36" />
+                <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width="36" height="36" />
                 <span className="brand-name">OSCAR</span>
               </div>
 
@@ -646,7 +645,7 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
         <div className="split-left">
           <div className="split-content">
             <div className="brand-header">
-              <img src={oscarLogo} alt="OSCAR" width="36" height="36" />
+              <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width="36" height="36" />
               <span className="brand-name">OSCAR</span>
             </div>
 
