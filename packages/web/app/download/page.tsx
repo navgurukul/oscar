@@ -8,13 +8,13 @@ import { Check } from "lucide-react";
 type Platform = "mac-intel" | "mac-silicon" | "windows" | "linux" | null;
 
 // Download configuration - GitHub Releases
-const GITHUB_RELEASE_BASE = "https://github.com/navgurukul/oscar/releases/download/v0.2.5";
+const GITHUB_RELEASE_BASE = "https://github.com/navgurukul/oscar/releases/download/v0.2.6";
 
 const DOWNLOAD_URLS: Record<Exclude<Platform, null>, string> = {
-  "mac-intel": `${GITHUB_RELEASE_BASE}/OSCAR_0.2.5_x64.dmg`,
-  "mac-silicon": `${GITHUB_RELEASE_BASE}/OSCAR_0.2.5_aarch64.dmg`,
-  windows: `${GITHUB_RELEASE_BASE}/OSCAR_0.2.5_x64-setup.exe`,
-  linux: `${GITHUB_RELEASE_BASE}/OSCAR_0.2.5_amd64.AppImage`,
+  "mac-intel": `${GITHUB_RELEASE_BASE}/OSCAR_0.2.6_x64.dmg`,
+  "mac-silicon": `${GITHUB_RELEASE_BASE}/OSCAR_0.2.6_aarch64.dmg`,
+  windows: `${GITHUB_RELEASE_BASE}/OSCAR_0.2.6_x64-setup.exe`,
+  linux: `${GITHUB_RELEASE_BASE}/OSCAR_0.2.6_amd64.AppImage`,
 };
 
 export default function DownloadPage() {

@@ -94,6 +94,10 @@ jobs:
 
       - name: Build frontend
         working-directory: packages/desktop
+        env:
+          VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
+          VITE_WEB_APP_URL: "https://release-dev.d3p88n1t5nfeta.amplifyapp.com"
         run: pnpm build
 
       - name: Build Tauri app
@@ -104,6 +108,9 @@ jobs:
           RUST_BACKTRACE: "1"
           CFLAGS: ${{ matrix.cflags }}
           CXXFLAGS: ${{ matrix.cflags }}
+          VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
+          VITE_WEB_APP_URL: "https://release-dev.d3p88n1t5nfeta.amplifyapp.com"
         # app → .app.tar.gz (silent auto-update via createUpdaterArtifacts); dmg → installer
         run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles app,dmg
 
