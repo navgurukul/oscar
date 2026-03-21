@@ -76,19 +76,20 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TARGET: ${{ matrix.target }}
         run: |
-          sign_file() {
-            local FILE="$1"
-            [ -f "$FILE" ] || return
-            echo "Signing $FILE..."
-            ../../node_modules/.bin/tauri signer sign "$FILE" \
-              --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
-              ${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:+--password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"}
-            echo "→ $(basename "$FILE").sig"
-          }
-          # Sign the .app.tar.gz (used by auto-updater for silent install)
-          for F in src-tauri/target/$TARGET/release/bundle/macos/*.app.tar.gz; do sign_file "$F"; done
-          # Sign the .dmg (used for initial download page)
-          for F in src-tauri/target/$TARGET/release/bundle/dmg/*.dmg; do sign_file "$F"; done
+          shopt -s nullglob  # prevent unmatched globs from being treated as literals
+          TAURI_BIN="../../node_modules/.bin/tauri"
+
+          # Tauri 2: reads TAURI_SIGNING_PRIVATE_KEY from env automatically
+          for F in \
+            src-tauri/target/$TARGET/release/bundle/macos/*.app.tar.gz \
+            src-tauri/target/$TARGET/release/bundle/dmg/*.dmg; do
+            echo "Signing $(basename "$F")..."
+            "$TAURI_BIN" signer sign "$F"
+            echo "✓ $(basename "$F").sig created"
+          done
+
+          echo "All signed files:"
+          find src-tauri/target/$TARGET/release/bundle -name "*.sig" | sort
 
       - name: Upload release assets
         env:
