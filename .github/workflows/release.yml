@@ -104,8 +104,8 @@ jobs:
           RUST_BACKTRACE: "1"
           CFLAGS: ${{ matrix.cflags }}
           CXXFLAGS: ${{ matrix.cflags }}
-        # Build both dmg (for initial download) and app (for silent auto-update via .app.tar.gz)
-        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles app,dmg
+        # updater → .app.tar.gz (silent auto-update); dmg → installer for download page
+        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles updater,dmg
 
       - name: Sign bundles
         working-directory: packages/desktop
@@ -153,7 +153,12 @@ jobs:
             echo ""
           }
 
+          shopt -s nullglob  # prevent unmatched globs becoming literal strings
           BASE="packages/desktop/src-tauri/target/$TARGET/release/bundle"
+          echo "Files in bundle/macos:"
+          ls "$BASE/macos/" 2>/dev/null || echo "(empty)"
+          echo "Files in bundle/dmg:"
+          ls "$BASE/dmg/" 2>/dev/null || echo "(empty)"
           # Upload .app.tar.gz + .sig (for auto-updater)
           for F in "$BASE"/macos/*.app.tar.gz "$BASE"/macos/*.app.tar.gz.sig; do upload_file "$F"; done
           # Upload .dmg + .sig (for download page)
