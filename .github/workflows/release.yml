@@ -60,12 +60,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           RUST_BACKTRACE: "1"
-          # Disable native CPU feature detection in ggml/whisper.cpp.
-          # GitHub Actions ARM runners don't support i8mm (ARMv8.6) which ggml
-          # auto-detects and tries to use, causing a compile error.
-          # GGML_NATIVE=OFF uses a safe baseline without advanced SIMD extensions.
-          # GGML_METAL=OFF disables Metal GPU (not available on CI runners).
-          CMAKE_ARGS: "-DGGML_NATIVE=OFF -DGGML_METAL=OFF -DWHISPER_METAL=OFF"
+          # Fix: whisper-rs-sys (via Rust cmake crate) picks up CFLAGS/CXXFLAGS.
+          # GitHub Actions ARM runners trigger ggml's i8mm code path which the
+          # clang compiler rejects unless the target explicitly includes i8mm.
+          # Pin to baseline ARMv8-A so ggml skips i8mm/dotprod optimisations.
+          CFLAGS: "-march=armv8-a"
+          CXXFLAGS: "-march=armv8-a"
         run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }}
 
       - name: Upload release assets
