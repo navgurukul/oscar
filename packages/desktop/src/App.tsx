@@ -48,6 +48,7 @@ async function saveSetting<T>(key: string, value: T): Promise<void> {
   try {
     const store = await getStore();
     await store.set(key, value);
+    await store.save(); // flush to disk immediately — set() is in-memory only
   } catch (e) {
     console.warn("[store] save failed:", e);
   }
