@@ -16,8 +16,12 @@ jobs:
         include:
           - target: aarch64-apple-darwin
             label: macos-silicon
+            # Pin to baseline ARMv8-A so whisper.cpp/ggml skips i8mm/dotprod
+            # SIMD paths that clang rejects on GitHub Actions ARM runners.
+            cflags: "-march=armv8-a"
           - target: x86_64-apple-darwin
             label: macos-intel
+            cflags: ""
 
     runs-on: macos-latest
 
@@ -60,12 +64,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           RUST_BACKTRACE: "1"
-          # Fix: whisper-rs-sys (via Rust cmake crate) picks up CFLAGS/CXXFLAGS.
-          # GitHub Actions ARM runners trigger ggml's i8mm code path which the
-          # clang compiler rejects unless the target explicitly includes i8mm.
-          # Pin to baseline ARMv8-A so ggml skips i8mm/dotprod optimisations.
-          CFLAGS: "-march=armv8-a"
-          CXXFLAGS: "-march=armv8-a"
+          # Per-arch compiler flags (set in matrix above).
+          # aarch64: pins to baseline ARMv8-A to skip i8mm SIMD paths in ggml.
+          # x86_64:  empty — no special flags needed.
+          CFLAGS: ${{ matrix.cflags }}
+          CXXFLAGS: ${{ matrix.cflags }}
         run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }}
 
       - name: Upload release assets
