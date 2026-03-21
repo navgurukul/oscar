@@ -14,10 +14,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            target: aarch64-apple-darwin      # Apple Silicon
-          - os: macos-latest
-            target: x86_64-apple-darwin       # Intel Mac
+          - os: macos-14          # Apple Silicon (M1/M2) — native aarch64
+            target: aarch64-apple-darwin
+          - os: macos-13          # Intel — native x86_64
+            target: x86_64-apple-darwin
 
     runs-on: ${{ matrix.os }}
 
@@ -25,17 +25,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install pnpm
+      - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 9
 
-      - name: Install Rust
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -45,7 +46,7 @@ jobs:
         with:
           workspaces: './packages/desktop/src-tauri -> target'
 
-      - name: Install frontend deps
+      - name: Install frontend dependencies
         run: pnpm install
 
       - name: Build Tauri app
@@ -58,13 +59,12 @@ jobs:
           projectPath: packages/desktop
           tagName: ${{ github.ref_name }}
           releaseName: 'OSCAR ${{ github.ref_name }}'
-          releaseBody: |
-            See the assets to download this version and install.
+          releaseBody: 'Bug fixes and improvements. Download the .dmg for your Mac below.'
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
 
-  # After both mac builds finish, create the updates.json manifest
+  # After both builds finish, generate and upload updates.json
   updater:
     needs: release
     permissions:
@@ -75,51 +75,89 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download release assets and build updates.json
+      - name: Generate updates.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           VERSION="${TAG#v}"
-          echo "Building updates.json for version $VERSION"
-
-          # Fetch the release JSON to get asset URLs and signatures
-          RELEASE=$(gh release view "$TAG" --json assets,body --repo ${{ github.repository }})
-
-          # Helper: get URL for an asset by pattern
-          get_url() { echo "$RELEASE" | jq -r ".assets[] | select(.name | test(\"$1\")) | .browserDownloadUrl" | head -1; }
-          get_sig() {
-            SIG_URL=$(echo "$RELEASE" | jq -r ".assets[] | select(.name | test(\"$1\")) | .browserDownloadUrl" | head -1)
-            curl -sL "$SIG_URL"
-          }
-
-          ARM_URL=$(get_url "aarch64.*\\.dmg$")
-          X86_URL=$(get_url "x86_64.*\\.dmg$")
-          ARM_SIG=$(get_sig "aarch64.*\\.dmg\\.sig$")
-          X86_SIG=$(get_sig "x86_64.*\\.dmg\\.sig$")
-
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          cat > updates.json << EOF
-          {
+          # Fetch all assets for this release
+          ASSETS=$(curl -sL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
+
+          get_url() {
+            echo "$ASSETS" | python3 -c "
+          import sys, json, re
+          data = json.load(sys.stdin)
+          pattern = sys.argv[1]
+          assets = data.get('assets', [])
+          for a in assets:
+              if re.search(pattern, a['name']):
+                  print(a['browser_download_url'])
+                  break
+          " "$1"
+          }
+
+          get_sig() {
+            SIG_URL=$(get_url "$1")
+            [ -n "$SIG_URL" ] && curl -sL "$SIG_URL" || echo ""
+          }
+
+          ARM_URL=$(get_url "aarch64.*\.dmg$")
+          X86_URL=$(get_url "x86_64.*\.dmg$|x64.*\.dmg$")
+          ARM_SIG=$(get_sig "aarch64.*\.dmg\.sig$")
+          X86_SIG=$(get_sig "x86_64.*\.dmg\.sig$|x64.*\.dmg\.sig$")
+
+          echo "ARM URL: $ARM_URL"
+          echo "X86 URL: $X86_URL"
+
+          python3 - <<PYEOF
+          import json
+          data = {
             "version": "$VERSION",
             "notes": "Bug fixes and improvements.",
             "pub_date": "$PUB_DATE",
             "platforms": {
               "darwin-aarch64": {
-                "signature": "$ARM_SIG",
+                "signature": """$ARM_SIG""".strip(),
                 "url": "$ARM_URL"
               },
               "darwin-x86_64": {
-                "signature": "$X86_SIG",
+                "signature": """$X86_SIG""".strip(),
                 "url": "$X86_URL"
               }
             }
           }
-          EOF
+          print(json.dumps(data, indent=2))
+          PYEOF > updates.json
 
-          echo "updates.json:"
           cat updates.json
 
-          # Upload updates.json to the release
-          gh release upload "$TAG" updates.json --clobber --repo ${{ github.repository }}
+      - name: Upload updates.json to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ github.ref_name }}
+          # Delete old updates.json if exists, then upload fresh one
+          ASSET_ID=$(curl -sL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
+            | python3 -c "import sys,json; assets=json.load(sys.stdin).get('assets',[]); print(next((str(a['id']) for a in assets if a['name']=='updates.json'),''))")
+
+          [ -n "$ASSET_ID" ] && curl -sL -X DELETE \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/assets/$ASSET_ID"
+
+          UPLOAD_URL=$(curl -sL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['upload_url'].split('{')[0])")
+
+          curl -sL -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @updates.json \
+            "${UPLOAD_URL}?name=updates.json"
