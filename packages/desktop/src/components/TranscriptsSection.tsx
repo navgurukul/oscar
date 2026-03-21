@@ -13,7 +13,7 @@ export function TranscriptsSection({
   onToggleStarTranscript,
   onClearAll,
 }: TranscriptsSectionProps) {
-  if (transcripts.length === 0) {
+  if (!transcripts || transcripts.length === 0) {
     return (
       <div className="mt-8 text-center text-slate-400 text-sm">
         <p>No transcripts yet. Hold Ctrl+Space to start recording.</p>
