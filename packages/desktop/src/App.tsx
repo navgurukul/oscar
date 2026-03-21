@@ -731,6 +731,9 @@ function App() {
   const isRecordingRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
   const autoPasteRef = useRef(true);
+  const targetAppRef = useRef<string>("");
+  const pendingStopRef = useRef(false);
+  const warmStreamRef = useRef<MediaStream | null>(null);
   const aiEditingRef = useRef(false);
   const tonePresetRef = useRef<TonePreset>("none");
   const dictWordsRef = useRef<string[]>([]);
@@ -889,17 +892,41 @@ function App() {
       setDictWords(savedDict);
       dictWordsRef.current = savedDict;
 
-      // If setup is complete, load the Whisper model
+      // If setup is complete, load the Whisper model and pre-warm mic
       if (setupDone) {
+        warmMicrophone(); // pre-warm ASAP so first hotkey press doesn't steal focus
         initWhisper();
       }
     })();
 
-    const unlistenStart = listen("hotkey-recording-start", () => {
+    const SELF_APP_NAMES = ["oscar", "claude"];  // filter out our own app
+    const unlistenStart = listen<string>("hotkey-recording-start", (ev) => {
+      const raw = (ev.payload || "").trim();
+      // If the frontmost app is ourselves, clear it so we don't try to activate ourselves
+      targetAppRef.current = SELF_APP_NAMES.includes(raw.toLowerCase()) ? "" : raw;
+      pendingStopRef.current = false;
+      console.log("[hotkey] START received — rawApp:", JSON.stringify(raw),
+        "targetApp:", JSON.stringify(targetAppRef.current),
+        "whisperLoaded:", whisperLoadedRef.current, "isRecording:", isRecordingRef.current);
       if (whisperLoadedRef.current && !isRecordingRef.current) startHotkeyRecording();
     });
     const unlistenStop = listen("hotkey-recording-stop", () => {
-      if (isRecordingRef.current) stopHotkeyRecording();
+      console.log("[hotkey] STOP received — isRecording:", isRecordingRef.current);
+      // ALWAYS set pending stop — this is the safety net for the race condition
+      // where STOP arrives before getUserMedia resolves in startHotkeyRecording
+      pendingStopRef.current = true;
+      console.log("[hotkey] pendingStopRef set to TRUE");
+      // Also try the normal stop path
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        console.log("[hotkey] MediaRecorder is active — stopping directly");
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        mediaRecorderRef.current.stop();
+        // Switch to processing dots — pill hides after processAudio finishes
+        invoke("set_pill_processing").catch(console.warn);
+      } else {
+        console.log("[hotkey] MediaRecorder not ready yet — pending stop will handle it");
+      }
     });
     const unlistenErr = listen<string>("hotkey-permission-error", (ev) => {
       setHotkeyWarning(ev.payload);
@@ -946,6 +973,19 @@ function App() {
     setWhisperLoaded(val);
   };
 
+  // Pre-warm the microphone so hotkey recording starts instantly (no getUserMedia delay).
+  // This is critical for fullscreen apps where macOS Space-switching delays event delivery.
+  const warmMicrophone = async () => {
+    if (warmStreamRef.current) return; // already warm
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      warmStreamRef.current = stream;
+      console.log("[mic] pre-warmed microphone stream");
+    } catch (e) {
+      console.warn("[mic] failed to pre-warm microphone:", e);
+    }
+  };
+
   const initWhisper = async () => {
     // First check the standard OSCAR model location
     try {
@@ -955,6 +995,7 @@ function App() {
       setWhisperLoadedAndRef(true);
       setWhisperModelPath(oscarPath);
       setStatus("Ready! Hold Ctrl+Space anywhere to record.");
+      warmMicrophone(); // pre-warm mic after whisper loads
       return;
     } catch {
       // Fall back to other common locations
@@ -970,6 +1011,7 @@ function App() {
           setWhisperLoadedAndRef(true);
           setWhisperModelPath(path);
           setStatus("Ready! Hold Ctrl+Space anywhere to record.");
+          warmMicrophone(); // pre-warm mic after whisper loads
           return;
         } catch {
           continue;
@@ -1001,56 +1043,94 @@ function App() {
   // ── Hotkey recording ───────────────────────────────────────────────────────
 
   const startHotkeyRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/webm";
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+    console.log("[record] startHotkeyRecording called, hasWarmStream:", !!warmStreamRef.current);
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      mediaRecorder.onstop = () => processAudio(stream, autoPasteRef.current);
-
-      mediaRecorder.start(100);
-      isRecordingRef.current = true;
-      setIsRecording(true);
-      setStatus("Recording... Release to stop");
-      invoke("show_recording_pill").catch(console.warn);
-    } catch (e) {
-      setStatus(`Error: Could not access microphone — ${e}`);
+    // Use the pre-warmed stream if available; fall back to getUserMedia
+    let stream: MediaStream;
+    if (warmStreamRef.current && warmStreamRef.current.getAudioTracks().some((t) => t.readyState === "live")) {
+      stream = warmStreamRef.current;
+      console.log("[record] using pre-warmed mic stream (instant)");
+    } else {
+      console.log("[record] no warm stream — calling getUserMedia (may be slow)");
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        warmStreamRef.current = stream; // keep for next time
+        console.log("[record] got mic stream from getUserMedia");
+      } catch (e) {
+        console.error("[record] getUserMedia failed:", e);
+        setStatus(`Error: Could not access microphone — ${e}`);
+        return;
+      }
     }
+
+    // Check if stop arrived during any async wait
+    if (pendingStopRef.current) {
+      console.log("[record] pending stop detected — aborting");
+      pendingStopRef.current = false;
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      setStatus("Recording too short — try holding longer");
+      invoke("hide_recording_pill").catch(console.warn);
+      return;
+    }
+
+    streamRef.current = stream;
+    const mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/webm";
+    const mediaRecorder = new MediaRecorder(stream, { mimeType });
+    mediaRecorderRef.current = mediaRecorder;
+    audioChunksRef.current = [];
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+    mediaRecorder.onstop = () => {
+      console.log("[record] mediaRecorder.onstop fired — chunks:", audioChunksRef.current.length,
+        "targetApp:", JSON.stringify(targetAppRef.current), "autoPaste:", autoPasteRef.current);
+      processAudio(stream, autoPasteRef.current, targetAppRef.current);
+    };
+
+    mediaRecorder.start(100);
+    isRecordingRef.current = true;
+    setIsRecording(true);
+    setStatus("Recording... Release to stop");
+    console.log("[record] MediaRecorder started (mimeType:", mimeType, ")");
+    invoke("show_recording_pill").catch(console.warn);
   };
 
   const stopHotkeyRecording = () => {
-    if (mediaRecorderRef.current && isRecordingRef.current) {
-      isRecordingRef.current = false;
-      setIsRecording(false);
+    console.log("[record] stopHotkeyRecording called — hasRecorder:", !!mediaRecorderRef.current,
+      "recorderState:", mediaRecorderRef.current?.state, "isRecording:", isRecordingRef.current);
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
-      invoke("hide_recording_pill").catch(console.warn);
     }
+    // Switch pill to processing (dots) — don't hide yet
+    invoke("set_pill_processing").catch(console.warn);
   };
 
   // ── Audio processing (shared by hotkey recording) ───────────────────────────
 
-  const processAudio = async (stream: MediaStream, shouldPaste: boolean) => {
+  const processAudio = async (stream: MediaStream, shouldPaste: boolean, targetApp?: string) => {
+    console.log("[process] processAudio called — shouldPaste:", shouldPaste, "targetApp:", JSON.stringify(targetApp));
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
+    console.log("[process] audio chunks:", chunkCount, "totalBytes:", totalBytes);
 
     if (chunkCount === 0 || totalBytes === 0) {
+      console.warn("[process] ABORT: no audio captured");
       setStatus("❌ No audio captured. Check microphone permission.");
-      stream.getTracks().forEach((t) => t.stop());
+      invoke("hide_recording_pill").catch(console.warn);
       return;
     }
 
     const mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/webm";
     const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+    console.log("[process] blob size:", audioBlob.size, "mimeType:", mimeType);
 
     if (audioBlob.size < 500) {
       setStatus(`❌ Blob too small (${audioBlob.size}B). Try again.`);
-      stream.getTracks().forEach((t) => t.stop());
+      invoke("hide_recording_pill").catch(console.warn);
       return;
     }
 
@@ -1071,7 +1151,7 @@ function App() {
       audioData = mono;
     } catch (e) {
       setStatus(`❌ Decode failed (${mimeType}): ${e}`);
-      stream.getTracks().forEach((t) => t.stop());
+      invoke("hide_recording_pill").catch(console.warn);
       return;
     } finally {
       audioContext.close();
@@ -1079,21 +1159,24 @@ function App() {
 
     if (audioData.length < 1600) {
       setStatus(`❌ Too short (${audioData.length} samples). Speak for ≥1 second.`);
-      stream.getTracks().forEach((t) => t.stop());
+      invoke("hide_recording_pill").catch(console.warn);
       return;
     }
 
     const durationSec = (audioData.length / 16000).toFixed(1);
     setIsProcessing(true);
     setStatus(`Transcribing ${durationSec}s...`);
+    console.log("[process] sending to whisper — samples:", audioData.length, "duration:", durationSec, "s");
 
     try {
       const result = await invoke<Transcription>("transcribe_audio", {
         audioData: Array.from(audioData),
         initialPrompt: buildInitialPrompt(),
       });
+      console.log("[process] whisper result:", JSON.stringify(result.text?.slice(0, 80)));
 
       if (!result.text) {
+        console.warn("[process] ABORT: no speech detected");
         setStatus("⚠️ No speech detected. Try speaking louder or closer.");
         return;
       }
@@ -1101,6 +1184,8 @@ function App() {
       let finalText = result.text;
 
       // AI editing via user's API key or Supabase Edge Function
+      console.log("[process] raw transcript:", JSON.stringify(finalText.slice(0, 80)),
+        "aiEditing:", aiEditingRef.current);
       if (aiEditingRef.current) {
         // Check if user has their own API key
         const hasUserApiKey = userApiKey && userApiKey.trim().length > 0;
@@ -1140,26 +1225,35 @@ function App() {
       ]);
 
       if (shouldPaste) {
+        console.log("[paste] invoking paste_transcription — text length:", finalText.length,
+          "(NOT passing targetApp — CGEvent HID reaches frontmost app directly)");
         try {
-          // Do NOT pass targetApp — activating a fullscreen app via NSRunningApplication
-          // interferes with macOS Spaces. The CGEvent Cmd+V posts to HID level, so it
-          // reaches whichever app is frontmost without needing explicit activation.
-          await invoke("paste_transcription", { text: finalText });
+          // Do NOT pass targetApp. CGEvent posted at HID level already reaches
+          // the frontmost app. Passing targetApp triggers `open -a` which disrupts
+          // macOS fullscreen Spaces. Oscar's recording pill is a non-activating
+          // overlay so the target app stays frontmost throughout.
+          const pasteResult = await invoke("paste_transcription", {
+            text: finalText,
+          });
+          console.log("[paste] SUCCESS — Rust returned:", pasteResult);
           setStatus("Pasted! ✓");
         } catch (pe) {
-          console.warn("[paste] error:", pe);
+          console.error("[paste] FAILED:", pe);
           setStatus("Done! (paste failed — check Accessibility permission)");
         }
       } else {
+        console.log("[paste] skipped — shouldPaste is false");
         setStatus("Done! ✓");
       }
     } catch (e) {
       setStatus(`❌ Error: ${e}`);
     } finally {
       setIsProcessing(false);
+      // Hide the pill now that processing is complete
+      invoke("hide_recording_pill").catch(console.warn);
     }
 
-    stream.getTracks().forEach((t) => t.stop());
+    // Don't stop the stream — keep it warm for next recording
   };
 
   const handlePermissionsContinue = async () => {
@@ -1169,7 +1263,8 @@ function App() {
 
   const handleSetupComplete = async () => {
     setSetupComplete(true);
-    // Load the model after setup is complete
+    // Load the model after setup is complete and pre-warm mic
+    warmMicrophone();
     initWhisper();
   };
 

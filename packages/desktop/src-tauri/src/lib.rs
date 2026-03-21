@@ -21,6 +21,7 @@ mod macos_paste {
         fn objc_getClass(name: *const std::ffi::c_char) -> *mut c_void;
         fn sel_registerName(name: *const std::ffi::c_char) -> *mut c_void;
         fn objc_msgSend() -> *mut c_void;
+        fn object_setClass(obj: *mut c_void, cls: *mut c_void) -> *mut c_void;
     }
 
     // Accessibility check
@@ -104,6 +105,76 @@ mod macos_paste {
                 }
             }
             Err(format!("App '{}' not found in running apps", app_name))
+        }
+    }
+
+    /// Convert an NSWindow to NSPanel and configure it to float above fullscreen apps.
+    /// NSPanel is the only window type macOS allows to appear over fullscreen Spaces.
+    /// MUST be called on the main thread — NSWindow/NSPanel methods are main-thread-only.
+    pub fn set_window_above_fullscreen(ns_window_ptr: *mut c_void) {
+        unsafe {
+            // 0. Convert NSWindow → NSPanel via isa-swizzle.
+            //    NSPanel is a subclass of NSWindow with identical memory layout,
+            //    so changing the class pointer is safe. This is what tauri-nspanel does.
+            let ns_panel_class = objc_getClass(b"NSPanel\0".as_ptr() as *const _);
+            if !ns_panel_class.is_null() {
+                object_setClass(ns_window_ptr, ns_panel_class);
+                log::info!("[pill] converted NSWindow → NSPanel via isa-swizzle");
+            } else {
+                log::warn!("[pill] could not find NSPanel class!");
+            }
+
+            // 1. Set window level to kCGScreenSaverWindowLevel (1000)
+            //    This is above fullscreen app windows (~level 8-14)
+            let sel_set_level = sel_registerName(b"setLevel:\0".as_ptr() as *const _);
+            type SetLevelFn = unsafe extern "C" fn(*mut c_void, *mut c_void, i64);
+            let set_level: SetLevelFn = std::mem::transmute(objc_msgSend as *const ());
+            set_level(ns_window_ptr, sel_set_level, 1000);
+
+            // 2. Set collection behavior flags for fullscreen Space compatibility
+            let sel_set_behavior =
+                sel_registerName(b"setCollectionBehavior:\0".as_ptr() as *const _);
+            type SetBehaviorFn = unsafe extern "C" fn(*mut c_void, *mut c_void, u64);
+            let set_behavior: SetBehaviorFn = std::mem::transmute(objc_msgSend as *const ());
+            // NSWindowCollectionBehaviorCanJoinAllSpaces          = 1 << 0 = 1
+            // NSWindowCollectionBehaviorStationary                = 1 << 4 = 16
+            // NSWindowCollectionBehaviorIgnoresCycle              = 1 << 6 = 64
+            // NSWindowCollectionBehaviorFullScreenAuxiliary       = 1 << 8 = 256
+            set_behavior(ns_window_ptr, sel_set_behavior, 1 | 16 | 64 | 256);
+
+            // 3. Set NSPanel-specific properties:
+            //    - setFloatingPanel: YES — stays above other windows
+            //    - setWorksWhenModal: YES — works even during modal dialogs
+            //    - setHidesOnDeactivate: NO — don't hide when app loses focus
+            let sel_set_floating =
+                sel_registerName(b"setFloatingPanel:\0".as_ptr() as *const _);
+            let sel_set_works_modal =
+                sel_registerName(b"setWorksWhenModal:\0".as_ptr() as *const _);
+            let sel_set_hides =
+                sel_registerName(b"setHidesOnDeactivate:\0".as_ptr() as *const _);
+            type SetBoolFn = unsafe extern "C" fn(*mut c_void, *mut c_void, bool);
+            let set_bool: SetBoolFn = std::mem::transmute(objc_msgSend as *const ());
+            set_bool(ns_window_ptr, sel_set_floating, true);
+            set_bool(ns_window_ptr, sel_set_works_modal, true);
+            set_bool(ns_window_ptr, sel_set_hides, false);
+
+            // 4. Add NSNonactivatingPanel style (bit 7 = 128) so showing the
+            //    panel doesn't activate the app or steal focus from fullscreen apps.
+            let sel_style = sel_registerName(b"styleMask\0".as_ptr() as *const _);
+            type GetStyleFn = unsafe extern "C" fn(*mut c_void, *mut c_void) -> u64;
+            let get_style: GetStyleFn = std::mem::transmute(objc_msgSend as *const ());
+            let current_style = get_style(ns_window_ptr, sel_style);
+
+            let sel_set_style = sel_registerName(b"setStyleMask:\0".as_ptr() as *const _);
+            type SetStyleFn = unsafe extern "C" fn(*mut c_void, *mut c_void, u64);
+            let set_style: SetStyleFn = std::mem::transmute(objc_msgSend as *const ());
+            // NSWindowStyleMaskNonactivatingPanel = 1 << 7 = 128
+            set_style(ns_window_ptr, sel_set_style, current_style | 128);
+
+            log::info!(
+                "[pill] NSPanel configured: level=1000, floating=YES, hidesOnDeactivate=NO, \
+                 behavior=canJoinAll|stationary|ignoresCycle|fullScreenAux, style |= NonactivatingPanel"
+            );
         }
     }
 
@@ -469,17 +540,18 @@ async fn enhance_with_edge_function(
 
 // ── Recording Pill Overlay ───────────────────────────────────────────────────
 
-#[tauri::command]
-fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
+/// Create the pill window (hidden) at app startup so it's ready instantly.
+/// Called from `.setup()` which runs on the main thread — this is critical
+/// because NSWindow methods (setLevel, setCollectionBehavior) are main-thread-only.
+fn create_pill_window(app: &tauri::AppHandle) {
     use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-    // If the pill window already exists, just show it
-    if let Some(w) = app.get_webview_window("recording-pill") {
-        w.show().map_err(|e| e.to_string())?;
-        return Ok(());
+    if app.get_webview_window("recording-pill").is_some() {
+        return; // already exists
     }
 
-    // Determine bottom-center position from the primary monitor
+    let pill_w = 200.0_f64;
+    let pill_h = 44.0_f64;
     let (pos_x, pos_y): (f64, f64) = app
         .primary_monitor()
         .ok()
@@ -488,36 +560,80 @@ fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
             let size = m.size();
             let pos = m.position();
             let scale = m.scale_factor();
-            // Physical -> logical pixels
             let lw = size.width as f64 / scale;
             let lh = size.height as f64 / scale;
             let lx = pos.x as f64 / scale;
             let ly = pos.y as f64 / scale;
-            // Bottom-center: pill is 160x36, placed 80px above the dock/taskbar
-            (lx + lw / 2.0 - 80.0, ly + lh - 116.0)
+            (lx + lw / 2.0 - pill_w / 2.0, ly + lh - pill_h - 80.0)
         })
         .unwrap_or((800.0, 900.0));
 
-    let w = WebviewWindowBuilder::new(
-        &app,
+    match WebviewWindowBuilder::new(
+        app,
         "recording-pill",
         WebviewUrl::App("pill.html".into()),
     )
     .title("")
-    .inner_size(160.0, 36.0)
+    .inner_size(pill_w, pill_h)
     .position(pos_x, pos_y)
     .decorations(false)
-    .always_on_top(true)
     .transparent(true)
     .resizable(false)
     .skip_taskbar(true)
     .focused(false)
+    .visible(false) // start hidden — will be shown on first hotkey
+    // NOTE: do NOT use .always_on_top(true) — it sets NSFloatingWindowLevel (3)
+    // which is too low and can override our manual level. We set level 1000 below.
     .build()
-    .map_err(|e: tauri::Error| e.to_string())?;
+    {
+        Ok(w) => {
+            let _ = w.set_ignore_cursor_events(true);
+            let _ = w.set_visible_on_all_workspaces(true);
 
-    let _ = w.set_ignore_cursor_events(true);
-    // Show pill on all macOS Spaces (including fullscreen app Spaces)
-    let _ = w.set_visible_on_all_workspaces(true);
+            // Set NSWindow level + collection behavior + NonactivatingPanel style.
+            // This runs on the main thread (called from .setup()) which is required
+            // for NSWindow property changes to take effect.
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(ns_win) = w.ns_window() {
+                    macos_paste::set_window_above_fullscreen(
+                        ns_win as *mut std::ffi::c_void,
+                    );
+                }
+            }
+
+            log::info!("[pill] pre-created pill window (hidden)");
+        }
+        Err(e) => {
+            log::warn!("[pill] failed to pre-create pill window: {}", e);
+        }
+    }
+}
+
+#[tauri::command]
+fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
+    // Ensure the pill exists (no-op if already created at startup)
+    create_pill_window(&app);
+
+    if let Some(w) = app.get_webview_window("recording-pill") {
+        let _ = app.emit_to("recording-pill", "pill-set-listening", ());
+        w.show().map_err(|e| e.to_string())?;
+
+        // Re-apply window level AFTER show() — macOS can reset level on show.
+        // This runs from a Tauri command (may not be main thread), so dispatch
+        // the NSWindow calls to the main thread.
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(ns_win) = w.ns_window() {
+                let ptr = ns_win as usize; // safe to send across threads
+                let _ = app.run_on_main_thread(move || {
+                    macos_paste::set_window_above_fullscreen(
+                        ptr as *mut std::ffi::c_void,
+                    );
+                });
+            }
+        }
+    }
     Ok(())
 }
 
@@ -526,6 +642,18 @@ fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("recording-pill") {
         w.hide().map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
+    let _ = app.emit_to("recording-pill", "pill-set-processing", ());
+    Ok(())
+}
+
+#[tauri::command]
+fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
+    let _ = app.emit_to("recording-pill", "pill-set-listening", ());
     Ok(())
 }
 
@@ -610,25 +738,29 @@ fn paste_transcription(text: String, target_app: Option<String>) -> Result<Strin
             );
         }
 
-        // 2. Activate target app (in-process via NSRunningApplication — no osascript)
+        // 2. Activate target app via `open -a` (Launch Services).
+        //    Unlike NSRunningApplication.activate, `open -a` properly navigates
+        //    to fullscreen Spaces without breaking macOS window management.
         if let Some(ref app_name) = target_app {
             if !app_name.is_empty() {
-                match macos_paste::activate_app(app_name) {
-                    Ok(activated) => {
-                        log::info!("[paste] activated '{}': {}", app_name, activated);
+                log::info!("[paste] activating '{}' via open -a", app_name);
+                match std::process::Command::new("open")
+                    .args(["-a", app_name])
+                    .output()
+                {
+                    Ok(out) => {
+                        log::info!(
+                            "[paste] open -a exit={}, stderr={}",
+                            out.status,
+                            String::from_utf8_lossy(&out.stderr).trim()
+                        );
                     }
-                    Err(e) => {
-                        log::warn!("[paste] activate_app failed: {}, trying osascript", e);
-                        // Fallback to osascript for activation
-                        let safe = app_name.replace('\\', "\\\\").replace('"', "\\\"");
-                        let script = format!(r#"tell application "{safe}" to activate"#);
-                        let _ = std::process::Command::new("osascript")
-                            .args(["-e", &script])
-                            .output();
-                    }
+                    Err(e) => log::warn!("[paste] open -a failed: {}", e),
                 }
-                // Wait for the target app to fully become frontmost
-                std::thread::sleep(std::time::Duration::from_millis(300));
+                // Wait for macOS to switch to the correct Space / bring app forward
+                log::info!("[paste] sleeping 400ms for Space switch...");
+                std::thread::sleep(std::time::Duration::from_millis(400));
+                log::info!("[paste] sleep done, about to post Cmd+V");
             }
         }
 
@@ -701,6 +833,8 @@ pub fn run() {
             enhance_text,
             show_recording_pill,
             hide_recording_pill,
+            set_pill_processing,
+            set_pill_listening,
             get_frontmost_app,
             activate_app,
             get_pending_deep_link,
@@ -734,6 +868,7 @@ pub fn run() {
                 match event.state {
                     ShortcutState::Pressed => {
                         if !is_rec.swap(true, Ordering::SeqCst) {
+                            log::info!("[hotkey] Ctrl+Space PRESSED — capturing frontmost app");
                             // Capture the frontmost app NOW, before Oscar's webview steals focus
                             #[cfg(target_os = "macos")]
                             let frontmost_app = {
@@ -750,11 +885,13 @@ pub fn run() {
                             #[cfg(not(target_os = "macos"))]
                             let frontmost_app = String::new();
 
+                            log::info!("[hotkey] frontmost app = '{}'", frontmost_app);
                             let _ = app_handle.emit("hotkey-recording-start", frontmost_app);
                         }
                     }
                     ShortcutState::Released => {
                         if is_rec.swap(false, Ordering::SeqCst) {
+                            log::info!("[hotkey] Ctrl+Space RELEASED — emitting stop");
                             let _ = app_handle.emit("hotkey-recording-stop", ());
                         }
                     }
@@ -774,6 +911,10 @@ pub fn run() {
             let _store = app.store("app-settings.json")
                 .map_err(|e| log::warn!("Could not open store: {e}"))
                 .ok();
+
+            // Pre-create the recording pill window (hidden) so that the first
+            // hotkey press doesn't steal focus by creating a new window.
+            create_pill_window(app.handle());
 
             Ok(())
         })
