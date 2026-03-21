@@ -731,7 +731,6 @@ function App() {
   const isRecordingRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
   const autoPasteRef = useRef(true);
-  const targetAppRef = useRef<string>("");
   const aiEditingRef = useRef(false);
   const tonePresetRef = useRef<TonePreset>("none");
   const dictWordsRef = useRef<string[]>([]);
@@ -896,9 +895,7 @@ function App() {
       }
     })();
 
-    const unlistenStart = listen<string>("hotkey-recording-start", (ev) => {
-      // Capture frontmost app BEFORE recording starts (Rust sends it as the payload)
-      targetAppRef.current = ev.payload || "";
+    const unlistenStart = listen("hotkey-recording-start", () => {
       if (whisperLoadedRef.current && !isRecordingRef.current) startHotkeyRecording();
     });
     const unlistenStop = listen("hotkey-recording-stop", () => {
@@ -1015,7 +1012,7 @@ function App() {
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
-      mediaRecorder.onstop = () => processAudio(stream, autoPasteRef.current, targetAppRef.current);
+      mediaRecorder.onstop = () => processAudio(stream, autoPasteRef.current);
 
       mediaRecorder.start(100);
       isRecordingRef.current = true;
@@ -1038,7 +1035,7 @@ function App() {
 
   // ── Audio processing (shared by hotkey recording) ───────────────────────────
 
-  const processAudio = async (stream: MediaStream, shouldPaste: boolean, targetApp?: string) => {
+  const processAudio = async (stream: MediaStream, shouldPaste: boolean) => {
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
 
@@ -1144,10 +1141,10 @@ function App() {
 
       if (shouldPaste) {
         try {
-          await invoke("paste_transcription", {
-            text: finalText,
-            targetApp: targetApp || null,
-          });
+          // Do NOT pass targetApp — activating a fullscreen app via NSRunningApplication
+          // interferes with macOS Spaces. The CGEvent Cmd+V posts to HID level, so it
+          // reaches whichever app is frontmost without needing explicit activation.
+          await invoke("paste_transcription", { text: finalText });
           setStatus("Pasted! ✓");
         } catch (pe) {
           console.warn("[paste] error:", pe);
