@@ -2655,8 +2655,8 @@ kbd {
 /* ── Outer shell ── */
 .st-layout {
   display: flex;
-  height: 100%;
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
   background: #f8fafc;
 }
 
@@ -2669,10 +2669,7 @@ kbd {
   padding: 28px 12px 20px;
   border-right: 1px solid #e8edf2;
   background: #f1f5f9;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .st-sidebar-label {
@@ -2758,6 +2755,7 @@ kbd {
 /* ── Right content panel ── */
 .st-panel {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   animation: stFadeIn 0.18s ease;
 }
@@ -3099,6 +3097,22 @@ kbd {
    RESPONSIVE ADJUSTMENTS
    ═════════════════════════════════════════════════════════════════════════════ */
 
+@media (max-width: 900px) {
+  .vocabulary-form-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .vocabulary-form-row .vocabulary-input-group:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .vocabulary-edit-inputs {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+}
+
 @media (max-width: 768px) {
   .sidebar {
     width: 100%;
@@ -3142,6 +3156,37 @@ kbd {
   .vocabulary-form-row,
   .vocabulary-edit-inputs {
     grid-template-columns: 1fr;
+  }
+
+  .vocabulary-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .vocabulary-section h3 {
+    font-size: 1.25rem;
+  }
+
+  .vocabulary-form {
+    padding: 16px;
+  }
+
+  .vocabulary-item {
+    padding: 14px 16px;
+  }
+
+  .vocabulary-empty {
+    padding: 32px 20px;
+  }
+
+  .vocabulary-item-content {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .vocabulary-item-actions {
+    align-self: flex-end;
   }
 
   .record-content,
@@ -3189,6 +3234,53 @@ kbd {
 
   .profile-dropdown {
     right: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .vocabulary-section {
+    padding: 16px;
+  }
+
+  .vocabulary-description {
+    font-size: 0.875rem;
+    margin-bottom: 16px;
+  }
+
+  .vocabulary-form {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .vocabulary-form-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .vocabulary-edit-inputs {
+    grid-template-columns: 1fr;
+  }
+
+  .vocabulary-edit-actions {
+    flex-direction: column;
+  }
+
+  .vocabulary-edit-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .vocabulary-item {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .vocabulary-empty {
+    padding: 24px 16px;
+  }
+
+  .vocabulary-upgrade-prompt {
+    padding: 16px;
   }
 }
 

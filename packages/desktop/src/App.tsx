@@ -1345,8 +1345,8 @@ function App() {
         {/* Center: content + bottom gutter */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Main scrollable content */}
-          <main className="flex-1 overflow-y-auto bg-slate-50 rounded-tl-2xl">
-              <div className="flex-1 flex flex-col">
+          <main className={`flex-1 flex flex-col ${activeTab === "settings" ? "overflow-hidden" : "overflow-y-auto"} bg-slate-50 rounded-tl-2xl`}>
+              <div className="flex-1 flex flex-col min-h-0">
                 {activeTab === "home" && user && (
                   <HomeTab
                     userName={user.user_metadata?.full_name || ""}

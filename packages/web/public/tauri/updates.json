@@ -1,23 +1,15 @@
 {
-  "version": "0.2.1",
+  "version": "0.2.4",
   "notes": "Bug fixes and improvements",
-  "pub_date": "2026-03-21T00:00:00Z",
+  "pub_date": "2026-03-22T00:00:00Z",
   "platforms": {
     "darwin-x86_64": {
       "signature": "",
-      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.1/OSCAR_0.2.1_x86_64.dmg"
+      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.4/OSCAR_x86_64.app.tar.gz"
     },
     "darwin-aarch64": {
       "signature": "",
-      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.1/OSCAR_0.2.1_aarch64.dmg"
-    },
-    "linux-x86_64": {
-      "signature": "",
-      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.1/OSCAR_0.2.1_amd64.AppImage"
-    },
-    "windows-x86_64": {
-      "signature": "",
-      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.1/OSCAR_0.2.1_x64-setup.exe"
+      "url": "https://github.com/navgurukul/oscar/releases/download/v0.2.4/OSCAR_aarch64.app.tar.gz"
     }
   }
 }
