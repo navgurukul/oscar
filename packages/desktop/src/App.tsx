@@ -262,7 +262,7 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: "https://oscar.samyarth.org/auth/desktop-callback",
+          redirectTo: `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`,
           skipBrowserRedirect: true,
         },
       });
