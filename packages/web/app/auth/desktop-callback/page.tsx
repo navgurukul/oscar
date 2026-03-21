@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 function DesktopCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function handleCallback() {
