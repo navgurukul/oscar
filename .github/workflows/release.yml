@@ -14,12 +14,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14          # Apple Silicon (M1/M2) — native aarch64
-            target: aarch64-apple-darwin
-          - os: macos-13          # Intel — native x86_64
-            target: x86_64-apple-darwin
+          - target: aarch64-apple-darwin
+            label: macos-silicon
+          - target: x86_64-apple-darwin
+            label: macos-intel
 
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest   # ARM M-series — aarch64 native, x86_64 cross-compiled
 
     steps:
       - name: Checkout
@@ -45,6 +45,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './packages/desktop/src-tauri -> target'
+          key: ${{ matrix.target }}
 
       - name: Install frontend dependencies
         run: pnpm install
@@ -64,7 +65,7 @@ jobs:
           prerelease: false
           args: --target ${{ matrix.target }}
 
-  # After both builds finish, generate and upload updates.json
+  # After both builds finish, generate and upload updates.json with signatures
   updater:
     needs: release
     permissions:
@@ -72,89 +73,67 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Generate updates.json
+      - name: Generate and upload updates.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
           VERSION="${TAG#v}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          # Fetch all assets for this release
           ASSETS=$(curl -sL \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
+            "https://api.github.com/repos/$REPO/releases/tags/$TAG")
 
           get_url() {
             echo "$ASSETS" | python3 -c "
           import sys, json, re
           data = json.load(sys.stdin)
-          pattern = sys.argv[1]
-          assets = data.get('assets', [])
-          for a in assets:
-              if re.search(pattern, a['name']):
-                  print(a['browser_download_url'])
-                  break
+          for a in data.get('assets', []):
+              if re.search(sys.argv[1], a['name']):
+                  print(a['browser_download_url']); break
           " "$1"
           }
 
           get_sig() {
-            SIG_URL=$(get_url "$1")
-            [ -n "$SIG_URL" ] && curl -sL "$SIG_URL" || echo ""
+            URL=$(get_url "$1")
+            [ -n "$URL" ] && curl -sL "$URL" || echo ""
           }
 
           ARM_URL=$(get_url "aarch64.*\.dmg$")
-          X86_URL=$(get_url "x86_64.*\.dmg$|x64.*\.dmg$")
+          X86_URL=$(get_url "x86_64.*\.dmg$|_x64.*\.dmg$")
           ARM_SIG=$(get_sig "aarch64.*\.dmg\.sig$")
-          X86_SIG=$(get_sig "x86_64.*\.dmg\.sig$|x64.*\.dmg\.sig$")
+          X86_SIG=$(get_sig "x86_64.*\.dmg\.sig$|_x64.*\.dmg\.sig$")
 
-          echo "ARM URL: $ARM_URL"
-          echo "X86 URL: $X86_URL"
-
-          python3 - <<PYEOF
-          import json
-          data = {
-            "version": "$VERSION",
-            "notes": "Bug fixes and improvements.",
-            "pub_date": "$PUB_DATE",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": """$ARM_SIG""".strip(),
-                "url": "$ARM_URL"
-              },
-              "darwin-x86_64": {
-                "signature": """$X86_SIG""".strip(),
-                "url": "$X86_URL"
-              }
+          python3 -c "
+          import json, sys
+          print(json.dumps({
+            'version': '$VERSION',
+            'notes': 'Bug fixes and improvements.',
+            'pub_date': '$PUB_DATE',
+            'platforms': {
+              'darwin-aarch64': {'signature': '''$ARM_SIG'''.strip(), 'url': '$ARM_URL'},
+              'darwin-x86_64':  {'signature': '''$X86_SIG'''.strip(), 'url': '$X86_URL'},
             }
-          }
-          print(json.dumps(data, indent=2))
-          PYEOF > updates.json
+          }, indent=2))
+          " > updates.json
 
           cat updates.json
 
-      - name: Upload updates.json to release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG=${{ github.ref_name }}
-          # Delete old updates.json if exists, then upload fresh one
-          ASSET_ID=$(curl -sL \
+          # Delete old updates.json asset if it exists
+          OLD_ID=$(echo "$ASSETS" | python3 -c "
+          import sys,json
+          for a in json.load(sys.stdin).get('assets',[]):
+              if a['name']=='updates.json': print(a['id']); break
+          ")
+          [ -n "$OLD_ID" ] && curl -sL -X DELETE \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
-            | python3 -c "import sys,json; assets=json.load(sys.stdin).get('assets',[]); print(next((str(a['id']) for a in assets if a['name']=='updates.json'),''))")
+            "https://api.github.com/repos/$REPO/releases/assets/$OLD_ID"
 
-          [ -n "$ASSET_ID" ] && curl -sL -X DELETE \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/assets/$ASSET_ID"
-
-          UPLOAD_URL=$(curl -sL \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['upload_url'].split('{')[0])")
+          # Upload fresh updates.json
+          UPLOAD_URL=$(echo "$ASSETS" | python3 -c "
+          import sys,json; print(json.load(sys.stdin)['upload_url'].split('{')[0])")
 
           curl -sL -X POST \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
