@@ -71,6 +71,24 @@ jobs:
           CXXFLAGS: ${{ matrix.cflags }}
         run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }}
 
+      - name: Sign bundles
+        working-directory: packages/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          BUNDLE_DIR="src-tauri/target/$TARGET/release/bundle/dmg"
+          for DMG in "$BUNDLE_DIR"/*.dmg; do
+            [ -f "$DMG" ] || continue
+            echo "Signing $DMG..."
+            ../../node_modules/.bin/tauri signer sign "$DMG" \
+              --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
+              ${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:+--password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"}
+            echo "Signature written to $DMG.sig"
+            cat "$DMG.sig"
+          done
+
       - name: Upload release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -96,7 +114,7 @@ jobs:
 
           UPLOAD_URL="https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets"
 
-          # Find and upload .dmg and .sig files
+          # Upload .dmg and .sig files (skip if already exists)
           BUNDLE_DIR="packages/desktop/src-tauri/target/$TARGET/release/bundle/dmg"
           for FILE in "$BUNDLE_DIR"/*.dmg "$BUNDLE_DIR"/*.dmg.sig; do
             [ -f "$FILE" ] || continue
