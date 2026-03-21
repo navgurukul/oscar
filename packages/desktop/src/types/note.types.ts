@@ -1,5 +1,12 @@
 // Note-related type definitions (mirrored from web app)
 
+export interface LocalTranscript {
+  id: string;
+  text: string;
+  starred: boolean;
+  createdAt: string;
+}
+
 export interface Note {
   formattedText: string;
   rawText: string;

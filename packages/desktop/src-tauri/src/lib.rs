@@ -11,6 +11,124 @@ use tauri_plugin_store::StoreExt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 use tokio::io::AsyncWriteExt;
 
+#[cfg(target_os = "macos")]
+mod macos_paste {
+    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+    use std::ffi::c_void;
+
+    extern "C" {
+        fn objc_getClass(name: *const std::ffi::c_char) -> *mut c_void;
+        fn sel_registerName(name: *const std::ffi::c_char) -> *mut c_void;
+        fn objc_msgSend() -> *mut c_void;
+    }
+
+    // Accessibility check
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+    }
+
+    pub fn is_accessibility_trusted() -> bool {
+        unsafe { AXIsProcessTrusted() }
+    }
+
+    /// Activate a macOS app by name using NSRunningApplication (in-process, no osascript).
+    /// Returns true if the app was found and activated.
+    pub fn activate_app(app_name: &str) -> Result<bool, String> {
+        unsafe {
+            let ws_class = objc_getClass(b"NSWorkspace\0".as_ptr() as *const _);
+            let sel_shared = sel_registerName(b"sharedWorkspace\0".as_ptr() as *const _);
+            let sel_running = sel_registerName(b"runningApplications\0".as_ptr() as *const _);
+            let sel_count = sel_registerName(b"count\0".as_ptr() as *const _);
+            let sel_object_at = sel_registerName(b"objectAtIndex:\0".as_ptr() as *const _);
+            let sel_localized_name = sel_registerName(b"localizedName\0".as_ptr() as *const _);
+            let sel_activate =
+                sel_registerName(b"activateWithOptions:\0".as_ptr() as *const _);
+
+            type NoArgFn =
+                unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
+            type CountFn =
+                unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
+            type IndexFn =
+                unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
+            type ActivateFn =
+                unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> bool;
+            type UTF8Fn =
+                unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const std::ffi::c_char;
+
+            let shared: NoArgFn = std::mem::transmute(objc_msgSend as *const ());
+            let ws = shared(ws_class, sel_shared);
+            if ws.is_null() {
+                return Err("NSWorkspace.sharedWorkspace is null".into());
+            }
+
+            let running_fn: NoArgFn = std::mem::transmute(objc_msgSend as *const ());
+            let apps = running_fn(ws, sel_running);
+            if apps.is_null() {
+                return Err("runningApplications is null".into());
+            }
+
+            let count_fn: CountFn = std::mem::transmute(objc_msgSend as *const ());
+            let count = count_fn(apps, sel_count);
+
+            let obj_at: IndexFn = std::mem::transmute(objc_msgSend as *const ());
+            let name_fn: NoArgFn = std::mem::transmute(objc_msgSend as *const ());
+            let sel_utf8 = sel_registerName(b"UTF8String\0".as_ptr() as *const _);
+            let utf8_fn: UTF8Fn = std::mem::transmute(objc_msgSend as *const ());
+            let activate_fn: ActivateFn = std::mem::transmute(objc_msgSend as *const ());
+
+            for i in 0..count {
+                let app = obj_at(apps, sel_object_at, i);
+                if app.is_null() {
+                    continue;
+                }
+                let ns_name = name_fn(app, sel_localized_name);
+                if ns_name.is_null() {
+                    continue;
+                }
+                let cstr = utf8_fn(ns_name, sel_utf8);
+                if cstr.is_null() {
+                    continue;
+                }
+                let name = std::ffi::CStr::from_ptr(cstr).to_string_lossy();
+                if name == app_name {
+                    // NSApplicationActivateIgnoringOtherApps = 1 << 1 = 2
+                    let activated = activate_fn(app, sel_activate, 2);
+                    log::info!(
+                        "[paste] NSRunningApplication.activate({}) = {}",
+                        app_name,
+                        activated
+                    );
+                    return Ok(activated);
+                }
+            }
+            Err(format!("App '{}' not found in running apps", app_name))
+        }
+    }
+
+    /// Simulate Cmd+V using CGEvents. Must be called from main thread for reliability.
+    pub fn post_cmd_v() -> Result<(), String> {
+        let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+            .map_err(|_| "Failed to create CGEventSource")?;
+
+        // keycode 9 = 'v'
+        let key_down = CGEvent::new_keyboard_event(source.clone(), 9, true)
+            .map_err(|_| "Failed to create key-down event")?;
+        let key_up = CGEvent::new_keyboard_event(source, 9, false)
+            .map_err(|_| "Failed to create key-up event")?;
+
+        key_down.set_flags(CGEventFlags::CGEventFlagCommand);
+        key_up.set_flags(CGEventFlags::CGEventFlagCommand);
+
+        key_down.post(CGEventTapLocation::HID);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        key_up.post(CGEventTapLocation::HID);
+
+        Ok(())
+    }
+}
+
 // ── Deep Link State ───────────────────────────────────────────────────────────
 
 static PENDING_DEEP_LINK: Mutex<Option<String>> = Mutex::new(None);
@@ -393,10 +511,13 @@ fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     .transparent(true)
     .resizable(false)
     .skip_taskbar(true)
+    .focused(false)
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
 
     let _ = w.set_ignore_cursor_events(true);
+    // Show pill on all macOS Spaces (including fullscreen app Spaces)
+    let _ = w.set_visible_on_all_workspaces(true);
     Ok(())
 }
 
@@ -408,30 +529,123 @@ fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// ── Focus Management ────────────────────────────────────────────────────────
+
+/// Returns the name of the frontmost application (macOS only).
+#[tauri::command]
+fn get_frontmost_app() -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("osascript")
+            .args([
+                "-e",
+                r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
+            ])
+            .output()
+            .map_err(|e| format!("Failed to get frontmost app: {}", e))?;
+
+        let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if name.is_empty() {
+            Err("Could not determine frontmost app".to_string())
+        } else {
+            Ok(name)
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("get_frontmost_app is only supported on macOS".to_string())
+    }
+}
+
+/// Activates (brings to front) the application with the given name.
+#[tauri::command]
+fn activate_app(app_name: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            r#"tell application "{}" to activate"#,
+            app_name.replace('\\', "\\\\").replace('"', "\\\"")
+        );
+        std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .map_err(|e| format!("Failed to activate {}: {}", app_name, e))?;
+        // Allow time for the app to come to the foreground and Space to switch
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app_name;
+        Ok(())
+    }
+}
+
 // ── Paste Transcription ───────────────────────────────────────────────────────
 
-/// Writes `text` to the system clipboard and simulates Cmd+V (macOS) or Ctrl+V (Windows/Linux)
-/// into whatever app was focused before this one.
+/// Writes `text` to the system clipboard and simulates Cmd+V (macOS) or Ctrl+V (Windows/Linux).
+/// If `target_app` is provided, activates that app first to ensure paste goes to the right window.
+///
+/// This is a SYNC command — Tauri 2 runs it on the main thread. This is intentional:
+/// CGEvent posting and NSRunningApplication activation are most reliable from the main thread.
 #[tauri::command]
-fn paste_transcription(text: String) -> Result<(), String> {
+fn paste_transcription(text: String, target_app: Option<String>) -> Result<String, String> {
+    // 1. Set clipboard
     let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
-    clipboard.set_text(text).map_err(|e| e.to_string())?;
-
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    clipboard.set_text(&text).map_err(|e| e.to_string())?;
+    log::info!("[paste] clipboard set ({} chars)", text.len());
 
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("osascript")
-            .args([
-                "-e",
-                r#"tell application "System Events" to keystroke "v" using command down"#,
-            ])
-            .output()
-            .map_err(|e| e.to_string())?;
+        // Check Accessibility permission
+        let trusted = macos_paste::is_accessibility_trusted();
+        log::info!("[paste] AXIsProcessTrusted = {}", trusted);
+        if !trusted {
+            return Err(
+                "Oscar needs Accessibility permission. \
+                 Go to System Settings → Privacy & Security → Accessibility and enable Oscar."
+                    .into(),
+            );
+        }
+
+        // 2. Activate target app (in-process via NSRunningApplication — no osascript)
+        if let Some(ref app_name) = target_app {
+            if !app_name.is_empty() {
+                match macos_paste::activate_app(app_name) {
+                    Ok(activated) => {
+                        log::info!("[paste] activated '{}': {}", app_name, activated);
+                    }
+                    Err(e) => {
+                        log::warn!("[paste] activate_app failed: {}, trying osascript", e);
+                        // Fallback to osascript for activation
+                        let safe = app_name.replace('\\', "\\\\").replace('"', "\\\"");
+                        let script = format!(r#"tell application "{safe}" to activate"#);
+                        let _ = std::process::Command::new("osascript")
+                            .args(["-e", &script])
+                            .output();
+                    }
+                }
+                // Wait for the target app to fully become frontmost
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+        }
+
+        // 3. Post Cmd+V via CGEvent (from main thread)
+        macos_paste::post_cmd_v()?;
+        log::info!("[paste] CGEvent Cmd+V posted from main thread");
+
+        return Ok(format!(
+            "paste OK: trusted={}, target={:?}",
+            trusted,
+            target_app
+        ));
     }
 
     #[cfg(target_os = "windows")]
     {
+        std::thread::sleep(std::time::Duration::from_millis(100));
         std::process::Command::new("powershell")
             .args([
                 "-Command",
@@ -439,17 +653,18 @@ fn paste_transcription(text: String) -> Result<(), String> {
             ])
             .output()
             .map_err(|e| e.to_string())?;
+        return Ok("pasted".to_string());
     }
 
     #[cfg(target_os = "linux")]
     {
+        std::thread::sleep(std::time::Duration::from_millis(100));
         std::process::Command::new("xdotool")
             .args(["key", "ctrl+v"])
             .output()
             .map_err(|e| e.to_string())?;
+        return Ok("pasted".to_string());
     }
-
-    Ok(())
 }
 
 // ── Deep Link Commands ───────────────────────────────────────────────────────
@@ -486,6 +701,8 @@ pub fn run() {
             enhance_text,
             show_recording_pill,
             hide_recording_pill,
+            get_frontmost_app,
+            activate_app,
             get_pending_deep_link,
         ])
         .setup(move |app| {
@@ -517,7 +734,23 @@ pub fn run() {
                 match event.state {
                     ShortcutState::Pressed => {
                         if !is_rec.swap(true, Ordering::SeqCst) {
-                            let _ = app_handle.emit("hotkey-recording-start", ());
+                            // Capture the frontmost app NOW, before Oscar's webview steals focus
+                            #[cfg(target_os = "macos")]
+                            let frontmost_app = {
+                                std::process::Command::new("osascript")
+                                    .args([
+                                        "-e",
+                                        r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
+                                    ])
+                                    .output()
+                                    .ok()
+                                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                                    .unwrap_or_default()
+                            };
+                            #[cfg(not(target_os = "macos"))]
+                            let frontmost_app = String::new();
+
+                            let _ = app_handle.emit("hotkey-recording-start", frontmost_app);
                         }
                     }
                     ShortcutState::Released => {

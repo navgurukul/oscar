@@ -1,6 +1,5 @@
 import React from "react";
 import { Home, Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle } from "lucide-react";
-import oscarLogo from "/OSCAR_LIGHT_LOGO.png";
 
 type TabType = "home" | "notes" | "vocabulary" | "billing" | "settings";
 
@@ -56,7 +55,7 @@ export function Navigation({
     <nav className="w-60 bg-white flex flex-col flex-shrink-0">
       {/* Brand section - fixed at top, draggable for macOS */}
       <div className="pb-4 px-5 flex items-center gap-2.5 [-webkit-app-region:drag]">
-        <img src={oscarLogo} alt="OSCAR" width={36} height={36} className="[-webkit-app-region:no-drag]" />
+        <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width={36} height={36} className="[-webkit-app-region:no-drag]" />
         <span className="text-base font-semibold text-slate-800 [-webkit-app-region:no-drag]">OSCAR</span>
       </div>
 
