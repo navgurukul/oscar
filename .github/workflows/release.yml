@@ -6,7 +6,45 @@ on:
       - 'v*'
 
 jobs:
+  # Create the GitHub release once, before the parallel matrix builds start.
+  # Both build jobs receive the release_id via job outputs — no race condition.
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+
+    steps:
+      - name: Create GitHub Release
+        id: create
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Check if release already exists (e.g. re-run after partial failure)
+          EXISTING=$(curl -sL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO/releases/tags/$TAG")
+
+          RELEASE_ID=$(echo "$EXISTING" | python3 -c \
+            "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(curl -sL -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"$TAG\",\"name\":\"OSCAR $TAG\",\"body\":\"Bug fixes and improvements.\",\"draft\":false,\"prerelease\":false}" \
+              "https://api.github.com/repos/$REPO/releases" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          fi
+
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          echo "Release ID: $RELEASE_ID"
+
   release:
+    needs: create-release
     permissions:
       contents: write
 
@@ -94,39 +132,27 @@ jobs:
       - name: Upload release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
           TARGET: ${{ matrix.target }}
           REPO: ${{ github.repository }}
         run: |
-          # Create or get the release
-          RELEASE=$(curl -sL \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            "https://api.github.com/repos/$REPO/releases/tags/$TAG")
-
-          RELEASE_ID=$(echo "$RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
-
-          if [ -z "$RELEASE_ID" ]; then
-            RELEASE_ID=$(curl -sL -X POST \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"tag_name\":\"$TAG\",\"name\":\"OSCAR $TAG\",\"body\":\"Bug fixes and improvements.\",\"draft\":false,\"prerelease\":false}" \
-              "https://api.github.com/repos/$REPO/releases" \
-              | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-          fi
-
           UPLOAD_URL="https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets"
 
           upload_file() {
             local FILE="$1"
-            [ -f "$FILE" ] || return
-            local NAME=$(basename "$FILE")
+            # Return 0 (not the test's exit code) so bash -e doesn't abort on missing files
+            [ -f "$FILE" ] || return 0
+            local NAME
+            NAME=$(basename "$FILE")
             echo "Uploading $NAME..."
             curl -sL -X POST \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Content-Type: application/octet-stream" \
               --data-binary @"$FILE" \
               "$UPLOAD_URL?name=$NAME"
+            echo ""
           }
+
           BASE="packages/desktop/src-tauri/target/$TARGET/release/bundle"
           # Upload .app.tar.gz + .sig (for auto-updater)
           for F in "$BASE"/macos/*.app.tar.gz "$BASE"/macos/*.app.tar.gz.sig; do upload_file "$F"; done
@@ -198,7 +224,7 @@ jobs:
           import sys,json
           for a in json.load(sys.stdin).get('assets',[]):
               if a['name']=='updates.json': print(a['id']); break
-          " 2>/dev/null)
+          " 2>/dev/null || true)
           [ -n "$OLD_ID" ] && curl -sL -X DELETE \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             "https://api.github.com/repos/$REPO/releases/assets/$OLD_ID"
