@@ -155,12 +155,29 @@ jobs:
 
           shopt -s nullglob  # prevent unmatched globs becoming literal strings
           BASE="packages/desktop/src-tauri/target/$TARGET/release/bundle"
+
+          # Derive short arch label: aarch64-apple-darwin → aarch64, x86_64-apple-darwin → x86_64
+          ARCH="${TARGET//-apple-darwin/}"
+
           echo "Files in bundle/macos:"
           ls "$BASE/macos/" 2>/dev/null || echo "(empty)"
           echo "Files in bundle/dmg:"
           ls "$BASE/dmg/" 2>/dev/null || echo "(empty)"
+
+          # Rename .app.tar.gz → include arch so both builds have unique filenames
+          # e.g. OSCAR.app.tar.gz → OSCAR_aarch64.app.tar.gz
+          for F in "$BASE/macos/"*.app.tar.gz; do
+            NEWNAME="${F%.app.tar.gz}_${ARCH}.app.tar.gz"
+            mv "$F" "$NEWNAME"
+            echo "Renamed to $(basename "$NEWNAME")"
+          done
+          for F in "$BASE/macos/"*.app.tar.gz.sig; do
+            NEWNAME="${F%.app.tar.gz.sig}_${ARCH}.app.tar.gz.sig"
+            mv "$F" "$NEWNAME"
+          done
+
           # Upload .app.tar.gz + .sig (for auto-updater)
-          for F in "$BASE"/macos/*.app.tar.gz "$BASE"/macos/*.app.tar.gz.sig; do upload_file "$F"; done
+          for F in "$BASE"/macos/*_${ARCH}.app.tar.gz "$BASE"/macos/*_${ARCH}.app.tar.gz.sig; do upload_file "$F"; done
           # Upload .dmg + .sig (for download page)
           for F in "$BASE"/dmg/*.dmg "$BASE"/dmg/*.dmg.sig; do upload_file "$F"; done
 
