@@ -16,6 +16,7 @@ import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
+import type { LocalTranscript } from "./types/note.types";
 import "./App.css";
 
 type TabType = "home" | "notes" | "vocabulary" | "billing" | "settings";
@@ -705,6 +706,7 @@ function App() {
   // Recording & processing (global hotkey functionality)
   const [isRecording, setIsRecording] = useState(false);
   const [_transcript, setTranscript] = useState("");
+  const [localTranscripts, setLocalTranscripts] = useState<LocalTranscript[]>([]);
   const [whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
   const [_isProcessing, setIsProcessing] = useState(false);
@@ -1126,6 +1128,17 @@ function App() {
 
       setTranscript((prev) => (prev ? prev + "\n\n" + finalText : finalText));
 
+      // Add to local transcripts list for the HomeTab UI
+      setLocalTranscripts((prev) => [
+        {
+          id: crypto.randomUUID(),
+          text: finalText,
+          starred: false,
+          createdAt: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+
       if (shouldPaste) {
         try {
           await invoke("paste_transcription", { text: finalText });
@@ -1239,6 +1252,22 @@ function App() {
                   <HomeTab
                     userName={user.user_metadata?.full_name || ""}
                     userId={user.id}
+                    localTranscripts={localTranscripts}
+                    onDeleteTranscript={(id) =>
+                      setLocalTranscripts((prev) => prev.filter((t) => t.id !== id))
+                    }
+                    onToggleStarTranscript={(id) =>
+                      setLocalTranscripts((prev) =>
+                        prev.map((t) => (t.id === id ? { ...t, starred: !t.starred } : t))
+                      )
+                    }
+                    onClearAllTranscripts={() => setLocalTranscripts([])}
+                  />
+                )}
+
+                {activeTab === "notes" && user && (
+                  <NotesTab
+                    userId={user.id}
                     isRecording={isRecording}
                     onToggleRecording={() => {
                       if (isRecording) {
@@ -1249,10 +1278,6 @@ function App() {
                     }}
                     recordingTime={0}
                   />
-                )}
-
-                {activeTab === "notes" && user && (
-                  <NotesTab userId={user.id} />
                 )}
 
                 {activeTab === "settings" && (
