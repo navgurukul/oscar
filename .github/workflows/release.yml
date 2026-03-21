@@ -47,6 +47,13 @@ jobs:
           workspaces: './packages/desktop/src-tauri -> target'
           key: ${{ matrix.target }}
 
+      - name: Install system dependencies
+        run: |
+          brew install cmake
+          # Ensure clang/llvm available for whisper-rs bindgen
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
+          echo "CLANG_PATH=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
+
       - name: Install dependencies
         run: pnpm install
 
