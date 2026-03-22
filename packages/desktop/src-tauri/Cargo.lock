@@ -2967,7 +2967,7 @@ dependencies = [
 
 [[package]]
 name = "oscar"
-version = "0.2.8"
+version = "0.2.10"
 dependencies = [
  "arboard",
  "core-graphics 0.24.0",

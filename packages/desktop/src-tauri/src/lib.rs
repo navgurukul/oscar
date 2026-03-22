@@ -603,8 +603,8 @@ fn create_pill_window(app: &tauri::AppHandle) {
         return; // already exists
     }
 
-    let pill_w = 200.0_f64;
-    let pill_h = 44.0_f64;
+    let pill_w = 120.0_f64;
+    let pill_h = 32.0_f64;
     let (pos_x, pos_y): (f64, f64) = app
         .primary_monitor()
         .ok()
@@ -780,22 +780,20 @@ fn paste_transcription(text: String, target_app: Option<String>) -> Result<Strin
 
     #[cfg(target_os = "macos")]
     {
-        // Check Accessibility permission
-        let mut trusted = macos_paste::is_accessibility_trusted();
+        // Check Accessibility permission.
+        // NOTE: Without Apple Developer ID code signing, AXIsProcessTrusted()
+        // will return false after every app update because macOS TCC stores a
+        // cryptographic code signature hash (csreq) that changes with each
+        // ad-hoc signed build. The toggle in System Settings may show ON but
+        // the actual check fails. We gracefully fall back to clipboard-only.
+        let trusted = macos_paste::is_accessibility_trusted();
         log::info!("[paste] AXIsProcessTrusted = {}", trusted);
+
         if !trusted {
-            // Trigger the macOS system prompt — this registers the current binary
-            // and opens System Settings → Accessibility automatically.
-            log::info!("[paste] not trusted, calling AXIsProcessTrustedWithOptions with prompt");
-            trusted = macos_paste::request_accessibility_with_prompt();
-            log::info!("[paste] after prompt, trusted = {}", trusted);
-        }
-        if !trusted {
-            // Text is already on the clipboard from step 1, so the user can Cmd+V manually.
-            return Err(
-                "ACCESSIBILITY_REQUIRED"
-                    .into(),
-            );
+            // Text is already on the clipboard from step 1.
+            // Return a special status so the frontend can show a helpful hint
+            // instead of an error. Do NOT prompt every time — it's disruptive.
+            return Ok("CLIPBOARD_ONLY".into());
         }
 
         // 2. Activate target app via `open -a` (Launch Services).

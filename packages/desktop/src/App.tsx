@@ -1287,18 +1287,18 @@ function App() {
           // the frontmost app. Passing targetApp triggers `open -a` which disrupts
           // macOS fullscreen Spaces. Oscar's recording pill is a non-activating
           // overlay so the target app stays frontmost throughout.
-          const pasteResult = await invoke("paste_transcription", {
+          const pasteResult = await invoke<string>("paste_transcription", {
             text: finalText,
           });
-          console.log("[paste] SUCCESS — Rust returned:", pasteResult);
-          setStatus("Pasted! ✓");
+          console.log("[paste] Rust returned:", pasteResult);
+          if (pasteResult === "CLIPBOARD_ONLY") {
+            setStatus("Copied! Press ⌘V to paste.");
+          } else {
+            setStatus("Pasted! ✓");
+          }
         } catch (pe) {
           console.error("[paste] FAILED:", pe);
-          if (String(pe).includes("ACCESSIBILITY_REQUIRED")) {
-            setStatus("Text copied! Enable Accessibility for OSCAR in System Settings, then Cmd+V to paste.");
-          } else {
-            setStatus("Done! (paste failed — text copied to clipboard)");
-          }
+          setStatus("Copied to clipboard. Press ⌘V to paste.");
         }
       } else {
         console.log("[paste] skipped — shouldPaste is false");
