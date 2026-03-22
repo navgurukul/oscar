@@ -14,6 +14,7 @@ interface NotesTabProps {
   isRecording: boolean;
   onToggleRecording: () => void;
   recordingTime: number;
+  refreshKey?: number;
 }
 
 // Format recording time as MM:SS
@@ -23,7 +24,7 @@ function formatTime(seconds: number): string {
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
-export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime }: NotesTabProps) {
+export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime, refreshKey }: NotesTabProps) {
   const [allNotes, setAllNotes] = useState<DBNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +44,7 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
   useEffect(() => {
     loadNotes();
     loadTrashCount();
-  }, [userId]);
+  }, [userId, refreshKey]);
 
   const loadTrashCount = async () => {
     const { data, error } = await notesService.getTrashedNotes();
