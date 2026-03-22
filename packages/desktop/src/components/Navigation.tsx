@@ -26,9 +26,38 @@ interface NavigationProps {
   onInstallUpdate?: () => void;
 }
 
-export function Navigation({ 
-  activeTab, 
-  onTabChange, 
+function NavItem({
+  id,
+  label,
+  icon: Icon,
+  isActive,
+  onClick,
+}: {
+  id: TabType;
+  label: string;
+  icon: React.ElementType;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      key={id}
+      className={`w-full flex items-center gap-3 py-2.5 px-4 rounded-lg border-none text-[0.9375rem] font-medium cursor-pointer transition-colors duration-150 ${
+        isActive
+          ? "bg-slate-100 text-slate-800"
+          : "bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+      }`}
+      onClick={onClick}
+    >
+      <Icon size={16} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+export function Navigation({
+  activeTab,
+  onTabChange,
   isProUser = false,
   onUpgradeClick,
   appVersion,
@@ -59,27 +88,23 @@ export function Navigation({
         <span className="text-base font-semibold text-slate-800 [-webkit-app-region:no-drag]">OSCAR</span>
       </div>
 
-      <div className="flex-1 py-2 px-3 flex flex-col gap-1">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              className={`flex items-center gap-3 py-3 px-4 rounded-[10px] border-none bg-transparent text-slate-500 text-[0.9375rem] font-medium cursor-pointer transition-all duration-200 relative hover:bg-slate-50 hover:text-slate-700 ${isActive ? "bg-sky-50 text-cyan-600" : ""}`}
-              onClick={() => onTabChange(item.id)}
-            >
-              <Icon size={16} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
+      <div className="flex-1 py-2 px-3 flex flex-col gap-0.5">
+        {navItems.map((item) => (
+          <NavItem
+            key={item.id}
+            id={item.id}
+            label={item.label}
+            icon={item.icon}
+            isActive={activeTab === item.id}
+            onClick={() => onTabChange(item.id)}
+          />
+        ))}
       </div>
 
-      <div className="p-4 border-t border-slate-100">
+      <div className="border-t border-slate-100">
         {/* Upgrade to Pro Card - only shown for free users */}
         {!isProUser && (
-          <div className="bg-gradient-to-br from-cyan-600 to-cyan-500 rounded-xl p-4 mb-4 text-white">
+          <div className="bg-gradient-to-br from-cyan-600 to-cyan-500 rounded-xl p-4 m-4 mb-3 text-white">
             <div className="flex items-center gap-2 mb-2.5">
               <div className="w-6 h-6 rounded-md bg-white/20 flex items-center justify-center text-white">
                 <Sparkles size={16} />
@@ -89,7 +114,7 @@ export function Navigation({
             <p className="text-[0.8125rem] text-white/85 leading-relaxed mb-3">
               Upgrade to Pro for unlimited recordings, vocabulary entries, and priority AI processing.
             </p>
-            <button 
+            <button
               className="flex items-center justify-center gap-1.5 w-full py-2.5 px-3.5 bg-white border-none rounded-lg text-cyan-600 text-sm font-semibold cursor-pointer transition-all duration-200 hover:bg-white/95 hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(6,182,212,0.3)]"
               onClick={handleUpgrade}
             >
@@ -99,17 +124,19 @@ export function Navigation({
           </div>
         )}
 
-        <button 
-          className={`flex items-center gap-3 py-3 px-4 rounded-[10px] border-none bg-transparent text-slate-500 text-[0.9375rem] font-medium cursor-pointer transition-all duration-200 relative hover:bg-slate-50 hover:text-slate-700 ${activeTab === "settings" ? "bg-sky-50 text-cyan-600" : ""}`}
-          onClick={() => onTabChange("settings")}
-        >
-          <Settings size={16} />
-          <span>Settings</span>
-        </button>
+        <div className="py-2 px-3 flex flex-col gap-0.5">
+          <NavItem
+            id="settings"
+            label="Settings"
+            icon={Settings}
+            isActive={activeTab === "settings"}
+            onClick={() => onTabChange("settings")}
+          />
+        </div>
 
         {/* Version indicator */}
         {appVersion && (
-          <div className="mt-3 pt-3 border-t border-slate-100">
+          <div className="pb-3 px-3 pt-1 border-t border-slate-100">
             <VersionIndicator
               version={appVersion}
               updaterState={updaterState}

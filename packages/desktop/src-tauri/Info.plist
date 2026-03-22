@@ -3,11 +3,13 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Voice Flow needs microphone access to record and transcribe your voice.</string>
+  <string>OSCAR needs microphone access to record and transcribe your voice.</string>
   <key>NSCameraUsageDescription</key>
-  <string>Voice Flow may use camera for future features.</string>
+  <string>OSCAR may use camera for future features.</string>
   <key>NSAppleEventsUsageDescription</key>
-  <string>Voice Flow needs this to paste transcribed text into other applications.</string>
+  <string>OSCAR needs this to paste transcribed text into other applications.</string>
+  <key>NSAccessibilityUsageDescription</key>
+  <string>OSCAR needs Accessibility access to paste transcribed text into other apps using your keyboard shortcut.</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>

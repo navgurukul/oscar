@@ -53,7 +53,7 @@ export async function GET() {
       canRecord: true,
       current,
       remaining,
-      limit: allowed ? SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS : null,
+      limit: remaining !== null ? SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS : null,
     });
   } catch (error) {
     console.error("Usage check error:", error);

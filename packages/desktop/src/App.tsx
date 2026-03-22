@@ -390,6 +390,11 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
   const [micStatus, setMicStatus] = useState<"idle" | "granted" | "denied">("idle");
   const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
 
+  // Check real accessibility status on mount
+  useEffect(() => {
+    invoke<boolean>("check_accessibility_permission").then(setAccessibilityEnabled).catch(() => {});
+  }, []);
+
   const requestMic = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -397,6 +402,29 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
       setMicStatus("granted");
     } catch {
       setMicStatus("denied");
+    }
+  };
+
+  const requestAccessibility = async () => {
+    try {
+      // AXIsProcessTrustedWithOptions registers the current binary and opens System Settings
+      const granted = await invoke<boolean>("request_accessibility_permission");
+      setAccessibilityEnabled(granted);
+      if (!granted) {
+        // Poll until the user enables it in System Settings
+        const interval = setInterval(async () => {
+          const trusted = await invoke<boolean>("check_accessibility_permission");
+          if (trusted) {
+            setAccessibilityEnabled(true);
+            clearInterval(interval);
+          }
+        }, 1500);
+        // Stop polling after 60s
+        setTimeout(() => clearInterval(interval), 60_000);
+      }
+    } catch {
+      // Fallback: open System Settings manually
+      invoke("open_url", { url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" }).catch(() => {});
     }
   };
 
@@ -468,7 +496,7 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
                     </svg>
                   </span>
                 ) : (
-                  <button className="perm-enable-btn-modern" onClick={() => setAccessibilityEnabled(true)}>
+                  <button className="perm-enable-btn-modern" onClick={requestAccessibility}>
                     Enable
                   </button>
                 )}
@@ -949,14 +977,14 @@ function App() {
     setDictSyncing(true);
     try {
       const { data, error } = await supabase
-        .from("user_dictionary")
-        .select("word")
+        .from("user_vocabulary")
+        .select("term")
         .eq("user_id", userId)
         .order("created_at", { ascending: true });
 
       if (error) throw error;
 
-      const words = (data ?? []).map((r: { word: string }) => r.word);
+      const words = (data ?? []).map((r: { term: string }) => r.term);
       dictWordsRef.current = words;
       setDictWords(words);
       await saveSetting("dictWords", words);

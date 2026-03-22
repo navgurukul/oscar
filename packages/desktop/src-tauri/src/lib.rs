@@ -28,10 +28,63 @@ mod macos_paste {
     #[link(name = "ApplicationServices", kind = "framework")]
     extern "C" {
         fn AXIsProcessTrusted() -> bool;
+        fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
     }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFDictionaryCreate(
+            allocator: *const c_void,
+            keys: *mut *const c_void,
+            values: *mut *const c_void,
+            num_values: isize,
+            key_callbacks: *const c_void,
+            value_callbacks: *const c_void,
+        ) -> *mut c_void;
+        fn CFStringCreateWithCString(
+            alloc: *const c_void,
+            c_str: *const std::ffi::c_char,
+            encoding: u32,
+        ) -> *mut c_void;
+        fn CFRelease(cf: *mut c_void);
+        static kCFBooleanTrue: *const c_void;
+        static kCFTypeDictionaryKeyCallBacks: c_void;
+        static kCFTypeDictionaryValueCallBacks: c_void;
+    }
+
+    // kCFStringEncodingUTF8
+    const CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 
     pub fn is_accessibility_trusted() -> bool {
         unsafe { AXIsProcessTrusted() }
+    }
+
+    /// Request accessibility permission with a system prompt.
+    /// Uses AXIsProcessTrustedWithOptions which registers the current binary
+    /// with macOS and opens System Settings if not already trusted.
+    pub fn request_accessibility_with_prompt() -> bool {
+        unsafe {
+            let key = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"AXTrustedCheckOptionPrompt\0".as_ptr() as *const _,
+                CF_STRING_ENCODING_UTF8,
+            );
+            let value = kCFBooleanTrue;
+            let mut keys_arr: *const c_void = key as *const c_void;
+            let mut vals_arr: *const c_void = value;
+            let dict = CFDictionaryCreate(
+                std::ptr::null(),
+                &mut keys_arr as *mut _,
+                &mut vals_arr as *mut _,
+                1,
+                &kCFTypeDictionaryKeyCallBacks as *const c_void,
+                &kCFTypeDictionaryValueCallBacks as *const c_void,
+            );
+            let trusted = AXIsProcessTrustedWithOptions(dict);
+            CFRelease(dict);
+            CFRelease(key as *mut c_void);
+            trusted
+        }
     }
 
     /// Activate a macOS app by name using NSRunningApplication (in-process, no osascript).
@@ -807,6 +860,35 @@ fn get_pending_deep_link() -> Option<String> {
     pending.take()
 }
 
+// ── Accessibility Commands ────────────────────────────────────────────────────
+
+#[tauri::command]
+fn check_accessibility_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos_paste::is_accessibility_trusted()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+/// Trigger the macOS system prompt to grant Accessibility access.
+/// Uses AXIsProcessTrustedWithOptions which registers the current binary
+/// and opens System Settings → Privacy & Security → Accessibility.
+#[tauri::command]
+fn request_accessibility_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos_paste::request_accessibility_with_prompt()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
 // ── App Entry Point ───────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -838,6 +920,8 @@ pub fn run() {
             get_frontmost_app,
             activate_app,
             get_pending_deep_link,
+            check_accessibility_permission,
+            request_accessibility_permission,
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();

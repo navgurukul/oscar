@@ -100,8 +100,6 @@ export function SettingsTab({
 
         <div className="st-sidebar-spacer" />
 
-        {/* Version / app info */}
-        <p className="st-sidebar-footer">OSCAR AI</p>
       </aside>
 
       {/* ── Right content panel ── */}
