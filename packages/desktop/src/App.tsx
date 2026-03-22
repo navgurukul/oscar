@@ -1268,7 +1268,11 @@ function App() {
           setStatus("Pasted! ✓");
         } catch (pe) {
           console.error("[paste] FAILED:", pe);
-          setStatus("Done! (paste failed — check Accessibility permission)");
+          if (String(pe).includes("ACCESSIBILITY_REQUIRED")) {
+            setStatus("Text copied! Enable Accessibility for OSCAR in System Settings, then Cmd+V to paste.");
+          } else {
+            setStatus("Done! (paste failed — text copied to clipboard)");
+          }
         }
       } else {
         console.log("[paste] skipped — shouldPaste is false");

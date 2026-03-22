@@ -781,12 +781,19 @@ fn paste_transcription(text: String, target_app: Option<String>) -> Result<Strin
     #[cfg(target_os = "macos")]
     {
         // Check Accessibility permission
-        let trusted = macos_paste::is_accessibility_trusted();
+        let mut trusted = macos_paste::is_accessibility_trusted();
         log::info!("[paste] AXIsProcessTrusted = {}", trusted);
         if !trusted {
+            // Trigger the macOS system prompt — this registers the current binary
+            // and opens System Settings → Accessibility automatically.
+            log::info!("[paste] not trusted, calling AXIsProcessTrustedWithOptions with prompt");
+            trusted = macos_paste::request_accessibility_with_prompt();
+            log::info!("[paste] after prompt, trusted = {}", trusted);
+        }
+        if !trusted {
+            // Text is already on the clipboard from step 1, so the user can Cmd+V manually.
             return Err(
-                "Oscar needs Accessibility permission. \
-                 Go to System Settings → Privacy & Security → Accessibility and enable Oscar."
+                "ACCESSIBILITY_REQUIRED"
                     .into(),
             );
         }
