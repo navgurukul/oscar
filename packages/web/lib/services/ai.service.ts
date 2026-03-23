@@ -17,7 +17,7 @@ import { localFormatterService } from "./localFormatter.service";
 const RETRY_CONFIG = {
   MAX_RETRIES: 2,
   INITIAL_DELAY_MS: 1000,
-  TIMEOUT_MS: 30000,
+  TIMEOUT_MS: 60000, // Increased to 60s for longer generation
 } as const;
 
 /**

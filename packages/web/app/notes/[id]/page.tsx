@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
+import { storageService } from "@/lib/services/storage.service";
+import { aiService } from "@/lib/services/ai.service";
 import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
+import { NoteActions } from "@/components/results/NoteActions";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
   Copy,
   Download,
@@ -79,6 +80,80 @@ export default function NoteDetailPage({
   const [activeMode, setActiveMode] = useState<"normal" | "email" | "translate" | "summary" | "bullets">("normal");
   const [modeContent, setModeContent] = useState<Record<string, string>>({});
   const [isLoadingMode, setIsLoadingMode] = useState(false);
+
+  // Translation states
+  const [selectedLanguage, setSelectedLanguage] = useState<"original" | "en" | "hi">("original");
+  const [isTranslating, setIsTranslating] = useState(false);
+  const translationCacheNoteRef = useRef<Map<string, string>>(new Map());
+  const translateControllerRef = useRef<AbortController | null>(null);
+
+  const applyLanguage = async (lang: "original" | "en" | "hi") => {
+    if (!note) return;
+    
+    if (lang === "original") {
+      translateControllerRef.current?.abort();
+      translateControllerRef.current = null;
+      setSelectedLanguage("original");
+      setModeContent(prev => ({ ...prev, translate: "" }));
+      if (isEditing) setEditedText(note.edited_text || note.original_formatted_text || "");
+      return;
+    }
+
+    const baseNote = note.edited_text || note.original_formatted_text || "";
+    if (!baseNote) return;
+
+    if (isTranslating && translateControllerRef.current) {
+      translateControllerRef.current.abort();
+    }
+
+    const noteKey = `${lang}|note|${baseNote}`;
+    const cachedNote = translationCacheNoteRef.current.get(noteKey);
+
+    if (cachedNote) {
+      setSelectedLanguage(lang);
+      setModeContent(prev => ({ ...prev, translate: cachedNote }));
+      if (isEditing) setEditedText(cachedNote);
+      toast({
+        title: "Language updated",
+        description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    translateControllerRef.current = controller;
+    setIsTranslating(true);
+    try {
+      const res = await aiService.translateText(baseNote, lang, controller.signal);
+
+      if (!res.success) {
+        if (controller.signal.aborted) return;
+        toast({
+          title: "Translation failed",
+          description: "Could not translate right now.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const noteText = res.translatedText || "";
+      translationCacheNoteRef.current.set(noteKey, noteText);
+
+      setSelectedLanguage(lang);
+      setModeContent(prev => ({ ...prev, translate: noteText }));
+      if (isEditing) setEditedText(noteText);
+
+      toast({
+        title: "Language updated",
+        description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
+      });
+    } finally {
+      setIsTranslating(false);
+      if (translateControllerRef.current === controller) {
+        translateControllerRef.current = null;
+      }
+    }
+  };
 
   // Feedback state
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
@@ -160,6 +235,14 @@ export default function NoteDetailPage({
       } else {
         setNote(data);
         setEditedText(data.edited_text || data.original_formatted_text);
+        // Set current note ID and raw text in storage for "Continue Recording" support
+        storageService.setCurrentNoteId(data.id);
+        storageService.updateRawText(data.raw_text);
+        storageService.saveNote(
+          data.original_formatted_text,
+          data.raw_text,
+          data.title
+        );
         // Set existing feedback state
         if (data.feedback_helpful !== null) {
           setHasFeedbackSubmitted(true);
@@ -171,6 +254,18 @@ export default function NoteDetailPage({
 
     loadNote();
   }, [id, router, user, authLoading]);
+
+  const handleStartEditing = () => {
+    setIsEditing(true);
+    const baseText = modeContent[activeMode] || (activeMode === "translate" ? modeContent["translate"] : null) || note?.edited_text || note?.original_formatted_text || "";
+    setEditedText(baseText);
+  };
+
+  const handleCancelEditing = () => {
+    const base = modeContent[activeMode] || (activeMode === "translate" ? modeContent["translate"] : null) || note?.edited_text || note?.original_formatted_text;
+    setEditedText(base || "");
+    setIsEditing(false);
+  };
 
   const handleSaveEdit = async () => {
     if (!note) return;
@@ -188,6 +283,12 @@ export default function NoteDetailPage({
       });
     } else {
       setNote({ ...note, edited_text: editedText });
+      
+      // Update modeContent cache for current mode
+      if (activeMode !== "normal") {
+        setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
+      }
+
       setIsEditing(false);
       toast({
         title: "Saved!",
@@ -198,7 +299,11 @@ export default function NoteDetailPage({
   };
 
   const handleCopy = async () => {
-    const text = note?.edited_text || note?.original_formatted_text || "";
+    const text = isEditing 
+      ? editedText 
+      : activeMode === "normal"
+      ? (note?.edited_text || note?.original_formatted_text || "")
+      : (modeContent[activeMode] || note?.edited_text || note?.original_formatted_text || "");
     await navigator.clipboard.writeText(text);
     toast({
       title: "Copied!",
@@ -208,7 +313,11 @@ export default function NoteDetailPage({
 
   const handleDownload = () => {
     if (!note) return;
-    const text = note.edited_text || note.original_formatted_text;
+    const text = isEditing 
+      ? editedText 
+      : activeMode === "normal"
+      ? (note.edited_text || note.original_formatted_text)
+      : (modeContent[activeMode] || note.edited_text || note.original_formatted_text);
     const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -382,67 +491,100 @@ export default function NoteDetailPage({
       </motion.div>
 
       {/* Mode Selection Bar (Floating) */}
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 mb-6 shadow-2xl z-10"
-      >
-        {[
-          { id: "normal", icon: FileText, label: "Normal" },
-          { id: "email", icon: Mail, label: "Email" },
-          { id: "bullets", icon: ListChecks, label: "Bullets" },
-          { id: "summary", icon: BookOpen, label: "Summary" },
-          { id: "translate", icon: Languages, label: "Translate" }
-        ].map((mode) => (
-          <button
-            key={mode.id}
-            onClick={async () => {
-              if (mode.id === "normal") {
-                setActiveMode("normal");
-                if (isEditing) setEditedText(note.edited_text || note.original_formatted_text || "");
-                return;
-              }
-              
-              setActiveMode(mode.id as any);
-              const baseText = note.edited_text || note.original_formatted_text || note.raw_text || "";
-              
-              if (!modeContent[mode.id]) {
-                setIsLoadingMode(true);
-                let resultText = baseText;
-                if (mode.id === "email") {
-                  const res = await gmailFormatText(baseText, note.title || "Untitled Note");
-                  resultText = res.success ? res.formattedText || baseText : baseText;
-                } else if (mode.id === "bullets") {
-                  resultText = baseText.split('\n').filter(l => l.trim()).map(l => `• ${l.trim()}`).join('\n');
-                } else if (mode.id === "summary") {
-                  const sentences = baseText.match(/[^.!?]+[.!?]+/g) || [baseText];
-                  resultText = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
-                } else if (mode.id === "translate") {
-                  // Placeholder for translation
-                  resultText = "Translation feature coming soon...";
+      <div className="flex flex-col items-center gap-4 w-full">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 mb-2 shadow-2xl z-10"
+        >
+          {[
+            { id: "normal", icon: FileText, label: "Normal" },
+            { id: "email", icon: Mail, label: "Email" },
+            { id: "bullets", icon: ListChecks, label: "Bullets" },
+            { id: "summary", icon: BookOpen, label: "Summary" },
+            { id: "translate", icon: Languages, label: "Translate" }
+          ].map((mode) => (
+            <button
+              key={mode.id}
+              onClick={async () => {
+                if (mode.id === "normal") {
+                  setActiveMode("normal");
+                  if (isEditing) setEditedText(note.edited_text || note.original_formatted_text || "");
+                  return;
                 }
-                setModeContent(prev => ({ ...prev, [mode.id]: resultText }));
-                if (isEditing) setEditedText(resultText);
-                setIsLoadingMode(false);
-              } else {
-                if (isEditing) setEditedText(modeContent[mode.id]);
-              }
-            }}
-            className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
-              activeMode === mode.id 
-                ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
-                : "text-gray-400 hover:text-white hover:bg-white/5"
-            }`}
-            title={mode.label}
-          >
-            {isLoadingMode && activeMode === mode.id ? (
-              <Spinner className="w-5 h-5" />
-            ) : (
-              <mode.icon className="w-5 h-5" />
-            )}
-          </button>
-        ))}
-      </motion.div>
+                
+                setActiveMode(mode.id as any);
+                const baseText = note.edited_text || note.original_formatted_text || note.raw_text || "";
+                
+                if (!modeContent[mode.id] && mode.id !== "translate") {
+                  setIsLoadingMode(true);
+                  let resultText = baseText;
+                  if (mode.id === "email") {
+                    const res = await gmailFormatText(baseText, note.title || "Untitled Note");
+                    resultText = res.success ? res.formattedText || baseText : baseText;
+                  } else if (mode.id === "bullets") {
+                    resultText = baseText.split('\n').filter(l => l.trim()).map(l => `• ${l.trim()}`).join('\n');
+                  } else if (mode.id === "summary") {
+                    const sentences = baseText.match(/[^.!?]+[.!?]+/g) || [baseText];
+                    resultText = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
+                  }
+                  setModeContent(prev => ({ ...prev, [mode.id]: resultText }));
+                  if (isEditing) setEditedText(resultText);
+                  setIsLoadingMode(false);
+                } else {
+                  if (isEditing && mode.id !== "translate") setEditedText(modeContent[mode.id] || baseText);
+                }
+              }}
+              className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
+                activeMode === mode.id 
+                  ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
+                  : "text-gray-400 hover:text-white hover:bg-white/5"
+              }`}
+              title={mode.label}
+            >
+              {isLoadingMode && activeMode === mode.id ? (
+                <Spinner className="w-5 h-5" />
+              ) : (
+                <mode.icon className="w-5 h-5" />
+              )}
+            </button>
+          ))}
+        </motion.div>
+
+        {/* Translation Dropdown - only when translate mode is active */}
+        <AnimatePresence>
+          {activeMode === "translate" && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex items-center gap-2 bg-slate-900/50 backdrop-blur-sm border border-white/5 rounded-full p-1 shadow-xl mb-4"
+            >
+              {[
+                { id: "original", label: "Original" },
+                { id: "en", label: "English" },
+                { id: "hi", label: "Hindi" }
+              ].map((lang) => (
+                <button
+                  key={lang.id}
+                  onClick={() => applyLanguage(lang.id as any)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    selectedLanguage === lang.id
+                      ? "bg-cyan-500 text-slate-950 shadow-lg"
+                      : "text-gray-400 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  {isTranslating && selectedLanguage === lang.id ? (
+                    <Spinner className="w-3 h-3" />
+                  ) : (
+                    lang.label
+                  )}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Main Note Card */}
       <motion.div 
@@ -476,8 +618,8 @@ export default function NoteDetailPage({
               </button>
               <button 
                 onClick={() => {
-                  setIsEditing(!isEditing);
-                  if (!isEditing) setEditedText(displayText);
+                  if (isEditing) handleCancelEditing();
+                  else handleStartEditing();
                 }}
                 className={`p-2 rounded-lg transition-all duration-300 ${isEditing ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
                 title="Edit note"
@@ -512,7 +654,7 @@ export default function NoteDetailPage({
           <div className="w-16 h-0.5 bg-cyan-500/80 rounded-full mb-6" />
 
           {/* Note Content Area */}
-          <div className="relative min-h-[150px]">
+          <div className="relative min-h-[120px]">
             {isEditing ? (
               <textarea
                 value={editedText}
@@ -538,6 +680,34 @@ export default function NoteDetailPage({
               </div>
             )}
           </div>
+
+          {!isEditing && (
+            <div className=" flex   border-white/5 border-t-4px  mt-4 pt-4">
+              <button 
+                onClick={() => {
+                  const raw = note.raw_text;
+                  if (!raw) {
+                    toast({
+                      title: "Error",
+                      description: "Original recording not found. Cannot continue.",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                  storageService.updateRawText(raw);
+                  storageService.setCurrentNoteId(note.id);
+                  storageService.setContinueMode(true);
+                  router.push("/recording");
+                }}
+                className="bg-cyan-500/10 hover:bg-cyan-500/20 gap-3 text-cyan-400 px-8 py-3 rounded-full font-bold text-sm transition-all duration-300 flex items-center  border border-cyan-500/20 group hover:-translate-y-1"
+              >
+                <div className="bg-cyan-500 text-slate-950 p-1.5 rounded-full group-hover:scale-110 transition-transform shadow-[0_0_15px_rgba(6,182,212,0.5)]">
+                  <Mic className="w-4 h-4" />
+                </div>
+                <span>Append to notes</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Feedback Section (Below Card) */}
@@ -590,8 +760,6 @@ export default function NoteDetailPage({
           )}
         </AnimatePresence>
       </motion.div>
-
-      
     </main>
   );
 }

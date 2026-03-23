@@ -95,19 +95,20 @@ function RecordingPageInner() {
       if (shouldContinue) {
         const rawText = storageService.getRawText();
         if (rawText) {
-          // Clear continue mode flag
-          storageService.clearContinueMode();
           // Start recording with existing transcript as seed
           toast({
-            title: "Continuing Recording",
-            description: "Adding to your existing note...",
+            title: "Resuming Recording",
+            description: "Preparing to add more to your note...",
           });
-          // Small delay to show toast
+          
+          // Clear continue mode flag ONLY after we've read the raw text and are about to start
+          storageService.clearContinueMode();
+
+          // Small delay to ensure everything is ready
           setTimeout(() => {
             startRecording(rawText);
-          }, 500);
+          }, 800);
         } else {
-          // No raw text to continue with, clear flag
           storageService.clearContinueMode();
         }
       }
@@ -316,52 +317,6 @@ function RecordingPageInner() {
           transcript,
           generatedTitle
         );
-
-        // Save to Supabase if user is authenticated
-        if (user) {
-          const currentNoteId = storageService.getCurrentNoteId();
-          const isContinuingExistingNote = Boolean(currentNoteId);
-          let saveResult;
-
-          if (currentNoteId) {
-            // Update existing note if we have an ID
-            saveResult = await notesService.updateNote(currentNoteId, {
-              title: generatedTitle || "Untitled Note",
-              raw_text: transcript,
-              original_formatted_text: result.formattedText,
-            });
-          } else {
-            // Create new note
-            saveResult = await notesService.createNote({
-              user_id: user.id,
-              title: generatedTitle || "Untitled Note",
-              raw_text: transcript,
-              original_formatted_text: result.formattedText,
-            });
-          }
-
-          const { data: savedNote, error: saveError } = saveResult;
-
-          if (saveError) {
-            console.error("Failed to save note to database:", saveError);
-            // Show non-blocking warning toast
-            if (isMountedRef.current) {
-              toast({
-                title: "Note Saved Locally",
-                description:
-                  "Could not sync to cloud, but your note is safe in this session.",
-                variant: "default",
-              });
-            }
-          } else if (savedNote) {
-            // Store the note ID for the results page
-            storageService.setCurrentNoteId(savedNote.id);
-            // Increment usage count only when creating a new note
-            if (!isContinuingExistingNote) {
-              await incrementUsage();
-            }
-          }
-        }
 
         if (isMountedRef.current) {
           setProcessingProgress(100);

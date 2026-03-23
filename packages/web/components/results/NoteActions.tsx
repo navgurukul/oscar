@@ -3,12 +3,12 @@
 import React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Play, RotateCcw } from "lucide-react";
+import { Play, RotateCcw, Save } from "lucide-react";
 import { storageService } from "@/lib/services/storage.service";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { motion } from "motion/react";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { notesService } from "@/lib/services/notes.service";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -16,7 +16,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export function NoteActions() {
+interface NoteActionsProps {
+  onSave?: () => Promise<void>;
+  isSaving?: boolean;
+  showSave?: boolean;
+}
+
+export function NoteActions({ onSave, isSaving, showSave }: NoteActionsProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
@@ -32,22 +38,14 @@ export function NoteActions() {
   };
 
   const handleRecordAgain = async () => {
-    try {
-      const currentId = storageService.getCurrentNoteId();
-      if (currentId && user) {
-        await notesService.deleteNote(currentId);
-      }
-    } catch {
-      // ignore deletion errors; proceed to clear local session
-    } finally {
-      storageService.clearNote();
-      router.push(ROUTES.RECORDING);
-    }
+    storageService.clearNote();
+    router.push(ROUTES.RECORDING);
   };
 
   return (
     <TooltipProvider>
       <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 flex items-center justify-center gap-4 z-50">
+        {/* Record Again */}
         <Tooltip>
           <TooltipTrigger asChild>
             <motion.div
@@ -57,17 +55,39 @@ export function NoteActions() {
               <Button
                 onClick={handleRecordAgain}
                 size="icon"
-                className="bg-slate-800 hover:bg-slate-700 text-white shadow-lg w-12 h-12 rounded-full"
+                className="bg-slate-800 hover:bg-slate-700 text-white shadow-lg w-12 h-12 rounded-full border-none"
               >
                 <RotateCcw className="w-5 h-5" />
               </Button>
             </motion.div>
           </TooltipTrigger>
-          <TooltipContent>
+          <TooltipContent side="top" className="bg-slate-800 border-slate-700 text-white">
             <p>{UI_STRINGS.RECORD_AGAIN}</p>
           </TooltipContent>
         </Tooltip>
 
+        {/* Save Button (In between) */}
+        {showSave && onSave && (
+          <motion.div
+            whileHover={{ y: -5 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+          >
+            <Button
+              onClick={onSave}
+              disabled={isSaving}
+              className="bg-cyan-600 hover:bg-cyan-700 text-white rounded-full px-6 h-12 gap-2 shadow-lg border-none"
+            >
+              {isSaving ? (
+                <Spinner className="w-4 h-4 text-white" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span className="text-sm font-bold">Save</span>
+            </Button>
+          </motion.div>
+        )}
+
+        {/* Continue Recording */}
         {!hideContinueRecording && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -78,13 +98,13 @@ export function NoteActions() {
                 <Button
                   onClick={handleContinueRecording}
                   size="icon"
-                  className="bg-cyan-600 hover:bg-cyan-700 text-white w-12 h-12 shadow-lg rounded-full"
+                  className="bg-cyan-600 hover:bg-cyan-700 text-white shadow-lg w-12 h-12 rounded-full border-none"
                 >
                   <Play className="w-5 h-5" />
                 </Button>
               </motion.div>
             </TooltipTrigger>
-            <TooltipContent>
+            <TooltipContent side="top" className="bg-cyan-800 border-cyan-700 text-white">
               <p>{UI_STRINGS.CONTINUE_RECORDING}</p>
             </TooltipContent>
           </Tooltip>

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useNoteStorage } from "@/lib/hooks/useNoteStorage";
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
+import { useAuth } from "@/lib/contexts/AuthContext";
 import { storageService } from "@/lib/services/storage.service";
 import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
@@ -15,7 +16,20 @@ import { Spinner } from "@/components/ui/spinner";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import type { FeedbackReason } from "@/lib/types/note.types";
-import { Mail, MessageCircle, Share2, FileText, FolderPlus, X, Check, Plus } from "lucide-react";
+import {
+  Mail,
+  MessageCircle,
+  Share2,
+  FileText,
+  FolderPlus,
+  X,
+  Check,
+  Plus,
+  Languages,
+  ListChecks,
+  BookOpen,
+} from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +49,7 @@ const NoteEditor = dynamic(
 export default function ResultsPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useAuth();
   const { isLoading, formattedNote, rawText, title, updateFormattedNote } =
     useNoteStorage();
 
@@ -52,8 +67,12 @@ export default function ResultsPage() {
     isFormatting: isGmailFormatting,
     formatText: gmailFormatText,
   } = useAIEmailFormatting();
-  const [isGmailMode, setIsGmailMode] = useState<boolean>(false);
-  const [gmailBody, setGmailBody] = useState<string | null>(null);
+  const [isNoteSaved, setIsNoteSaved] = useState<boolean>(false);
+
+  // New Mode states
+  const [activeMode, setActiveMode] = useState<"normal" | "email" | "translate" | "summary" | "bullets">("normal");
+  const [modeContent, setModeContent] = useState<Record<string, string>>({});
+  const [isLoadingMode, setIsLoadingMode] = useState(false);
 
   // Language / translation state (post-recording)
   const [selectedLanguage, setSelectedLanguage] = useState<
@@ -161,9 +180,9 @@ export default function ResultsPage() {
     try {
       const textToCopy = isEditing
         ? editedText
-        : isGmailMode
-        ? gmailBody || ""
-        : translatedNote ?? formattedNote;
+        : activeMode === "normal"
+        ? formattedNote || ""
+        : modeContent[activeMode] || formattedNote || "";
       await navigator.clipboard.writeText(textToCopy);
       toast({
         title: "Copied!",
@@ -188,9 +207,9 @@ export default function ResultsPage() {
     try {
       const textToDownload = isEditing
         ? editedText
-        : isGmailMode
-        ? gmailBody || ""
-        : translatedNote ?? formattedNote;
+        : activeMode === "normal"
+        ? formattedNote || ""
+        : modeContent[activeMode] || formattedNote || "";
       const blob = new Blob([textToDownload], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -225,11 +244,13 @@ export default function ResultsPage() {
       setSelectedLanguage("original");
       setTranslatedNote(null);
       setTranslatedRaw(null);
+      setModeContent(prev => ({ ...prev, translate: "" }));
+      if (isEditing) setEditedText(formattedNote || "");
       return;
     }
 
-    // Always translate the simple content, not Gmail mode.
-    const baseNote = (isEditing && !isGmailMode ? editedText : formattedNote) || "";
+    // Always translate the simple content, not other modes.
+    const baseNote = (isEditing && activeMode === "normal" ? editedText : formattedNote) || "";
     const baseRaw = rawText || "";
     if (!baseNote && !baseRaw) return;
 
@@ -297,6 +318,11 @@ export default function ResultsPage() {
       setSelectedLanguage(lang);
       setTranslatedNote(noteText);
       setTranslatedRaw(rawTextTranslated);
+      
+      // Update modeContent for translate mode
+      setModeContent(prev => ({ ...prev, translate: noteText }));
+      if (isEditing) setEditedText(noteText);
+
       toast({
         title: "Language updated",
         description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
@@ -344,35 +370,31 @@ export default function ResultsPage() {
 
   const handleStartEditing = async () => {
     setIsEditing(true);
-    if (isGmailMode) {
-      setShareSubject(title || UI_STRINGS.UNTITLED_NOTE);
-      let bodyToUse = gmailBody;
-      if (!bodyToUse) {
-        const baseText = ((translatedNote ?? formattedNote) || rawText || "");
-        const res = await gmailFormatText(baseText, title || UI_STRINGS.UNTITLED_NOTE);
-        bodyToUse = res.success ? (res.formattedText || baseText) : baseText;
-        setGmailBody(bodyToUse);
-      }
-      setEditedText(bodyToUse || "");
-    } else {
-      const base = (translatedNote ?? formattedNote) || "";
-      setEditedText(base);
-    }
+    const baseText = (modeContent[activeMode] || (activeMode === "translate" ? translatedNote : null) || formattedNote || rawText || "");
+    setEditedText(baseText);
   };
 
   const handleCancelEditing = () => {
-    const base = isGmailMode ? (gmailBody || "") : (translatedNote ?? formattedNote);
+    const base = modeContent[activeMode] || (activeMode === "translate" ? translatedNote : null) || formattedNote;
     setEditedText(base || "");
     setIsEditing(false);
   };
 
   const handleSaveEdit = async () => {
     if (!noteId) {
+      // If not saved to DB yet, just update local state
+      updateFormattedNote(editedText);
+      
+      // Update modeContent cache for current mode
+      if (activeMode !== "normal") {
+        setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
+      }
+      
       toast({
-        title: "Error",
-        description: "Could not save changes - note not found in database.",
-        variant: "destructive",
+        title: "Updated!",
+        description: "Your changes have been saved locally.",
       });
+      setIsEditing(false);
       return;
     }
 
@@ -390,6 +412,11 @@ export default function ResultsPage() {
     } else {
       // Update session storage and internal state to keep UI in sync
       updateFormattedNote(editedText);
+      
+      // Update modeContent cache for current mode
+      if (activeMode !== "normal") {
+        setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
+      }
 
       toast({
         title: "Saved!",
@@ -398,6 +425,62 @@ export default function ResultsPage() {
       setIsEditing(false);
     }
     setIsSaving(false);
+  };
+
+  const handleSaveToDatabase = async () => {
+    if (!user) {
+      router.push(`/auth?redirectTo=${encodeURIComponent(ROUTES.RESULTS)}`);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const isContinuingExistingNote = Boolean(noteId);
+      let saveResult;
+
+      if (noteId) {
+        // Update existing note if we have an ID
+        saveResult = await notesService.updateNote(noteId, {
+          title: title || "Untitled Note",
+          raw_text: rawText || "",
+          original_formatted_text: formattedNote || "",
+          edited_text: isEditing ? editedText : undefined,
+        });
+      } else {
+        // Create new note
+        saveResult = await notesService.createNote({
+          user_id: user.id,
+          title: title || "Untitled Note",
+          raw_text: rawText || "",
+          original_formatted_text: formattedNote || "",
+        });
+      }
+
+      const { data: savedNote, error: saveError } = saveResult;
+
+      if (saveError) {
+        throw saveError;
+      }
+
+      if (savedNote) {
+        setNoteId(savedNote.id);
+        storageService.setCurrentNoteId(savedNote.id);
+        setIsNoteSaved(true);
+        toast({
+          title: "Saved!",
+          description: "Your note has been saved to the cloud.",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to save note to database:", error);
+      toast({
+        title: "Save Failed",
+        description: "Could not save to cloud. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleFeedbackSubmit = async (
@@ -450,10 +533,14 @@ export default function ResultsPage() {
     );
   }
 
+  const displayText = activeMode === "normal"
+    ? (isEditing ? editedText : formattedNote)
+    : (modeContent[activeMode] || (isEditing ? editedText : formattedNote));
+
   return (
-    <main className="flex flex-col items-center px-4 pt-8 pb-24">
-      <div className="w-full max-w-2xl flex flex-col items-center gap-8 mt-16">
-        <div className="text-center space-y-4 mt-8 w-full">
+    <main className="flex flex-col items-center px-4 pt-8 pb-24 min-h-screen bg-[#020617] text-white overflow-x-hidden">
+      <div className="w-full max-w-2xl flex flex-col items-center gap-6 mt-16">
+        <div className="text-center space-y-4 w-full">
           <h1 className="text-3xl md:text-5xl font-bold text-white tracking-tight">
             {title || UI_STRINGS.RESULTS_TITLE}
           </h1>
@@ -486,40 +573,40 @@ export default function ResultsPage() {
                     <button
                       key={folder}
                       onClick={() => handleUpdateFolder(folder)}
-                      className="text-xs px-3 py-1 rounded-full bg-slate-900 border border-white/10 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-all whitespace-nowrap"
+                      className="text-[11px] px-3 py-1 rounded-full bg-slate-900 border border-white/5 text-gray-500 hover:text-cyan-400 hover:border-cyan-500/30 transition-all whitespace-nowrap"
                     >
                       {folder}
                     </button>
                   ))}
                   <button
                     onClick={() => setIsAddingNewFolder(true)}
-                    className="text-xs px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 transition-all flex items-center gap-1"
+                    className="text-[11px] px-3 py-1 rounded-full bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-all flex items-center gap-1 font-medium"
                   >
                     <Plus className="w-3 h-3" />
-                    New Folder
+                    New
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 bg-slate-900/50 border border-cyan-500/30 rounded-lg p-1 animate-in fade-in zoom-in duration-200">
+                <div className="flex items-center gap-1 bg-slate-900/80 border border-cyan-500/30 rounded-full px-2 py-0.5 animate-in fade-in zoom-in duration-200">
                   <Input
                     autoFocus
-                    placeholder="Folder name..."
+                    placeholder="Folder..."
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddNewFolder()}
-                    className="h-8 w-32 bg-transparent border-none text-xs focus-visible:ring-0 placeholder:text-gray-600"
+                    className="h-6 w-24 bg-transparent border-none text-[11px] focus-visible:ring-0 placeholder:text-gray-600 p-0"
                   />
                   <button
                     onClick={handleAddNewFolder}
                     className="p-1 hover:text-cyan-400 transition-colors"
                   >
-                    <Check className="w-4 h-4" />
+                    <Check className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => setIsAddingNewFolder(false)}
                     className="p-1 hover:text-red-400 transition-colors"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               )}
@@ -527,65 +614,104 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        {/* Language selector + Simple/Gmail mode toggle in one row */}
-        <div className="w-full max-w-[650px] flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-gray-400">Transcript language:</label>
-            <select
-              value={selectedLanguage}
-              onChange={(e) =>
-                applyLanguage(e.target.value as "original" | "en" | "hi")
-              }
-              disabled={isTranslating}
-              className="bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
-            >
-              <option value="original">Original</option>
-              <option value="en">English</option>
-              <option value="hi">Hindi</option>
-            </select>
-          </div>
+        {/* Mode Selection Bar (Floating) */}
+        <div className="flex flex-col items-center gap-4 w-full">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 shadow-2xl z-10"
+          >
+            {[
+              { id: "normal", icon: FileText, label: "Normal" },
+              { id: "email", icon: Mail, label: "Email" },
+              { id: "bullets", icon: ListChecks, label: "Bullets" },
+              { id: "summary", icon: BookOpen, label: "Summary" },
+              { id: "translate", icon: Languages, label: "Translate" }
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                onClick={async () => {
+                  if (mode.id === "normal") {
+                    setActiveMode("normal");
+                    if (isEditing) setEditedText(formattedNote || "");
+                    return;
+                  }
+                  
+                  setActiveMode(mode.id as any);
+                  const baseText = (isEditing ? editedText : formattedNote) || rawText || "";
+                  
+                  if (!modeContent[mode.id] && mode.id !== "translate") {
+                    setIsLoadingMode(true);
+                    let resultText = baseText;
+                    if (mode.id === "email") {
+                      const res = await gmailFormatText(baseText, title || "Untitled Note");
+                      resultText = res.success ? res.formattedText || baseText : baseText;
+                    } else if (mode.id === "bullets") {
+                      resultText = baseText.split('\n').filter(l => l.trim()).map(l => `• ${l.trim()}`).join('\n');
+                    } else if (mode.id === "summary") {
+                      const sentences = baseText.match(/[^.!?]+[.!?]+/g) || [baseText];
+                      resultText = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
+                    }
+                    setModeContent(prev => ({ ...prev, [mode.id]: resultText }));
+                    if (isEditing) setEditedText(resultText);
+                    setIsLoadingMode(false);
+                  } else {
+                    if (isEditing && mode.id !== "translate") setEditedText(modeContent[mode.id] || baseText);
+                  }
+                }}
+                className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
+                  activeMode === mode.id 
+                    ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
+                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                }`}
+                title={mode.label}
+              >
+                {isLoadingMode && activeMode === mode.id ? (
+                  <Spinner className="w-5 h-5" />
+                ) : (
+                  <mode.icon className="w-5 h-5" />
+                )}
+              </button>
+            ))}
+          </motion.div>
 
-          <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
-            <button
-              onClick={() => {
-                setIsGmailMode(false);
-                if (isEditing) {
-                  const base = (translatedNote ?? formattedNote) || "";
-                  setEditedText(base);
-                }
-              }}
-              className={`px-3 py-1 text-sm ${!isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"}`}
-            >
-              <FileText className="w-4 h-4" />
-            </button>
-              
-            
-            <button
-              onClick={async () => {
-                setIsGmailMode(true);
-                setShareSubject((prev) => prev ?? (title || UI_STRINGS.UNTITLED_NOTE));
-                let bodyToUse = gmailBody;
-                if (!gmailBody) {
-                  const baseText = ((translatedNote ?? formattedNote) || rawText || "");
-                  const res = await gmailFormatText(baseText, title || UI_STRINGS.UNTITLED_NOTE);
-                  const emailBody = res.success ? (res.formattedText || baseText) : baseText;
-                  setGmailBody(emailBody);
-                  bodyToUse = emailBody;
-                }
-                if (isEditing) {
-                  setEditedText(bodyToUse || "");
-                }
-              }}
-              className={`px-3 py-1 text-sm flex items-center gap-1 ${isGmailMode ? "bg-cyan-600 text-white" : "text-gray-300"}`}
-            >
-              {isGmailFormatting ? <Spinner className="w-4 h-4 text-cyan-500" /> : <Mail className="w-4 h-4" />}
-              
-            </button>
-          </div>
+          {/* Translation Dropdown - only when translate mode is active */}
+          <AnimatePresence>
+            {activeMode === "translate" && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="flex items-center gap-2 bg-slate-900/50 backdrop-blur-sm border border-white/5 rounded-full p-1 shadow-xl"
+              >
+                {[
+                  { id: "original", label: "Original" },
+                  { id: "en", label: "English" },
+                  { id: "hi", label: "Hindi" }
+                ].map((lang) => (
+                  <button
+                    key={lang.id}
+                    onClick={() => applyLanguage(lang.id as any)}
+                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                      selectedLanguage === lang.id
+                        ? "bg-cyan-500 text-slate-950 shadow-lg"
+                        : "text-gray-400 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    {isTranslating && selectedLanguage === lang.id ? (
+                      <Spinner className="w-3 h-3" />
+                    ) : (
+                      lang.label
+                    )}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Inline subject editor when Gmail mode + editing */}
-        {isGmailMode && isEditing && (
+        {/* Inline subject editor when Email mode + editing */}
+        {activeMode === "email" && isEditing && (
           <div className="w-full max-w-[650px]">
             <label className="text-sm text-gray-400 block mb-1">Email subject</label>
             <input
@@ -599,13 +725,7 @@ export default function ResultsPage() {
         )}
 
         <NoteEditor
-          formattedNote={
-            isEditing
-              ? editedText
-              : isGmailMode
-              ? (gmailBody || "")
-              : translatedNote ?? formattedNote
-          }
+          formattedNote={displayText || ""}
           title={title || UI_STRINGS.UNTITLED_NOTE}
           onCopy={handleCopyNote}
           onDownload={handleDownloadNote}
@@ -631,7 +751,11 @@ export default function ResultsPage() {
         />
       </div>
 
-      <NoteActions />
+      <NoteActions 
+        onSave={handleSaveToDatabase} 
+        isSaving={isSaving} 
+        showSave={!isNoteSaved} 
+      />
 
       {/* Share Options Modal */}
       {isShareModalOpen && (
@@ -698,9 +822,9 @@ export default function ResultsPage() {
               const subject = encodeURIComponent(subjectText);
               const bodyText = isEditing
                 ? editedText
-                : isGmailMode
-                ? (gmailBody ?? (translatedNote ?? formattedNote ?? ""))
-                : (translatedNote ?? formattedNote) || "";
+                : activeMode === "normal"
+                ? formattedNote || ""
+                : modeContent[activeMode] || formattedNote || "";
                   const body = encodeURIComponent(bodyText);
                   const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}&tf=1`;
                   window.open(gmailUrl, "_blank", "noopener,noreferrer");
@@ -723,9 +847,9 @@ export default function ResultsPage() {
               const subject = encodeURIComponent(subjectText);
               const bodyText = isEditing
                 ? editedText
-                : isGmailMode
-                ? (gmailBody || "")
-                : (translatedNote ?? formattedNote) || "";
+                : activeMode === "normal"
+                ? formattedNote || ""
+                : modeContent[activeMode] || formattedNote || "";
                   const body = encodeURIComponent(bodyText);
                   window.location.href = `mailto:?subject=${subject}&body=${body}`;
                   setIsShareModalOpen(false);
