@@ -337,7 +337,22 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
             </button>
 
             <p className="terms-text">
-              By signing up, you agree to our Terms of Service and Privacy Policy.
+              By signing up, you agree to our{" "}
+              <button
+                type="button"
+                className="terms-link"
+                onClick={() => openUrl(`${import.meta.env.VITE_WEB_APP_URL}/terms`)}
+              >
+                Terms of Service
+              </button>
+              {" "}and{" "}
+              <button
+                type="button"
+                className="terms-link"
+                onClick={() => openUrl(`${import.meta.env.VITE_WEB_APP_URL}/privacy`)}
+              >
+                Privacy Policy
+              </button>.
             </p>
 
             <button
@@ -529,8 +544,8 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
 
 // ── Setup Screen ──────────────────────────────────────────────────────────────
 
-const MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
-const MODEL_PATH = ".oscar/models/ggml-base.bin";
+const MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
+const MODEL_PATH = ".oscar/models/ggml-small.bin";
 
 interface DownloadProgress {
   downloaded: number;
@@ -751,6 +766,9 @@ function App() {
   const [aiEditing, setAiEditing] = useState(false);
   const [tonePreset, setTonePreset] = useState<TonePreset>("none");
 
+  // Transcription language ("auto" = whisper auto-detects)
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
+
   // Personal dictionary (local state; synced to Supabase when logged in)
   const [_dictWords, setDictWords] = useState<string[]>([]);
   const [, setDictSyncing] = useState(false);
@@ -900,7 +918,7 @@ function App() {
 
   useEffect(() => {
     (async () => {
-      const [savedAiEditing, savedTone, savedAutoPaste, savedDict, permsDone, setupDone, savedApiKey, savedTranscripts] =
+      const [savedAiEditing, savedTone, savedAutoPaste, savedDict, permsDone, setupDone, savedApiKey, savedTranscripts, savedLanguage] =
         await Promise.all([
           loadSetting<boolean>("aiEditing", false),
           loadSetting<TonePreset>("tonePreset", "none"),
@@ -910,6 +928,7 @@ function App() {
           loadSetting<boolean>("setupComplete", false),
           loadSetting<string>("userApiKey", ""),
           loadSetting<LocalTranscript[]>("localTranscripts", []),
+          loadSetting<string>("transcriptionLanguage", "auto"),
         ]);
 
       setPermissionsShown(permsDone);
@@ -924,6 +943,7 @@ function App() {
       setDictWords(savedDict);
       dictWordsRef.current = savedDict;
       setLocalTranscripts(savedTranscripts);
+      setTranscriptionLanguage(savedLanguage);
 
       // If setup is complete, load the Whisper model and pre-warm mic
       if (setupDone) {
@@ -1023,7 +1043,7 @@ function App() {
     // First check the standard OSCAR model location
     try {
       const home = await homeDir();
-      const oscarPath = `${home}/.oscar/models/ggml-base.bin`;
+      const oscarPath = `${home}/.oscar/models/ggml-small.bin`;
       await invoke("load_whisper_model", { path: oscarPath });
       setWhisperLoadedAndRef(true);
       setWhisperModelPath(oscarPath);
@@ -1034,9 +1054,8 @@ function App() {
       // Fall back to other common locations
       const paths = [
         "/Users/souvikdeb/.whisper/ggml-small.bin",
-        "/Users/souvikdeb/.whisper/ggml-base.bin",
-        "./models/ggml-base.bin",
-        "/usr/local/share/whisper/ggml-base.bin",
+        "./models/ggml-small.bin",
+        "/usr/local/share/whisper/ggml-small.bin",
       ];
       for (const path of paths) {
         try {
@@ -1205,6 +1224,7 @@ function App() {
       const result = await invoke<Transcription>("transcribe_audio", {
         audioData: Array.from(audioData),
         initialPrompt: buildInitialPrompt(),
+        language: transcriptionLanguage,
       });
       console.log("[process] whisper result:", JSON.stringify(result.text?.slice(0, 80)));
 
@@ -1466,6 +1486,11 @@ function App() {
                       tonePresetRef.current = t;
                       setTonePreset(t);
                       saveSetting("tonePreset", t);
+                    }}
+                    transcriptionLanguage={transcriptionLanguage}
+                    onLanguageChange={(lang) => {
+                      setTranscriptionLanguage(lang);
+                      saveSetting("transcriptionLanguage", lang);
                     }}
                     onApiKeyChange={setUserApiKey}
                     onSaveApiKey={() => saveSetting("userApiKey", userApiKey)}

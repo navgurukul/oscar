@@ -1,13 +1,31 @@
 import { useState } from "react";
 import {
   CreditCard, BookOpen, User, Shield, LogOut, AlertTriangle,
-  Download, FileText, Trash2, ExternalLink, Mail, Lock,
+  Download, FileText, Trash2, ExternalLink, Mail, Lock, Mic,
 } from "lucide-react";
 import { BillingSection } from "./BillingSection";
 import { VocabularySection } from "./VocabularySection";
 
 type TonePreset = "none" | "professional" | "casual" | "friendly";
-type SettingsTabType = "billing" | "vocabulary" | "account" | "privacy";
+type SettingsTabType = "billing" | "vocabulary" | "transcription" | "account" | "privacy";
+
+const LANGUAGES = [
+  { code: "auto", label: "Auto Detect" },
+  { code: "en",   label: "English" },
+  { code: "hi",   label: "Hindi" },
+  { code: "es",   label: "Spanish" },
+  { code: "fr",   label: "French" },
+  { code: "de",   label: "German" },
+  { code: "zh",   label: "Chinese" },
+  { code: "ja",   label: "Japanese" },
+  { code: "ar",   label: "Arabic" },
+  { code: "pt",   label: "Portuguese" },
+  { code: "ru",   label: "Russian" },
+  { code: "ko",   label: "Korean" },
+  { code: "it",   label: "Italian" },
+];
+
+const WEB_APP_URL = import.meta.env.VITE_WEB_APP_URL ?? "https://oscarai.app";
 
 interface SettingsTabProps {
   whisperModelPath: string;
@@ -16,6 +34,7 @@ interface SettingsTabProps {
   tonePreset: TonePreset;
   userApiKey: string;
   whisperLoaded: boolean;
+  transcriptionLanguage: string;
   onModelPathChange: (path: string) => void;
   onLoadModel: () => void;
   onAutoPasteChange: (value: boolean) => void;
@@ -23,6 +42,7 @@ interface SettingsTabProps {
   onTonePresetChange: (tone: TonePreset) => void;
   onApiKeyChange: (key: string) => void;
   onSaveApiKey: () => void;
+  onLanguageChange: (lang: string) => void;
   onClearData: () => void;
   userEmail?: string;
   userId?: string;
@@ -34,10 +54,11 @@ const NAV_ITEMS: {
   label: string;
   icon: React.ElementType;
 }[] = [
-  { id: "billing",    label: "Plans & Billing", icon: CreditCard },
-  { id: "vocabulary", label: "Vocabulary",       icon: BookOpen   },
-  { id: "account",    label: "Account",          icon: User       },
-  { id: "privacy",    label: "Data & Privacy",   icon: Shield     },
+  { id: "billing",       label: "Plans & Billing", icon: CreditCard },
+  { id: "vocabulary",    label: "Vocabulary",       icon: BookOpen   },
+  { id: "transcription", label: "Transcription",    icon: Mic        },
+  { id: "account",       label: "Account",          icon: User       },
+  { id: "privacy",       label: "Data & Privacy",   icon: Shield     },
 ];
 
 function getInitials(email?: string): string {
@@ -57,6 +78,7 @@ export function SettingsTab({
   tonePreset: _tonePreset,
   userApiKey: _userApiKey,
   whisperLoaded: _whisperLoaded,
+  transcriptionLanguage,
   onModelPathChange: _onModelPathChange,
   onLoadModel: _onLoadModel,
   onAutoPasteChange: _onAutoPasteChange,
@@ -64,6 +86,7 @@ export function SettingsTab({
   onTonePresetChange: _onTonePresetChange,
   onApiKeyChange: _onApiKeyChange,
   onSaveApiKey: _onSaveApiKey,
+  onLanguageChange,
   onClearData,
   userEmail,
   userId,
@@ -133,6 +156,42 @@ export function SettingsTab({
               </div>
             </div>
           )
+        )}
+
+        {/* ── Transcription ── */}
+        {activeTab === "transcription" && (
+          <div className="st-content">
+            <h2 className="st-content-title">Transcription</h2>
+
+            {/* Language card */}
+            <div className="st-card">
+              <div className="st-card-hd">
+                <span className="st-ico-pill">
+                  <Mic size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title">Language</h3>
+                  <p className="st-card-desc">
+                    Choose the language you speak, or let OSCAR detect it automatically
+                  </p>
+                </div>
+              </div>
+              <select
+                className="st-select"
+                value={transcriptionLanguage}
+                onChange={(e) => onLanguageChange(e.target.value)}
+              >
+                {LANGUAGES.map(({ code, label }) => (
+                  <option key={code} value={code}>{label}</option>
+                ))}
+              </select>
+              {transcriptionLanguage === "auto" && (
+                <p className="st-card-hint">
+                  Auto Detect uses the first few seconds of audio to identify the language. Works best with the small model.
+                </p>
+              )}
+            </div>
+          </div>
         )}
 
         {/* ── Account ── */}
@@ -228,7 +287,7 @@ export function SettingsTab({
               </div>
               <button
                 className="st-btn-primary"
-                onClick={() => window.open("https://oscarai.app/settings", "_blank")}
+                onClick={() => window.open(`${WEB_APP_URL}/settings`, "_blank")}
               >
                 <Download size={14} />
                 Request Data Export
@@ -248,9 +307,9 @@ export function SettingsTab({
               </div>
               <div className="st-legal-list">
                 {[
-                  { label: "Privacy Policy",   href: "https://oscarai.app/privacy" },
-                  { label: "Terms of Service", href: "https://oscarai.app/terms" },
-                  { label: "Refund Policy",    href: "https://oscarai.app/refund-policy" },
+                  { label: "Privacy Policy",   href: `${WEB_APP_URL}/privacy` },
+                  { label: "Terms of Service", href: `${WEB_APP_URL}/terms` },
+                  { label: "Refund Policy",    href: `${WEB_APP_URL}/refund-policy` },
                 ].map(({ label, href }) => (
                   <a
                     key={href}

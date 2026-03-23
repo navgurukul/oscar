@@ -374,6 +374,7 @@ fn load_whisper_model(
 fn transcribe_audio(
     audio_data: Vec<f32>,
     initial_prompt: Option<String>,
+    language: Option<String>,
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> Result<TranscriptionResult, String> {
     let app_state = state.lock().map_err(|e| e.to_string())?;
@@ -384,7 +385,9 @@ fn transcribe_audio(
         .ok_or("Whisper model not loaded")?;
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-    params.set_language(Some("en"));
+    // "auto" or None → let Whisper auto-detect the language from the audio
+    let lang = language.as_deref().filter(|l| *l != "auto" && !l.is_empty());
+    params.set_language(lang);
     params.set_print_special(false);
     params.set_print_progress(false);
     params.set_print_realtime(false);
