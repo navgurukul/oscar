@@ -71,12 +71,18 @@ export const notesService = {
    * Soft delete a note by setting deleted_at
    */
   async deleteNote(id: string): Promise<{ error: Error | null }> {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("notes")
       .update({ deleted_at: new Date().toISOString() })
-      .eq("id", id);
+      .eq("id", id)
+      .select();
 
-    return { error: error as Error | null };
+    if (error) return { error: error as Error };
+    // RLS may silently block the update → 0 rows returned
+    if (!data || data.length === 0) {
+      return { error: new Error("Delete failed: note not found or permission denied") };
+    }
+    return { error: null };
   },
 
   /**

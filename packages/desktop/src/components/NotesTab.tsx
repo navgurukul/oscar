@@ -127,15 +127,23 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this note?")) return;
 
     setDeletingId(id);
-    const { error } = await notesService.deleteNote(id);
-    if (error) {
-      alert("Failed to delete note. Please try again.");
-    } else {
-      setAllNotes(allNotes.filter((note) => note.id !== id));
-      setTrashCount((prev) => prev + 1);
+    try {
+      const { error } = await notesService.deleteNote(id);
+      if (error) {
+        console.error("[NotesTab] delete failed:", error);
+        // Inline error feedback instead of alert() which may not work in WKWebView
+        setError("Failed to delete note. Please try again.");
+        setTimeout(() => setError(null), 3000);
+      } else {
+        setAllNotes((prev) => prev.filter((note) => note.id !== id));
+        setTrashCount((prev) => prev + 1);
+      }
+    } catch (err) {
+      console.error("[NotesTab] delete error:", err);
+      setError("Failed to delete note. Please try again.");
+      setTimeout(() => setError(null), 3000);
     }
     setDeletingId(null);
   };

@@ -1413,9 +1413,11 @@ function App() {
                     userId={user.id}
                     localTranscripts={localTranscripts}
                     onDeleteTranscript={(id) => {
-                      const updated = localTranscripts.filter((t) => t.id !== id);
-                      setLocalTranscripts(updated);
-                      saveSetting("localTranscripts", updated);
+                      setLocalTranscripts((prev) => {
+                        const updated = prev.filter((t) => t.id !== id);
+                        saveSetting("localTranscripts", updated);
+                        return updated;
+                      });
                     }}
                     onClearAllTranscripts={() => {
                       setLocalTranscripts([]);
