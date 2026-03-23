@@ -769,6 +769,9 @@ function App() {
   // Transcription language ("auto" = whisper auto-detects)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
 
+  // Selected microphone device id ("" = system default)
+  const [selectedMicId, setSelectedMicId] = useState("");
+
   // Personal dictionary (local state; synced to Supabase when logged in)
   const [_dictWords, setDictWords] = useState<string[]>([]);
   const [, setDictSyncing] = useState(false);
@@ -918,7 +921,7 @@ function App() {
 
   useEffect(() => {
     (async () => {
-      const [savedAiEditing, savedTone, savedAutoPaste, savedDict, permsDone, setupDone, savedApiKey, savedTranscripts, savedLanguage] =
+      const [savedAiEditing, savedTone, savedAutoPaste, savedDict, permsDone, setupDone, savedApiKey, savedTranscripts, savedLanguage, savedMicId] =
         await Promise.all([
           loadSetting<boolean>("aiEditing", false),
           loadSetting<TonePreset>("tonePreset", "none"),
@@ -929,6 +932,7 @@ function App() {
           loadSetting<string>("userApiKey", ""),
           loadSetting<LocalTranscript[]>("localTranscripts", []),
           loadSetting<string>("transcriptionLanguage", "auto"),
+          loadSetting<string>("selectedMicId", ""),
         ]);
 
       setPermissionsShown(permsDone);
@@ -944,6 +948,7 @@ function App() {
       dictWordsRef.current = savedDict;
       setLocalTranscripts(savedTranscripts);
       setTranscriptionLanguage(savedLanguage);
+      setSelectedMicId(savedMicId);
 
       // If setup is complete, load the Whisper model and pre-warm mic
       if (setupDone) {
@@ -1031,7 +1036,8 @@ function App() {
   const warmMicrophone = async () => {
     if (warmStreamRef.current) return; // already warm
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioConstraints = selectedMicId ? { deviceId: { ideal: selectedMicId } } : true;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       warmStreamRef.current = stream;
       console.log("[mic] pre-warmed microphone stream");
     } catch (e) {
@@ -1105,7 +1111,8 @@ function App() {
     } else {
       console.log("[record] no warm stream — calling getUserMedia (may be slow)");
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioConstraints = selectedMicId ? { deviceId: { ideal: selectedMicId } } : true;
+        stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
         warmStreamRef.current = stream; // keep for next time
         console.log("[record] got mic stream from getUserMedia");
       } catch (e) {
@@ -1491,6 +1498,16 @@ function App() {
                     onLanguageChange={(lang) => {
                       setTranscriptionLanguage(lang);
                       saveSetting("transcriptionLanguage", lang);
+                    }}
+                    selectedMicId={selectedMicId}
+                    onMicChange={(id) => {
+                      setSelectedMicId(id);
+                      saveSetting("selectedMicId", id);
+                      // Reset warm stream so next recording uses the new mic
+                      if (warmStreamRef.current) {
+                        warmStreamRef.current.getTracks().forEach((t) => t.stop());
+                        warmStreamRef.current = null;
+                      }
                     }}
                     onApiKeyChange={setUserApiKey}
                     onSaveApiKey={() => saveSetting("userApiKey", userApiKey)}
