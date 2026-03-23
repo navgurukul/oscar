@@ -3,7 +3,6 @@
 export interface LocalTranscript {
   id: string;
   text: string;
-  starred: boolean;
   createdAt: string;
 }
 

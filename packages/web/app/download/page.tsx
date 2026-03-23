@@ -24,37 +24,48 @@ export default function DownloadPage() {
   useEffect(() => {
     if (hasDownloaded.current) return;
 
-    const detectPlatform = () => {
+    const detectPlatform = async (): Promise<Platform> => {
       const userAgent = navigator.userAgent.toLowerCase();
       const platform = navigator.platform.toLowerCase();
 
       if (userAgent.includes("mac") || platform.includes("mac")) {
-        if (
-          userAgent.includes("arm64") ||
-          userAgent.includes("aarch64") ||
-          (typeof navigator !== "undefined" &&
-            // @ts-expect-error - navigator.userAgentData is not in standard types yet
-            navigator.userAgentData?.platform === "macOS")
-        ) {
-          return "mac-silicon" as Platform;
+        // Check high-entropy UA hints (Chrome 90+) — the only reliable way to
+        // distinguish Apple Silicon from Intel via the browser.
+        try {
+          // @ts-expect-error - navigator.userAgentData is not in standard types yet
+          if (navigator.userAgentData?.getHighEntropyValues) {
+            // @ts-expect-error
+            const hints = await navigator.userAgentData.getHighEntropyValues(["architecture"]);
+            if (hints.architecture === "arm") return "mac-silicon";
+            if (hints.architecture === "x86") return "mac-intel";
+          }
+        } catch {
+          // High-entropy hints not available or blocked — fall through
         }
-        return "mac-intel" as Platform;
+
+        // Fallback: UA string rarely contains arch on macOS, but check anyway
+        if (userAgent.includes("arm64") || userAgent.includes("aarch64")) {
+          return "mac-silicon";
+        }
+
+        // Cannot reliably detect — default to Intel (safer: Rosetta can run
+        // Intel builds on Apple Silicon, but Apple Silicon builds won't run on Intel)
+        return "mac-intel";
       } else if (userAgent.includes("win") || platform.includes("win")) {
-        return "windows" as Platform;
+        return "windows";
       } else if (userAgent.includes("linux") || platform.includes("linux")) {
-        return "linux" as Platform;
+        return "linux";
       }
       return null;
     };
 
-    const platform = detectPlatform();
-    setDetectedPlatform(platform);
-
-    // Immediately start download
-    if (platform && !hasDownloaded.current) {
-      hasDownloaded.current = true;
-      triggerDownload(platform);
-    }
+    detectPlatform().then((platform) => {
+      setDetectedPlatform(platform);
+      if (platform && !hasDownloaded.current) {
+        hasDownloaded.current = true;
+        triggerDownload(platform);
+      }
+    });
   }, []);
 
   const triggerDownload = (platform: Platform) => {
@@ -94,6 +105,51 @@ export default function DownloadPage() {
           >
             Download didn&apos;t start? Click here
           </button>
+
+          {/* Mac architecture selector — shown only for Mac users */}
+          {(detectedPlatform === "mac-intel" || detectedPlatform === "mac-silicon") && (
+            <div className="mt-8 pt-6 border-t border-gray-100">
+              <p className="text-xs text-gray-400 mb-3 uppercase tracking-wide font-medium">
+                Not sure which version downloaded?
+              </p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => triggerDownload("mac-silicon")}
+                  className={`flex items-center justify-between w-full px-4 py-3 rounded-xl border text-sm transition-colors ${
+                    detectedPlatform === "mac-silicon"
+                      ? "border-cyan-500 bg-cyan-50 text-cyan-700 font-medium"
+                      : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <span>Mac (Apple Silicon)</span>
+                  <span className="text-xs text-gray-400">M1 / M2 / M3 / M4</span>
+                </button>
+                <button
+                  onClick={() => triggerDownload("mac-intel")}
+                  className={`flex items-center justify-between w-full px-4 py-3 rounded-xl border text-sm transition-colors ${
+                    detectedPlatform === "mac-intel"
+                      ? "border-cyan-500 bg-cyan-50 text-cyan-700 font-medium"
+                      : "border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <span>Mac (Intel)</span>
+                  <span className="text-xs text-gray-400">2019 and earlier</span>
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">
+                Not sure?{" "}
+                <a
+                  href="https://support.apple.com/en-us/116943"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-cyan-600 hover:underline"
+                >
+                  Check your Mac chip
+                </a>
+              </p>
+            </div>
+          )}
+
         </div>
       </div>
 

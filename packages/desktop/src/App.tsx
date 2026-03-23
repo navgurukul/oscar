@@ -900,7 +900,7 @@ function App() {
 
   useEffect(() => {
     (async () => {
-      const [savedAiEditing, savedTone, savedAutoPaste, savedDict, permsDone, setupDone, savedApiKey] =
+      const [savedAiEditing, savedTone, savedAutoPaste, savedDict, permsDone, setupDone, savedApiKey, savedTranscripts] =
         await Promise.all([
           loadSetting<boolean>("aiEditing", false),
           loadSetting<TonePreset>("tonePreset", "none"),
@@ -909,6 +909,7 @@ function App() {
           loadSetting<boolean>("permissionsDone", false),
           loadSetting<boolean>("setupComplete", false),
           loadSetting<string>("userApiKey", ""),
+          loadSetting<LocalTranscript[]>("localTranscripts", []),
         ]);
 
       setPermissionsShown(permsDone);
@@ -922,6 +923,7 @@ function App() {
       autoPasteRef.current = savedAutoPaste;
       setDictWords(savedDict);
       dictWordsRef.current = savedDict;
+      setLocalTranscripts(savedTranscripts);
 
       // If setup is complete, load the Whisper model and pre-warm mic
       if (setupDone) {
@@ -1245,15 +1247,15 @@ function App() {
       setTranscript((prev) => (prev ? prev + "\n\n" + finalText : finalText));
 
       // Add to local transcripts list for the HomeTab UI
-      setLocalTranscripts((prev) => [
-        {
-          id: crypto.randomUUID(),
-          text: finalText,
-          starred: false,
-          createdAt: new Date().toISOString(),
-        },
-        ...prev,
-      ]);
+      const newTranscript: LocalTranscript = {
+        id: crypto.randomUUID(),
+        text: finalText,
+        createdAt: new Date().toISOString(),
+      };
+      const updatedTranscripts = [newTranscript, ...localTranscripts];
+      setLocalTranscripts(updatedTranscripts);
+      // Persist to disk
+      saveSetting("localTranscripts", updatedTranscripts);
 
       // Save to Supabase as a note (matches web app behavior)
       if (user) {
@@ -1410,15 +1412,15 @@ function App() {
                     userName={user.user_metadata?.full_name || ""}
                     userId={user.id}
                     localTranscripts={localTranscripts}
-                    onDeleteTranscript={(id) =>
-                      setLocalTranscripts((prev) => prev.filter((t) => t.id !== id))
-                    }
-                    onToggleStarTranscript={(id) =>
-                      setLocalTranscripts((prev) =>
-                        prev.map((t) => (t.id === id ? { ...t, starred: !t.starred } : t))
-                      )
-                    }
-                    onClearAllTranscripts={() => setLocalTranscripts([])}
+                    onDeleteTranscript={(id) => {
+                      const updated = localTranscripts.filter((t) => t.id !== id);
+                      setLocalTranscripts(updated);
+                      saveSetting("localTranscripts", updated);
+                    }}
+                    onClearAllTranscripts={() => {
+                      setLocalTranscripts([]);
+                      saveSetting("localTranscripts", []);
+                    }}
                   />
                 )}
 

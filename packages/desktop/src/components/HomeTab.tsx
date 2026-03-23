@@ -7,7 +7,6 @@ interface HomeTabProps {
   totalNotes?: number;
   localTranscripts: LocalTranscript[];
   onDeleteTranscript: (id: string) => void;
-  onToggleStarTranscript: (id: string) => void;
   onClearAllTranscripts: () => void;
 }
 
@@ -76,7 +75,6 @@ function HomeTab({
   totalNotes,
   localTranscripts,
   onDeleteTranscript,
-  onToggleStarTranscript,
   onClearAllTranscripts,
 }: HomeTabProps) {
   // Extract first name
@@ -126,7 +124,6 @@ function HomeTab({
         <TranscriptsSection
           transcripts={localTranscripts}
           onDeleteTranscript={onDeleteTranscript}
-          onToggleStarTranscript={onToggleStarTranscript}
           onClearAll={onClearAllTranscripts}
         />
       </div>

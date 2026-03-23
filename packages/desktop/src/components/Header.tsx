@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogOut, Settings } from "lucide-react";
 
 interface HeaderProps {
@@ -30,11 +31,22 @@ export function Header({ userEmail, onSignOut, onSettingsClick }: HeaderProps) {
     return name.slice(0, 2).toUpperCase();
   };
 
+  const handleDragRegionMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button, a, input, [role='button']")) return;
+    getCurrentWindow().startDragging();
+  };
+
   return (
-    <header className="flex items-center justify-end py-3 px-6 bg-white h-14 flex-shrink-0 [-webkit-app-region:drag]">
+    <header
+      data-tauri-drag-region
+      className="flex items-center justify-end py-3 px-6 bg-white h-14 flex-shrink-0 cursor-default"
+      onMouseDown={handleDragRegionMouseDown}
+    >
       <div className="flex items-center gap-3 relative" ref={dropdownRef}>
         <button
-          className="flex items-center gap-2 py-1 px-2 pl-1 bg-transparent border-none rounded-3xl cursor-pointer transition-colors duration-200 [webkit-app-region:no-drag] hover:bg-slate-50"
+          className="flex items-center gap-2 py-1 px-2 pl-1 bg-transparent border-none rounded-3xl cursor-pointer transition-colors duration-200 hover:bg-slate-50"
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           aria-haspopup="true"
           aria-expanded={isDropdownOpen}
@@ -45,7 +57,7 @@ export function Header({ userEmail, onSignOut, onSettingsClick }: HeaderProps) {
         </button>
 
         {isDropdownOpen && (
-          <div className="absolute top-[calc(100%+8px)] right-0 min-w-[220px] bg-white border border-slate-200 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] z-[100] animate-[dropdown-fade-in_0.15s_ease] [webkit-app-region:no-drag]">
+          <div className="absolute top-[calc(100%+8px)] right-0 min-w-[220px] bg-white border border-slate-200 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.12)] z-[100] animate-[dropdown-fade-in_0.15s_ease]">
             <div className="flex items-center gap-3 p-4">
               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-600 to-cyan-500 text-white flex items-center justify-center text-base font-semibold uppercase shrink-0">
                 <span>{getInitials(userEmail)}</span>

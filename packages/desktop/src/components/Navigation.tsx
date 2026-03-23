@@ -1,4 +1,5 @@
 import React from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Home, Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle } from "lucide-react";
 
 type TabType = "home" | "notes" | "vocabulary" | "billing" | "settings";
@@ -83,9 +84,13 @@ export function Navigation({
   return (
     <nav className="w-60 bg-white flex flex-col flex-shrink-0">
       {/* Brand section - fixed at top, draggable for macOS */}
-      <div className="pb-4 px-5 flex items-center gap-2.5 [-webkit-app-region:drag]">
-        <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width={36} height={36} className="[-webkit-app-region:no-drag]" />
-        <span className="text-base font-semibold text-slate-800 [-webkit-app-region:no-drag]">OSCAR</span>
+      <div
+        data-tauri-drag-region
+        className="pb-4 px-5 flex items-center gap-2.5 cursor-default"
+        onMouseDown={(e) => { if (e.button === 0) getCurrentWindow().startDragging(); }}
+      >
+        <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width={36} height={36} />
+        <span className="text-base font-semibold text-slate-800">OSCAR</span>
       </div>
 
       <div className="flex-1 py-2 px-3 flex flex-col gap-0.5">

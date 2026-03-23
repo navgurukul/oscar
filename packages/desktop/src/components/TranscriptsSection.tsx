@@ -3,14 +3,12 @@ import type { LocalTranscript } from "../types/note.types";
 interface TranscriptsSectionProps {
   transcripts: LocalTranscript[];
   onDeleteTranscript: (id: string) => void;
-  onToggleStarTranscript: (id: string) => void;
   onClearAll: () => void;
 }
 
 export function TranscriptsSection({
   transcripts,
   onDeleteTranscript,
-  onToggleStarTranscript,
   onClearAll,
 }: TranscriptsSectionProps) {
   if (!transcripts || transcripts.length === 0) {
@@ -53,22 +51,11 @@ export function TranscriptsSection({
               </span>
               <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
-                  onClick={() => onToggleStarTranscript(t.id)}
-                  className={`text-xs px-2 py-1 rounded ${
-                    t.starred
-                      ? "text-amber-500"
-                      : "text-slate-400 hover:text-amber-500"
-                  } transition-colors`}
-                  title={t.starred ? "Unstar" : "Star"}
-                >
-                  {t.starred ? "\u2605" : "\u2606"}
-                </button>
-                <button
                   onClick={() => onDeleteTranscript(t.id)}
                   className="text-xs text-slate-400 hover:text-red-500 px-2 py-1 rounded transition-colors"
                   title="Delete"
                 >
-                  \u2715
+                  ×
                 </button>
               </div>
             </div>
