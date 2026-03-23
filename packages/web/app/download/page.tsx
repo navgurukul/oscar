@@ -32,9 +32,9 @@ export default function DownloadPage() {
         // Check high-entropy UA hints (Chrome 90+) — the only reliable way to
         // distinguish Apple Silicon from Intel via the browser.
         try {
-          // @ts-expect-error - navigator.userAgentData is not in standard types yet
+          // @ts-expect-error navigator.userAgentData is not in standard TS lib types yet
           if (navigator.userAgentData?.getHighEntropyValues) {
-            // @ts-expect-error
+            // @ts-expect-error navigator.userAgentData is not in standard TS lib types yet
             const hints = await navigator.userAgentData.getHighEntropyValues(["architecture"]);
             if (hints.architecture === "arm") return "mac-silicon";
             if (hints.architecture === "x86") return "mac-intel";
