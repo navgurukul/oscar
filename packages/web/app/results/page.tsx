@@ -15,8 +15,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 import type { FeedbackReason } from "@/lib/types/note.types";
-import { Mail, MessageCircle, Share2, FileText } from "lucide-react";
+import { Mail, MessageCircle, Share2, FileText, FolderPlus, X, Check, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 // Lazy load the NoteEditor component
 const NoteEditor = dynamic(
@@ -71,12 +73,67 @@ export default function ResultsPage() {
   const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
   const [feedbackValue, setFeedbackValue] = useState<boolean | null>(null);
 
+  // Folder state
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [availableFolders, setAvailableFolders] = useState<string[]>([]);
+  const [isAddingNewFolder, setIsAddingNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+
   useEffect(() => {
     const storedNoteId = storageService.getCurrentNoteId();
     if (storedNoteId) {
       setNoteId(storedNoteId);
+      loadNoteDetails(storedNoteId);
     }
+    loadAvailableFolders();
   }, []);
+
+  const loadNoteDetails = async (id: string) => {
+    const { data, error } = await notesService.getNoteById(id);
+    if (!error && data) {
+      setSelectedFolder(data.folder);
+    }
+  };
+
+  const loadAvailableFolders = async () => {
+    const { data, error } = await notesService.getFolders();
+    if (!error && data) {
+      setAvailableFolders(data);
+    }
+  };
+
+  const handleUpdateFolder = async (folderName: string | null) => {
+    if (!noteId) return;
+
+    const { error } = await notesService.updateNote(noteId, {
+      folder: folderName,
+    });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update folder.",
+        variant: "destructive",
+      });
+    } else {
+      setSelectedFolder(folderName);
+      if (folderName && !availableFolders.includes(folderName)) {
+        setAvailableFolders([...availableFolders, folderName]);
+      }
+      toast({
+        title: "Success",
+        description: folderName ? `Added to folder "${folderName}"` : "Removed from folder",
+      });
+    }
+  };
+
+  const handleAddNewFolder = () => {
+    if (newFolderName.trim()) {
+      handleUpdateFolder(newFolderName.trim());
+      setIsAddingNewFolder(false);
+      setNewFolderName("");
+    }
+  };
 
   useEffect(() => {
     if (formattedNote) {
@@ -396,10 +453,78 @@ export default function ResultsPage() {
   return (
     <main className="flex flex-col items-center px-4 pt-8 pb-24">
       <div className="w-full max-w-2xl flex flex-col items-center gap-8 mt-16">
-        <div className="text-center space-y-2 mt-8">
-          <h1 className="text-4xl font-bold text-white">
-            {UI_STRINGS.RESULTS_TITLE}
+        <div className="text-center space-y-4 mt-8 w-full">
+          <h1 className="text-3xl md:text-5xl font-bold text-white tracking-tight">
+            {title || UI_STRINGS.RESULTS_TITLE}
           </h1>
+
+          {/* Folder Management Section */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-wrap justify-center items-center gap-2">
+              {selectedFolder ? (
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 px-3 py-1 text-sm flex items-center gap-2">
+                    <FolderPlus className="w-3.5 h-3.5" />
+                    {selectedFolder}
+                    <button 
+                      onClick={() => handleUpdateFolder(null)}
+                      className="hover:text-cyan-200 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                </div>
+              ) : (
+                <span className="text-gray-500 text-sm">No folder assigned</span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 mt-2">
+              {!isAddingNewFolder ? (
+                <div className="flex items-center gap-2 overflow-x-auto max-w-[90vw] no-scrollbar pb-1">
+                  {availableFolders.filter(f => f !== selectedFolder).map(folder => (
+                    <button
+                      key={folder}
+                      onClick={() => handleUpdateFolder(folder)}
+                      className="text-xs px-3 py-1 rounded-full bg-slate-900 border border-white/10 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-all whitespace-nowrap"
+                    >
+                      {folder}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setIsAddingNewFolder(true)}
+                    className="text-xs px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 transition-all flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    New Folder
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 bg-slate-900/50 border border-cyan-500/30 rounded-lg p-1 animate-in fade-in zoom-in duration-200">
+                  <Input
+                    autoFocus
+                    placeholder="Folder name..."
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddNewFolder()}
+                    className="h-8 w-32 bg-transparent border-none text-xs focus-visible:ring-0 placeholder:text-gray-600"
+                  />
+                  <button
+                    onClick={handleAddNewFolder}
+                    className="p-1 hover:text-cyan-400 transition-colors"
+                  >
+                    <Check className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setIsAddingNewFolder(false)}
+                    className="p-1 hover:text-red-400 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Language selector + Simple/Gmail mode toggle in one row */}

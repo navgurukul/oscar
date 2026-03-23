@@ -1,16 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
 import { motion } from "motion/react";
 import { LampContainer } from "@/components/ui/lamp";
 import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download } from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Search, Settings, Plus, Upload, MoreHorizontal } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency } from "@/lib/constants";
+import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
+import { notesService } from "@/lib/services/notes.service";
+import type { DBNote } from "@/lib/types/note.types";
+import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency, UI_STRINGS, ROUTES, STORAGE_KEYS } from "@/lib/constants";
+import { storageService } from "@/lib/services/storage.service";
 import type { BillingCycle } from "@/lib/types/subscription.types";
 import img1 from "@/components/ui/assets/image_1.png";
 import img2 from "@/components/ui/assets/image_2.jpg";
@@ -49,10 +55,43 @@ const TESTIMONIALS = [
 ];
 
 export default function Home() {
-  const { session } = useAuth();
+  const { session, user } = useAuth();
+  const { notesCount } = useSubscriptionContext();
+  const [recentNotes, setRecentNotes] = useState<DBNote[]>([]);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
   const router = useRouter();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [currency, setCurrency] = useState<Currency>("INR");
+
+  useEffect(() => {
+    if (session) {
+      loadRecentNotes();
+    }
+  }, [session]);
+
+  const loadRecentNotes = async () => {
+    setIsLoadingNotes(true);
+    const { data, error } = await notesService.getNotes();
+    if (!error && data) {
+      setRecentNotes(data.slice(0, 3));
+    }
+    setIsLoadingNotes(false);
+  };
+
+  const handleStartRecording = () => {
+    storageService.clearNote();
+    router.push(ROUTES.RECORDING);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 3600 * 24));
+    
+    if (diffDays === 0) return "Today, " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (diffDays === 1) return "Yesterday, " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return diffDays + " days ago";
+  };
 
   const handleViewPricing = () => {
     router.push("/auth?redirectTo=/pricing");
@@ -61,6 +100,245 @@ export default function Home() {
   const pricingConfig = currency === "USD" ? PRICING_USD : PRICING;
   const price = billingCycle === "monthly" ? pricingConfig.MONTHLY : pricingConfig.YEARLY;
   const currencySymbol = currency === "USD" ? "$" : "₹";
+
+  if (session) {
+    const firstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || "there";
+
+    // If no notes exist and not loading, show the empty state UI
+    if (!isLoadingNotes && recentNotes.length === 0) {
+      return (
+        <main className="w-full min-h-screen flex flex-col items-center justify-center px-4 bg-slate-950 overflow-hidden relative">
+          {/* Dashboard Header - matches reference layout */}
+          <div className="fixed top-0 left-0 w-full p-6 md:p-8 flex items-center justify-between z-40">
+            {/* Profile (Left) */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-center gap-3"
+            >
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-cyan-500/30 overflow-hidden bg-slate-900 flex items-center justify-center shadow-lg">
+                {user?.user_metadata?.avatar_url ? (
+                  <Image
+                    src={user.user_metadata.avatar_url}
+                    alt="Profile"
+                    width={48}
+                    height={48}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-cyan-400 font-bold">{user?.email?.[0].toUpperCase()}</span>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Settings (Right) */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+            >
+              <Link href={ROUTES.SETTINGS}>
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center shadow-lg hover:border-cyan-500/30 transition-colors group">
+                  <Settings className="w-5 h-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
+                </div>
+              </Link>
+            </motion.div>
+          </div>
+
+          {/* Top Decoration */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+          
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="text-center max-w-2xl w-full"
+          >
+            {/* Top Badge */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.4, duration: 0.5 }}
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/50 border border-cyan-500/30 text-cyan-400 text-xs font-medium mb-12 backdrop-blur-sm"
+            >
+              <Sparkles className="w-3 h-3" />
+              <span>AI-Powered Voice Notes</span>
+            </motion.div>
+
+            {/* App Name / Logo */}
+            <h1 className="text-6xl md:text-8xl font-bold font-serif text-white mb-6 tracking-tight">
+              {UI_STRINGS.APP_NAME}
+            </h1>
+            
+            <div className="flex items-center justify-center gap-3 mb-8">
+              <div className="h-px w-8 bg-gradient-to-r from-transparent to-cyan-500/50" />
+              <p className="text-xl md:text-2xl text-gray-400 font-medium italic">
+                Your voice, written your way.
+              </p>
+              <div className="h-px w-8 bg-gradient-to-l from-transparent to-cyan-500/50" />
+            </div>
+
+            {/* Empty State Illustration */}
+            <div className="relative mb-12">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-cyan-500/5 blur-[100px] rounded-full" />
+              
+              <div className="relative w-36 h-36 md:w-44 md:h-44 bg-gradient-to-b from-slate-900/80 to-slate-950/80 border border-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto backdrop-blur-md shadow-2xl group transition-all duration-500 hover:border-cyan-500/20">
+                <div className="absolute inset-0 border border-cyan-500/10 rounded-[2.5rem] animate-pulse" />
+                
+                <div className="relative">
+                  <FileText className="w-14 h-14 md:w-18 md:h-18 text-cyan-400/70 group-hover:text-cyan-400 transition-colors duration-500" />
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-cyan-500 rounded-lg flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-500">
+                    <Mic className="w-3 h-3 text-slate-950" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-2xl md:text-3xl font-semibold text-white/90 tracking-tight">
+                Looks like there&apos;s nothing here (yet).
+              </h3>
+              <p className="text-gray-500 text-lg md:text-xl max-w-md mx-auto leading-relaxed">
+                Click record to get started and turn your speech into clean, formatted text!
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Bottom indicator for the floating record button */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1, duration: 1 }}
+            className="absolute bottom-32 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
+          >
+            <div className="w-px h-12 bg-gradient-to-b from-transparent via-cyan-500/20 to-transparent" />
+          </motion.div>
+        </main>
+      );
+    }
+
+    // If notes exist, show the dashboard UI
+    return (
+      <main className="w-full min-h-screen flex flex-col items-center pt-24 pb-12 px-4 bg-[#020617] relative">
+        {/* Dashboard Header */}
+        <div className="fixed top-0 left-0 w-full p-6 md:p-8 flex items-center justify-between z-40 bg-[#020617]/80 backdrop-blur-md">
+          {/* Logo (Left) */}
+          <Link href={ROUTES.HOME} className="flex items-center gap-2">
+            <div className="relative w-8 h-8">
+              <Image src="/OSCAR_DARK_LOGO.png" alt="OSCAR Logo" fill className="object-contain" />
+            </div>
+            <span className="text-xl font-bold tracking-tight text-white">{UI_STRINGS.APP_NAME}</span>
+          </Link>
+
+          {/* Right Actions */}
+          <div className="flex items-center gap-4">
+            <Link href={ROUTES.NOTES}>
+              <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center shadow-lg hover:border-cyan-500/30 transition-colors group">
+                <FileText className="w-5 h-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
+              </div>
+            </Link>
+            <Link href={ROUTES.SETTINGS}>
+              <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center shadow-lg hover:border-cyan-500/30 transition-colors group">
+                <Settings className="w-5 h-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
+              </div>
+            </Link>
+            <div className="w-10 h-10 rounded-full border-2 border-cyan-500/30 overflow-hidden bg-slate-900 flex items-center justify-center shadow-lg">
+              {user?.user_metadata?.avatar_url ? (
+                <Image src={user.user_metadata.avatar_url} alt="Profile" width={40} height={40} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-cyan-400 font-bold">{user?.email?.[0].toUpperCase()}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-2xl flex flex-col items-center"
+        >
+          {/* Welcome Text */}
+          <div className="text-center mb-12">
+            <p className="text-cyan-400 font-medium mb-2">Welcome back, {firstName}</p>
+            <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight">
+              Start recording your ideas
+            </h1>
+          </div>
+
+        
+
+          {/* Recent Transcriptions Section */}
+          <div className="w-full mb-12">
+            <h2 className="text-gray-400 font-medium mb-6 text-center">Recent Transcriptions</h2>
+            
+            <div className="space-y-3">
+              {isLoadingNotes ? (
+                [1, 2, 3].map((i) => (
+                  <div key={i} className="h-20 bg-slate-900/50 rounded-2xl animate-pulse border border-white/5" />
+                ))
+              ) : recentNotes.length > 0 ? (
+                recentNotes.map((note) => (
+                  <Link key={note.id} href={`${ROUTES.NOTES}/${note.id}`}>
+                    <div className="w-full p-4 mb-3 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-cyan-500/20 rounded-2xl flex items-center justify-between transition-all group">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
+                          <FileText className="w-5 h-5 text-orange-500" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-white font-semibold truncate">
+                            {note.title || UI_STRINGS.UNTITLED_NOTE}
+                          </h4>
+                          <p className="text-gray-500 text-xs mt-1">
+                            {formatDate(note.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <p className="text-gray-400 text-sm hidden md:block max-w-[200px] truncate">
+                          {note.original_formatted_text}
+                        </p>
+                        <MoreHorizontal className="w-5 h-5 text-gray-600" />
+                      </div>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <div className="text-center py-10 bg-slate-900/20 rounded-2xl border border-dashed border-white/10">
+                  <p className="text-gray-500 italic">No recordings yet. Speak your first idea!</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap justify-center gap-4">
+            <Button
+              onClick={handleStartRecording}
+              className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold px-6 py-6 rounded-full h-auto"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              New Note
+            </Button>
+            <Button
+              variant="outline"
+              className="bg-slate-900/50 border-white/10 text-gray-300 hover:text-white hover:bg-slate-800 px-6 py-6 rounded-full h-auto"
+            >
+              <Upload className="w-5 h-5 mr-2" />
+              Import Audio
+            </Button>
+            <Link href={ROUTES.NOTES}>
+              <Button
+                variant="outline"
+                className="bg-slate-900/50 border-white/10 text-gray-300 hover:text-white hover:bg-slate-800 px-6 py-6 rounded-full h-auto"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Saved Notes
+              </Button>
+            </Link>
+          </div>
+        </motion.div>
+      </main>
+    );
+  }
 
   return (
     <main className="w-full flex flex-col">
