@@ -1469,8 +1469,15 @@ function App() {
                     }}
                     onApiKeyChange={setUserApiKey}
                     onSaveApiKey={() => saveSetting("userApiKey", userApiKey)}
-                    onClearData={() => {
+                    onClearData={async () => {
                       if (confirm("This will clear all local data including settings. Continue?")) {
+                        try {
+                          const store = await getStore();
+                          await store.clear();
+                          await store.save();
+                        } catch (e) {
+                          console.warn("[store] clear failed:", e);
+                        }
                         localStorage.clear();
                         window.location.reload();
                       }
