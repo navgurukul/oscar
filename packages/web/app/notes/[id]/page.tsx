@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
+import { storageService } from "@/lib/services/storage.service";
+import { aiService } from "@/lib/services/ai.service";
 import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
+import { NoteActions } from "@/components/results/NoteActions";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
   Copy,
   Download,
@@ -25,10 +26,19 @@ import {
   ListChecks,
   BookOpen,
   Star,
+  FolderPlus,
+  Plus,
+  Check,
+  ThumbsUp,
+  ThumbsDown,
+  Mic,
+  MoreHorizontal,
 } from "lucide-react";
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
 
 // Lazy load the FeedbackWidget
@@ -71,6 +81,80 @@ export default function NoteDetailPage({
   const [modeContent, setModeContent] = useState<Record<string, string>>({});
   const [isLoadingMode, setIsLoadingMode] = useState(false);
 
+  // Translation states
+  const [selectedLanguage, setSelectedLanguage] = useState<"original" | "en" | "hi">("original");
+  const [isTranslating, setIsTranslating] = useState(false);
+  const translationCacheNoteRef = useRef<Map<string, string>>(new Map());
+  const translateControllerRef = useRef<AbortController | null>(null);
+
+  const applyLanguage = async (lang: "original" | "en" | "hi") => {
+    if (!note) return;
+    
+    if (lang === "original") {
+      translateControllerRef.current?.abort();
+      translateControllerRef.current = null;
+      setSelectedLanguage("original");
+      setModeContent(prev => ({ ...prev, translate: "" }));
+      if (isEditing) setEditedText(note.edited_text || note.original_formatted_text || "");
+      return;
+    }
+
+    const baseNote = note.edited_text || note.original_formatted_text || "";
+    if (!baseNote) return;
+
+    if (isTranslating && translateControllerRef.current) {
+      translateControllerRef.current.abort();
+    }
+
+    const noteKey = `${lang}|note|${baseNote}`;
+    const cachedNote = translationCacheNoteRef.current.get(noteKey);
+
+    if (cachedNote) {
+      setSelectedLanguage(lang);
+      setModeContent(prev => ({ ...prev, translate: cachedNote }));
+      if (isEditing) setEditedText(cachedNote);
+      toast({
+        title: "Language updated",
+        description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    translateControllerRef.current = controller;
+    setIsTranslating(true);
+    try {
+      const res = await aiService.translateText(baseNote, lang, controller.signal);
+
+      if (!res.success) {
+        if (controller.signal.aborted) return;
+        toast({
+          title: "Translation failed",
+          description: "Could not translate right now.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const noteText = res.translatedText || "";
+      translationCacheNoteRef.current.set(noteKey, noteText);
+
+      setSelectedLanguage(lang);
+      setModeContent(prev => ({ ...prev, translate: noteText }));
+      if (isEditing) setEditedText(noteText);
+
+      toast({
+        title: "Language updated",
+        description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
+      });
+    } finally {
+      setIsTranslating(false);
+      if (translateControllerRef.current === controller) {
+        translateControllerRef.current = null;
+      }
+    }
+  };
+
   // Feedback state
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
@@ -79,13 +163,59 @@ export default function NoteDetailPage({
   // Star state
   const [isStarring, setIsStarring] = useState(false);
 
+  // Folder state
+  const [availableFolders, setAvailableFolders] = useState<string[]>([]);
+  const [isAddingNewFolder, setIsAddingNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+
   useEffect(() => {
     const initializeParams = async () => {
       const resolvedParams = await params;
       setId(resolvedParams.id);
     };
     initializeParams();
+    loadAvailableFolders();
   }, [params]);
+
+  const loadAvailableFolders = async () => {
+    const { data, error } = await notesService.getFolders();
+    if (!error && data) {
+      setAvailableFolders(data);
+    }
+  };
+
+  const handleUpdateFolder = async (folderName: string | null) => {
+    if (!id || !note) return;
+
+    const { error, data } = await notesService.updateNote(id, {
+      folder: folderName,
+    });
+
+    if (error || !data) {
+      toast({
+        title: "Error",
+        description: "Failed to update folder.",
+        variant: "destructive",
+      });
+    } else {
+      setNote(data);
+      if (folderName && !availableFolders.includes(folderName)) {
+        setAvailableFolders([...availableFolders, folderName]);
+      }
+      toast({
+        title: "Success",
+        description: folderName ? `Added to folder "${folderName}"` : "Removed from folder",
+      });
+    }
+  };
+
+  const handleAddNewFolder = () => {
+    if (newFolderName.trim()) {
+      handleUpdateFolder(newFolderName.trim());
+      setIsAddingNewFolder(false);
+      setNewFolderName("");
+    }
+  };
 
   useEffect(() => {
     const loadNote = async () => {
@@ -105,6 +235,14 @@ export default function NoteDetailPage({
       } else {
         setNote(data);
         setEditedText(data.edited_text || data.original_formatted_text);
+        // Set current note ID and raw text in storage for "Continue Recording" support
+        storageService.setCurrentNoteId(data.id);
+        storageService.updateRawText(data.raw_text);
+        storageService.saveNote(
+          data.original_formatted_text,
+          data.raw_text,
+          data.title
+        );
         // Set existing feedback state
         if (data.feedback_helpful !== null) {
           setHasFeedbackSubmitted(true);
@@ -116,6 +254,18 @@ export default function NoteDetailPage({
 
     loadNote();
   }, [id, router, user, authLoading]);
+
+  const handleStartEditing = () => {
+    setIsEditing(true);
+    const baseText = modeContent[activeMode] || (activeMode === "translate" ? modeContent["translate"] : null) || note?.edited_text || note?.original_formatted_text || "";
+    setEditedText(baseText);
+  };
+
+  const handleCancelEditing = () => {
+    const base = modeContent[activeMode] || (activeMode === "translate" ? modeContent["translate"] : null) || note?.edited_text || note?.original_formatted_text;
+    setEditedText(base || "");
+    setIsEditing(false);
+  };
 
   const handleSaveEdit = async () => {
     if (!note) return;
@@ -133,6 +283,12 @@ export default function NoteDetailPage({
       });
     } else {
       setNote({ ...note, edited_text: editedText });
+      
+      // Update modeContent cache for current mode
+      if (activeMode !== "normal") {
+        setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
+      }
+
       setIsEditing(false);
       toast({
         title: "Saved!",
@@ -143,7 +299,11 @@ export default function NoteDetailPage({
   };
 
   const handleCopy = async () => {
-    const text = note?.edited_text || note?.original_formatted_text || "";
+    const text = isEditing 
+      ? editedText 
+      : activeMode === "normal"
+      ? (note?.edited_text || note?.original_formatted_text || "")
+      : (modeContent[activeMode] || note?.edited_text || note?.original_formatted_text || "");
     await navigator.clipboard.writeText(text);
     toast({
       title: "Copied!",
@@ -153,7 +313,11 @@ export default function NoteDetailPage({
 
   const handleDownload = () => {
     if (!note) return;
-    const text = note.edited_text || note.original_formatted_text;
+    const text = isEditing 
+      ? editedText 
+      : activeMode === "normal"
+      ? (note.edited_text || note.original_formatted_text)
+      : (modeContent[activeMode] || note.edited_text || note.original_formatted_text);
     const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -255,662 +419,347 @@ export default function NoteDetailPage({
     : (modeContent[activeMode] || note.edited_text || note.original_formatted_text);
 
   return (
-    <main className="flex flex-col items-center px-5 pt-8 pb-24">
-      <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
-        {/* Header with Back Button */}
+    <main className="min-h-screen bg-[#020617] text-white flex flex-col items-center pt-16 pb-32 px-4 relative overflow-x-hidden">
+      {/* Note Header Info (Centered) */}
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-3xl text-center mb-8 space-y-3"
+      >
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+          {note.title || "Untitled Note"}
+        </h1>
+        <p className="text-gray-500 text-sm font-medium">
+          {formatDate(note.created_at)}
+        </p>
 
-        {/* <div className="flex-1 text-center">
-          <h1 className="text-3xl font-bold text-white">
-            {note.title || "Untitled Note"}
-          </h1>
-          <p className="text-gray-400 text-sm mt-1">
-            {formatDate(note.created_at)}
-          </p>
-        </div> */}
-        <div className="w-10" />
-
-        <div className="flex bg-slate-800 border border-slate-700 rounded-lg overflow-hidden ml-auto mr-2 gap-0.5">
-          {/* Normal mode */}
-          <button
-            onClick={() => {
-              setActiveMode("normal");
-              if (isEditing) {
-                const base = note.edited_text || note.original_formatted_text || "";
-                setEditedText(base);
-              }
-            }}
-            className={`px-3 py-2 text-sm transition-colors ${
-              activeMode === "normal" ? "bg-cyan-600 text-white" : "text-gray-300 hover:text-white"
-            }`}
-            title="Normal"
-          >
-            <FileText className="w-4 h-4" />
-          </button>
-
-          {/* Email mode */}
-          <button
-            onClick={async () => {
-              setActiveMode("email");
-              setShareSubject(note.title || "Untitled Note");
-              const baseText = note.edited_text || note.original_formatted_text || note.raw_text || "";
-              
-              if (!modeContent["email"]) {
-                setIsLoadingMode(true);
-                const res = await gmailFormatText(baseText, note.title || "Untitled Note");
-                const emailBody = res.success ? res.formattedText || baseText : baseText;
-                setModeContent(prev => ({ ...prev, email: emailBody }));
-                if (isEditing) setEditedText(emailBody);
-                setIsLoadingMode(false);
-              } else {
-                if (isEditing) setEditedText(modeContent["email"]);
-              }
-            }}
-            className={`px-3 py-2 text-sm flex items-center gap-1 transition-colors ${
-              activeMode === "email" ? "bg-cyan-600 text-white" : "text-gray-300 hover:text-white"
-            }`}
-            title="Email format"
-          >
-            {isLoadingMode && activeMode === "email" ? (
-              <Spinner className="w-4 h-4" />
-            ) : (
-              <Mail className="w-4 h-4" />
-            )}
-          </button>
-
-          {/* Bullet points mode */}
-          <button
-            onClick={async () => {
-              setActiveMode("bullets");
-              const baseText = note.edited_text || note.original_formatted_text || "";
-              
-              if (!modeContent["bullets"]) {
-                setIsLoadingMode(true);
-                // For now, use a simple conversion - you can add a dedicated API endpoint later
-                const bulletPoints = baseText
-                  .split('\n')
-                  .filter(line => line.trim())
-                  .map(line => `• ${line.trim()}`)
-                  .join('\n');
-                setModeContent(prev => ({ ...prev, bullets: bulletPoints }));
-                if (isEditing) setEditedText(bulletPoints);
-                setIsLoadingMode(false);
-              } else {
-                if (isEditing) setEditedText(modeContent["bullets"]);
-              }
-            }}
-            className={`px-3 py-2 text-sm flex items-center gap-1 transition-colors ${
-              activeMode === "bullets" ? "bg-cyan-600 text-white" : "text-gray-300 hover:text-white"
-            }`}
-            title="Bullet points"
-          >
-            {isLoadingMode && activeMode === "bullets" ? (
-              <Spinner className="w-4 h-4" />
-            ) : (
-              <ListChecks className="w-4 h-4" />
-            )}
-          </button>
-
-          {/* Summary mode */}
-          <button
-            onClick={async () => {
-              setActiveMode("summary");
-              const baseText = note.edited_text || note.original_formatted_text || "";
-              
-              if (!modeContent["summary"]) {
-                setIsLoadingMode(true);
-                // Simple summary - first 3 sentences
-                const sentences = baseText.match(/[^.!?]+[.!?]+/g) || [baseText];
-                const summary = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
-                setModeContent(prev => ({ ...prev, summary }));
-                if (isEditing) setEditedText(summary);
-                setIsLoadingMode(false);
-              } else {
-                if (isEditing) setEditedText(modeContent["summary"]);
-              }
-            }}
-            className={`px-3 py-2 text-sm flex items-center gap-1 transition-colors ${
-              activeMode === "summary" ? "bg-cyan-600 text-white" : "text-gray-300 hover:text-white"
-            }`}
-            title="Summary"
-          >
-            {isLoadingMode && activeMode === "summary" ? (
-              <Spinner className="w-4 h-4" />
-            ) : (
-              <BookOpen className="w-4 h-4" />
-            )}
-          </button>
-
-          {/* Translate mode */}
-          <button
-            onClick={async () => {
-              setActiveMode("translate");
-              const baseText = note.edited_text || note.original_formatted_text || "";
-              
-              if (!modeContent["translate"]) {
-                setIsLoadingMode(true);
-                try {
-                  const response = await fetch('/api/deepseek/translate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: baseText }),
-                  });
-                  const data = await response.json();
-                  const translated = data.translatedText || baseText;
-                  setModeContent(prev => ({ ...prev, translate: translated }));
-                  if (isEditing) setEditedText(translated);
-                } catch (error) {
-                  console.error('Translation failed:', error);
-                  setModeContent(prev => ({ ...prev, translate: baseText }));
-                }
-                setIsLoadingMode(false);
-              } else {
-                if (isEditing) setEditedText(modeContent["translate"]);
-              }
-            }}
-            className={`px-3 py-2 text-sm flex items-center gap-1 transition-colors ${
-              activeMode === "translate" ? "bg-cyan-600 text-white" : "text-gray-300 hover:text-white"
-            }`}
-            title="Translate"
-          >
-            {isLoadingMode && activeMode === "translate" ? (
-              <Spinner className="w-4 h-4" />
-            ) : (
-              <Languages className="w-4 h-4" />
-            )}
-          </button>
-        </div>
-
-        {/* Note Editor Card */}
-        <div className="w-full max-w-[800px]">
-          <Card className="bg-slate-900 border-cyan-700/30 rounded-t-2xl shadow-xl overflow-hidden">
-            <CardHeader>
-              {/* Title and Actions */}
-              <div className="flex gap-6 justify-between items-start">
-                <div className="mb-2">
-                  <h2 className="text-xl font-semibold text-white truncate">
-                    {note.title || "Untitled Note"}
-                  </h2>
-                  <p className="text-gray-400 text-sm">
-                    {formatDate(note.created_at)}
-                  </p>
-                </div>
-
-                <div className="hidden md:flex items-center">
-                  <div className="flex">
-                    {isEditing ? (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleSaveEdit}
-                          disabled={isSaving}
-                          className="text-cyan-500 hover:text-cyan-300"
-                        >
-                          {isSaving ? (
-                            <Spinner className="w-4 h-4" />
-                          ) : (
-                            <Save className="w-4 h-4" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setIsEditing(false);
-                            setEditedText(
-                              note.edited_text || note.original_formatted_text
-                            );
-                          }}
-                          disabled={isSaving}
-                          className="text-gray-400 hover:text-white"
-                        >
-                          <X className="w-5 h-5" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        {/* Simple/Gmail mode toggle */}
-
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleToggleStar}
-                          disabled={isStarring}
-                          className={
-                            note.is_starred
-                              ? "text-cyan-400 hover:text-cyan-300"
-                              : "text-gray-400 hover:text-cyan-400"
-                          }
-                          title={note.is_starred ? "Unstar note" : "Star note"}
-                        >
-                          <Star
-                            className={`w-4 h-4 ${note.is_starred ? "fill-cyan-400" : ""}`}
-                          />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setIsEditing(true);
-                            if (activeMode === "email") {
-                              setShareSubject(note.title || "Untitled Note");
-                            }
-                          }}
-                          className="text-gray-400 hover:text-cyan-500"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleCopy}
-                          className="text-gray-400 hover:text-cyan-500"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleDownload}
-                          className="text-gray-400 hover:text-cyan-500"
-                        >
-                          <Download className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setShareSubject(note.title || "Untitled Note");
-                            setIsShareModalOpen(true);
-                          }}
-                          className="text-gray-400 hover:text-cyan-500"
-                        >
-                          <Share2 className="w-4 h-4" />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <Separator className="w-24 h-0.5 bg-cyan-500" />
-            </CardHeader>
-
-            <CardContent>
-              {isEditing ? (
-                <>
-                  {activeMode === "email" && (
-                    <div className="mb-3">
-                      <label className="text-sm text-gray-400 block mb-1">
-                        Email subject
-                      </label>
-                      <input
-                        type="text"
-                        value={shareSubject ?? (note.title || "Untitled Note")}
-                        onChange={(e) => setShareSubject(e.target.value)}
-                        className="w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        placeholder="Subject"
-                      />
-                    </div>
-                  )}
-                  <textarea
-                    value={editedText}
-                    onChange={(e) => setEditedText(e.target.value)}
-                    className="w-full min-h-[250px] bg-slate-800 text-gray-300 rounded-lg p-4 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 border border-slate-700"
-                    autoFocus
-                  />
-                </>
-              ) : (
-                <div className="text-md text-start text-gray-300 whitespace-pre-wrap">
-                  {displayText}
-                </div>
-              )}
-
-              {/* Mobile Action Buttons */}
-              <div className="flex md:hidden justify-center items-center mt-6 border-slate-700/50">
-                <div className="flex gap-4 items-center">
-                  {/* Simple/Gmail toggle for mobile */}
-
-                  {isEditing ? (
-                    <>
-                      {activeMode === "email" && (
-                        <div className="w-full">
-                          <label className="text-sm text-gray-400 block mb-1">
-                            Email subject
-                          </label>
-                          <input
-                            type="text"
-                            value={
-                              shareSubject ?? (note.title || "Untitled Note")
-                            }
-                            onChange={(e) => setShareSubject(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                            placeholder="Subject"
-                          />
-                        </div>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleSaveEdit}
-                        disabled={isSaving}
-                        className="text-cyan-500 hover:text-cyan-400 flex flex-col items-center gap-1 h-auto py-2"
-                      >
-                        {isSaving ? (
-                          <Spinner className="w-5 h-5" />
-                        ) : (
-                          <Save className="w-5 h-5" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setIsEditing(false);
-                          setEditedText(
-                            note.edited_text || note.original_formatted_text
-                          );
-                        }}
-                        disabled={isSaving}
-                        className="text-gray-400 hover:text-white flex flex-col items-center gap-1 h-auto py-2"
-                      >
-                        <X className="w-5 h-5" />
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleToggleStar}
-                        disabled={isStarring}
-                        className={`flex flex-col items-center gap-1 h-auto py-2 ${
-                          note.is_starred
-                            ? "text-cyan-400 hover:text-cyan-300"
-                            : "text-gray-400 hover:text-cyan-400"
-                        }`}
-                        title={note.is_starred ? "Unstar note" : "Star note"}
-                      >
-                        <Star
-                          className={`w-5 h-5 ${note.is_starred ? "fill-cyan-400" : ""}`}
-                        />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setIsEditing(true)}
-                        className="text-gray-400 hover:text-cyan-500 flex flex-col items-center gap-1 h-auto py-2"
-                      >
-                        <Edit3 className="w-5 h-5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleCopy}
-                        className="text-gray-400 hover:text-cyan-500 flex flex-col items-center gap-1 h-auto py-2"
-                      >
-                        <Copy className="w-5 h-5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleDownload}
-                        className="text-gray-400 hover:text-cyan-500 flex flex-col items-center gap-1 h-auto py-2"
-                      >
-                        <Download className="w-5 h-5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setShareSubject(note.title || "Untitled Note");
-                          setIsShareModalOpen(true);
-                        }}
-                        className="text-gray-400 hover:text-cyan-500 flex flex-col items-center gap-1 h-auto py-2"
-                      >
-                        <Share2 className="w-5 h-5" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Share Options Modal */}
-          {isShareModalOpen && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-              <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                onClick={() => setIsShareModalOpen(false)}
-              />
-              <div className="relative w-full max-w-md rounded-2xl border border-cyan-700/30 bg-slate-900 p-6 shadow-2xl">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <Share2 className="w-5 h-5 text-cyan-400" />
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">
-                        Share note
-                      </h3>
-                      <p className="text-sm text-gray-400">
-                        Choose a destination
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setIsShareModalOpen(false)}
-                    className="text-gray-400 hover:text-white text-xl"
-                    aria-label="Close share dialog"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <Separator className="bg-cyan-700/30" />
-
-                {/* Subject input */}
-                <div className="mt-4">
-                  <label className="text-sm text-gray-400 block mb-1">
-                    Email subject
-                  </label>
-                  <input
-                    type="text"
-                    value={shareSubject ?? (note.title || "Untitled Note")}
-                    onChange={(e) => setShareSubject(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    placeholder="Subject"
-                  />
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 gap-3">
-                  {/* WhatsApp */}
-                  <button
-                    onClick={async () => {
-                      const textToShare = displayText || "";
-                      const shareTitle = note.title || "Untitled Note";
-                      const payload = `${shareTitle}\n\n${textToShare}`.trim();
-                      const url = `https://wa.me/?text=${encodeURIComponent(
-                        payload
-                      )}`;
-                      window.open(url, "_blank", "noopener,noreferrer");
-                      setIsShareModalOpen(false);
-                    }}
-                    className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
-                  >
-                    <MessageCircle className="w-5 h-5" />
-                    <span>WhatsApp</span>
-                  </button>
-
-                  {/* Gmail */}
-                  <button
-                    onClick={() => {
-                      const shareTitle = note.title || "Untitled Note";
-                      const subjectText = shareSubject ?? shareTitle;
-                      const subject = encodeURIComponent(subjectText);
-                      const bodyText = isEditing
-                        ? editedText
-                        : activeMode === "email"
-                        ? modeContent["email"] || ""
-                        : note.edited_text ||
-                          note.original_formatted_text ||
-                          "";
-                      const body = encodeURIComponent(bodyText);
-                      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}&tf=1`;
-                      window.open(gmailUrl, "_blank", "noopener,noreferrer");
-                      setIsShareModalOpen(false);
-                    }}
-                    className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
-                  >
-                    <Mail className="w-5 h-5" />
-                    <div className="flex flex-col items-start">
-                      <span>Gmail</span>
-                      <span className="text-xs text-gray-400">
-                        Active mode content (Gmail or formal)
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* Default Email Client */}
-                  <button
-                    onClick={() => {
-                      const shareTitle = note.title || "Untitled Note";
-                      const subjectText = shareSubject ?? shareTitle;
-                      const subject = encodeURIComponent(subjectText);
-                      const bodyText = isEditing
-                        ? editedText
-                        : activeMode === "email"
-                        ? modeContent["email"] || ""
-                        : note.edited_text ||
-                          note.original_formatted_text ||
-                          "";
-                      const body = encodeURIComponent(bodyText);
-                      window.location.href = `mailto:?subject=${subject}&body=${body}`;
-                      setIsShareModalOpen(false);
-                    }}
-                    className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
-                  >
-                    <Mail className="w-5 h-5" />
-                    <div className="flex flex-col items-start">
-                      <span>Email (Default Client)</span>
-                      <span className="text-xs text-gray-400">
-                        Active mode content (Gmail or formal)
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* Web Share API */}
-                  {typeof navigator !== "undefined" && "share" in navigator && (
-                    <button
-                      onClick={async () => {
-                        const textToShare = displayText || "";
-                        const shareTitle = note.title || "Untitled Note";
-                        const payload =
-                          `${shareTitle}\n\n${textToShare}`.trim();
-                        try {
-                          // setIsSharing(true);
-                          const nav = navigator as Navigator & {
-                            share?: (data: ShareData) => Promise<void>;
-                          };
-                          await nav.share?.({
-                            title: shareTitle,
-                            text: payload,
-                          });
-                          setIsShareModalOpen(false);
-                        } catch {
-                          // user may have cancelled
-                        } finally {
-                          // setIsSharing(false);
-                        }
-                      }}
-                      className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
-                    >
-                      <Share2 className="w-5 h-5" />
-                      <span>More Options…</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+        {/* Folders / Tags Section (Centered Pills) */}
+        <div className="flex flex-wrap justify-center items-center gap-2 pt-1">
+          {note.folder && (
+            <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 px-3 py-1 rounded-full text-xs flex items-center gap-2 group">
+              <FolderPlus className="w-3 h-3" />
+              {note.folder}
+              <button 
+                onClick={() => handleUpdateFolder(null)}
+                className="hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
           )}
+          
+          <div className="flex items-center gap-2">
+            {!isAddingNewFolder ? (
+              <div className="flex items-center gap-2">
+                {availableFolders.filter(f => f !== note.folder).slice(0, 2).map(folder => (
+                  <button
+                    key={folder}
+                    onClick={() => handleUpdateFolder(folder)}
+                    className="text-[11px] px-3 py-1 rounded-full bg-slate-900 border border-white/5 text-gray-500 hover:text-cyan-400 hover:border-cyan-500/30 transition-all whitespace-nowrap"
+                  >
+                    {folder}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setIsAddingNewFolder(true)}
+                  className="text-[11px] px-3 py-1 rounded-full bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-all flex items-center gap-1 font-medium"
+                >
+                  <Plus className="w-3 h-3" />
+                  New
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 bg-slate-900/80 border border-cyan-500/30 rounded-full px-2 py-0.5 animate-in fade-in zoom-in duration-200">
+                <Input
+                  autoFocus
+                  placeholder="Folder..."
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddNewFolder()}
+                  className="h-6 w-24 bg-transparent border-none text-[11px] focus-visible:ring-0 placeholder:text-gray-600 p-0"
+                />
+                <button onClick={handleAddNewFolder} className="p-1 hover:text-cyan-400 transition-colors">
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => setIsAddingNewFolder(false)} className="p-1 hover:text-red-400 transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </motion.div>
 
-          {/* Feedback Widget */}
-          <div className="mt-4">
-            <FeedbackWidget
-              onSubmit={handleFeedbackSubmit}
-              isSubmitting={isFeedbackSubmitting}
-              hasSubmitted={hasFeedbackSubmitted}
-              submittedValue={feedbackValue}
-            />
+      {/* Mode Selection Bar (Floating) */}
+      <div className="flex flex-col items-center gap-4 w-full">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 mb-2 shadow-2xl z-10"
+        >
+          {[
+            { id: "normal", icon: FileText, label: "Normal" },
+            { id: "email", icon: Mail, label: "Email" },
+            { id: "bullets", icon: ListChecks, label: "Bullets" },
+            { id: "summary", icon: BookOpen, label: "Summary" },
+            { id: "translate", icon: Languages, label: "Translate" }
+          ].map((mode) => (
+            <button
+              key={mode.id}
+              onClick={async () => {
+                if (mode.id === "normal") {
+                  setActiveMode("normal");
+                  if (isEditing) setEditedText(note.edited_text || note.original_formatted_text || "");
+                  return;
+                }
+                
+                setActiveMode(mode.id as any);
+                const baseText = note.edited_text || note.original_formatted_text || note.raw_text || "";
+                
+                if (!modeContent[mode.id] && mode.id !== "translate") {
+                  setIsLoadingMode(true);
+                  let resultText = baseText;
+                  if (mode.id === "email") {
+                    const res = await gmailFormatText(baseText, note.title || "Untitled Note");
+                    resultText = res.success ? res.formattedText || baseText : baseText;
+                  } else if (mode.id === "bullets") {
+                    resultText = baseText.split('\n').filter(l => l.trim()).map(l => `• ${l.trim()}`).join('\n');
+                  } else if (mode.id === "summary") {
+                    const sentences = baseText.match(/[^.!?]+[.!?]+/g) || [baseText];
+                    resultText = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
+                  }
+                  setModeContent(prev => ({ ...prev, [mode.id]: resultText }));
+                  if (isEditing) setEditedText(resultText);
+                  setIsLoadingMode(false);
+                } else {
+                  if (isEditing && mode.id !== "translate") setEditedText(modeContent[mode.id] || baseText);
+                }
+              }}
+              className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
+                activeMode === mode.id 
+                  ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
+                  : "text-gray-400 hover:text-white hover:bg-white/5"
+              }`}
+              title={mode.label}
+            >
+              {isLoadingMode && activeMode === mode.id ? (
+                <Spinner className="w-5 h-5" />
+              ) : (
+                <mode.icon className="w-5 h-5" />
+              )}
+            </button>
+          ))}
+        </motion.div>
+
+        {/* Translation Dropdown - only when translate mode is active */}
+        <AnimatePresence>
+          {activeMode === "translate" && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex items-center gap-2 bg-slate-900/50 backdrop-blur-sm border border-white/5 rounded-full p-1 shadow-xl mb-4"
+            >
+              {[
+                { id: "original", label: "Original" },
+                { id: "en", label: "English" },
+                { id: "hi", label: "Hindi" }
+              ].map((lang) => (
+                <button
+                  key={lang.id}
+                  onClick={() => applyLanguage(lang.id as any)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    selectedLanguage === lang.id
+                      ? "bg-cyan-500 text-slate-950 shadow-lg"
+                      : "text-gray-400 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  {isTranslating && selectedLanguage === lang.id ? (
+                    <Spinner className="w-3 h-3" />
+                  ) : (
+                    lang.label
+                  )}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Main Note Card */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="w-full max-w-3xl"
+      >
+        <div className="bg-[#0f172a]/60 backdrop-blur-sm border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl relative group overflow-hidden">
+          {/* Subtle Glow Effect */}
+          <div className="absolute -top-16 -right-16 w-48 h-48 bg-cyan-500/5 blur-[80px] rounded-full pointer-events-none" />
+          
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
+            <div className="space-y-1.5">
+              <h2 className="text-xl font-bold text-white leading-tight">
+                {note.title || "Untitled Note"}
+              </h2>
+              <p className="text-gray-500 text-xs font-medium">
+                {formatDate(note.created_at)}
+              </p>
+            </div>
+
+            {/* Action Icons */}
+            <div className="flex items-center gap-1 self-end md:self-start">
+              <button 
+                onClick={handleToggleStar}
+                className={`p-2 rounded-lg transition-all duration-300 ${note.is_starred ? 'text-yellow-400 bg-yellow-400/10' : 'text-gray-500 hover:text-yellow-400 hover:bg-yellow-400/5'}`}
+                title="Star note"
+              >
+                <Star className={`w-4 h-4 ${note.is_starred ? 'fill-yellow-400' : ''}`} />
+              </button>
+              <button 
+                onClick={() => {
+                  if (isEditing) handleCancelEditing();
+                  else handleStartEditing();
+                }}
+                className={`p-2 rounded-lg transition-all duration-300 ${isEditing ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
+                title="Edit note"
+              >
+                <Edit3 className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={handleCopy}
+                className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                title="Copy text"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={handleDownload}
+                className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                title="Download txt"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => setIsShareModalOpen(true)}
+                className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                title="Share"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          {/* Raw Transcript - Slide In/Out with Framer Motion */}
-          <AnimatePresence mode="wait">
-            {showRawTranscript ? (
-              <motion.div
-                key="transcript-visible"
-                initial={{ opacity: 0, scaleY: 0, y: 0 }}
-                animate={{ opacity: 1, scaleY: 1, y: 0 }}
-                exit={{ opacity: 0, scaleY: 0, y: 0 }}
-                transition={{
-                  duration: 0.3,
-                  ease: "easeInOut",
-                }}
-                style={{ originY: 0 }}
-              >
-                <div className="flex justify-center">
-                  <Card className="bg-white border-none rounded-t-none rounded-b-2xl shadow-xl w-full max-w-[90%]">
-                    <CardContent className="pt-6">
-                      <div className="space-y-4">
-                        {/* Raw Transcript Text */}
-                        <div className="text-gray-800 text-md whitespace-pre-wrap leading-relaxed">
-                          {note.raw_text || "No transcript available."}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+          {/* Cyan Underline */}
+          <div className="w-16 h-0.5 bg-cyan-500/80 rounded-full mb-6" />
 
-                {/* Hide Button - Below Raw Transcript with Delayed Animation */}
-                <motion.div
-                  initial={{ opacity: 0, y: 0 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 0 }}
-                  transition={{
-                    duration: 0.2,
-                    ease: "easeOut",
-                    delay: 0.2,
-                  }}
-                  className="flex justify-center"
-                >
-                  <button
-                    onClick={() => setShowRawTranscript(false)}
-                    className="bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white font-medium py-2.5 px-10 transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl flex items-center justify-center gap-2 rounded-b-2xl"
-                  >
-                    <span className="text-sm">hide original transcript</span>
-                  </button>
-                </motion.div>
-              </motion.div>
+          {/* Note Content Area */}
+          <div className="relative min-h-[120px]">
+            {isEditing ? (
+              <textarea
+                value={editedText}
+                onChange={(e) => setEditedText(e.target.value)}
+                className="w-full bg-slate-900/50 border border-cyan-500/30 rounded-xl p-4 text-gray-200 leading-relaxed focus:outline-none focus:ring-1 focus:ring-cyan-500/20 min-h-[200px] resize-none"
+                placeholder="Write your note here..."
+              />
             ) : (
-              <motion.div
-                key="transcript-hidden"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{
-                  duration: 0.2,
-                  ease: "easeOut",
-                }}
-                className="flex justify-center"
-              >
-                <button
-                  onClick={() => setShowRawTranscript(true)}
-                  className="bg-gradient-to-r from-cyan-600 to-cyan-700 hover:from-cyan-700 hover:to-cyan-800 text-white font-medium py-2.5 px-10 transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl flex items-center justify-center gap-2 rounded-b-2xl"
-                >
-                  <span className="text-sm">view original transcript</span>
-                </button>
-              </motion.div>
+              <div className="text-gray-300 text-base leading-relaxed whitespace-pre-wrap font-medium">
+                {displayText || "No content available."}
+              </div>
             )}
-          </AnimatePresence>
+
+            {isEditing && (
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)} className="text-gray-400 hover:text-white">
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveEdit} size="sm" disabled={isSaving} className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold px-6">
+                  {isSaving ? <Spinner className="mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                  Save
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {!isEditing && (
+            <div className=" flex   border-white/5 border-t-4px  mt-4 pt-4">
+              <button 
+                onClick={() => {
+                  const raw = note.raw_text;
+                  if (!raw) {
+                    toast({
+                      title: "Error",
+                      description: "Original recording not found. Cannot continue.",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                  storageService.updateRawText(raw);
+                  storageService.setCurrentNoteId(note.id);
+                  storageService.setContinueMode(true);
+                  router.push("/recording");
+                }}
+                className="bg-cyan-500/10 hover:bg-cyan-500/20 gap-3 text-cyan-400 px-8 py-3 rounded-full font-bold text-sm transition-all duration-300 flex items-center  border border-cyan-500/20 group hover:-translate-y-1"
+              >
+                <div className="bg-cyan-500 text-slate-950 p-1.5 rounded-full group-hover:scale-110 transition-transform shadow-[0_0_15px_rgba(6,182,212,0.5)]">
+                  <Mic className="w-4 h-4" />
+                </div>
+                <span>Append to notes</span>
+              </button>
+            </div>
+          )}
         </div>
-      </div>
+
+        {/* Feedback Section (Below Card) */}
+        <div className="mt-4 bg-[#0f172a]/40 border border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-gray-400 text-sm font-medium">Was this formatting helpful?</p>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => handleFeedbackSubmit(true)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${hasFeedbackSubmitted && feedbackValue === true ? 'bg-cyan-500 text-slate-950' : 'bg-slate-900/50 text-gray-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <ThumbsUp className="w-4 h-4" />
+              <span className="font-semibold text-sm">Yes</span>
+            </button>
+            <button 
+              onClick={() => handleFeedbackSubmit(false)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${hasFeedbackSubmitted && feedbackValue === false ? 'bg-red-500/20 text-red-400' : 'bg-slate-900/50 text-gray-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <ThumbsDown className="w-4 h-4" />
+              <span className="font-semibold text-sm">No</span>
+            </button>
+          </div>
+        </div>
+
+        {/* View Original Transcript Button */}
+        <div className="flex justify-center mt-4">
+          <button 
+            onClick={() => setShowRawTranscript(!showRawTranscript)}
+            className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 px-6 py-2.5 rounded-xl font-bold text-sm transition-all duration-300 hover:-translate-y-0.5"
+          >
+            {showRawTranscript ? "hide original transcript" : "view original transcript"}
+          </button>
+        </div>
+
+        {/* Raw Transcript (Collapsible) */}
+        <AnimatePresence>
+          {showRawTranscript && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-4 w-full overflow-hidden"
+            >
+              <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-6">
+                <h3 className="text-gray-500 font-bold uppercase tracking-widest text-xs mb-4">Original Recording</h3>
+                <div className="text-gray-400 leading-relaxed italic text-sm">
+                  "{note.raw_text}"
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </main>
   );
 }

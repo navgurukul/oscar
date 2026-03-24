@@ -21,7 +21,9 @@ export function AuthEdgeButton() {
   const [isHovered, setIsHovered] = useState(false);
 
   // Don't show anything while auth is loading or on auth page
-  if (isLoading || pathname === ROUTES.AUTH) return null;
+  // Also hide on home page if logged in, as we show a special dashboard header there
+  const isHomePage = pathname === ROUTES.HOME;
+  if (isLoading || pathname === ROUTES.AUTH || (isHomePage && user)) return null;
 
   const handleAction = async () => {
     if (user) {

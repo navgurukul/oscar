@@ -181,4 +181,25 @@ export const notesService = {
 
     return { error: error as Error | null };
   },
+
+  /**
+   * Get all unique folder names for the current user
+   */
+  async getFolders(): Promise<{ data: string[] | null; error: Error | null }> {
+    const supabase = getSupabase();
+    if (!supabase) return { data: null, error: new Error("Supabase client not initialized") };
+
+    const { data, error } = await supabase
+      .from("notes")
+      .select("folder")
+      .is("deleted_at", null)
+      .not("folder", "is", null);
+
+    if (error) return { data: null, error: error as Error };
+    if (!data) return { data: [], error: null };
+
+    // Filter unique non-null folder names
+    const folders = Array.from(new Set(data.map((n: { folder: string | null }) => n.folder as string)));
+    return { data: folders, error: null };
+  },
 };

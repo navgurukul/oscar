@@ -49,6 +49,8 @@ export default function NotesPage() {
   const [sortBy, setSortBy] = useState<SortOption>("created");
   const [currentPage, setCurrentPage] = useState(1);
   const [showStarredOnly, setShowStarredOnly] = useState(false);
+  const [selectedFolder, setSelectedFolder] = useState<string>("All Notes");
+  const [folders, setFolders] = useState<string[]>([]);
 
   useEffect(() => {
     setContextPrompt(getTimeBasedPrompt());
@@ -61,8 +63,16 @@ export default function NotesPage() {
     if (!user) return;
     loadNotes();
     loadTrashCount();
+    loadFolders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id]);
+
+  const loadFolders = async () => {
+    const { data, error } = await notesService.getFolders();
+    if (!error && data) {
+      setFolders(data);
+    }
+  };
 
   const loadTrashCount = async () => {
     const { data, error } = await notesService.getTrashedNotes();
@@ -74,11 +84,18 @@ export default function NotesPage() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortBy, showStarredOnly]);
+  }, [searchQuery, sortBy, showStarredOnly, selectedFolder]);
 
   // Filter and sort notes
   const filteredNotes = useMemo(() => {
     let result = [...allNotes];
+
+    // Filter by folder
+    if (selectedFolder === "Uncategorized") {
+      result = result.filter((note) => !note.folder);
+    } else if (selectedFolder !== "All Notes") {
+      result = result.filter((note) => note.folder === selectedFolder);
+    }
 
     // Filter starred only
     if (showStarredOnly) {
@@ -123,7 +140,7 @@ export default function NotesPage() {
     });
 
     return result;
-  }, [allNotes, searchQuery, sortBy, showStarredOnly]);
+  }, [allNotes, searchQuery, sortBy, showStarredOnly, selectedFolder]);
 
   const totalPages = Math.ceil(filteredNotes.length / ITEMS_PER_PAGE);
 
@@ -322,6 +339,31 @@ export default function NotesPage() {
         {error && (
           <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg mb-6">
             <p className="text-red-400">{error}</p>
+          </div>
+        )}
+
+        {/* Folder Tabs */}
+        {allNotes.length > 0 && (
+          <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide no-scrollbar">
+            {["All Notes", ...folders, "Uncategorized"].map((folder) => {
+              const isActive = selectedFolder === folder;
+              // Only show Uncategorized if there are actually uncategorized notes
+              if (folder === "Uncategorized" && !allNotes.some(n => !n.folder)) return null;
+              
+              return (
+                <button
+                  key={folder}
+                  onClick={() => setSelectedFolder(folder)}
+                  className={`px-6 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap border-b-2 ${
+                    isActive
+                      ? "bg-cyan-500 text-slate-950 border-cyan-500 shadow-[0_-4px_10px_rgba(6,182,212,0.2)]"
+                      : "bg-slate-900/50 text-gray-400 border-transparent hover:text-gray-200 hover:bg-slate-800"
+                  }`}
+                >
+                  {folder}
+                </button>
+              );
+            })}
           </div>
         )}
 

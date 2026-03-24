@@ -141,11 +141,15 @@ export const storageService = {
   /**
    * Set current note ID
    */
-  setCurrentNoteId(id: string): void {
+  setCurrentNoteId(id: string | null): void {
     if (!isBrowser()) {
       return;
     }
-    sessionStorage.setItem(STORAGE_KEYS.CURRENT_NOTE_ID, id);
+    if (id) {
+      sessionStorage.setItem(STORAGE_KEYS.CURRENT_NOTE_ID, id);
+    } else {
+      sessionStorage.removeItem(STORAGE_KEYS.CURRENT_NOTE_ID);
+    }
   },
 
   /**

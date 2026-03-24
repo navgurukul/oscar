@@ -33,6 +33,8 @@ export interface DBNote {
   deleted_at: string | null;
   // Starred/favorite
   is_starred: boolean;
+  // Folder/category name (Database column is 'folder')
+  folder: string | null;
 }
 
 // Insert type for creating a new note
@@ -42,6 +44,7 @@ export interface DBNoteInsert {
   raw_text: string;
   original_formatted_text: string;
   edited_text?: string | null;
+  folder?: string | null;
 }
 
 // Update type for modifying a note
@@ -58,6 +61,8 @@ export interface DBNoteUpdate {
   deleted_at?: string | null;
   // Starred/favorite
   is_starred?: boolean;
+  // Folder/category name (Database column is 'folder')
+  folder?: string | null;
 }
 
 export interface FormattingResult {

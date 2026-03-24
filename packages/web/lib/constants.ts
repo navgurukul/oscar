@@ -86,8 +86,8 @@ export const API_CONFIG = {
   DEEPSEEK_MODEL: "deepseek-chat",
 
   // Format API settings
-  FORMAT_TEMPERATURE: 0.1,
-  FORMAT_TOP_P: 0.9,
+  FORMAT_TEMPERATURE: 0.0, // Set to 0.0 for maximum stability and completeness
+  FORMAT_TOP_P: 1.0, // Standard Top P
   FORMAT_MAX_TOKENS: 8192,
 
   // Title API settings
