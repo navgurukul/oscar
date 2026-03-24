@@ -142,10 +142,13 @@ export class STTService {
         setTimeout(resolve, RECORDING_CONFIG.STOP_PROCESSING_DELAY_MS)
       );
 
-      // Get final transcript
-      const finalTranscript =
-        this.accumulatedTranscript.trim() ||
-        this.sttInstance.getFullTranscript().trim();
+      // Get final transcript by merging accumulated (includes seed for continue mode)
+      // with the library's transcript to ensure we capture all content
+      const libraryTranscript = this.sttInstance.getFullTranscript().trim();
+      const finalTranscript = this.mergeTranscripts(
+        this.accumulatedTranscript,
+        libraryTranscript
+      );
 
       return finalTranscript;
     } catch (error) {
