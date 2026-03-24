@@ -10,12 +10,12 @@ import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Search, Settings, Plus, Upload, MoreHorizontal } from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Settings, Plus, Upload, MoreHorizontal } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
+
 import { notesService } from "@/lib/services/notes.service";
 import type { DBNote } from "@/lib/types/note.types";
-import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency, UI_STRINGS, ROUTES, STORAGE_KEYS } from "@/lib/constants";
+import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency, UI_STRINGS, ROUTES } from "@/lib/constants";
 import { storageService } from "@/lib/services/storage.service";
 import type { BillingCycle } from "@/lib/types/subscription.types";
 import img1 from "@/components/ui/assets/image_1.png";
@@ -56,7 +56,6 @@ const TESTIMONIALS = [
 
 export default function Home() {
   const { session, user } = useAuth();
-  const { notesCount } = useSubscriptionContext();
   const [recentNotes, setRecentNotes] = useState<DBNote[]>([]);
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
   const router = useRouter();

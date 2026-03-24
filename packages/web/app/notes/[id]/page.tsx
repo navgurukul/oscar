@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notesService } from "@/lib/services/notes.service";
@@ -9,7 +8,6 @@ import { feedbackService } from "@/lib/services/feedback.service";
 import { storageService } from "@/lib/services/storage.service";
 import { aiService } from "@/lib/services/ai.service";
 import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
-import { NoteActions } from "@/components/results/NoteActions";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +18,6 @@ import {
   X,
   Share2,
   Mail,
-  MessageCircle,
   FileText,
   Languages,
   ListChecks,
@@ -32,7 +29,6 @@ import {
   ThumbsUp,
   ThumbsDown,
   Mic,
-  MoreHorizontal,
 } from "lucide-react";
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
@@ -40,20 +36,6 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
-
-// Lazy load the FeedbackWidget
-const FeedbackWidget = dynamic(
-  () =>
-    import("@/components/results/FeedbackWidget").then((mod) => ({
-      default: mod.FeedbackWidget,
-    })),
-  {
-    loading: () => (
-      <div className="mt-4 h-20 bg-slate-900 border border-cyan-700/30 rounded-xl animate-pulse" />
-    ),
-    ssr: false,
-  }
-);
 
 export default function NoteDetailPage({
   params,
@@ -71,9 +53,8 @@ export default function NoteDetailPage({
   const [isSaving, setIsSaving] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [showRawTranscript, setShowRawTranscript] = useState(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [, setIsShareModalOpen] = useState(false);
   // const [isSharing, setIsSharing] = useState(false);
-  const [shareSubject, setShareSubject] = useState<string | null>(null);
   // Gmail AI format now applies directly to the main editor text (no separate box)
   const { formatText: gmailFormatText } =
     useAIEmailFormatting();
@@ -156,7 +137,7 @@ export default function NoteDetailPage({
   };
 
   // Feedback state
-  const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
+  const [, setIsFeedbackSubmitting] = useState(false);
   const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
   const [feedbackValue, setFeedbackValue] = useState<boolean | null>(null);
 
@@ -513,9 +494,9 @@ export default function NoteDetailPage({
                   return;
                 }
                 
-                setActiveMode(mode.id as any);
+                setActiveMode(mode.id as typeof activeMode);
                 const baseText = note.edited_text || note.original_formatted_text || note.raw_text || "";
-                
+
                 if (!modeContent[mode.id] && mode.id !== "translate") {
                   setIsLoadingMode(true);
                   let resultText = baseText;
@@ -567,7 +548,7 @@ export default function NoteDetailPage({
               ].map((lang) => (
                 <button
                   key={lang.id}
-                  onClick={() => applyLanguage(lang.id as any)}
+                  onClick={() => applyLanguage(lang.id as "original" | "en" | "hi")}
                   className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                     selectedLanguage === lang.id
                       ? "bg-cyan-500 text-slate-950 shadow-lg"
@@ -753,7 +734,7 @@ export default function NoteDetailPage({
               <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-6">
                 <h3 className="text-gray-500 font-bold uppercase tracking-widest text-xs mb-4">Original Recording</h3>
                 <div className="text-gray-400 leading-relaxed italic text-sm">
-                  "{note.raw_text}"
+                  &ldquo;{note.raw_text}&rdquo;
                 </div>
               </div>
             </motion.div>

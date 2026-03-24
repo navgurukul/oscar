@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, Suspense, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
 import { storageService } from "@/lib/services/storage.service";
-import { notesService } from "@/lib/services/notes.service";
 import { aiService } from "@/lib/services/ai.service";
 import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
 import { useAuth } from "@/lib/contexts/AuthContext";
@@ -30,7 +29,6 @@ function RecordingPageInner() {
   const {
     canRecord,
     recordingsThisMonth,
-    incrementUsage,
   } = useSubscriptionContext();
 
   const {

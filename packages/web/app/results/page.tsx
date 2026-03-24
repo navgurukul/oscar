@@ -64,7 +64,6 @@ export default function ResultsPage() {
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [shareSubject, setShareSubject] = useState<string | null>(null);
   const {
-    isFormatting: isGmailFormatting,
     formatText: gmailFormatText,
   } = useAIEmailFormatting();
   const [isNoteSaved, setIsNoteSaved] = useState<boolean>(false);
@@ -435,7 +434,6 @@ export default function ResultsPage() {
 
     setIsSaving(true);
     try {
-      const isContinuingExistingNote = Boolean(noteId);
       let saveResult;
 
       if (noteId) {
@@ -637,7 +635,7 @@ export default function ResultsPage() {
                     return;
                   }
                   
-                  setActiveMode(mode.id as any);
+                  setActiveMode(mode.id as typeof activeMode);
                   const baseText = (isEditing ? editedText : formattedNote) || rawText || "";
                   
                   if (!modeContent[mode.id] && mode.id !== "translate") {
@@ -691,7 +689,7 @@ export default function ResultsPage() {
                 ].map((lang) => (
                   <button
                     key={lang.id}
-                    onClick={() => applyLanguage(lang.id as any)}
+                    onClick={() => applyLanguage(lang.id as "original" | "en" | "hi")}
                     className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                       selectedLanguage === lang.id
                         ? "bg-cyan-500 text-slate-950 shadow-lg"
