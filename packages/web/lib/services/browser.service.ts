@@ -11,11 +11,7 @@ export const browserService = {
     // as Apple restricts this to Safari only.
     if (this.isIOS() && !this.isSafari()) return false;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const win = window as any;
-    const SpeechRecognitionAPI =
-      win.SpeechRecognition || win.webkitSpeechRecognition;
-    return !!SpeechRecognitionAPI;
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   },
 
   /**

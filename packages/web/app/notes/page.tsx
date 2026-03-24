@@ -64,7 +64,7 @@ export default function NotesPage() {
     loadNotes();
     loadTrashCount();
     loadFolders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-fetch when auth settles or user changes; load functions are stable
   }, [authLoading, user?.id]);
 
   const loadFolders = async () => {

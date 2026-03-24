@@ -65,7 +65,7 @@ export function useRecording() {
         sttServiceRef.current.destroy();
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: STT service init and cleanup
   }, []);
 
   // Start timer when recording

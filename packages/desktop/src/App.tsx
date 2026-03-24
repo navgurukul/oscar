@@ -810,7 +810,7 @@ function App() {
       updater.checkForUpdates();
     }, 3000);
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time startup check; updater ref is stable
   }, []);
 
   // ── Supabase auth listener ─────────────────────────────────────────────────
@@ -831,7 +831,7 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: auth listener + one-time session check
   }, []);
 
   // ── Deep link handler for OAuth callback ────────────────────────────────────
@@ -839,8 +839,6 @@ function App() {
   useEffect(() => {
     // Handle deep link URL
     const handleDeepLink = async (url: string) => {
-      console.log("[deep-link] Received:", url);
-      
       // Parse the deep link URL
       if (url.startsWith("oscar://auth/callback")) {
         const urlObj = new URL(url);
@@ -861,8 +859,6 @@ function App() {
         }
         
         if (accessToken && refreshToken) {
-          console.log("[deep-link] Setting session with tokens...");
-          
           // Set the session using the tokens from the web app
           const { data, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
@@ -872,17 +868,14 @@ function App() {
           if (sessionError) {
             console.error("[deep-link] Failed to set session:", sessionError);
           } else if (data.session) {
-            console.log("[deep-link] Session established successfully");
             setSession(data.session);
             setUser(data.session.user);
             sessionRef.current = data.session;
           }
         } else if (success === "true") {
           // Fallback: no tokens in URL, try to get session (for backward compatibility)
-          console.log("[deep-link] Auth success but no tokens, checking session...");
           const { data: { session } } = await supabase.auth.getSession();
           if (session) {
-            console.log("[deep-link] Session found, authenticating...");
             setSession(session);
             setUser(session.user);
             sessionRef.current = session;
@@ -914,7 +907,7 @@ function App() {
     return () => {
       unlistenDeepLink.then((f) => f());
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: deep link listener registered once
   }, []);
 
   // ── Boot: load persisted settings ──────────────────────────────────────────
@@ -963,27 +956,20 @@ function App() {
       // If the frontmost app is ourselves, clear it so we don't try to activate ourselves
       targetAppRef.current = SELF_APP_NAMES.includes(raw.toLowerCase()) ? "" : raw;
       pendingStopRef.current = false;
-      console.log("[hotkey] START received — rawApp:", JSON.stringify(raw),
-        "targetApp:", JSON.stringify(targetAppRef.current),
-        "whisperLoaded:", whisperLoadedRef.current, "isRecording:", isRecordingRef.current);
       if (whisperLoadedRef.current && !isRecordingRef.current) startHotkeyRecording();
     });
     const unlistenStop = listen("hotkey-recording-stop", () => {
-      console.log("[hotkey] STOP received — isRecording:", isRecordingRef.current);
       // ALWAYS set pending stop — this is the safety net for the race condition
       // where STOP arrives before getUserMedia resolves in startHotkeyRecording
       pendingStopRef.current = true;
-      console.log("[hotkey] pendingStopRef set to TRUE");
       // Also try the normal stop path
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-        console.log("[hotkey] MediaRecorder is active — stopping directly");
         isRecordingRef.current = false;
         setIsRecording(false);
         mediaRecorderRef.current.stop();
         // Switch to processing dots — pill hides after processAudio finishes
         invoke("set_pill_processing").catch(console.warn);
       } else {
-        console.log("[hotkey] MediaRecorder not ready yet — pending stop will handle it");
       }
     });
     const unlistenErr = listen<string>("hotkey-permission-error", (ev) => {
@@ -997,7 +983,7 @@ function App() {
       unlistenErr.then((f) => f());
       unlistenReg.then((f) => f());
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads settings, registers hotkey listeners; uses refs for mutable state
   }, []);
 
   // ── Supabase dictionary sync ───────────────────────────────────────────────
@@ -1039,7 +1025,6 @@ function App() {
       const audioConstraints = selectedMicId ? { deviceId: { ideal: selectedMicId } } : true;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       warmStreamRef.current = stream;
-      console.log("[mic] pre-warmed microphone stream");
     } catch (e) {
       console.warn("[mic] failed to pre-warm microphone:", e);
     }
@@ -1101,20 +1086,15 @@ function App() {
   // ── Hotkey recording ───────────────────────────────────────────────────────
 
   const startHotkeyRecording = async () => {
-    console.log("[record] startHotkeyRecording called, hasWarmStream:", !!warmStreamRef.current);
-
     // Use the pre-warmed stream if available; fall back to getUserMedia
     let stream: MediaStream;
     if (warmStreamRef.current && warmStreamRef.current.getAudioTracks().some((t) => t.readyState === "live")) {
       stream = warmStreamRef.current;
-      console.log("[record] using pre-warmed mic stream (instant)");
     } else {
-      console.log("[record] no warm stream — calling getUserMedia (may be slow)");
       try {
         const audioConstraints = selectedMicId ? { deviceId: { ideal: selectedMicId } } : true;
         stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
         warmStreamRef.current = stream; // keep for next time
-        console.log("[record] got mic stream from getUserMedia");
       } catch (e) {
         console.error("[record] getUserMedia failed:", e);
         setStatus(`Error: Could not access microphone — ${e}`);
@@ -1124,7 +1104,6 @@ function App() {
 
     // Check if stop arrived during any async wait
     if (pendingStopRef.current) {
-      console.log("[record] pending stop detected — aborting");
       pendingStopRef.current = false;
       isRecordingRef.current = false;
       setIsRecording(false);
@@ -1143,8 +1122,6 @@ function App() {
       if (e.data.size > 0) audioChunksRef.current.push(e.data);
     };
     mediaRecorder.onstop = () => {
-      console.log("[record] mediaRecorder.onstop fired — chunks:", audioChunksRef.current.length,
-        "targetApp:", JSON.stringify(targetAppRef.current), "autoPaste:", autoPasteRef.current);
       processAudio(stream, autoPasteRef.current, targetAppRef.current);
     };
 
@@ -1152,13 +1129,10 @@ function App() {
     isRecordingRef.current = true;
     setIsRecording(true);
     setStatus("Recording... Release to stop");
-    console.log("[record] MediaRecorder started (mimeType:", mimeType, ")");
     invoke("show_recording_pill").catch(console.warn);
   };
 
   const stopHotkeyRecording = () => {
-    console.log("[record] stopHotkeyRecording called — hasRecorder:", !!mediaRecorderRef.current,
-      "recorderState:", mediaRecorderRef.current?.state, "isRecording:", isRecordingRef.current);
     isRecordingRef.current = false;
     setIsRecording(false);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -1171,10 +1145,8 @@ function App() {
   // ── Audio processing (shared by hotkey recording) ───────────────────────────
 
   const processAudio = async (_stream: MediaStream, shouldPaste: boolean, targetApp?: string) => {
-    console.log("[process] processAudio called — shouldPaste:", shouldPaste, "targetApp:", JSON.stringify(targetApp));
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
-    console.log("[process] audio chunks:", chunkCount, "totalBytes:", totalBytes);
 
     if (chunkCount === 0 || totalBytes === 0) {
       console.warn("[process] ABORT: no audio captured");
@@ -1185,7 +1157,6 @@ function App() {
 
     const mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/webm";
     const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-    console.log("[process] blob size:", audioBlob.size, "mimeType:", mimeType);
 
     if (audioBlob.size < 500) {
       setStatus(`❌ Blob too small (${audioBlob.size}B). Try again.`);
@@ -1225,7 +1196,6 @@ function App() {
     const durationSec = (audioData.length / 16000).toFixed(1);
     setIsProcessing(true);
     setStatus(`Transcribing ${durationSec}s...`);
-    console.log("[process] sending to whisper — samples:", audioData.length, "duration:", durationSec, "s");
 
     try {
       const result = await invoke<Transcription>("transcribe_audio", {
@@ -1233,7 +1203,6 @@ function App() {
         initialPrompt: buildInitialPrompt(),
         language: transcriptionLanguage,
       });
-      console.log("[process] whisper result:", JSON.stringify(result.text?.slice(0, 80)));
 
       if (!result.text) {
         console.warn("[process] ABORT: no speech detected");
@@ -1244,8 +1213,6 @@ function App() {
       let finalText = result.text;
 
       // AI editing via user's API key or Supabase Edge Function
-      console.log("[process] raw transcript:", JSON.stringify(finalText.slice(0, 80)),
-        "aiEditing:", aiEditingRef.current);
       if (aiEditingRef.current) {
         // Check if user has their own API key
         const hasUserApiKey = userApiKey && userApiKey.trim().length > 0;
@@ -1302,15 +1269,12 @@ function App() {
           if (saveErr) {
             console.warn("[notes] failed to save note:", saveErr);
           } else {
-            console.log("[notes] saved to database");
             setNotesRefreshKey((k) => k + 1);
           }
         });
       }
 
       if (shouldPaste) {
-        console.log("[paste] invoking paste_transcription — text length:", finalText.length,
-          "(NOT passing targetApp — CGEvent HID reaches frontmost app directly)");
         try {
           // Do NOT pass targetApp. CGEvent posted at HID level already reaches
           // the frontmost app. Passing targetApp triggers `open -a` which disrupts
@@ -1319,7 +1283,6 @@ function App() {
           const pasteResult = await invoke<string>("paste_transcription", {
             text: finalText,
           });
-          console.log("[paste] Rust returned:", pasteResult);
           if (pasteResult === "CLIPBOARD_ONLY") {
             setStatus("Copied! Press ⌘V to paste.");
           } else {
@@ -1330,7 +1293,6 @@ function App() {
           setStatus("Copied to clipboard. Press ⌘V to paste.");
         }
       } else {
-        console.log("[paste] skipped — shouldPaste is false");
         setStatus("Done! ✓");
       }
     } catch (e) {
@@ -1471,29 +1433,6 @@ function App() {
 
                 {activeTab === "settings" && (
                   <SettingsTab
-                    whisperModelPath={whisperModelPath}
-                    autoPaste={autoPaste}
-                    aiEditing={aiEditing}
-                    tonePreset={tonePreset}
-                    userApiKey={userApiKey}
-                    whisperLoaded={whisperLoaded}
-                    onModelPathChange={setWhisperModelPath}
-                    onLoadModel={loadWhisperModel}
-                    onAutoPasteChange={(value) => {
-                      autoPasteRef.current = value;
-                      setAutoPaste(value);
-                      saveSetting("autoPaste", value);
-                    }}
-                    onAiEditingChange={(value) => {
-                      aiEditingRef.current = value;
-                      setAiEditing(value);
-                      saveSetting("aiEditing", value);
-                    }}
-                    onTonePresetChange={(t) => {
-                      tonePresetRef.current = t;
-                      setTonePreset(t);
-                      saveSetting("tonePreset", t);
-                    }}
                     transcriptionLanguage={transcriptionLanguage}
                     onLanguageChange={(lang) => {
                       setTranscriptionLanguage(lang);
@@ -1503,21 +1442,20 @@ function App() {
                     onMicChange={(id) => {
                       setSelectedMicId(id);
                       saveSetting("selectedMicId", id);
-                      // Reset warm stream so next recording uses the new mic
+                      // Reset warm stream and re-warm with new mic
                       if (warmStreamRef.current) {
                         warmStreamRef.current.getTracks().forEach((t) => t.stop());
                         warmStreamRef.current = null;
                       }
+                      warmMicrophone();
                     }}
-                    onApiKeyChange={setUserApiKey}
-                    onSaveApiKey={() => saveSetting("userApiKey", userApiKey)}
                     onClearData={async () => {
                       try {
                         const store = await getStore();
                         await store.clear();
                         await store.save();
-                      } catch (e) {
-                        console.warn("[store] clear failed:", e);
+                      } catch {
+                        // clearing store failed — reload will reset state anyway
                       }
                       localStorage.clear();
                       window.location.reload();

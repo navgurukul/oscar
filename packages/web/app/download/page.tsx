@@ -8,13 +8,15 @@ import { Check } from "lucide-react";
 type Platform = "mac-intel" | "mac-silicon" | "windows" | "linux" | null;
 
 // Download configuration - GitHub Releases
-const GITHUB_RELEASE_BASE = "https://github.com/navgurukul/oscar/releases/download/v0.2.11";
+const GITHUB_REPO = process.env.NEXT_PUBLIC_GITHUB_REPO ?? "navgurukul/oscar";
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.2.11";
+const GITHUB_RELEASE_BASE = `https://github.com/${GITHUB_REPO}/releases/download/v${APP_VERSION}`;
 
 const DOWNLOAD_URLS: Record<Exclude<Platform, null>, string> = {
-  "mac-intel": `${GITHUB_RELEASE_BASE}/OSCAR_0.2.11_x64.dmg`,
-  "mac-silicon": `${GITHUB_RELEASE_BASE}/OSCAR_0.2.11_aarch64.dmg`,
-  windows: `${GITHUB_RELEASE_BASE}/OSCAR_0.2.11_x64-setup.exe`,
-  linux: `${GITHUB_RELEASE_BASE}/OSCAR_0.2.11_amd64.AppImage`,
+  "mac-intel": `${GITHUB_RELEASE_BASE}/OSCAR_${APP_VERSION}_x64.dmg`,
+  "mac-silicon": `${GITHUB_RELEASE_BASE}/OSCAR_${APP_VERSION}_aarch64.dmg`,
+  windows: `${GITHUB_RELEASE_BASE}/OSCAR_${APP_VERSION}_x64-setup.exe`,
+  linux: `${GITHUB_RELEASE_BASE}/OSCAR_${APP_VERSION}_amd64.AppImage`,
 };
 
 export default function DownloadPage() {
@@ -32,9 +34,7 @@ export default function DownloadPage() {
         // Check high-entropy UA hints (Chrome 90+) — the only reliable way to
         // distinguish Apple Silicon from Intel via the browser.
         try {
-          // @ts-expect-error navigator.userAgentData is not in standard TS lib types yet
           if (navigator.userAgentData?.getHighEntropyValues) {
-            // @ts-expect-error navigator.userAgentData is not in standard TS lib types yet
             const hints = await navigator.userAgentData.getHighEntropyValues(["architecture"]);
             if (hints.architecture === "arm") return "mac-silicon";
             if (hints.architecture === "x86") return "mac-intel";

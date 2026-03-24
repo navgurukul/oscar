@@ -42,7 +42,7 @@ function PostCallbackContent() {
     };
 
     sync();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: one-time OAuth session sync
   }, []);
 
   if (error) {

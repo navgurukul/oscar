@@ -6,7 +6,6 @@ import {
 import { BillingSection } from "./BillingSection";
 import { VocabularySection } from "./VocabularySection";
 
-type TonePreset = "none" | "professional" | "casual" | "friendly";
 type SettingsTabType = "billing" | "vocabulary" | "general" | "account" | "privacy";
 
 // All languages Whisper small supports, with flag + native name
@@ -50,21 +49,8 @@ const WEB_APP_URL = import.meta.env.VITE_WEB_APP_URL ?? "https://oscarai.app";
 interface MicDevice { deviceId: string; label: string; }
 
 interface SettingsTabProps {
-  whisperModelPath: string;
-  autoPaste: boolean;
-  aiEditing: boolean;
-  tonePreset: TonePreset;
-  userApiKey: string;
-  whisperLoaded: boolean;
   transcriptionLanguage: string;
   selectedMicId: string;
-  onModelPathChange: (path: string) => void;
-  onLoadModel: () => void;
-  onAutoPasteChange: (value: boolean) => void;
-  onAiEditingChange: (value: boolean) => void;
-  onTonePresetChange: (tone: TonePreset) => void;
-  onApiKeyChange: (key: string) => void;
-  onSaveApiKey: () => void;
   onLanguageChange: (lang: string) => void;
   onMicChange: (deviceId: string) => void;
   onClearData: () => void;
@@ -89,21 +75,8 @@ function getInitials(email?: string): string {
 }
 
 export function SettingsTab({
-  whisperModelPath: _whisperModelPath,
-  autoPaste: _autoPaste,
-  aiEditing: _aiEditing,
-  tonePreset: _tonePreset,
-  userApiKey: _userApiKey,
-  whisperLoaded: _whisperLoaded,
   transcriptionLanguage,
   selectedMicId,
-  onModelPathChange: _onModelPathChange,
-  onLoadModel: _onLoadModel,
-  onAutoPasteChange: _onAutoPasteChange,
-  onAiEditingChange: _onAiEditingChange,
-  onTonePresetChange: _onTonePresetChange,
-  onApiKeyChange: _onApiKeyChange,
-  onSaveApiKey: _onSaveApiKey,
   onLanguageChange,
   onMicChange,
   onClearData,
@@ -137,8 +110,6 @@ export function SettingsTab({
       l.name.toLowerCase().includes(langSearch.toLowerCase()) ||
       l.native.toLowerCase().includes(langSearch.toLowerCase()),
   );
-
-  void _tonePreset;
 
   return (
     <div className="st-layout">
