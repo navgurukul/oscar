@@ -753,18 +753,18 @@ function App() {
   const [_transcript, setTranscript] = useState("");
   const [localTranscripts, setLocalTranscripts] = useState<LocalTranscript[]>([]);
   const [notesRefreshKey, setNotesRefreshKey] = useState(0);
-  const [whisperLoaded, setWhisperLoaded] = useState(false);
+  const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
   const [_isProcessing, setIsProcessing] = useState(false);
   const [_hotkeyWarning, setHotkeyWarning] = useState("");
 
   // Settings panel
-  const [whisperModelPath, setWhisperModelPath] = useState("");
-  const [autoPaste, setAutoPaste] = useState(true);
+  const [_whisperModelPath, setWhisperModelPath] = useState("");
+  const [_autoPaste, setAutoPaste] = useState(true);
 
   // AI editing
-  const [aiEditing, setAiEditing] = useState(false);
-  const [tonePreset, setTonePreset] = useState<TonePreset>("none");
+  const [_aiEditing, setAiEditing] = useState(false);
+  const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
   // Transcription language ("auto" = whisper auto-detects)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
@@ -1064,18 +1064,6 @@ function App() {
     setStatus("Whisper model not found. Set the path in Settings.");
   };
 
-  const loadWhisperModel = async () => {
-    if (!whisperModelPath) return;
-    try {
-      setStatus("Loading Whisper model...");
-      await invoke("load_whisper_model", { path: whisperModelPath });
-      setWhisperLoadedAndRef(true);
-      setStatus("Ready! Hold Ctrl+Space anywhere to record.");
-    } catch (e) {
-      setStatus(`Failed to load model: ${e}`);
-    }
-  };
-
   // ── Dictionary helpers ─────────────────────────────────────────────────────
 
   const buildInitialPrompt = () => {
@@ -1144,7 +1132,7 @@ function App() {
 
   // ── Audio processing (shared by hotkey recording) ───────────────────────────
 
-  const processAudio = async (_stream: MediaStream, shouldPaste: boolean, targetApp?: string) => {
+  const processAudio = async (_stream: MediaStream, shouldPaste: boolean, _targetApp?: string) => {
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
 
@@ -1284,13 +1272,15 @@ function App() {
             text: finalText,
           });
           if (pasteResult === "CLIPBOARD_ONLY") {
-            setStatus("Copied! Press ⌘V to paste.");
+            const isMac = navigator.platform.toLowerCase().includes("mac");
+            setStatus(isMac ? "Copied! Press ⌘V to paste." : "Copied! Press Ctrl+V to paste.");
           } else {
             setStatus("Pasted! ✓");
           }
         } catch (pe) {
           console.error("[paste] FAILED:", pe);
-          setStatus("Copied to clipboard. Press ⌘V to paste.");
+          const isMac = navigator.platform.toLowerCase().includes("mac");
+          setStatus(isMac ? "Copied to clipboard. Press ⌘V to paste." : "Copied to clipboard. Press Ctrl+V to paste.");
         }
       } else {
         setStatus("Done! ✓");

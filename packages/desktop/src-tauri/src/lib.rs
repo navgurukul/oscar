@@ -658,6 +658,12 @@ fn create_pill_window(app: &tauri::AppHandle) {
                 }
             }
 
+            // On Windows/Linux, use always_on_top to float above other windows
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = w.set_always_on_top(true);
+            }
+
             log::info!("[pill] pre-created pill window (hidden)");
         }
         Err(e) => {
@@ -738,7 +744,9 @@ fn get_frontmost_app() -> Result<String, String> {
 
     #[cfg(not(target_os = "macos"))]
     {
-        Err("get_frontmost_app is only supported on macOS".to_string())
+        // On Windows/Linux, return empty string — paste still works because
+        // enigo simulates Ctrl+V on whatever window is currently focused.
+        Ok(String::new())
     }
 }
 
@@ -836,26 +844,14 @@ fn paste_transcription(text: String, target_app: Option<String>) -> Result<Strin
         ));
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        std::process::Command::new("powershell")
-            .args([
-                "-Command",
-                "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')",
-            ])
-            .output()
-            .map_err(|e| e.to_string())?;
-        return Ok("pasted".to_string());
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        std::process::Command::new("xdotool")
-            .args(["key", "ctrl+v"])
-            .output()
-            .map_err(|e| e.to_string())?;
+        use enigo::{Enigo, Key, KeyboardControllable};
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let mut enigo = Enigo::new();
+        enigo.key_down(Key::Control);
+        enigo.key_click(Key::Layout('v'));
+        enigo.key_up(Key::Control);
         return Ok("pasted".to_string());
     }
 }

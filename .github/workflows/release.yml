@@ -7,7 +7,6 @@ on:
 
 jobs:
   # Create the GitHub release once, before the parallel matrix builds start.
-  # Both build jobs receive the release_id via job outputs — no race condition.
   create-release:
     permissions:
       contents: write
@@ -23,7 +22,6 @@ jobs:
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
-          # Check if release already exists (e.g. re-run after partial failure)
           EXISTING=$(curl -sL \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             "https://api.github.com/repos/$REPO/releases/tags/$TAG")
@@ -52,16 +50,31 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # ── macOS ──
           - target: aarch64-apple-darwin
             label: macos-silicon
-            # Pin to baseline ARMv8-A so whisper.cpp/ggml skips i8mm/dotprod
-            # SIMD paths that clang rejects on GitHub Actions ARM runners.
+            os: macos-latest
             cflags: "-march=armv8-a"
+            bundles: "app,dmg"
           - target: x86_64-apple-darwin
             label: macos-intel
+            os: macos-latest
             cflags: ""
+            bundles: "app,dmg"
+          # ── Windows ──
+          - target: x86_64-pc-windows-msvc
+            label: windows-x64
+            os: windows-latest
+            cflags: ""
+            bundles: "nsis"
+          # ── Linux ──
+          - target: x86_64-unknown-linux-gnu
+            label: linux-x64
+            os: ubuntu-22.04
+            cflags: ""
+            bundles: "appimage,deb"
 
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
@@ -77,6 +90,21 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libasound2-dev \
+            libxdo-dev
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -111,30 +139,46 @@ jobs:
           VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
           VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
           VITE_WEB_APP_URL: "https://release-dev.d3p88n1t5nfeta.amplifyapp.com"
-        # app → .app.tar.gz (silent auto-update via createUpdaterArtifacts); dmg → installer
-        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles app,dmg
+        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
       - name: Sign bundles
+        if: runner.os != 'Windows'
         working-directory: packages/desktop
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TARGET: ${{ matrix.target }}
         run: |
-          shopt -s nullglob  # prevent unmatched globs from being treated as literals
+          shopt -s nullglob
           TAURI_BIN="../../node_modules/.bin/tauri"
 
-          # Tauri 2: reads TAURI_SIGNING_PRIVATE_KEY from env automatically
           for F in \
             src-tauri/target/$TARGET/release/bundle/macos/*.app.tar.gz \
-            src-tauri/target/$TARGET/release/bundle/dmg/*.dmg; do
+            src-tauri/target/$TARGET/release/bundle/dmg/*.dmg \
+            src-tauri/target/$TARGET/release/bundle/appimage/*.AppImage.tar.gz; do
             echo "Signing $(basename "$F")..."
             "$TAURI_BIN" signer sign "$F"
-            echo "✓ $(basename "$F").sig created"
+            echo "  $(basename "$F").sig created"
           done
 
           echo "All signed files:"
           find src-tauri/target/$TARGET/release/bundle -name "*.sig" | sort
+
+      - name: Sign bundles (Windows)
+        if: runner.os == 'Windows'
+        working-directory: packages/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TARGET: ${{ matrix.target }}
+        shell: pwsh
+        run: |
+          $TAURI_BIN = "../../node_modules/.bin/tauri"
+          $BASE = "src-tauri/target/$env:TARGET/release/bundle/nsis"
+          Get-ChildItem "$BASE/*.nsis.zip" -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "Signing $($_.Name)..."
+            & $TAURI_BIN signer sign $_.FullName
+          }
 
       - name: Upload release assets
         env:
@@ -142,12 +186,13 @@ jobs:
           RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
           TARGET: ${{ matrix.target }}
           REPO: ${{ github.repository }}
+          LABEL: ${{ matrix.label }}
+        shell: bash
         run: |
           UPLOAD_URL="https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets"
 
           upload_file() {
             local FILE="$1"
-            # Return 0 (not the test's exit code) so bash -e doesn't abort on missing files
             [ -f "$FILE" ] || return 0
             local NAME
             NAME=$(basename "$FILE")
@@ -160,35 +205,40 @@ jobs:
             echo ""
           }
 
-          shopt -s nullglob  # prevent unmatched globs becoming literal strings
+          shopt -s nullglob
           BASE="packages/desktop/src-tauri/target/$TARGET/release/bundle"
 
-          # Derive short arch label: aarch64-apple-darwin → aarch64, x86_64-apple-darwin → x86_64
-          ARCH="${TARGET//-apple-darwin/}"
+          # ── macOS ──
+          if [[ "$TARGET" == *apple-darwin* ]]; then
+            ARCH="${TARGET//-apple-darwin/}"
+            # Rename .app.tar.gz to include arch
+            for F in "$BASE/macos/"*.app.tar.gz; do
+              NEWNAME="${F%.app.tar.gz}_${ARCH}.app.tar.gz"
+              mv "$F" "$NEWNAME"
+              echo "Renamed to $(basename "$NEWNAME")"
+            done
+            for F in "$BASE/macos/"*.app.tar.gz.sig; do
+              NEWNAME="${F%.app.tar.gz.sig}_${ARCH}.app.tar.gz.sig"
+              mv "$F" "$NEWNAME"
+            done
+            for F in "$BASE"/macos/*_${ARCH}.app.tar.gz "$BASE"/macos/*_${ARCH}.app.tar.gz.sig; do upload_file "$F"; done
+            for F in "$BASE"/dmg/*.dmg "$BASE"/dmg/*.dmg.sig; do upload_file "$F"; done
+          fi
 
-          echo "Files in bundle/macos:"
-          ls "$BASE/macos/" 2>/dev/null || echo "(empty)"
-          echo "Files in bundle/dmg:"
-          ls "$BASE/dmg/" 2>/dev/null || echo "(empty)"
+          # ── Windows ──
+          if [[ "$TARGET" == *windows* ]]; then
+            for F in "$BASE"/nsis/*.exe; do upload_file "$F"; done
+            for F in "$BASE"/nsis/*.nsis.zip "$BASE"/nsis/*.nsis.zip.sig; do upload_file "$F"; done
+          fi
 
-          # Rename .app.tar.gz → include arch so both builds have unique filenames
-          # e.g. OSCAR.app.tar.gz → OSCAR_aarch64.app.tar.gz
-          for F in "$BASE/macos/"*.app.tar.gz; do
-            NEWNAME="${F%.app.tar.gz}_${ARCH}.app.tar.gz"
-            mv "$F" "$NEWNAME"
-            echo "Renamed to $(basename "$NEWNAME")"
-          done
-          for F in "$BASE/macos/"*.app.tar.gz.sig; do
-            NEWNAME="${F%.app.tar.gz.sig}_${ARCH}.app.tar.gz.sig"
-            mv "$F" "$NEWNAME"
-          done
+          # ── Linux ──
+          if [[ "$TARGET" == *linux* ]]; then
+            for F in "$BASE"/appimage/*.AppImage; do upload_file "$F"; done
+            for F in "$BASE"/appimage/*.AppImage.tar.gz "$BASE"/appimage/*.AppImage.tar.gz.sig; do upload_file "$F"; done
+            for F in "$BASE"/deb/*.deb; do upload_file "$F"; done
+          fi
 
-          # Upload .app.tar.gz + .sig (for auto-updater)
-          for F in "$BASE"/macos/*_${ARCH}.app.tar.gz "$BASE"/macos/*_${ARCH}.app.tar.gz.sig; do upload_file "$F"; done
-          # Upload .dmg + .sig (for download page)
-          for F in "$BASE"/dmg/*.dmg "$BASE"/dmg/*.dmg.sig; do upload_file "$F"; done
-
-  # After both builds, generate updates.json with real signatures
+  # After ALL builds, generate updates.json with real signatures for auto-updater
   updater:
     needs: release
     permissions:
@@ -224,25 +274,41 @@ jobs:
             [ -n "$URL" ] && curl -sL "$URL" || echo ""
           }
 
-          # Use .app.tar.gz for auto-updater (supports silent install on macOS)
+          # macOS updater artifacts (.app.tar.gz)
           ARM_URL=$(get_url "aarch64.*\.app\.tar\.gz$")
           X86_URL=$(get_url "x64.*\.app\.tar\.gz$|x86_64.*\.app\.tar\.gz$")
           ARM_SIG=$(get_sig "aarch64.*\.app\.tar\.gz\.sig$")
           X86_SIG=$(get_sig "x64.*\.app\.tar\.gz\.sig$|x86_64.*\.app\.tar\.gz\.sig$")
 
-          echo "ARM: $ARM_URL"
-          echo "X86: $X86_URL"
+          # Windows updater artifact (.nsis.zip)
+          WIN_URL=$(get_url "\.nsis\.zip$")
+          WIN_SIG=$(get_sig "\.nsis\.zip\.sig$")
+
+          # Linux updater artifact (.AppImage.tar.gz)
+          LINUX_URL=$(get_url "\.AppImage\.tar\.gz$")
+          LINUX_SIG=$(get_sig "\.AppImage\.tar\.gz\.sig$")
+
+          echo "macOS ARM:  $ARM_URL"
+          echo "macOS x86:  $X86_URL"
+          echo "Windows:    $WIN_URL"
+          echo "Linux:      $LINUX_URL"
 
           python3 -c "
           import json
+          platforms = {}
+          if '$ARM_URL':
+            platforms['darwin-aarch64'] = {'signature': r'''$ARM_SIG'''.strip(), 'url': '$ARM_URL'}
+          if '$X86_URL':
+            platforms['darwin-x86_64'] = {'signature': r'''$X86_SIG'''.strip(), 'url': '$X86_URL'}
+          if '$WIN_URL':
+            platforms['windows-x86_64'] = {'signature': r'''$WIN_SIG'''.strip(), 'url': '$WIN_URL'}
+          if '$LINUX_URL':
+            platforms['linux-x86_64'] = {'signature': r'''$LINUX_SIG'''.strip(), 'url': '$LINUX_URL'}
           print(json.dumps({
             'version': '$VERSION',
             'notes': 'Bug fixes and improvements.',
             'pub_date': '$PUB_DATE',
-            'platforms': {
-              'darwin-aarch64': {'signature': r'''$ARM_SIG'''.strip(), 'url': '$ARM_URL'},
-              'darwin-x86_64':  {'signature': r'''$X86_SIG'''.strip(), 'url': '$X86_URL'},
-            }
+            'platforms': platforms
           }, indent=2))
           " > updates.json
 
