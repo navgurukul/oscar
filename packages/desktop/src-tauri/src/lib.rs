@@ -1,3 +1,5 @@
+mod ai_model;
+
 use arboard::Clipboard;
 use serde::{Deserialize, Serialize};
 use std::sync::{
@@ -268,6 +270,11 @@ pub fn set_pending_deep_link(url: String) {
 
 struct AppState {
     whisper_context: Option<WhisperContext>,
+}
+
+struct AiState {
+    model: Option<ai_model::AiModel>,
+    is_loading: bool,
 }
 
 #[derive(Serialize, Deserialize)]

@@ -31,8 +31,15 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio = { version = "1", features = ["fs", "io-util"] }
 futures-util = "0.3"
 
+# AI inference (candle — pure Rust, Metal GPU on macOS)
+candle-core = { version = "0.8" }
+candle-transformers = "0.8"
+candle-nn = "0.8"
+tokenizers = { version = "0.20", default-features = false }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.24"
+candle-core = { version = "0.8", features = ["metal"] }
 
 
 [profile.release]
