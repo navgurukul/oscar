@@ -2778,7 +2778,7 @@ kbd {
 /* ── Content wrapper (Account / Privacy) ── */
 .st-content {
   padding: 32px 36px;
-  max-width: 620px;
+  width: 100%;
 }
 
 .st-content-title {
@@ -4406,40 +4406,6 @@ kbd {
   color: #334155;
 }
 
-/* App Icons */
-.home-app-icons {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 14px;
-  margin-bottom: 12px;
-}
-
-.home-app-icons svg {
-  width: 28px;
-  height: 28px;
-  color: #64748b;
-  opacity: 0.5;
-  transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease;
-}
-
-.home-app-icons svg:hover {
-  opacity: 1;
-  transform: scale(1.15);
-}
-
-/* Brand colors on hover */
-.home-app-icons svg:nth-child(1):hover { color: #E01E5A; }  /* Slack */
-.home-app-icons svg:nth-child(2):hover { color: #000000; }  /* Notion */
-.home-app-icons svg:nth-child(3):hover { color: #007ACC; }  /* VS Code */
-.home-app-icons svg:nth-child(4):hover { color: #4285F4; }  /* Google Docs */
-.home-app-icons svg:nth-child(5):hover { color: #4285F4; }  /* Chrome */
-.home-app-icons svg:nth-child(6):hover { color: #5865F2; }  /* Discord */
-.home-app-icons svg:nth-child(7):hover { color: #6264A7; }  /* Teams */
-.home-app-icons svg:nth-child(8):hover { color: #F24E1E; }  /* Figma */
-.home-app-icons svg:nth-child(9):hover { color: #181717; }  /* GitHub */
-.home-app-icons svg:nth-child(10):hover { color: #2D8CFF; } /* Zoom */
-.home-app-icons svg:nth-child(11):hover { color: #1DB954; } /* Spotify */
 
 /* Works Everywhere Text */
 .home-works-everywhere {
