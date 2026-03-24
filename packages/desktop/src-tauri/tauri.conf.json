@@ -33,8 +33,7 @@
       {
         "title": "OSCAR",
         "width": 900,
-        "height": 700,
-        "titleBarStyle": "Overlay"
+        "height": 700
       }
     ],
     "security": {

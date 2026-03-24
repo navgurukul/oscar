@@ -951,21 +951,34 @@ pub fn run() {
             delete_file,
         ])
         .setup(move |app| {
+            // Set overlay titlebar on macOS only (not supported on Linux/GTK)
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(main_window) = app.get_webview_window("main") {
+                    use tauri::TitleBarStyle;
+                    let _ = main_window.set_title_bar_style(TitleBarStyle::Overlay);
+                }
+            }
+
             let app_handle = app.handle().clone();
 
-            // Set up deep link handler
-            app.deep_link().on_open_url(move |event| {
-                for url in event.urls() {
-                    let url_str = url.to_string();
-                    log::info!("Deep link received: {}", url_str);
-                    
-                    // Store the deep link
-                    set_pending_deep_link(url_str.clone());
-                    
-                    // Emit to frontend
-                    let _ = app_handle.emit("deep-link", url_str);
-                }
-            });
+            // Set up deep link handler (may not be available on all Linux desktops)
+            if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        let url_str = url.to_string();
+                        log::info!("Deep link received: {}", url_str);
+
+                        // Store the deep link
+                        set_pending_deep_link(url_str.clone());
+
+                        // Emit to frontend
+                        let _ = app_handle.emit("deep-link", url_str);
+                    }
+                });
+            })) {
+                log::warn!("Deep link handler not available on this platform: {:?}", e);
+            }
 
             // Right Ctrl as hold-to-record hotkey (avoids conflicts on both macOS & Windows)
             let shortcut = Shortcut::new(
