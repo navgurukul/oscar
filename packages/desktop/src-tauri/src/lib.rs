@@ -897,6 +897,23 @@ fn request_accessibility_permission() -> bool {
     }
 }
 
+// ── File Utilities ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn check_file_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
+#[tauri::command]
+fn delete_file(path: String) -> Result<String, String> {
+    if std::path::Path::new(&path).exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("Failed to delete file: {}", e))?;
+        Ok(format!("Deleted {}", path))
+    } else {
+        Ok(format!("File not found: {}", path))
+    }
+}
+
 // ── App Entry Point ───────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -930,6 +947,8 @@ pub fn run() {
             get_pending_deep_link,
             check_accessibility_permission,
             request_accessibility_permission,
+            check_file_exists,
+            delete_file,
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();

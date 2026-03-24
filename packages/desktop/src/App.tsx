@@ -546,6 +546,7 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
 
 const MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
 const MODEL_PATH = ".oscar/models/ggml-small.bin";
+const OLD_MODEL_PATH = ".oscar/models/ggml-base.bin";
 
 interface DownloadProgress {
   downloaded: number;
@@ -582,6 +583,19 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
       
       unlisten();
       setDownloadStatus("Download complete!");
+      
+      // Clean up old model file if it exists (migration from base to small)
+      try {
+        const oldModelPath = `${home}/${OLD_MODEL_PATH}`;
+        const oldExists = await invoke<boolean>("check_file_exists", { path: oldModelPath });
+        if (oldExists) {
+          await invoke("delete_file", { path: oldModelPath });
+          console.log("Cleaned up old model file:", oldModelPath);
+        }
+      } catch (cleanupErr) {
+        console.warn("Failed to clean up old model:", cleanupErr);
+        // Non-fatal — don't block setup completion
+      }
       
       // Move to API key step
       setTimeout(() => {
@@ -945,6 +959,23 @@ function App() {
 
       // If setup is complete, load the Whisper model and pre-warm mic
       if (setupDone) {
+        // Check if the current model exists — if not, user needs to re-download
+        // (handles migration from ggml-base.bin to ggml-small.bin)
+        try {
+          const home = await homeDir();
+          const modelExists = await invoke<boolean>("check_file_exists", {
+            path: `${home}/${MODEL_PATH}`,
+          });
+          if (!modelExists) {
+            // Model file missing — reset setup so user re-downloads
+            await saveSetting("setupComplete", false);
+            setSetupComplete(false);
+            return; // SetupScreen will render
+          }
+        } catch (err) {
+          console.error("Model migration check failed:", err);
+          // On error, proceed normally — initWhisper will handle fallback
+        }
         warmMicrophone(); // pre-warm ASAP so first hotkey press doesn't steal focus
         initWhisper();
       }
@@ -1031,9 +1062,17 @@ function App() {
   };
 
   const initWhisper = async () => {
+    // Get home directory first so it's available in fallback section
+    let home: string;
+    try {
+      home = await homeDir();
+    } catch {
+      setStatus("Failed to get home directory.");
+      return;
+    }
+
     // First check the standard OSCAR model location
     try {
-      const home = await homeDir();
       const oscarPath = `${home}/.oscar/models/ggml-small.bin`;
       await invoke("load_whisper_model", { path: oscarPath });
       setWhisperLoadedAndRef(true);
@@ -1044,7 +1083,7 @@ function App() {
     } catch {
       // Fall back to other common locations
       const paths = [
-        "/Users/souvikdeb/.whisper/ggml-small.bin",
+        `${home}/.whisper/ggml-small.bin`,
         "./models/ggml-small.bin",
         "/usr/local/share/whisper/ggml-small.bin",
       ];
