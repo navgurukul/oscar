@@ -846,12 +846,16 @@ fn paste_transcription(text: String, target_app: Option<String>) -> Result<Strin
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
-        use enigo::{Enigo, Key, KeyboardControllable};
+        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
         std::thread::sleep(std::time::Duration::from_millis(150));
-        let mut enigo = Enigo::new();
-        enigo.key_down(Key::Control);
-        enigo.key_click(Key::Layout('v'));
-        enigo.key_up(Key::Control);
+        let mut enigo = Enigo::new(&Settings::default())
+            .map_err(|e| format!("enigo init failed: {e}"))?;
+        enigo.key(Key::Control, Direction::Press)
+            .map_err(|e| format!("ctrl down failed: {e}"))?;
+        enigo.key(Key::Unicode('v'), Direction::Click)
+            .map_err(|e| format!("v click failed: {e}"))?;
+        enigo.key(Key::Control, Direction::Release)
+            .map_err(|e| format!("ctrl up failed: {e}"))?;
         return Ok("pasted".to_string());
     }
 }

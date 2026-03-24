@@ -1,6 +1,6 @@
 [package]
 name = "oscar"
-version = "0.2.11"
+version = "0.2.12"
 description = "Voice to Text Desktop App"
 authors = ["you"]
 edition = "2021"
@@ -26,7 +26,7 @@ whisper-rs = "0.15"
 log = "0.4"
 env_logger = "0.11"
 arboard = "3"
-enigo = "0.2"
+enigo = "0.3"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio = { version = "1", features = ["fs", "io-util"] }
 futures-util = "0.3"
