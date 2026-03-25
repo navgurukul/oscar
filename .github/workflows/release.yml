@@ -5,8 +5,8 @@ on:
     tags:
       - 'v*'
 
-env:
-  VERSION: ${{ github.ref_name # v prefix }}  # e.g., v0.2.13 -> 0.2.13
+# Version is extracted from git tag in inject-version job
+# e.g., v0.2.13 -> 0.2.13
 
 jobs:
   # Create the GitHub release once, before the parallel matrix builds start.
@@ -25,7 +25,8 @@ jobs:
             exit 1
           fi
           echo "Tag format valid: ${{ github.ref_name }}"
-          echo "Version: ${VERSION}"
+          VERSION="${{ github.ref_name }}"
+          echo "Version: ${VERSION#v}"
 
       - name: Create GitHub Release
         id: create
