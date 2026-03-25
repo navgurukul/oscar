@@ -1,7 +1,7 @@
 //! Local AI inference — quantized Phi-3.5-mini via candle.
 //! Metal GPU on Apple Silicon/macOS, CPU elsewhere.
 
-use candle_core::{quantized::gguf_file, Device, Tensor};
+use candle_core::{quantized::gguf_file, Device, Tensor, IndexOp};
 use candle_transformers::{generation::LogitsProcessor, models::quantized_phi3::ModelWeights};
 use tokenizers::Tokenizer;
 
@@ -27,7 +27,7 @@ impl AiModel {
             .map_err(|e| format!("cannot open model: {e}"))?;
         let content = gguf_file::Content::read(&mut f)
             .map_err(|e| format!("cannot parse GGUF: {e}"))?;
-        let model = ModelWeights::from_gguf(content, &mut f, &device)
+        let model = ModelWeights::from_gguf(false, content, &mut f, &device)
             .map_err(|e| format!("cannot load weights: {e}"))?;
 
         let tokenizer = Tokenizer::from_file(tokenizer_path)
@@ -67,7 +67,7 @@ impl AiModel {
             .map_err(|e| format!("prefill error: {e}"))?;
         let logits = logits
             .i((.., prompt_len - 1, ..))
-            .and_then(|t| t.squeeze(0))
+            .and_then(|t: Tensor| t.squeeze(0))
             .map_err(|e| format!("logits slice error: {e}"))?;
 
         let mut lp = LogitsProcessor::new(42, Some(0.7), None);
