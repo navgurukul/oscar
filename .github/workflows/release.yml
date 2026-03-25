@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+env:
+  VERSION: ${{ github.ref_name # v prefix }}  # e.g., v0.2.13 -> 0.2.13
+
 jobs:
   # Create the GitHub release once, before the parallel matrix builds start.
   create-release:
@@ -15,6 +18,15 @@ jobs:
       release_id: ${{ steps.create.outputs.release_id }}
 
     steps:
+      - name: Validate tag format
+        run: |
+          if ! echo '${{ github.ref_name }}' | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Tag must be in format vMAJOR.MINOR.PATCH (e.g., v0.2.13)"
+            exit 1
+          fi
+          echo "Tag format valid: ${{ github.ref_name }}"
+          echo "Version: ${VERSION}"
+
       - name: Create GitHub Release
         id: create
         env:
@@ -41,8 +53,111 @@ jobs:
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
           echo "Release ID: $RELEASE_ID"
 
-  release:
+  # Inject version into all config files before any build starts
+  inject-version:
     needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG='${{ github.ref_name }}'
+          VERSION="${TAG#v}"  # Remove 'v' prefix
+          
+          # Validate version format
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Invalid version format '$VERSION'. Expected MAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          
+          echo "Injecting version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Inject version into root package.json
+        run: |
+          VERSION='${{ steps.version.outputs.version }}'
+          FILE="package.json"
+          
+          if ! grep -q '"version":' "$FILE"; then
+            echo "Error: No version field found in $FILE"
+            exit 1
+          fi
+          
+          # Use jq if available, otherwise sed
+          if command -v jq &> /dev/null; then
+            jq --arg v "$VERSION" '.version = $v' "$FILE" > "${FILE}.tmp" \
+              && mv "${FILE}.tmp" "$FILE" \
+              && echo "Updated $FILE with jq"
+          else
+            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" "$FILE"
+            echo "Updated $FILE with sed"
+          fi
+          
+          grep '"version"' "$FILE"
+
+      - name: Inject version into desktop package.json
+        run: |
+          VERSION='${{ steps.version.outputs.version }}'
+          FILE="packages/desktop/package.json"
+          
+          if ! grep -q '"version":' "$FILE"; then
+            echo "Error: No version field found in $FILE"
+            exit 1
+          fi
+          
+          if command -v jq &> /dev/null; then
+            jq --arg v "$VERSION" '.version = $v' "$FILE" > "${FILE}.tmp" \
+              && mv "${FILE}.tmp" "$FILE" \
+              && echo "Updated $FILE with jq"
+          else
+            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" "$FILE"
+            echo "Updated $FILE with sed"
+          fi
+          
+          grep '"version"' "$FILE"
+
+      - name: Inject version into tauri.conf.json
+        run: |
+          VERSION='${{ steps.version.outputs.version }}'
+          FILE="packages/desktop/src-tauri/tauri.conf.json"
+          
+          if ! grep -q '"version":' "$FILE"; then
+            echo "Error: No version field found in $FILE"
+            exit 1
+          fi
+          
+          if command -v jq &> /dev/null; then
+            jq --arg v "$VERSION" '.version = $v' "$FILE" > "${FILE}.tmp" \
+              && mv "${FILE}.tmp" "$FILE" \
+              && echo "Updated $FILE with jq"
+          else
+            # Handle JSON with potential surrounding whitespace
+            sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$VERSION\"/" "$FILE"
+            echo "Updated $FILE with sed"
+          fi
+          
+          grep '"version"' "$FILE"
+
+      - name: Commit version updates
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add -A
+          
+          if git diff --cached --quiet; then
+            echo "No changes to commit (version already matches)"
+          else
+            git commit -m "chore: Set version to ${{ steps.version.outputs.version }} from tag"
+            git push origin ${{ github.ref_name }}
+            echo "Committed and pushed version update"
+          fi
+
+  release:
+    needs: [create-release, inject-version]
     permissions:
       contents: write
 
@@ -79,29 +194,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Extract version from tag
-        id: version
-        run: |
-          VERSION="${TAG#v}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building version: $VERSION"
-
-      - name: Update version in all config files
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          
-          # Update root package.json
-          sed -i 's/"version": "[^"]*"/"version": "'$VERSION'"/' package.json
-          
-          # Update desktop/package.json
-          sed -i 's/"version": "[^"]*"/"version": "'$VERSION'"/' packages/desktop/package.json
-          
-          # Update tauri.conf.json
-          sed -i 's/"version": "[^"]*"/"version": "'$VERSION'"/' packages/desktop/src-tauri/tauri.conf.json
-          
-          echo "Updated all version references to $VERSION"
-          grep '"version"' package.json packages/desktop/package.json packages/desktop/src-tauri/tauri.conf.json
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
