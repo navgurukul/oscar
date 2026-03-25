@@ -4,9 +4,7 @@
   "private": true,
   "scripts": {
     "dev:web": "cd packages/web && pnpm dev",
-    "dev:desktop": "cd packages/desktop && pnpm dev",
-    "sync-version": "node scripts/sync-version.js",
-    "release": "npm run sync-version && cd packages/desktop && npm run tauri build"
+    "dev:desktop": "cd packages/desktop && pnpm dev"
   },
   "packageManager": "pnpm@9.0.0"
 }

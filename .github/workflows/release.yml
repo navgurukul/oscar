@@ -80,6 +80,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version: $VERSION"
+
+      - name: Update version in all config files
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Update root package.json
+          sed -i 's/"version": "[^"]*"/"version": "'$VERSION'"/' package.json
+          
+          # Update desktop/package.json
+          sed -i 's/"version": "[^"]*"/"version": "'$VERSION'"/' packages/desktop/package.json
+          
+          # Update tauri.conf.json
+          sed -i 's/"version": "[^"]*"/"version": "'$VERSION'"/' packages/desktop/src-tauri/tauri.conf.json
+          
+          echo "Updated all version references to $VERSION"
+          grep '"version"' package.json packages/desktop/package.json packages/desktop/src-tauri/tauri.conf.json
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
