@@ -300,7 +300,7 @@ export const aiService = {
         }
 
         // Map common server errors to user-friendly messages
-        let friendlyError = ERROR_MESSAGES.API_ERROR;
+        let friendlyError: string = ERROR_MESSAGES.API_ERROR;
         if (response.status === 401) {
           friendlyError = "Please sign in to use translation.";
         } else if (response.status === 429) {
