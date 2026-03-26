@@ -80,20 +80,20 @@ export const API_CONFIG = {
   TRANSLATE_ENDPOINT: "/api/deepseek/translate",
 
   // External APIs
-  DEEPSEEK_API_URL: "https://api.deepseek.com/v1/chat/completions",
+  DEEPSEEK_API_URL: "https://api.deepseek.com/chat/completions",
 
   // DeepSeek model configuration
-  DEEPSEEK_MODEL: "deepseek-chat",
+  DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || "deepseek-chat",
 
   // Format API settings
-  FORMAT_TEMPERATURE: 0.1,
-  FORMAT_TOP_P: 0.9,
+  FORMAT_TEMPERATURE: 0.0,
+  FORMAT_TOP_P: 0.7,
   FORMAT_MAX_TOKENS: 8192,
 
   // Title API settings
   TITLE_TEMPERATURE: 0.3,
-  TITLE_TOP_P: 0.9,
-  TITLE_MAX_TOKENS: 64,
+  TITLE_TOP_P: 0.7,
+  TITLE_MAX_TOKENS: 32,
   TITLE_MAX_LENGTH: 60,
 } as const;
 

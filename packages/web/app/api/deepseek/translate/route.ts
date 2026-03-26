@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   );
   if (rateLimitResult) return rateLimitResult;
 
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
       { error: ERROR_MESSAGES.SERVER_MISSING_API_KEY },
@@ -112,14 +112,14 @@ export async function POST(req: NextRequest) {
     // SECURITY: Wrap user input in explicit delimiters
     const secureUserContent = wrapUserInput(text, 'text');
     
-    const response = await fetchWithTimeout(API_CONFIG.DEEPSEEK_API_URL, {
+    const response = await fetchWithTimeout(API_CONFIG.GROQ_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: API_CONFIG.DEEPSEEK_MODEL,
+        model: API_CONFIG.GROQ_MODEL_FAST,
         messages: [
           { role: "system", content: SYSTEM_PROMPTS.TRANSLATE },
           {
@@ -127,9 +127,8 @@ export async function POST(req: NextRequest) {
             content: `TARGET LANGUAGE: ${languageLabel}\n\n${secureUserContent}`,
           },
         ],
-        temperature: 0.2,
-        top_p: 0.9,
-        max_tokens: 8192,
+        temperature: API_CONFIG.TRANSLATE_TEMPERATURE,
+        max_tokens: API_CONFIG.TRANSLATE_MAX_TOKENS,
         stream: false,
       }),
     });

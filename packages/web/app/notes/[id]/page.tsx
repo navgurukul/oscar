@@ -7,6 +7,7 @@ import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
 import { storageService } from "@/lib/services/storage.service";
 import { aiService } from "@/lib/services/ai.service";
+import { ROUTES } from "@/lib/constants";
 import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
@@ -111,9 +112,12 @@ export default function NoteDetailPage({
         if (controller.signal.aborted) return;
         toast({
           title: "Translation failed",
-          description: "Could not translate right now.",
+          description: res.error || "Could not translate right now.",
           variant: "destructive",
         });
+        if (res.error && res.error.toLowerCase().includes("sign in")) {
+          router.push(ROUTES.AUTH);
+        }
         return;
       }
 

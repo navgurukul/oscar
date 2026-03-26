@@ -299,11 +299,17 @@ export default function ResultsPage() {
         if (controller.signal.aborted) {
           return;
         }
+        const combinedError =
+          (("error" in noteRes && noteRes.error) || ("error" in rawRes && rawRes.error) || "Could not translate right now. Please try again.");
         toast({
           title: "Translation failed",
-          description: "Could not translate right now. Please try again.",
+          description: combinedError,
           variant: "destructive",
         });
+        const errMsg = (typeof combinedError === "string" ? combinedError : "").toLowerCase();
+        if (errMsg.includes("sign in")) {
+          router.push(ROUTES.AUTH);
+        }
         return;
       }
 

@@ -1,5 +1,3 @@
-// AI service for text formatting and title generation
-
 import type {
   FormattingResult,
   TitleGenerationResult,
@@ -11,18 +9,37 @@ import type {
 import { API_CONFIG, ERROR_MESSAGES, UI_STRINGS } from "../constants";
 import { localFormatterService } from "./localFormatter.service";
 
-/**
- * Retry configuration for AI API calls
- */
 const RETRY_CONFIG = {
   MAX_RETRIES: 2,
   INITIAL_DELAY_MS: 1000,
-  TIMEOUT_MS: 60000, // Increased to 60s for longer generation
+  TIMEOUT_MS: 15000,      // ✅ was 60s — matches backend 12s + small buffer
+  TITLE_TIMEOUT_MS: 8000, // ✅ titles are tiny, fail fast
 } as const;
 
-/**
- * Helper to create fetch request with timeout and optional abort signal
- */
+// ✅ Reusable stream reader — live chunks, UI updates as text arrives
+async function readStream(
+  response: Response,
+  onChunk: (text: string) => void
+): Promise<string> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let fullText = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      fullText += chunk;
+      onChunk(fullText); // ✅ UI update har chunk pe
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return fullText.trim();
+}
+
 async function fetchWithTimeout(
   url: string,
   options: RequestInit,
@@ -32,11 +49,7 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  // If external signal is provided, abort when it aborts
-  const handleExternalAbort = () => {
-    controller.abort();
-  };
-
+  const handleExternalAbort = () => controller.abort();
   if (externalSignal) {
     if (externalSignal.aborted) {
       clearTimeout(timeoutId);
@@ -46,37 +59,21 @@ async function fetchWithTimeout(
   }
 
   try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
+    const response = await fetch(url, { ...options, signal: controller.signal });
     clearTimeout(timeoutId);
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
-    if (externalSignal) {
-      externalSignal.removeEventListener("abort", handleExternalAbort);
-    }
-    if (error instanceof Error) {
-      if (error.name === "AbortError") {
-        // Check if it was external abort or timeout
-        if (externalSignal?.aborted) {
-          throw new Error(ERROR_MESSAGES.FORMATTING_CANCELLED);
-        }
-        throw new Error("Request timed out. Please try again.");
-      }
+    if (error instanceof Error && error.name === "AbortError") {
+      if (externalSignal?.aborted) throw new Error(ERROR_MESSAGES.FORMATTING_CANCELLED);
+      throw new Error("Request timed out. Please try again.");
     }
     throw error;
   } finally {
-    if (externalSignal) {
-      externalSignal.removeEventListener("abort", handleExternalAbort);
-    }
+    externalSignal?.removeEventListener("abort", handleExternalAbort);
   }
 }
 
-/**
- * Retry helper with exponential backoff
- */
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   maxRetries: number = RETRY_CONFIG.MAX_RETRIES,
@@ -86,206 +83,158 @@ async function retryWithBackoff<T>(
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    // Check for cancellation before each attempt
-    if (signal?.aborted) {
-      throw new Error(ERROR_MESSAGES.FORMATTING_CANCELLED);
-    }
-
+    if (signal?.aborted) throw new Error(ERROR_MESSAGES.FORMATTING_CANCELLED);
     try {
       return await fn();
     } catch (error: unknown) {
       lastError = error as Error;
-
-      // Don't retry on cancellation
-      if (lastError.message === ERROR_MESSAGES.FORMATTING_CANCELLED) {
-        throw lastError;
-      }
-
-      // Don't retry on certain errors
+      if (lastError.message === ERROR_MESSAGES.FORMATTING_CANCELLED) throw lastError;
       if (
         lastError.message?.includes("400") ||
         lastError.message?.includes("401") ||
         lastError.message?.includes("403")
-      ) {
-        throw lastError;
-      }
+      ) throw lastError;
 
       if (attempt < maxRetries) {
         const delay = initialDelay * Math.pow(2, attempt);
-        console.log(
-          `Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms`
-        );
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
-
   throw lastError;
 }
 
 export const aiService = {
-  /**
-   * Format raw transcript text using AI
-   * Falls back to local formatting if AI fails
-   * @param rawText - Raw transcript from speech recognition
-   * @param signal - Optional AbortSignal for cancellation
-   * @returns Formatted text result
-   */
+
+  // ✅ onChunk callback — UI live update ke liye
   async formatText(
     rawText: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onChunk?: (text: string) => void  // ← NEW
   ): Promise<FormattingResult> {
-    if (!rawText || !rawText.trim()) {
-      return {
-        success: false,
-        error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_FORMATTING,
-      };
+    if (!rawText?.trim()) {
+      return { success: false, error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_FORMATTING };
     }
-
-    // Check for cancellation early
     if (signal?.aborted) {
-      return {
-        success: false,
-        error: ERROR_MESSAGES.FORMATTING_CANCELLED,
-      };
+      return { success: false, error: ERROR_MESSAGES.FORMATTING_CANCELLED };
     }
 
     try {
-      return await retryWithBackoff(
-        async () => {
-          const response = await fetchWithTimeout(
-            API_CONFIG.FORMAT_ENDPOINT,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ rawText }),
-            },
-            RETRY_CONFIG.TIMEOUT_MS,
-            signal
-          );
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`Format API error: ${response.status}`, errorText);
-            throw new Error(`Formatting failed: ${response.status}`);
-          }
-
-          const data = (await response.json()) as DeepseekFormatResponse;
-          const formattedText = data?.formattedText?.trim();
-
-          if (!formattedText) {
-            throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING);
-          }
-
-          // Remove markdown code blocks if present
-          const cleanedText = formattedText
-            .replace(/^```[\w]*\n/, "")
-            .replace(/\n```$/, "")
-            .trim();
-
-          return {
-            success: true,
-            formattedText: cleanedText,
-          };
+      // ✅ No retry for format — slow network pe retry = 2x wait
+      const response = await fetchWithTimeout(
+        API_CONFIG.FORMAT_ENDPOINT,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rawText }),
         },
-        RETRY_CONFIG.MAX_RETRIES,
-        RETRY_CONFIG.INITIAL_DELAY_MS,
+        RETRY_CONFIG.TIMEOUT_MS,
         signal
       );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Format API error: ${response.status}`, errorText);
+        throw new Error(`Formatting failed: ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+
+      let formattedText: string;
+
+      if (contentType.includes("application/json")) {
+        // Legacy JSON path
+        const data = (await response.json()) as DeepseekFormatResponse;
+        formattedText = data?.formattedText?.trim() || "";
+      } else {
+        // ✅ Streaming path — live UI updates
+        formattedText = await readStream(response, onChunk ?? (() => {}));
+      }
+
+      if (!formattedText) {
+        throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING);
+      }
+
+      // ✅ Cleanup (safety net — backend already strips these)
+      const cleanedText = formattedText
+        .replace(/^```[\w]*\n/, "")
+        .replace(/\n```$/, "")
+        .trim();
+
+      return { success: true, formattedText: cleanedText };
+
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Format text error:", error);
 
-      // If cancelled, don't fallback - just return the cancellation error
       if (err?.message === ERROR_MESSAGES.FORMATTING_CANCELLED) {
-        return {
-          success: false,
-          error: ERROR_MESSAGES.FORMATTING_CANCELLED,
-        };
+        return { success: false, error: ERROR_MESSAGES.FORMATTING_CANCELLED };
       }
 
-      // Fallback to local formatting
+      // Fallback to local formatter
       console.log("AI formatting failed, using local fallback");
       const localFormatted = localFormatterService.formatTextLocally(rawText);
-
       if (localFormatted) {
-        return {
-          success: true,
-          formattedText: localFormatted,
-          fallback: true,
-        };
+        return { success: true, formattedText: localFormatted, fallback: true };
       }
 
-      return {
-        success: false,
-        error: err?.message || "Failed to format text",
-      };
+      return { success: false, error: err?.message || "Failed to format text" };
     }
   },
 
-  /**
-   * Format a note into a Gmail-friendly formal email body via AI
-   * @param rawText - base content to convert into email body
-   * @param title - optional title for contextual intro
-   * @param signal - optional AbortSignal for cancellation
-   */
   async formatEmailText(
     rawText: string,
     title?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onChunk?: (text: string) => void  // ← NEW
   ): Promise<FormattingResult> {
-    if (!rawText || !rawText.trim()) {
-      return {
-        success: false,
-        error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_FORMATTING,
-      };
+    if (!rawText?.trim()) {
+      return { success: false, error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_FORMATTING };
     }
-
     if (signal?.aborted) {
-      return {
-        success: false,
-        error: ERROR_MESSAGES.FORMATTING_CANCELLED,
-      };
+      return { success: false, error: ERROR_MESSAGES.FORMATTING_CANCELLED };
     }
 
     try {
-      return await retryWithBackoff(
-        async () => {
-          const response = await fetchWithTimeout(
-            API_CONFIG.FORMAT_EMAIL_ENDPOINT,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ rawText, title }),
-            },
-            RETRY_CONFIG.TIMEOUT_MS,
-            signal
-          );
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`Email Format API error: ${response.status}`, errorText);
-            throw new Error(`Formatting failed: ${response.status}`);
-          }
-
-          const data = (await response.json()) as DeepseekFormatResponse;
-          const formattedText = data?.formattedText?.trim();
-
-          if (!formattedText) {
-            throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING);
-          }
-
-          const cleanedText = formattedText
-            .replace(/^```[\w]*\n/, "")
-            .replace(/\n```$/, "")
-            .trim();
-
-          return { success: true, formattedText: cleanedText };
+      const response = await fetchWithTimeout(
+        API_CONFIG.FORMAT_EMAIL_ENDPOINT,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rawText, title }),
         },
-        RETRY_CONFIG.MAX_RETRIES,
-        RETRY_CONFIG.INITIAL_DELAY_MS,
+        RETRY_CONFIG.TIMEOUT_MS,
         signal
       );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Email Format API error: ${response.status}`, errorText);
+        throw new Error(`Formatting failed: ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      let formattedText: string;
+
+      if (contentType.includes("application/json")) {
+        const data = (await response.json()) as DeepseekFormatResponse;
+        formattedText = data?.formattedText?.trim() || "";
+      } else {
+        // ✅ Streaming path
+        formattedText = await readStream(response, onChunk ?? (() => {}));
+      }
+
+      if (!formattedText) {
+        throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING);
+      }
+
+      const cleanedText = formattedText
+        .replace(/^```[\w]*\n/, "")
+        .replace(/\n```$/, "")
+        .trim();
+
+      return { success: true, formattedText: cleanedText };
+
     } catch (error: unknown) {
       const err = error as Error;
       console.error("Format email text error:", error);
@@ -294,98 +243,106 @@ export const aiService = {
         return { success: false, error: ERROR_MESSAGES.FORMATTING_CANCELLED };
       }
 
-      // Fallback: use local formatter as plain formatting and wrap minimally
-      console.log("AI email formatting failed, using local fallback");
       const localFormatted = localFormatterService.formatTextLocally(rawText);
       if (localFormatted) {
-        const fallbackBody = `${localFormatted}`;
-        return { success: true, formattedText: fallbackBody, fallback: true };
+        return { success: true, formattedText: localFormatted, fallback: true };
       }
 
       return { success: false, error: err?.message || "Failed to format text" };
     }
   },
 
-  /**
-   * Translate text into a target language (en/hi)
-   */
+  // ✅ Both format + email parallel — onChunk dono ke liye
+  async formatTextAndEmail(
+    rawText: string,
+    title?: string,
+    signal?: AbortSignal,
+    onFormatChunk?: (text: string) => void,  // ← NEW
+    onEmailChunk?: (text: string) => void    // ← NEW
+  ): Promise<{ formatting: FormattingResult; email: FormattingResult }> {
+    const [formatting, email] = await Promise.all([
+      this.formatText(rawText, signal, onFormatChunk),
+      this.formatEmailText(rawText, title, signal, onEmailChunk),
+    ]);
+    return { formatting, email };
+  },
+
   async translateText(
     text: string,
     targetLanguage: "en" | "hi",
     signal?: AbortSignal
   ): Promise<{ success: boolean; translatedText?: string; error?: string }> {
-    if (!text || !text.trim()) {
-      return {
-        success: false,
-        error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_TRANSLATION,
-      };
+    if (!text?.trim()) {
+      return { success: false, error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_TRANSLATION };
     }
 
     try {
-      return await retryWithBackoff(
-        async () => {
-          const response = await fetchWithTimeout(
-            API_CONFIG.TRANSLATE_ENDPOINT,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ text, targetLanguage }),
-            },
-            RETRY_CONFIG.TIMEOUT_MS,
-            signal
-          );
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`Translate API error: ${response.status}`, errorText);
-            throw new Error(`Translation failed: ${response.status}`);
-          }
-
-          const data = (await response.json()) as { translatedText?: string };
-          const translatedText = data?.translatedText?.trim();
-
-          if (!translatedText) {
-            throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_TRANSLATION);
-          }
-
-          return { success: true, translatedText };
+      const response = await fetchWithTimeout(
+        API_CONFIG.TRANSLATE_ENDPOINT,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, targetLanguage }),
         },
-        /* maxRetries */ 0,
-        RETRY_CONFIG.INITIAL_DELAY_MS,
+        RETRY_CONFIG.TIMEOUT_MS, // ✅ was 60s
         signal
       );
+
+      if (!response.ok) {
+        let serverError: string | undefined;
+        let serverDetails: string | undefined;
+        try {
+          const errJson = await response.json();
+          serverError = errJson?.error;
+          serverDetails = errJson?.details;
+        } catch {
+          serverError = await response.text();
+        }
+
+        // Map common server errors to user-friendly messages
+        let friendlyError = ERROR_MESSAGES.API_ERROR;
+        if (response.status === 401) {
+          friendlyError = "Please sign in to use translation.";
+        } else if (response.status === 429) {
+          friendlyError = "Too many translation requests. Please wait a moment.";
+        } else if (response.status === 500) {
+          if (serverError?.includes("Server missing DEEPSEEK_API_KEY")) {
+            friendlyError = "Server configuration issue: translation API key is missing.";
+          } else {
+            friendlyError = ERROR_MESSAGES.DEEPSEEK_REQUEST_FAILED;
+          }
+        } else if (response.status >= 400 && response.status < 500) {
+          friendlyError = serverError || ERROR_MESSAGES.API_ERROR;
+        }
+
+        console.error("Translate API error:", response.status, serverError || serverDetails);
+        return { success: false, error: friendlyError };
+      }
+
+      const data = (await response.json()) as { translatedText?: string };
+      const translatedText = data?.translatedText?.trim();
+
+      if (!translatedText) throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_TRANSLATION);
+
+      return { success: true, translatedText };
+
     } catch (error) {
       console.error("Translation error:", error);
-      return {
-        success: false,
-        error: ERROR_MESSAGES.API_ERROR,
-      };
+      const err = error as Error;
+      if (err?.message?.includes("timed out")) {
+        return { success: false, error: "Translation timed out. Please try again." };
+      }
+      return { success: false, error: err?.message || ERROR_MESSAGES.API_ERROR };
     }
   },
 
-  /**
-   * Generate a concise title for the note
-   * @param text - Formatted or raw text content
-   * @param signal - Optional AbortSignal for cancellation
-   * @returns Title generation result
-   */
   async generateTitle(
     text: string,
     signal?: AbortSignal
   ): Promise<TitleGenerationResult> {
     const source = (text || "").trim();
-
-    if (!source) {
-      return {
-        success: false,
-        error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_TITLE,
-      };
-    }
-
-    // Check for cancellation early
-    if (signal?.aborted) {
-      return this.generateFallbackTitle(source);
-    }
+    if (!source) return { success: false, error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_TITLE };
+    if (signal?.aborted) return this.generateFallbackTitle(source);
 
     try {
       return await retryWithBackoff(
@@ -397,46 +354,27 @@ export const aiService = {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ text: source }),
             },
-            RETRY_CONFIG.TIMEOUT_MS,
+            RETRY_CONFIG.TITLE_TIMEOUT_MS, // ✅ 8s — titles are tiny
             signal
           );
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`Title API error: ${response.status}`, errorText);
-            // Fallback to heuristic title on API error
-            return this.generateFallbackTitle(source);
-          }
+          if (!response.ok) return this.generateFallbackTitle(source);
 
           const data = (await response.json()) as DeepseekTitleResponse;
           const title = data?.title?.trim();
+          if (!title) return this.generateFallbackTitle(source);
 
-          if (!title) {
-            return this.generateFallbackTitle(source);
-          }
-
-          const sanitized = this.sanitizeTitle(title);
-
-          return {
-            success: true,
-            title: sanitized,
-          };
+          return { success: true, title: this.sanitizeTitle(title) };
         },
         RETRY_CONFIG.MAX_RETRIES,
         RETRY_CONFIG.INITIAL_DELAY_MS,
         signal
       );
-    } catch (error: unknown) {
-      console.error("Title generation error:", error);
+    } catch {
       return this.generateFallbackTitle(source);
     }
   },
 
-  /**
-   * Generate fallback title using heuristic approach
-   * @param text - Text content
-   * @returns Heuristic title
-   */
   generateFallbackTitle(text: string): TitleGenerationResult {
     try {
       const cleaned = text.replace(/\s+/g, " ").trim();
@@ -446,27 +384,15 @@ export const aiService = {
           ? firstSentence.slice(0, 57).trim() + "…"
           : firstSentence;
 
-      const title = this.sanitizeTitle(
-        truncated || cleaned.slice(0, API_CONFIG.TITLE_MAX_LENGTH)
-      );
-
       return {
         success: true,
-        title,
+        title: this.sanitizeTitle(truncated || cleaned.slice(0, API_CONFIG.TITLE_MAX_LENGTH)),
       };
     } catch {
-      return {
-        success: true,
-        title: UI_STRINGS.UNTITLED_NOTE,
-      };
+      return { success: true, title: UI_STRINGS.UNTITLED_NOTE };
     }
   },
 
-  /**
-   * Sanitize title by removing unwanted characters
-   * @param title - Raw title
-   * @returns Cleaned title
-   */
   sanitizeTitle(title: string): string {
     return (title || "")
       .replace(/[\r\n]+/g, " ")

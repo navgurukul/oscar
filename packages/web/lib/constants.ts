@@ -72,29 +72,35 @@ export const ERROR_TIPS = {
 /**
  * API configuration and endpoints
  */
+// lib/constants.ts — API_CONFIG mein yeh badlo
 export const API_CONFIG = {
-  // Internal API routes
+  // Internal API routes — same rehenge
   FORMAT_ENDPOINT: "/api/deepseek/format",
   FORMAT_EMAIL_ENDPOINT: "/api/deepseek/format-email",
   TITLE_ENDPOINT: "/api/deepseek/title",
   TRANSLATE_ENDPOINT: "/api/deepseek/translate",
 
-  // External APIs
-  DEEPSEEK_API_URL: "https://api.deepseek.com/v1/chat/completions",
+  // ✅ Groq — primary (fast + free)
+  GROQ_API_URL: "https://api.groq.com/openai/v1/chat/completions",
+  GROQ_MODEL_FAST: "llama-3.1-8b-instant",      // format + title
 
-  // DeepSeek model configuration
-  DEEPSEEK_MODEL: "deepseek-chat",
-
-  // Format API settings
-  FORMAT_TEMPERATURE: 0.0, // Set to 0.0 for maximum stability and completeness
-  FORMAT_TOP_P: 1.0, // Standard Top P
+  // Format settings
+  FORMAT_TEMPERATURE: 0.0,
+  FORMAT_TOP_P: 1.0,
   FORMAT_MAX_TOKENS: 8192,
+  FORMAT_EMAIL_MAX_TOKENS: 2048,
+  FORMAT_STREAM: true,
 
-  // Title API settings
+  // Title settings
   TITLE_TEMPERATURE: 0.3,
-  TITLE_TOP_P: 0.9,
-  TITLE_MAX_TOKENS: 64,
-  TITLE_MAX_LENGTH: 60,
+  TITLE_TOP_P: 0.7,
+  TITLE_MAX_TOKENS: 32,
+  TITLE_MAX_LENGTH: 40,
+  TITLE_STREAM: false,
+
+  // Translate settings
+  TRANSLATE_TEMPERATURE: 0.0,
+  TRANSLATE_MAX_TOKENS: 1024,
 } as const;
 
 /**
