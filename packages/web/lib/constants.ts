@@ -1,4 +1,6 @@
-// Centralized constants file for the OSCAR application
+// Web-specific constants for the OSCAR application.
+// Base constants are defined in @oscar/shared/constants — keep in sync.
+// This file overrides API_CONFIG (Groq vs DeepSeek) and adds ROUTES.DOWNLOAD.
 
 /**
  * Error messages and tips

@@ -57,7 +57,11 @@ async function saveSetting<T>(key: string, value: T): Promise<void> {
 
 // ── Step Indicator ────────────────────────────────────────────────────────────
 
-function StepIndicator({ currentStep }: { currentStep: "signin" | "permissions" | "setup" }) {
+function StepIndicator({
+  currentStep,
+}: {
+  currentStep: "signin" | "permissions" | "setup";
+}) {
   const steps = [
     { id: "signin", label: "SIGN IN" },
     { id: "permissions", label: "PERMISSIONS" },
@@ -74,7 +78,17 @@ function StepIndicator({ currentStep }: { currentStep: "signin" | "permissions" 
             <span className="step-label">{step.label}</span>
           </div>
           {index < steps.length - 1 && (
-            <svg className="step-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="step-arrow"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <polyline points="9 18 15 12 9 6" />
             </svg>
           )}
@@ -117,7 +131,7 @@ function CoverShowcase() {
       <MemoizedSparkles />
 
       {/* Slide 1: Speed */}
-      <div className={`cover-slide ${currentSlide === 0 ? 'active' : ''}`}>
+      <div className={`cover-slide ${currentSlide === 0 ? "active" : ""}`}>
         <div className="cover-content">
           <p className="cover-subtitle">Using OSCAR</p>
           <h2 className="cover-title">4x faster than typing</h2>
@@ -125,7 +139,10 @@ function CoverShowcase() {
             <span className="cover-speed">220 wpm</span>
           </div>
           <div className="cover-demo-text">
-            <p>"Just started with the project, how would you like to set up the file? Here are a few options..."</p>
+            <p>
+              "Just started with the project, how would you like to set up the
+              file? Here are a few options..."
+            </p>
           </div>
           <div className="cover-waveform">
             <div className="waveform-bar" />
@@ -141,7 +158,7 @@ function CoverShowcase() {
       </div>
 
       {/* Slide 2: Warp Speed */}
-      <div className={`cover-slide ${currentSlide === 1 ? 'active' : ''}`}>
+      <div className={`cover-slide ${currentSlide === 1 ? "active" : ""}`}>
         <div className="cover-content">
           <p className="cover-subtitle">Experience the future</p>
           <h2 className="cover-title warp-title">
@@ -151,7 +168,10 @@ function CoverShowcase() {
             <span className="cover-speed">AI-powered</span>
           </div>
           <div className="cover-demo-text">
-            <p>Transform your thoughts into text instantly. Just speak naturally and let OSCAR do the rest.</p>
+            <p>
+              Transform your thoughts into text instantly. Just speak naturally
+              and let OSCAR do the rest.
+            </p>
           </div>
           <div className="cover-waveform">
             <div className="waveform-bar" />
@@ -167,7 +187,7 @@ function CoverShowcase() {
       </div>
 
       {/* Slide 3: Anywhere */}
-      <div className={`cover-slide ${currentSlide === 2 ? 'active' : ''}`}>
+      <div className={`cover-slide ${currentSlide === 2 ? "active" : ""}`}>
         <div className="cover-content">
           <p className="cover-subtitle">Works everywhere</p>
           <h2 className="cover-title">Use in any app</h2>
@@ -175,7 +195,10 @@ function CoverShowcase() {
             <span className="cover-speed">Global shortcut</span>
           </div>
           <div className="cover-demo-text">
-            <p>Hold <kbd>Ctrl</kbd>+<kbd>Space</kbd> to start dictating. Works in Slack, Notion, VS Code, and everywhere else.</p>
+            <p>
+              Hold <kbd>Ctrl</kbd>+<kbd>Space</kbd> to start dictating. Works in
+              Slack, Notion, VS Code, and everywhere else.
+            </p>
           </div>
           <div className="cover-waveform">
             <div className="waveform-bar" />
@@ -195,7 +218,7 @@ function CoverShowcase() {
         {Array.from({ length: totalSlides }).map((_, index) => (
           <button
             key={index}
-            className={`slide-dot ${currentSlide === index ? 'active' : ''}`}
+            className={`slide-dot ${currentSlide === index ? "active" : ""}`}
             onClick={() => setCurrentSlide(index)}
             aria-label={`Go to slide ${index + 1}`}
           />
@@ -210,7 +233,10 @@ function CoverShowcase() {
 function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [oauthState, setOauthState] = useState<{ verifier: string; url: string } | null>(null);
+  const [oauthState, setOauthState] = useState<{
+    verifier: string;
+    url: string;
+  } | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Poll for session when OAuth is in progress
@@ -219,7 +245,9 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
       // Start polling for session
       pollingRef.current = setInterval(async () => {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
           if (session) {
             // Session found, stop polling and authenticate
             if (pollingRef.current) {
@@ -236,15 +264,18 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
       }, 1000);
 
       // Stop polling after 5 minutes
-      const timeout = setTimeout(() => {
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
-        }
-        setOauthState(null);
-        setLoading(false);
-        setError("Authentication timed out. Please try again.");
-      }, 5 * 60 * 1000);
+      const timeout = setTimeout(
+        () => {
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+          setOauthState(null);
+          setLoading(false);
+          setError("Authentication timed out. Please try again.");
+        },
+        5 * 60 * 1000,
+      );
 
       return () => {
         if (pollingRef.current) {
@@ -290,22 +321,27 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
           <div className="split-content">
             <div className="brand-header">
               {/* <div className="brand-icon-small"> */}
-                <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width="36" height="36" />
+              <img
+                src="/OSCAR_LIGHT_LOGO.png"
+                alt="OSCAR"
+                width="36"
+                height="36"
+              />
               {/* </div> */}
               <span className="brand-name">OSCAR</span>
             </div>
 
-            <h1 className="split-title">
-              Let's get you started
-            </h1>
+            <h1 className="split-title">Let's get you started</h1>
             <p className="split-description">
-              Write faster in every app using your voice. Sign in with Google to sync your dictionary and enable AI editing.
+              Write faster in every app using your voice. Sign in with Google to
+              sync your dictionary and enable AI editing.
             </p>
 
             {error && <p className="auth-error">{error}</p>}
             {oauthState && (
               <p className="auth-message">
-                Waiting for authentication... Please complete the sign-in in your browser.
+                Waiting for authentication... Please complete the sign-in in
+                your browser.
               </p>
             )}
 
@@ -315,7 +351,12 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
               onClick={signInWithGoogle}
               disabled={loading}
             >
-              <svg className="google-icon" viewBox="0 0 24 24" width="18" height="18">
+              <svg
+                className="google-icon"
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+              >
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -341,18 +382,23 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
               <button
                 type="button"
                 className="terms-link"
-                onClick={() => openUrl(`${import.meta.env.VITE_WEB_APP_URL}/terms`)}
+                onClick={() =>
+                  openUrl(`${import.meta.env.VITE_WEB_APP_URL}/terms`)
+                }
               >
                 Terms of Service
-              </button>
-              {" "}and{" "}
+              </button>{" "}
+              and{" "}
               <button
                 type="button"
                 className="terms-link"
-                onClick={() => openUrl(`${import.meta.env.VITE_WEB_APP_URL}/privacy`)}
+                onClick={() =>
+                  openUrl(`${import.meta.env.VITE_WEB_APP_URL}/privacy`)
+                }
               >
                 Privacy Policy
-              </button>.
+              </button>
+              .
             </p>
 
             <button
@@ -403,12 +449,16 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
 // ── Permissions Screen ────────────────────────────────────────────────────────
 
 function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
-  const [micStatus, setMicStatus] = useState<"idle" | "granted" | "denied">("idle");
+  const [micStatus, setMicStatus] = useState<"idle" | "granted" | "denied">(
+    "idle",
+  );
   const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
 
   // Check real accessibility status on mount
   useEffect(() => {
-    invoke<boolean>("check_accessibility_permission").then(setAccessibilityEnabled).catch(() => {});
+    invoke<boolean>("check_accessibility_permission")
+      .then(setAccessibilityEnabled)
+      .catch(() => {});
   }, []);
 
   const requestMic = async () => {
@@ -429,7 +479,9 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
       if (!granted) {
         // Poll until the user enables it in System Settings
         const interval = setInterval(async () => {
-          const trusted = await invoke<boolean>("check_accessibility_permission");
+          const trusted = await invoke<boolean>(
+            "check_accessibility_permission",
+          );
           if (trusted) {
             setAccessibilityEnabled(true);
             clearInterval(interval);
@@ -440,7 +492,9 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
       }
     } catch {
       // Fallback: open System Settings manually
-      invoke("open_url", { url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" }).catch(() => {});
+      invoke("open_url", {
+        url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+      }).catch(() => {});
     }
   };
 
@@ -453,7 +507,12 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
         <div className="split-left">
           <div className="split-content">
             <div className="brand-header">
-              <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width="36" height="36" />
+              <img
+                src="/OSCAR_LIGHT_LOGO.png"
+                alt="OSCAR"
+                width="36"
+                height="36"
+              />
               <span className="brand-name">OSCAR</span>
             </div>
 
@@ -461,14 +520,23 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
               Allow OSCAR to transcribe your voice
             </h1>
             <p className="split-description">
-              When you turn it on, OSCAR transcribes using your microphone. Your audio
-              is processed locally — nothing leaves your device.
+              When you turn it on, OSCAR transcribes using your microphone. Your
+              audio is processed locally — nothing leaves your device.
             </p>
 
             <div className="permissions-items-modern">
               <div className="perm-item-modern">
                 <div className="perm-item-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                     <line x1="12" x2="12" y1="19" y2="22" />
@@ -476,18 +544,32 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
                 </div>
                 <div className="perm-item-content">
                   <span className="perm-item-label">Microphone access</span>
-                  <span className="perm-item-sub">Required for voice transcription</span>
+                  <span className="perm-item-sub">
+                    Required for voice transcription
+                  </span>
                 </div>
                 {micStatus === "granted" ? (
                   <span className="perm-badge-modern granted">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   </span>
                 ) : micStatus === "denied" ? (
                   <span className="perm-badge-modern denied">Denied</span>
                 ) : (
-                  <button className="perm-enable-btn-modern" onClick={requestMic}>
+                  <button
+                    className="perm-enable-btn-modern"
+                    onClick={requestMic}
+                  >
                     Enable
                   </button>
                 )}
@@ -495,24 +577,49 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
 
               <div className="perm-item-modern">
                 <div className="perm-item-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                     <polyline points="15 3 21 3 21 9" />
                     <line x1="10" x2="21" y1="14" y2="3" />
                   </svg>
                 </div>
                 <div className="perm-item-content">
-                  <span className="perm-item-label">Accessibility &amp; global hotkey</span>
-                  <span className="perm-item-sub">Required for Ctrl+Space anywhere</span>
+                  <span className="perm-item-label">
+                    Accessibility &amp; global hotkey
+                  </span>
+                  <span className="perm-item-sub">
+                    Required for Ctrl+Space anywhere
+                  </span>
                 </div>
                 {accessibilityEnabled ? (
                   <span className="perm-badge-modern granted">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   </span>
                 ) : (
-                  <button className="perm-enable-btn-modern" onClick={requestAccessibility}>
+                  <button
+                    className="perm-enable-btn-modern"
+                    onClick={requestAccessibility}
+                  >
                     Enable
                   </button>
                 )}
@@ -521,7 +628,8 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
 
             {!accessibilityEnabled && (
               <p className="perm-skip-note-modern">
-                You can enable Accessibility later in System Settings → Privacy &amp; Security.
+                You can enable Accessibility later in System Settings → Privacy
+                &amp; Security.
               </p>
             )}
 
@@ -544,7 +652,8 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
 
 // ── Setup Screen ──────────────────────────────────────────────────────────────
 
-const MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
+const MODEL_URL =
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
 const MODEL_PATH = ".oscar/models/ggml-small.bin";
 const OLD_MODEL_PATH = ".oscar/models/ggml-base.bin";
 
@@ -555,7 +664,9 @@ interface DownloadProgress {
 }
 
 function SetupScreen({ onComplete }: { onComplete: () => void }) {
-  const [step, setStep] = useState<"download" | "apikey" | "loading">("download");
+  const [step, setStep] = useState<"download" | "apikey" | "loading">(
+    "download",
+  );
   const [, setDownloadStatus] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState("");
@@ -564,30 +675,35 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
   const downloadModel = async () => {
     setStep("loading");
     setProgress({ downloaded: 0, total: 1, percentage: 0 });
-    
+
     // Set up progress listener
-    const unlisten = await listen<DownloadProgress>("download-progress", (event) => {
-      setProgress(event.payload);
-    });
-    
+    const unlisten = await listen<DownloadProgress>(
+      "download-progress",
+      (event) => {
+        setProgress(event.payload);
+      },
+    );
+
     try {
       // Get the home directory and construct full path
       const home = await homeDir();
       const fullPath = `${home}/${MODEL_PATH}`;
-      
+
       // Download the model (async, with progress events)
       await invoke("download_whisper_model", {
         url: MODEL_URL,
         path: fullPath,
       });
-      
+
       unlisten();
       setDownloadStatus("Download complete!");
-      
+
       // Clean up old model file if it exists (migration from base to small)
       try {
         const oldModelPath = `${home}/${OLD_MODEL_PATH}`;
-        const oldExists = await invoke<boolean>("check_file_exists", { path: oldModelPath });
+        const oldExists = await invoke<boolean>("check_file_exists", {
+          path: oldModelPath,
+        });
         if (oldExists) {
           await invoke("delete_file", { path: oldModelPath });
           console.log("Cleaned up old model file:", oldModelPath);
@@ -596,7 +712,7 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
         console.warn("Failed to clean up old model:", cleanupErr);
         // Non-fatal — don't block setup completion
       }
-      
+
       // Move to API key step
       setTimeout(() => {
         setStep("apikey");
@@ -613,10 +729,10 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
     if (apiKey.trim()) {
       await saveSetting("userApiKey", apiKey.trim());
     }
-    
+
     // Mark setup as complete
     await saveSetting("setupComplete", true);
-    
+
     onComplete();
   };
 
@@ -632,26 +748,32 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
           <div className="split-left">
             <div className="split-content">
               <div className="brand-header">
-                <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width="36" height="36" />
+                <img
+                  src="/OSCAR_LIGHT_LOGO.png"
+                  alt="OSCAR"
+                  width="36"
+                  height="36"
+                />
                 <span className="brand-name">OSCAR</span>
               </div>
 
               <h1 className="split-title">Warming up the engines...</h1>
               <p className="split-description">
-                Downloading the speech recognition model. This happens entirely on your device — just a quick one-time setup.
+                Downloading the speech recognition model. This happens entirely
+                on your device — just a quick one-time setup.
               </p>
-              
+
               <div className="setup-loading">
                 {/* Progress bar */}
                 <div className="download-progress-container">
                   <div className="download-progress-bar">
-                    <div 
-                      className="download-progress-fill" 
+                    <div
+                      className="download-progress-fill"
                       style={{ width: `${progress?.percentage || 0}%` }}
                     />
                   </div>
                 </div>
-                
+
                 {error && <p className="setup-error">{error}</p>}
               </div>
             </div>
@@ -672,19 +794,28 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
           <div className="split-left">
             <div className="split-content">
               <div className="brand-header">
-                <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width="36" height="36" />
+                <img
+                  src="/OSCAR_LIGHT_LOGO.png"
+                  alt="OSCAR"
+                  width="36"
+                  height="36"
+                />
                 <span className="brand-name">OSCAR</span>
               </div>
 
               <h1 className="split-title">Getting your voice ready</h1>
               <p className="split-description">
-                We need to set up the magic that turns your voice into text. 
-                This happens entirely on your device — just a quick one-time setup.
+                We need to set up the magic that turns your voice into text.
+                This happens entirely on your device — just a quick one-time
+                setup.
               </p>
 
               {error && <p className="setup-error">{error}</p>}
 
-              <button className="perm-continue-btn-modern active" onClick={downloadModel}>
+              <button
+                className="perm-continue-btn-modern active"
+                onClick={downloadModel}
+              >
                 Get Started
               </button>
             </div>
@@ -705,18 +836,25 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
         <div className="split-left">
           <div className="split-content">
             <div className="brand-header">
-              <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width="36" height="36" />
+              <img
+                src="/OSCAR_LIGHT_LOGO.png"
+                alt="OSCAR"
+                width="36"
+                height="36"
+              />
               <span className="brand-name">OSCAR</span>
             </div>
 
             <h1 className="split-title">AI Enhancement (Optional)</h1>
             <p className="split-description">
-              OSCAR can enhance your transcriptions with AI. Use our service (requires sign-in) 
-              or provide your own DeepSeek API key.
+              OSCAR can enhance your transcriptions with AI. Use our service
+              (requires sign-in) or provide your own DeepSeek API key.
             </p>
 
             <div className="setup-apikey-section">
-              <label className="setup-label">Your DeepSeek API Key (optional)</label>
+              <label className="setup-label">
+                Your DeepSeek API Key (optional)
+              </label>
               <input
                 type="password"
                 className="setup-input"
@@ -725,12 +863,16 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
                 onChange={(e) => setApiKey(e.target.value)}
               />
               <p className="setup-hint">
-                Leave blank to use OSCAR&apos;s AI service. Your key is stored locally.
+                Leave blank to use OSCAR&apos;s AI service. Your key is stored
+                locally.
               </p>
             </div>
 
             <div className="setup-buttons">
-              <button className="perm-continue-btn-modern active" onClick={handleComplete}>
+              <button
+                className="perm-continue-btn-modern active"
+                onClick={handleComplete}
+              >
                 {apiKey.trim() ? "Save & Continue" : "Continue"}
               </button>
               {!apiKey.trim() && (
@@ -758,14 +900,18 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
 
   // First-run gates
-  const [permissionsShown, setPermissionsShown] = useState<boolean | null>(null);
+  const [permissionsShown, setPermissionsShown] = useState<boolean | null>(
+    null,
+  );
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [userApiKey, setUserApiKey] = useState<string>("");
 
   // Recording & processing (global hotkey functionality)
   const [isRecording, setIsRecording] = useState(false);
   const [_transcript, setTranscript] = useState("");
-  const [localTranscripts, setLocalTranscripts] = useState<LocalTranscript[]>([]);
+  const [localTranscripts, setLocalTranscripts] = useState<LocalTranscript[]>(
+    [],
+  );
   const [notesRefreshKey, setNotesRefreshKey] = useState(0);
   const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
@@ -824,7 +970,7 @@ function App() {
       updater.checkForUpdates();
     }, 3000);
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time startup check; updater ref is stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time startup check; updater ref is stable
   }, []);
 
   // ── Supabase auth listener ─────────────────────────────────────────────────
@@ -837,7 +983,9 @@ function App() {
       setAuthLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       sessionRef.current = s;
       setUser(s?.user ?? null);
@@ -845,7 +993,7 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: auth listener + one-time session check
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: auth listener + one-time session check
   }, []);
 
   // ── Deep link handler for OAuth callback ────────────────────────────────────
@@ -860,25 +1008,25 @@ function App() {
         const success = urlObj.searchParams.get("success");
         let accessToken = urlObj.searchParams.get("access_token");
         let refreshToken = urlObj.searchParams.get("refresh_token");
-        
+
         // Also check fragment (after #) for tokens
         if (urlObj.hash) {
           const fragmentParams = new URLSearchParams(urlObj.hash.substring(1));
           accessToken = accessToken || fragmentParams.get("access_token");
           refreshToken = refreshToken || fragmentParams.get("refresh_token");
         }
-        
+
         if (error) {
           console.error("[deep-link] Auth error:", error);
         }
-        
+
         if (accessToken && refreshToken) {
           // Set the session using the tokens from the web app
           const { data, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
-          
+
           if (sessionError) {
             console.error("[deep-link] Failed to set session:", sessionError);
           } else if (data.session) {
@@ -888,7 +1036,9 @@ function App() {
           }
         } else if (success === "true") {
           // Fallback: no tokens in URL, try to get session (for backward compatibility)
-          const { data: { session } } = await supabase.auth.getSession();
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
           if (session) {
             setSession(session);
             setUser(session.user);
@@ -921,26 +1071,36 @@ function App() {
     return () => {
       unlistenDeepLink.then((f) => f());
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: deep link listener registered once
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: deep link listener registered once
   }, []);
 
   // ── Boot: load persisted settings ──────────────────────────────────────────
 
   useEffect(() => {
     (async () => {
-      const [savedAiEditing, savedTone, savedAutoPaste, savedDict, permsDone, setupDone, savedApiKey, savedTranscripts, savedLanguage, savedMicId] =
-        await Promise.all([
-          loadSetting<boolean>("aiEditing", false),
-          loadSetting<TonePreset>("tonePreset", "none"),
-          loadSetting<boolean>("autoPaste", true),
-          loadSetting<string[]>("dictWords", []),
-          loadSetting<boolean>("permissionsDone", false),
-          loadSetting<boolean>("setupComplete", false),
-          loadSetting<string>("userApiKey", ""),
-          loadSetting<LocalTranscript[]>("localTranscripts", []),
-          loadSetting<string>("transcriptionLanguage", "auto"),
-          loadSetting<string>("selectedMicId", ""),
-        ]);
+      const [
+        savedAiEditing,
+        savedTone,
+        savedAutoPaste,
+        savedDict,
+        permsDone,
+        setupDone,
+        savedApiKey,
+        savedTranscripts,
+        savedLanguage,
+        savedMicId,
+      ] = await Promise.all([
+        loadSetting<boolean>("aiEditing", false),
+        loadSetting<TonePreset>("tonePreset", "none"),
+        loadSetting<boolean>("autoPaste", true),
+        loadSetting<string[]>("dictWords", []),
+        loadSetting<boolean>("permissionsDone", false),
+        loadSetting<boolean>("setupComplete", false),
+        loadSetting<string>("userApiKey", ""),
+        loadSetting<LocalTranscript[]>("localTranscripts", []),
+        loadSetting<string>("transcriptionLanguage", "auto"),
+        loadSetting<string>("selectedMicId", ""),
+      ]);
 
       setPermissionsShown(permsDone);
       setSetupComplete(setupDone);
@@ -981,20 +1141,26 @@ function App() {
       }
     })();
 
-    const SELF_APP_NAMES = ["oscar", "claude"];  // filter out our own app
+    const SELF_APP_NAMES = ["oscar", "claude"]; // filter out our own app
     const unlistenStart = listen<string>("hotkey-recording-start", (ev) => {
       const raw = (ev.payload || "").trim();
       // If the frontmost app is ourselves, clear it so we don't try to activate ourselves
-      targetAppRef.current = SELF_APP_NAMES.includes(raw.toLowerCase()) ? "" : raw;
+      targetAppRef.current = SELF_APP_NAMES.includes(raw.toLowerCase())
+        ? ""
+        : raw;
       pendingStopRef.current = false;
-      if (whisperLoadedRef.current && !isRecordingRef.current) startHotkeyRecording();
+      if (whisperLoadedRef.current && !isRecordingRef.current)
+        startHotkeyRecording();
     });
     const unlistenStop = listen("hotkey-recording-stop", () => {
       // ALWAYS set pending stop — this is the safety net for the race condition
       // where STOP arrives before getUserMedia resolves in startHotkeyRecording
       pendingStopRef.current = true;
       // Also try the normal stop path
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state === "recording"
+      ) {
         isRecordingRef.current = false;
         setIsRecording(false);
         mediaRecorderRef.current.stop();
@@ -1014,7 +1180,7 @@ function App() {
       unlistenErr.then((f) => f());
       unlistenReg.then((f) => f());
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads settings, registers hotkey listeners; uses refs for mutable state
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads settings, registers hotkey listeners; uses refs for mutable state
   }, []);
 
   // ── Supabase dictionary sync ───────────────────────────────────────────────
@@ -1053,8 +1219,12 @@ function App() {
   const warmMicrophone = async () => {
     if (warmStreamRef.current) return; // already warm
     try {
-      const audioConstraints = selectedMicId ? { deviceId: { ideal: selectedMicId } } : true;
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      const audioConstraints = selectedMicId
+        ? { deviceId: { ideal: selectedMicId } }
+        : true;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+      });
       warmStreamRef.current = stream;
     } catch (e) {
       console.warn("[mic] failed to pre-warm microphone:", e);
@@ -1115,12 +1285,21 @@ function App() {
   const startHotkeyRecording = async () => {
     // Use the pre-warmed stream if available; fall back to getUserMedia
     let stream: MediaStream;
-    if (warmStreamRef.current && warmStreamRef.current.getAudioTracks().some((t) => t.readyState === "live")) {
+    if (
+      warmStreamRef.current &&
+      warmStreamRef.current
+        .getAudioTracks()
+        .some((t) => t.readyState === "live")
+    ) {
       stream = warmStreamRef.current;
     } else {
       try {
-        const audioConstraints = selectedMicId ? { deviceId: { ideal: selectedMicId } } : true;
-        stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+        const audioConstraints = selectedMicId
+          ? { deviceId: { ideal: selectedMicId } }
+          : true;
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+        });
         warmStreamRef.current = stream; // keep for next time
       } catch (e) {
         console.error("[record] getUserMedia failed:", e);
@@ -1140,7 +1319,9 @@ function App() {
     }
 
     streamRef.current = stream;
-    const mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/webm";
+    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
+      ? "audio/mp4"
+      : "audio/webm";
     const mediaRecorder = new MediaRecorder(stream, { mimeType });
     mediaRecorderRef.current = mediaRecorder;
     audioChunksRef.current = [];
@@ -1162,7 +1343,10 @@ function App() {
   const stopHotkeyRecording = () => {
     isRecordingRef.current = false;
     setIsRecording(false);
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state === "recording"
+    ) {
       mediaRecorderRef.current.stop();
     }
     // Switch pill to processing (dots) — don't hide yet
@@ -1171,7 +1355,11 @@ function App() {
 
   // ── Audio processing (shared by hotkey recording) ───────────────────────────
 
-  const processAudio = async (_stream: MediaStream, shouldPaste: boolean, _targetApp?: string) => {
+  const processAudio = async (
+    _stream: MediaStream,
+    shouldPaste: boolean,
+    _targetApp?: string,
+  ) => {
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
 
@@ -1182,7 +1370,9 @@ function App() {
       return;
     }
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/webm";
+    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
+      ? "audio/mp4"
+      : "audio/webm";
     const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
 
     if (audioBlob.size < 500) {
@@ -1215,7 +1405,9 @@ function App() {
     }
 
     if (audioData.length < 1600) {
-      setStatus(`❌ Too short (${audioData.length} samples). Speak for ≥1 second.`);
+      setStatus(
+        `❌ Too short (${audioData.length} samples). Speak for ≥1 second.`,
+      );
       invoke("hide_recording_pill").catch(console.warn);
       return;
     }
@@ -1243,14 +1435,16 @@ function App() {
       if (aiEditingRef.current) {
         // Check if user has their own API key
         const hasUserApiKey = userApiKey && userApiKey.trim().length > 0;
-        
+
         if (hasUserApiKey || (sessionRef.current && SUPABASE_URL)) {
           setStatus("✨ Enhancing with AI...");
           try {
             finalText = await invoke<string>("enhance_text", {
               text: finalText,
               tone: tonePresetRef.current,
-              edgeFunctionUrl: hasUserApiKey ? null : `${SUPABASE_URL}/functions/v1/enhance`,
+              edgeFunctionUrl: hasUserApiKey
+                ? null
+                : `${SUPABASE_URL}/functions/v1/enhance`,
               jwt: hasUserApiKey ? null : sessionRef.current?.access_token,
               apiKey: hasUserApiKey ? userApiKey : null,
             });
@@ -1273,32 +1467,38 @@ function App() {
         text: finalText,
         createdAt: new Date().toISOString(),
       };
-      const updatedTranscripts = [newTranscript, ...localTranscripts];
-      setLocalTranscripts(updatedTranscripts);
-      // Persist to disk
-      saveSetting("localTranscripts", updatedTranscripts);
+      // Use functional update to avoid stale closure issues
+      setLocalTranscripts((prev) => {
+        const updatedTranscripts = [newTranscript, ...prev];
+        // Persist to disk
+        saveSetting("localTranscripts", updatedTranscripts);
+        return updatedTranscripts;
+      });
 
       // Save to Supabase as a note (matches web app behavior)
       if (user) {
         const rawText = result.text;
         // Generate title: first sentence up to 60 chars, fallback to "Untitled Note"
         const firstSentence = finalText.split(/[.\n]/)[0]?.trim() || "";
-        const title = firstSentence.length > 60
-          ? firstSentence.slice(0, 57) + "..."
-          : firstSentence || "Untitled Note";
+        const title =
+          firstSentence.length > 60
+            ? firstSentence.slice(0, 57) + "..."
+            : firstSentence || "Untitled Note";
 
-        notesService.createNote({
-          user_id: user.id,
-          title,
-          raw_text: rawText,
-          original_formatted_text: finalText,
-        }).then(({ error: saveErr }) => {
-          if (saveErr) {
-            console.warn("[notes] failed to save note:", saveErr);
-          } else {
-            setNotesRefreshKey((k) => k + 1);
-          }
-        });
+        notesService
+          .createNote({
+            user_id: user.id,
+            title,
+            raw_text: rawText,
+            original_formatted_text: finalText,
+          })
+          .then(({ error: saveErr }) => {
+            if (saveErr) {
+              console.warn("[notes] failed to save note:", saveErr);
+            } else {
+              setNotesRefreshKey((k) => k + 1);
+            }
+          });
       }
 
       if (shouldPaste) {
@@ -1312,14 +1512,22 @@ function App() {
           });
           if (pasteResult === "CLIPBOARD_ONLY") {
             const isMac = navigator.platform.toLowerCase().includes("mac");
-            setStatus(isMac ? "Copied! Press ⌘V to paste." : "Copied! Press Ctrl+V to paste.");
+            setStatus(
+              isMac
+                ? "Copied! Press ⌘V to paste."
+                : "Copied! Press Ctrl+V to paste.",
+            );
           } else {
             setStatus("Pasted! ✓");
           }
         } catch (pe) {
           console.error("[paste] FAILED:", pe);
           const isMac = navigator.platform.toLowerCase().includes("mac");
-          setStatus(isMac ? "Copied to clipboard. Press ⌘V to paste." : "Copied to clipboard. Press Ctrl+V to paste.");
+          setStatus(
+            isMac
+              ? "Copied to clipboard. Press ⌘V to paste."
+              : "Copied to clipboard. Press Ctrl+V to paste.",
+          );
         }
       } else {
         setStatus("Done! ✓");
@@ -1360,7 +1568,7 @@ function App() {
   // Fetch subscription status when user changes
   useEffect(() => {
     if (!user) return;
-    
+
     const fetchSubscription = async () => {
       try {
         const { data } = await supabase
@@ -1368,23 +1576,33 @@ function App() {
           .select("status")
           .eq("user_id", user.id)
           .maybeSingle();
-        
+
         setIsProUser(data?.status === "active");
       } catch (e) {
         console.error("Failed to fetch subscription:", e);
         setIsProUser(false);
       }
     };
-    
+
     fetchSubscription();
   }, [user]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (authLoading) return null;
-  if (!user) return <AuthScreen onAuth={(s) => { setSession(s); sessionRef.current = s; setUser(s.user); }} />;
+  if (!user)
+    return (
+      <AuthScreen
+        onAuth={(s) => {
+          setSession(s);
+          sessionRef.current = s;
+          setUser(s.user);
+        }}
+      />
+    );
   if (permissionsShown === null) return null;
-  if (!permissionsShown) return <PermissionsScreen onContinue={handlePermissionsContinue} />;
+  if (!permissionsShown)
+    return <PermissionsScreen onContinue={handlePermissionsContinue} />;
   if (setupComplete === null) return null;
   if (!setupComplete) return <SetupScreen onComplete={handleSetupComplete} />;
 
@@ -1423,79 +1641,83 @@ function App() {
         {/* Center: content + bottom gutter */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Main scrollable content */}
-          <main className={`flex-1 flex flex-col ${activeTab === "settings" ? "overflow-hidden" : "overflow-y-auto"} bg-slate-50 rounded-tl-2xl`}>
-              <div className="flex-1 flex flex-col min-h-0">
-                {activeTab === "home" && user && (
-                  <HomeTab
-                    userName={user.user_metadata?.full_name || ""}
-                    userId={user.id}
-                    localTranscripts={localTranscripts}
-                    onDeleteTranscript={(id) => {
-                      setLocalTranscripts((prev) => {
-                        const updated = prev.filter((t) => t.id !== id);
-                        saveSetting("localTranscripts", updated);
-                        return updated;
-                      });
-                    }}
-                    onClearAllTranscripts={() => {
-                      setLocalTranscripts([]);
-                      saveSetting("localTranscripts", []);
-                    }}
-                  />
-                )}
+          <main
+            className={`flex-1 flex flex-col ${activeTab === "settings" ? "overflow-hidden" : "overflow-y-auto"} bg-slate-50 rounded-tl-2xl`}
+          >
+            <div className="flex-1 flex flex-col min-h-0">
+              {activeTab === "home" && user && (
+                <HomeTab
+                  userName={user.user_metadata?.full_name || ""}
+                  userId={user.id}
+                  localTranscripts={localTranscripts}
+                  onDeleteTranscript={(id) => {
+                    setLocalTranscripts((prev) => {
+                      const updated = prev.filter((t) => t.id !== id);
+                      saveSetting("localTranscripts", updated);
+                      return updated;
+                    });
+                  }}
+                  onClearAllTranscripts={() => {
+                    setLocalTranscripts([]);
+                    saveSetting("localTranscripts", []);
+                  }}
+                />
+              )}
 
-                {activeTab === "notes" && user && (
-                  <NotesTab
-                    userId={user.id}
-                    isRecording={isRecording}
-                    onToggleRecording={() => {
-                      if (isRecording) {
-                        stopHotkeyRecording();
-                      } else {
-                        startHotkeyRecording();
-                      }
-                    }}
-                    recordingTime={0}
-                    refreshKey={notesRefreshKey}
-                  />
-                )}
+              {activeTab === "notes" && user && (
+                <NotesTab
+                  userId={user.id}
+                  isRecording={isRecording}
+                  onToggleRecording={() => {
+                    if (isRecording) {
+                      stopHotkeyRecording();
+                    } else {
+                      startHotkeyRecording();
+                    }
+                  }}
+                  recordingTime={0}
+                  refreshKey={notesRefreshKey}
+                />
+              )}
 
-                {activeTab === "settings" && (
-                  <SettingsTab
-                    transcriptionLanguage={transcriptionLanguage}
-                    onLanguageChange={(lang) => {
-                      setTranscriptionLanguage(lang);
-                      saveSetting("transcriptionLanguage", lang);
-                    }}
-                    selectedMicId={selectedMicId}
-                    onMicChange={(id) => {
-                      setSelectedMicId(id);
-                      saveSetting("selectedMicId", id);
-                      // Reset warm stream and re-warm with new mic
-                      if (warmStreamRef.current) {
-                        warmStreamRef.current.getTracks().forEach((t) => t.stop());
-                        warmStreamRef.current = null;
-                      }
-                      warmMicrophone();
-                    }}
-                    onClearData={async () => {
-                      try {
-                        const store = await getStore();
-                        await store.clear();
-                        await store.save();
-                      } catch {
-                        // clearing store failed — reload will reset state anyway
-                      }
-                      localStorage.clear();
-                      window.location.reload();
-                    }}
-                    userEmail={user?.email}
-                    userId={user?.id}
-                    onSignOut={handleSignOut}
-                  />
-                )}
-              </div>
-            </main>
+              {activeTab === "settings" && (
+                <SettingsTab
+                  transcriptionLanguage={transcriptionLanguage}
+                  onLanguageChange={(lang) => {
+                    setTranscriptionLanguage(lang);
+                    saveSetting("transcriptionLanguage", lang);
+                  }}
+                  selectedMicId={selectedMicId}
+                  onMicChange={(id) => {
+                    setSelectedMicId(id);
+                    saveSetting("selectedMicId", id);
+                    // Reset warm stream and re-warm with new mic
+                    if (warmStreamRef.current) {
+                      warmStreamRef.current
+                        .getTracks()
+                        .forEach((t) => t.stop());
+                      warmStreamRef.current = null;
+                    }
+                    warmMicrophone();
+                  }}
+                  onClearData={async () => {
+                    try {
+                      const store = await getStore();
+                      await store.clear();
+                      await store.save();
+                    } catch {
+                      // clearing store failed — reload will reset state anyway
+                    }
+                    localStorage.clear();
+                    window.location.reload();
+                  }}
+                  userEmail={user?.email}
+                  userId={user?.id}
+                  onSignOut={handleSignOut}
+                />
+              )}
+            </div>
+          </main>
 
           {/* Bottom gutter */}
           <div className="h-3 bg-white flex-shrink-0" />

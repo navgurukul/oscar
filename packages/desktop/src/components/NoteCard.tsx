@@ -1,5 +1,6 @@
 import { Star, Trash2, Loader2 } from "lucide-react";
 import type { DBNote } from "../types/note.types";
+import { formatNoteDate } from "../lib/utils";
 
 interface NoteCardProps {
   note: DBNote;
@@ -16,16 +17,6 @@ export function NoteCard({
   onDelete,
   isDeleting = false,
 }: NoteCardProps) {
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  };
-
   const getPreview = (note: DBNote) => {
     const text = note.edited_text || note.original_formatted_text;
     return text.length > 150 ? text.substring(0, 150) + "..." : text;
@@ -42,7 +33,7 @@ export function NoteCard({
             {note.title || "Untitled Note"}
           </h2>
           <p className="note-card-date">
-            {formatDate(note.created_at)}
+            {formatNoteDate(note.created_at)}
           </p>
         </div>
         <div className="note-card-actions">

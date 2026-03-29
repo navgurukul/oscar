@@ -104,13 +104,63 @@ async function retryWithBackoff<T>(
   throw lastError;
 }
 
+/**
+ * Parse a streaming or JSON response from the format APIs.
+ * Handles both legacy JSON and streaming text paths, cleans markdown fences.
+ */
+async function parseFormatResponse(
+  response: Response,
+  onChunk?: (text: string) => void
+): Promise<string> {
+  const contentType = response.headers.get("content-type") || "";
+  let formattedText: string;
+
+  if (contentType.includes("application/json")) {
+    const data = (await response.json()) as DeepseekFormatResponse;
+    formattedText = data?.formattedText?.trim() || "";
+  } else {
+    formattedText = await readStream(response, onChunk ?? (() => {}));
+  }
+
+  if (!formattedText) {
+    throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING);
+  }
+
+  // Strip markdown code fences (safety net — backend already strips these)
+  return formattedText
+    .replace(/^```[\w]*\n/, "")
+    .replace(/\n```$/, "")
+    .trim();
+}
+
+/**
+ * Handle formatting errors with local fallback.
+ */
+function handleFormatError(
+  error: unknown,
+  rawText: string
+): FormattingResult {
+  const err = error as Error;
+
+  if (err?.message === ERROR_MESSAGES.FORMATTING_CANCELLED) {
+    return { success: false, error: ERROR_MESSAGES.FORMATTING_CANCELLED };
+  }
+
+  console.log("AI formatting failed, using local fallback");
+  const localFormatted = localFormatterService.formatTextLocally(rawText);
+  if (localFormatted) {
+    return { success: true, formattedText: localFormatted, fallback: true };
+  }
+
+  return { success: false, error: err?.message || "Failed to format text" };
+}
+
 export const aiService = {
 
-  // ✅ onChunk callback — UI live update ke liye
   async formatText(
     rawText: string,
     signal?: AbortSignal,
-    onChunk?: (text: string) => void  // ← NEW
+    onChunk?: (text: string) => void
   ): Promise<FormattingResult> {
     if (!rawText?.trim()) {
       return { success: false, error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_FORMATTING };
@@ -120,7 +170,6 @@ export const aiService = {
     }
 
     try {
-      // ✅ No retry for format — slow network pe retry = 2x wait
       const response = await fetchWithTimeout(
         API_CONFIG.FORMAT_ENDPOINT,
         {
@@ -138,47 +187,11 @@ export const aiService = {
         throw new Error(`Formatting failed: ${response.status}`);
       }
 
-      const contentType = response.headers.get("content-type") || "";
-
-      let formattedText: string;
-
-      if (contentType.includes("application/json")) {
-        // Legacy JSON path
-        const data = (await response.json()) as DeepseekFormatResponse;
-        formattedText = data?.formattedText?.trim() || "";
-      } else {
-        // ✅ Streaming path — live UI updates
-        formattedText = await readStream(response, onChunk ?? (() => {}));
-      }
-
-      if (!formattedText) {
-        throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING);
-      }
-
-      // ✅ Cleanup (safety net — backend already strips these)
-      const cleanedText = formattedText
-        .replace(/^```[\w]*\n/, "")
-        .replace(/\n```$/, "")
-        .trim();
-
-      return { success: true, formattedText: cleanedText };
-
+      const formattedText = await parseFormatResponse(response, onChunk);
+      return { success: true, formattedText };
     } catch (error: unknown) {
-      const err = error as Error;
       console.error("Format text error:", error);
-
-      if (err?.message === ERROR_MESSAGES.FORMATTING_CANCELLED) {
-        return { success: false, error: ERROR_MESSAGES.FORMATTING_CANCELLED };
-      }
-
-      // Fallback to local formatter
-      console.log("AI formatting failed, using local fallback");
-      const localFormatted = localFormatterService.formatTextLocally(rawText);
-      if (localFormatted) {
-        return { success: true, formattedText: localFormatted, fallback: true };
-      }
-
-      return { success: false, error: err?.message || "Failed to format text" };
+      return handleFormatError(error, rawText);
     }
   },
 
@@ -186,7 +199,7 @@ export const aiService = {
     rawText: string,
     title?: string,
     signal?: AbortSignal,
-    onChunk?: (text: string) => void  // ← NEW
+    onChunk?: (text: string) => void
   ): Promise<FormattingResult> {
     if (!rawText?.trim()) {
       return { success: false, error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_FORMATTING };
@@ -213,42 +226,11 @@ export const aiService = {
         throw new Error(`Formatting failed: ${response.status}`);
       }
 
-      const contentType = response.headers.get("content-type") || "";
-      let formattedText: string;
-
-      if (contentType.includes("application/json")) {
-        const data = (await response.json()) as DeepseekFormatResponse;
-        formattedText = data?.formattedText?.trim() || "";
-      } else {
-        // ✅ Streaming path
-        formattedText = await readStream(response, onChunk ?? (() => {}));
-      }
-
-      if (!formattedText) {
-        throw new Error(ERROR_MESSAGES.EMPTY_RESPONSE_FROM_FORMATTING);
-      }
-
-      const cleanedText = formattedText
-        .replace(/^```[\w]*\n/, "")
-        .replace(/\n```$/, "")
-        .trim();
-
-      return { success: true, formattedText: cleanedText };
-
+      const formattedText = await parseFormatResponse(response, onChunk);
+      return { success: true, formattedText };
     } catch (error: unknown) {
-      const err = error as Error;
       console.error("Format email text error:", error);
-
-      if (err?.message === ERROR_MESSAGES.FORMATTING_CANCELLED) {
-        return { success: false, error: ERROR_MESSAGES.FORMATTING_CANCELLED };
-      }
-
-      const localFormatted = localFormatterService.formatTextLocally(rawText);
-      if (localFormatted) {
-        return { success: true, formattedText: localFormatted, fallback: true };
-      }
-
-      return { success: false, error: err?.message || "Failed to format text" };
+      return handleFormatError(error, rawText);
     }
   },
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { RotateCcw, X, Loader2 } from "lucide-react";
 import { notesService } from "../services/notes.service";
 import type { DBNote } from "../types/note.types";
+import { formatShortDate } from "../lib/utils";
 
 interface TrashPanelProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -52,9 +54,8 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
   };
 
   const handlePermanentDelete = async (id: string) => {
-    if (!confirm("Delete forever? This cannot be undone.")) return;
-
     setDeletingId(id);
+    setConfirmDeleteId(null);
     const { error } = await notesService.permanentDelete(id);
     if (error) {
       console.error("Failed to delete note:", error);
@@ -62,13 +63,6 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
       setTrashedNotes((prev) => prev.filter((note) => note.id !== id));
     }
     setDeletingId(null);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
   };
 
   const getPreview = (note: DBNote) => {
@@ -111,7 +105,7 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
                       {note.title || "Untitled Note"}
                     </h3>
                     <span className="trash-note-date">
-                      {formatDate(note.deleted_at!)}
+                      {formatShortDate(note.deleted_at!)}
                     </span>
                   </div>
                   <p className="trash-note-preview">{getPreview(note)}</p>
@@ -128,18 +122,38 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
                       )}
                       Restore
                     </button>
-                    <button
-                      onClick={() => handlePermanentDelete(note.id)}
-                      disabled={deletingId === note.id}
-                      className="trash-action-btn delete"
-                    >
-                      {deletingId === note.id ? (
-                        <Loader2 size={14} className="spin" />
-                      ) : (
+                    {confirmDeleteId === note.id ? (
+                      <div className="trash-confirm-delete">
+                        <span className="trash-confirm-label">Delete forever?</span>
+                        <button
+                          onClick={() => handlePermanentDelete(note.id)}
+                          disabled={deletingId === note.id}
+                          className="trash-action-btn delete"
+                        >
+                          {deletingId === note.id ? (
+                            <Loader2 size={14} className="spin" />
+                          ) : (
+                            <X size={14} />
+                          )}
+                          Yes
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="trash-action-btn restore"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDeleteId(note.id)}
+                        disabled={deletingId === note.id}
+                        className="trash-action-btn delete"
+                      >
                         <X size={14} />
-                      )}
-                      Delete
-                    </button>
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

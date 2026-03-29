@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogOut, Settings } from "lucide-react";
+import { getInitials } from "../lib/utils";
 
 interface HeaderProps {
   userEmail?: string;
@@ -23,13 +24,6 @@ export function Header({ userEmail, onSignOut, onSettingsClick }: HeaderProps) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  // Get user initials for avatar
-  const getInitials = (email?: string) => {
-    if (!email) return "?";
-    const name = email.split("@")[0];
-    return name.slice(0, 2).toUpperCase();
-  };
 
   const handleDragRegionMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;

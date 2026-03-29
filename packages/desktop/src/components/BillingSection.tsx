@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { CreditCard, Check, Loader2, Calendar, Zap, Crown } from "lucide-react";
 import { supabase } from "../supabase";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { formatBillingDate } from "../lib/utils";
 
 type SubscriptionStatus = "active" | "cancelled" | "expired" | "past_due" | null;
 
@@ -99,15 +100,6 @@ export function BillingSection({ userId, userEmail }: BillingSectionProps) {
     }
   }, []);
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
-
   const getUsagePercentage = (current: number, limit: number | null) => {
     if (!limit) return 0;
     return Math.min((current / limit) * 100, 100);
@@ -143,7 +135,7 @@ export function BillingSection({ userId, userEmail }: BillingSectionProps) {
           <div className="plan-details">
             <div className="plan-detail">
               <Calendar size={16} />
-              <span>Renews on {formatDate(subscription.currentPeriodEnd)}</span>
+              <span>Renews on {formatBillingDate(subscription.currentPeriodEnd)}</span>
             </div>
             <div className="plan-status active">
               <Check size={14} />

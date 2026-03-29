@@ -146,11 +146,17 @@ export default function ResultsPage() {
   };
 
   const handleAddNewFolder = () => {
-    if (newFolderName.trim()) {
-      handleUpdateFolder(newFolderName.trim());
-      setIsAddingNewFolder(false);
-      setNewFolderName("");
+    if (!newFolderName.trim()) {
+      toast({
+        title: "Error",
+        description: "Folder name cannot be empty.",
+        variant: "destructive",
+      });
+      return;
     }
+    handleUpdateFolder(newFolderName.trim());
+    setIsAddingNewFolder(false);
+    setNewFolderName("");
   };
 
   useEffect(() => {
@@ -602,7 +608,8 @@ export default function ResultsPage() {
                   />
                   <button
                     onClick={handleAddNewFolder}
-                    className="p-1 hover:text-cyan-400 transition-colors"
+                    disabled={newFolderName.trim() === ""}
+                    className="p-1 hover:text-cyan-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <Check className="w-3.5 h-3.5" />
                   </button>
@@ -696,7 +703,8 @@ export default function ResultsPage() {
                   <button
                     key={lang.id}
                     onClick={() => applyLanguage(lang.id as "original" | "en" | "hi")}
-                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    disabled={isTranslating && selectedLanguage !== lang.id}
+                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                       selectedLanguage === lang.id
                         ? "bg-cyan-500 text-slate-950 shadow-lg"
                         : "text-gray-400 hover:text-white hover:bg-white/5"

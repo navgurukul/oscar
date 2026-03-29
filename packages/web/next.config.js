@@ -3,6 +3,7 @@ const path = require('path');
 
 const nextConfig = {
   reactStrictMode: false,
+  transpilePackages: ['@oscar/shared'],
   outputFileTracingRoot: path.join(__dirname, '../../'),
   images: {
     remotePatterns: [

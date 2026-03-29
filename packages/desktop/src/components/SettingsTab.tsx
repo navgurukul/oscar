@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { BillingSection } from "./BillingSection";
 import { VocabularySection } from "./VocabularySection";
+import { getInitials } from "../lib/utils";
 
 type SettingsTabType = "billing" | "vocabulary" | "general" | "account" | "privacy";
 
@@ -66,13 +67,6 @@ const NAV_ITEMS: { id: SettingsTabType; label: string; icon: React.ElementType }
   { id: "account",   label: "Account",          icon: User        },
   { id: "privacy",   label: "Data & Privacy",   icon: Shield      },
 ];
-
-function getInitials(email?: string): string {
-  if (!email) return "?";
-  const local = email.split("@")[0];
-  const parts = local.split(/[._\-+]/);
-  return parts.slice(0, 2).map((p) => (p[0] ?? "").toUpperCase()).join("") || (email[0]?.toUpperCase() ?? "?");
-}
 
 export function SettingsTab({
   transcriptionLanguage,

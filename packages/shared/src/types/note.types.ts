@@ -1,9 +1,16 @@
-// Note-related type definitions
+// Note-related type definitions — canonical source for all packages
 
 export interface Note {
   formattedText: string;
   rawText: string;
   title?: string;
+}
+
+// Local transcript (desktop-only, but defined centrally for consistency)
+export interface LocalTranscript {
+  id: string;
+  text: string;
+  createdAt: string;
 }
 
 // Feedback reason options
@@ -33,6 +40,8 @@ export interface DBNote {
   deleted_at: string | null;
   // Starred/favorite
   is_starred: boolean;
+  // Folder/category name
+  folder: string | null;
 }
 
 // Insert type for creating a new note
@@ -42,6 +51,7 @@ export interface DBNoteInsert {
   raw_text: string;
   original_formatted_text: string;
   edited_text?: string | null;
+  folder?: string | null;
 }
 
 // Update type for modifying a note
@@ -58,6 +68,8 @@ export interface DBNoteUpdate {
   deleted_at?: string | null;
   // Starred/favorite
   is_starred?: boolean;
+  // Folder/category name
+  folder?: string | null;
 }
 
 export interface FormattingResult {

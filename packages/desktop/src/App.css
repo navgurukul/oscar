@@ -4009,6 +4009,18 @@ kbd {
   gap: 12px;
 }
 
+.trash-confirm-delete {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trash-confirm-label {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary, #9ca3af);
+  white-space: nowrap;
+}
+
 .trash-action-btn {
   display: flex;
   align-items: center;
