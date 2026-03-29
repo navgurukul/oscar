@@ -601,6 +601,196 @@ async fn enhance_with_edge_function(
         .ok_or_else(|| "Empty response from Edge Function".to_string())
 }
 
+// ── Local AI: Download, Load, Process ────────────────────────────────────────
+
+#[derive(Clone, Serialize)]
+struct AiDownloadProgress {
+    file: String,
+    downloaded: u64,
+    total: u64,
+    percentage: u8,
+}
+
+/// Download both the GGUF model and tokenizer for local AI.
+/// Re-uses the same streaming pattern as `download_whisper_model`.
+#[tauri::command]
+async fn download_ai_model(
+    model_url: String,
+    model_path: String,
+    tokenizer_url: String,
+    tokenizer_path: String,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(1200))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    // Helper to download a single file with progress events
+    async fn download_file(
+        client: &reqwest::Client,
+        url: &str,
+        path: &str,
+        label: &str,
+        app: &tauri::AppHandle,
+    ) -> Result<u64, String> {
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory: {e}"))?;
+        }
+
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| format!("Download failed: {e}"))?;
+
+        if !response.status().is_success() {
+            return Err(format!("Download failed with status: {}", response.status()));
+        }
+
+        let total_size = response.content_length().unwrap_or(0);
+        let mut file = tokio::fs::File::create(path)
+            .await
+            .map_err(|e| format!("Failed to create file: {e}"))?;
+
+        let mut downloaded: u64 = 0;
+        let mut stream = response.bytes_stream();
+        use futures_util::StreamExt;
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| format!("Failed to read chunk: {e}"))?;
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| format!("Failed to write file: {e}"))?;
+            downloaded += chunk.len() as u64;
+
+            let percentage = if total_size > 0 {
+                ((downloaded as f64 / total_size as f64) * 100.0) as u8
+            } else {
+                0
+            };
+            let _ = app.emit(
+                "ai-download-progress",
+                AiDownloadProgress {
+                    file: label.to_string(),
+                    downloaded,
+                    total: total_size,
+                    percentage,
+                },
+            );
+        }
+
+        file.flush()
+            .await
+            .map_err(|e| format!("Failed to flush file: {e}"))?;
+        Ok(downloaded)
+    }
+
+    // Download model weights (large)
+    let model_bytes =
+        download_file(&client, &model_url, &model_path, "model", &app).await?;
+    // Download tokenizer (small)
+    let tok_bytes =
+        download_file(&client, &tokenizer_url, &tokenizer_path, "tokenizer", &app).await?;
+
+    Ok(format!(
+        "AI model downloaded: {} bytes model + {} bytes tokenizer",
+        model_bytes, tok_bytes
+    ))
+}
+
+/// Load the local AI model into memory (blocking — runs on a thread).
+#[tauri::command]
+async fn load_ai_model(
+    model_path: String,
+    tokenizer_path: String,
+    state: tauri::State<'_, Mutex<AiState>>,
+) -> Result<String, String> {
+    // Check if already loaded
+    {
+        let ai = state.lock().map_err(|e| e.to_string())?;
+        if ai.model.is_some() {
+            return Ok("AI model already loaded".to_string());
+        }
+        if ai.is_loading {
+            return Ok("AI model is currently loading".to_string());
+        }
+    }
+
+    // Mark as loading
+    {
+        let mut ai = state.lock().map_err(|e| e.to_string())?;
+        ai.is_loading = true;
+    }
+
+    // Load on a blocking thread (model loading is CPU-heavy)
+    let result = tokio::task::spawn_blocking(move || {
+        ai_model::AiModel::load(&model_path, &tokenizer_path)
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking failed: {e}"))?;
+
+    match result {
+        Ok(model) => {
+            let mut ai = state.lock().map_err(|e| e.to_string())?;
+            ai.model = Some(model);
+            ai.is_loading = false;
+            Ok("AI model loaded successfully".to_string())
+        }
+        Err(e) => {
+            let mut ai = state.lock().map_err(|e2| e2.to_string())?;
+            ai.is_loading = false;
+            Err(e)
+        }
+    }
+}
+
+/// Check if the AI model is currently loaded.
+#[tauri::command]
+fn is_ai_model_loaded(state: tauri::State<'_, Mutex<AiState>>) -> Result<bool, String> {
+    let ai = state.lock().map_err(|e| e.to_string())?;
+    Ok(ai.model.is_some())
+}
+
+/// Process text with the local AI model. Streams tokens via "ai-token" events.
+#[tauri::command]
+async fn ai_process_text(
+    text: String,
+    mode: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Mutex<AiState>>,
+) -> Result<String, String> {
+    // Take the model out of the mutex so we can use it without holding the lock
+    let mut model = {
+        let mut ai = state.lock().map_err(|e| e.to_string())?;
+        ai.model.take().ok_or("AI model not loaded")?
+    };
+
+    let prompt = ai_model::build_prompt(&mode, &text);
+    let app_clone = app.clone();
+
+    // Run generation on a blocking thread (CPU/GPU intensive)
+    let result = tokio::task::spawn_blocking(move || {
+        let gen_result = model.generate(&prompt, 2048, |token| {
+            let _ = app_clone.emit("ai-token", &token);
+        });
+        (model, gen_result)
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking failed: {e}"))?;
+
+    let (model, gen_result) = result;
+
+    // Put the model back
+    {
+        let mut ai = state.lock().map_err(|e| e.to_string())?;
+        ai.model = Some(model);
+    }
+
+    gen_result
+}
+
 // ── Recording Pill Overlay ───────────────────────────────────────────────────
 
 /// Create the pill window (hidden) at app startup so it's ready instantly.
@@ -939,6 +1129,10 @@ pub fn run() {
         .manage(Mutex::new(AppState {
             whisper_context: None,
         }))
+        .manage(Mutex::new(AiState {
+            model: None,
+            is_loading: false,
+        }))
         .invoke_handler(tauri::generate_handler![
             download_whisper_model,
             load_whisper_model,
@@ -956,6 +1150,10 @@ pub fn run() {
             request_accessibility_permission,
             check_file_exists,
             delete_file,
+            download_ai_model,
+            load_ai_model,
+            is_ai_model_loaded,
+            ai_process_text,
         ])
         .setup(move |app| {
             // Set overlay titlebar on macOS only (not supported on Linux/GTK)

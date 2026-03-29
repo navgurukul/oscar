@@ -34,14 +34,15 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const isLandingPage = pathname === "/";
   const isSettingsPage = pathname === "/settings";
   const isDownloadPage = pathname === "/download";
+  const isLegalPage = pathname === "/privacy" || pathname === "/terms" || pathname === "/refund-policy";
   
   // Footer visibility rules:
   // 1. Unauthenticated on landing page -> show footer
   // 2. Authenticated only on settings page -> show footer
   const shouldShowFooter = (!isAuthenticated && isLandingPage) || (isAuthenticated && isSettingsPage);
   
-  // Hide recording button on download page
-  const shouldShowRecordingButton = !isDownloadPage;
+  // Hide recording button on download and legal pages
+  const shouldShowRecordingButton = !isDownloadPage && !isLegalPage;
   
 
   return (

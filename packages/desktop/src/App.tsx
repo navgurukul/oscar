@@ -383,7 +383,9 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
                 type="button"
                 className="terms-link"
                 onClick={() =>
-                  openUrl(`${import.meta.env.VITE_WEB_APP_URL}/terms`)
+                  openUrl(
+                    `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/terms`,
+                  )
                 }
               >
                 Terms of Service
@@ -393,7 +395,9 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
                 type="button"
                 className="terms-link"
                 onClick={() =>
-                  openUrl(`${import.meta.env.VITE_WEB_APP_URL}/privacy`)
+                  openUrl(
+                    `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/privacy`,
+                  )
                 }
               >
                 Privacy Policy
@@ -656,6 +660,14 @@ const MODEL_URL =
   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
 const MODEL_PATH = ".oscar/models/ggml-small.bin";
 const OLD_MODEL_PATH = ".oscar/models/ggml-base.bin";
+
+// Local AI model (Phi-3.5-mini quantized)
+const AI_MODEL_URL =
+  "https://huggingface.co/microsoft/Phi-3.5-mini-instruct-gguf/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf";
+const AI_MODEL_PATH = ".oscar/models/phi-3.5-mini-Q4_K_M.gguf";
+const AI_TOKENIZER_URL =
+  "https://huggingface.co/microsoft/Phi-3.5-mini-instruct/resolve/main/tokenizer.json";
+const AI_TOKENIZER_PATH = ".oscar/models/phi-3.5-tokenizer.json";
 
 interface DownloadProgress {
   downloaded: number;
@@ -926,6 +938,11 @@ function App() {
   const [_aiEditing, setAiEditing] = useState(false);
   const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
+  // Local AI model state
+  const [aiModelReady, setAiModelReady] = useState(false);
+  const [aiDownloading, setAiDownloading] = useState(false);
+  const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
+
   // Transcription language ("auto" = whisper auto-detects)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
 
@@ -1138,6 +1155,7 @@ function App() {
         }
         warmMicrophone(); // pre-warm ASAP so first hotkey press doesn't steal focus
         initWhisper();
+        initAiModel(); // try to load local AI model if already downloaded
       }
     })();
 
@@ -1272,6 +1290,84 @@ function App() {
     }
     setStatus("Whisper model not found. Set the path in Settings.");
   };
+
+  // ── Local AI model helpers ──────────────────────────────────────────────────
+
+  const initAiModel = useCallback(async () => {
+    try {
+      const home = await homeDir();
+      const modelPath = `${home}/${AI_MODEL_PATH}`;
+      const tokenizerPath = `${home}/${AI_TOKENIZER_PATH}`;
+
+      // Check if files exist
+      const [modelExists, tokenizerExists] = await Promise.all([
+        invoke<boolean>("check_file_exists", { path: modelPath }),
+        invoke<boolean>("check_file_exists", { path: tokenizerPath }),
+      ]);
+
+      if (!modelExists || !tokenizerExists) {
+        console.log("[ai] Model files not found — AI features not available yet");
+        return;
+      }
+
+      // Check if already loaded
+      const loaded = await invoke<boolean>("is_ai_model_loaded");
+      if (loaded) {
+        setAiModelReady(true);
+        return;
+      }
+
+      // Load the model
+      console.log("[ai] Loading local AI model...");
+      await invoke("load_ai_model", { modelPath, tokenizerPath });
+      setAiModelReady(true);
+      console.log("[ai] AI model ready");
+    } catch (err) {
+      console.warn("[ai] Failed to init AI model:", err);
+    }
+  }, []);
+
+  const handleDownloadAI = useCallback(async () => {
+    if (aiDownloading) return;
+    setAiDownloading(true);
+
+    try {
+      const home = await homeDir();
+      const modelPath = `${home}/${AI_MODEL_PATH}`;
+      const tokenizerPath = `${home}/${AI_TOKENIZER_PATH}`;
+
+      await invoke("download_ai_model", {
+        modelUrl: AI_MODEL_URL,
+        modelPath,
+        tokenizerUrl: AI_TOKENIZER_URL,
+        tokenizerPath,
+      });
+
+      // Load the model after download
+      await invoke("load_ai_model", { modelPath, tokenizerPath });
+      setAiModelReady(true);
+      console.log("[ai] AI model downloaded and loaded");
+    } catch (err) {
+      console.error("[ai] Download/load failed:", err);
+      alert(`Failed to download AI model: ${err}`);
+    } finally {
+      setAiDownloading(false);
+    }
+  }, [aiDownloading]);
+
+  const handleApplyAI = useCallback(
+    (transcriptId: string, newText: string) => {
+      setLocalTranscripts((prev) => {
+        const updated = prev.map((t) =>
+          t.id === transcriptId ? { ...t, text: newText } : t,
+        );
+        saveSetting("localTranscripts", updated);
+        return updated;
+      });
+      setSelectedTranscriptId(null);
+    },
+    [],
+  );
 
   // ── Dictionary helpers ─────────────────────────────────────────────────────
 
@@ -1656,11 +1752,18 @@ function App() {
                       saveSetting("localTranscripts", updated);
                       return updated;
                     });
+                    if (selectedTranscriptId === id) setSelectedTranscriptId(null);
                   }}
                   onClearAllTranscripts={() => {
                     setLocalTranscripts([]);
                     saveSetting("localTranscripts", []);
+                    setSelectedTranscriptId(null);
                   }}
+                  aiModelReady={aiModelReady}
+                  onDownloadAI={handleDownloadAI}
+                  onApplyAI={handleApplyAI}
+                  selectedTranscriptId={selectedTranscriptId}
+                  onSelectTranscript={setSelectedTranscriptId}
                 />
               )}
 

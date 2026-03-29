@@ -2064,6 +2064,242 @@ kbd {
 }
 
 /* ═════════════════════════════════════════════════════════════════════════════
+   AI PANEL
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.ai-panel {
+  margin-top: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+/* CTA state (model not downloaded) */
+.ai-panel--cta {
+  border-color: #e0e7ff;
+  background: linear-gradient(135deg, #f5f3ff 0%, #eef2ff 100%);
+}
+
+.ai-panel-cta-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.ai-panel-cta-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e0e7ff;
+  border-radius: 10px;
+  color: #6366f1;
+}
+
+.ai-panel-cta-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-panel-cta-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #312e81;
+}
+
+.ai-panel-cta-desc {
+  font-size: 0.6875rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.ai-panel-cta-btn {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #6366f1;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ai-panel-cta-btn:hover {
+  background: #4f46e5;
+}
+
+/* Action buttons row */
+.ai-panel-actions {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-panel-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #6366f1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ai-panel-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ai-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ai-action-btn:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
+/* Streaming output */
+.ai-output-wrap {
+  border-top: 1px solid #e2e8f0;
+}
+
+.ai-output-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.ai-output-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6366f1;
+}
+
+.ai-thinking-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6366f1;
+  animation: ai-pulse 1s ease-in-out infinite;
+}
+
+@keyframes ai-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.ai-output-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.ai-output-close:hover {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.ai-output-text {
+  padding: 14px 16px;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: #334155;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.ai-output-error {
+  padding: 14px 16px;
+  font-size: 0.8125rem;
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.ai-cursor-blink {
+  animation: blink 0.8s step-end infinite;
+  color: #6366f1;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Footer actions */
+.ai-output-footer {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px;
+  border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+.ai-footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: white;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #64748b;
+}
+
+.ai-footer-btn:hover {
+  background: #f1f5f9;
+}
+
+.ai-footer-apply {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: white;
+}
+
+.ai-footer-apply:hover {
+  background: #4f46e5;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
    VOCABULARY SECTION
    ═════════════════════════════════════════════════════════════════════════════ */
 
@@ -2167,6 +2403,15 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* Label hidden in icon-only (auto-sized) mode; shown when button goes full-width */
+.vocabulary-add-label {
+  display: none;
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .vocabulary-add-btn:hover:not(:disabled) {
@@ -2768,6 +3013,9 @@ kbd {
   min-height: 0;
   overflow-y: auto;
   animation: stFadeIn 0.18s ease;
+  /* Enable container queries so children respond to panel width, not viewport */
+  container-type: inline-size;
+  container-name: settings-panel;
 }
 
 @keyframes stFadeIn {
@@ -3267,6 +3515,149 @@ kbd {
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   VOCABULARY — CONTAINER QUERIES
+   Respond to the settings panel's own width, not the viewport.
+   The sidebar is 210 px fixed, so panel ≈ viewport − 210 px.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Medium panel  (≤ 660 px): collapse form to 2 columns */
+@container settings-panel (max-width: 660px) {
+  .vocabulary-section {
+    padding: 24px 20px;
+  }
+
+  .vocabulary-form {
+    padding: 16px;
+  }
+
+  .vocabulary-form-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  /* Category field spans both columns */
+  .vocabulary-form-row .vocabulary-input-group:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  /* Add button stretches full width below the inputs */
+  .vocabulary-add-btn {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 40px;
+    border-radius: 8px;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .vocabulary-add-label {
+    display: inline;
+  }
+
+  .vocabulary-edit-inputs {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  /* Third edit input (Category) spans full width */
+  .vocabulary-edit-inputs input:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .vocabulary-item {
+    padding: 14px 16px;
+  }
+}
+
+/* Small panel (≤ 440 px): single-column stack */
+@container settings-panel (max-width: 440px) {
+  .vocabulary-section {
+    padding: 16px 14px;
+  }
+
+  .vocabulary-section h3 {
+    font-size: 1.125rem;
+  }
+
+  .vocabulary-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .vocabulary-description {
+    font-size: 0.875rem;
+    margin-bottom: 16px;
+  }
+
+  .vocabulary-form {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .vocabulary-form-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .vocabulary-form-row .vocabulary-input-group:nth-child(3) {
+    grid-column: 1;
+  }
+
+  .vocabulary-add-btn {
+    grid-column: 1;
+    width: 100%;
+    height: 40px;
+    border-radius: 8px;
+  }
+
+  .vocabulary-add-label {
+    display: inline;
+  }
+
+  .vocabulary-edit-inputs {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .vocabulary-edit-inputs input:last-child {
+    grid-column: 1;
+  }
+
+  .vocabulary-edit-actions {
+    flex-direction: row;
+    width: 100%;
+  }
+
+  .vocabulary-edit-actions button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .vocabulary-item {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .vocabulary-item-content {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .vocabulary-item-actions {
+    align-self: flex-end;
+  }
+
+  .vocabulary-empty {
+    padding: 32px 16px;
+  }
+
+  .vocabulary-upgrade-prompt {
+    padding: 14px;
+  }
+}
+
 @media (max-width: 768px) {
   .sidebar {
     width: 100%;
@@ -3307,44 +3698,7 @@ kbd {
     display: none;
   }
 
-  .vocabulary-form-row,
-  .vocabulary-edit-inputs {
-    grid-template-columns: 1fr;
-  }
-
-  .vocabulary-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .vocabulary-section h3 {
-    font-size: 1.25rem;
-  }
-
-  .vocabulary-form {
-    padding: 16px;
-  }
-
-  .vocabulary-item {
-    padding: 14px 16px;
-  }
-
-  .vocabulary-empty {
-    padding: 32px 20px;
-  }
-
-  .vocabulary-item-content {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .vocabulary-item-actions {
-    align-self: flex-end;
-  }
-
   .record-content,
-  .vocabulary-section,
   .billing-section,
   .st-content {
     padding: 20px;
@@ -3392,50 +3746,7 @@ kbd {
 }
 
 @media (max-width: 480px) {
-  .vocabulary-section {
-    padding: 16px;
-  }
-
-  .vocabulary-description {
-    font-size: 0.875rem;
-    margin-bottom: 16px;
-  }
-
-  .vocabulary-form {
-    padding: 12px;
-    border-radius: 12px;
-  }
-
-  .vocabulary-form-row {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .vocabulary-edit-inputs {
-    grid-template-columns: 1fr;
-  }
-
-  .vocabulary-edit-actions {
-    flex-direction: column;
-  }
-
-  .vocabulary-edit-actions button {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .vocabulary-item {
-    padding: 12px;
-    border-radius: 10px;
-  }
-
-  .vocabulary-empty {
-    padding: 24px 16px;
-  }
-
-  .vocabulary-upgrade-prompt {
-    padding: 16px;
-  }
+  /* Vocabulary handled by container queries above; only non-vocabulary rules here */
 }
 
 /* ═════════════════════════════════════════════════════════════════════════════

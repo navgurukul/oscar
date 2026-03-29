@@ -228,6 +228,7 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
             ) : (
               <Plus size={18} />
             )}
+            <span className="vocabulary-add-label">Add</span>
           </button>
         </div>
       </div>

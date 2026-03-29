@@ -1,4 +1,5 @@
 import { TranscriptsSection } from "./TranscriptsSection";
+import { AIPanel } from "./AIPanel";
 import type { LocalTranscript } from "../types/note.types";
 
 interface HomeTabProps {
@@ -8,6 +9,11 @@ interface HomeTabProps {
   localTranscripts: LocalTranscript[];
   onDeleteTranscript: (id: string) => void;
   onClearAllTranscripts: () => void;
+  aiModelReady: boolean;
+  onDownloadAI: () => void;
+  onApplyAI: (transcriptId: string, text: string) => void;
+  selectedTranscriptId: string | null;
+  onSelectTranscript: (id: string | null) => void;
 }
 
 // Simple app icon SVGs — each accepts optional className for color control
@@ -109,6 +115,11 @@ function HomeTab({
   localTranscripts,
   onDeleteTranscript,
   onClearAllTranscripts,
+  aiModelReady,
+  onDownloadAI,
+  onApplyAI,
+  selectedTranscriptId,
+  onSelectTranscript,
 }: HomeTabProps) {
   // Extract first name
   const firstName = userName?.split(" ")[0] || "";
@@ -158,7 +169,23 @@ function HomeTab({
           transcripts={localTranscripts}
           onDeleteTranscript={onDeleteTranscript}
           onClearAll={onClearAllTranscripts}
+          selectedTranscriptId={selectedTranscriptId}
+          onSelectTranscript={onSelectTranscript}
         />
+
+        {/* AI Panel — shown when a transcript is selected */}
+        {selectedTranscriptId && (() => {
+          const selected = localTranscripts.find(t => t.id === selectedTranscriptId);
+          if (!selected) return null;
+          return (
+            <AIPanel
+              transcript={selected.text}
+              aiModelReady={aiModelReady}
+              onApply={(text) => onApplyAI(selectedTranscriptId, text)}
+              onDownloadAI={onDownloadAI}
+            />
+          );
+        })()}
       </div>
     </div>
   );
