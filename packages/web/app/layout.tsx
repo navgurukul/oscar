@@ -34,23 +34,30 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const isLandingPage = pathname === "/";
   const isSettingsPage = pathname === "/settings";
   const isDownloadPage = pathname === "/download";
-  const isLegalPage = pathname === "/privacy" || pathname === "/terms" || pathname === "/refund-policy";
-  
+  const isLegalPage =
+    pathname === "/privacy" ||
+    pathname === "/terms" ||
+    pathname === "/refund-policy";
+
   // Footer visibility rules:
   // 1. Unauthenticated on landing page -> show footer
   // 2. Authenticated only on settings page -> show footer
-  const shouldShowFooter = (!isAuthenticated && isLandingPage) || (isAuthenticated && isSettingsPage);
-  
+  const shouldShowFooter =
+    (!isAuthenticated && isLandingPage) || (isAuthenticated && isSettingsPage);
+
   // Hide recording button on download and legal pages
   const shouldShowRecordingButton = !isDownloadPage && !isLegalPage;
-  
 
   return (
     <div className="flex flex-col min-h-screen">
       <FloatingNavbar />
       <AuthEdgeButton />
       {children}
-      {shouldShowFooter && <div className="mt-auto"><Footer /></div>}
+      {shouldShowFooter && (
+        <div className="mt-auto">
+          <Footer />
+        </div>
+      )}
       {shouldShowRecordingButton && (
         <div className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50">
           <HomeRecordingButton />
@@ -67,10 +74,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      className={`${figtree.variable} ${ebGaramond.variable}`}
-    >
+    <html lang="en" className={`${figtree.variable} ${ebGaramond.variable}`}>
       <head>
         {/* Load ONNX Runtime Web from CDN to avoid bundling issues and fix 'onnxruntime' missing error */}
         <Script
