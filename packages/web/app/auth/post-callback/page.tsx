@@ -8,7 +8,10 @@ import { Spinner } from "@/components/ui/spinner";
 function PostCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams?.get("next") ?? "/";
+  // Check query param first (backward compat), then sessionStorage, then default to "/"
+  const queryNext = searchParams?.get("next");
+  const storedNext = typeof window !== "undefined" ? sessionStorage.getItem("auth_redirect_next") : null;
+  const next = queryNext ?? storedNext ?? "/";
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -29,6 +32,9 @@ function PostCallbackContent() {
             throw new Error("No active session after sign-in");
           }
         }
+
+        // Clean up the stored redirect destination
+        sessionStorage.removeItem("auth_redirect_next");
 
         router.replace(next);
         router.refresh();

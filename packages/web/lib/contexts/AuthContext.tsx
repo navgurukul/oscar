@@ -58,12 +58,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = useCallback(
     async (redirectTo: string = "/") => {
+      // Store the post-login destination in sessionStorage so we can retrieve
+      // it in the callback. We must NOT append query parameters to the
+      // Supabase redirectTo URL because Supabase uses exact URL matching
+      // against the allowed Redirect URLs list — any extra query params
+      // cause a mismatch and Supabase falls back to the Site URL.
+      sessionStorage.setItem("auth_redirect_next", redirectTo);
+
       // Always use the current origin — each environment (prod, dev, localhost)
-      // will naturally redirect back to itself. Never hardcode a URL here or
-      // Supabase will randomly redirect cross-environment when the env var
-      // doesn't match the actual host.
-      const callbackBase = window.location.origin;
-      const callbackUrl = `${callbackBase}/auth/callback?next=${encodeURIComponent(redirectTo)}`;
+      // will naturally redirect back to itself.
+      const callbackUrl = `${window.location.origin}/auth/callback`;
       await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
