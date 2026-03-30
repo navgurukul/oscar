@@ -176,7 +176,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
           VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
-          VITE_WEB_APP_URL: "https://release-dev.d3p88n1t5nfeta.amplifyapp.com"
+          VITE_WEB_APP_URL: "https://oscar.samyarth.org"
         run: pnpm build
 
       - name: Build Tauri app
@@ -189,7 +189,7 @@ jobs:
           CXXFLAGS: ${{ matrix.cflags }}
           VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
           VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
-          VITE_WEB_APP_URL: "https://release-dev.d3p88n1t5nfeta.amplifyapp.com"
+          VITE_WEB_APP_URL: "https://oscar.samyarth.org"
         run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
       - name: Sign bundles
