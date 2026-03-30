@@ -120,6 +120,19 @@ impl AiModel {
 
 pub fn build_prompt(mode: &str, text: &str) -> String {
     match mode {
+        "transcribe_cleanup" => format!(
+            "You are a speech-to-text post-processor. The following text was produced by a speech recognition system \
+             and may contain transcription artifacts. Your job:\n\
+             - Add proper punctuation (periods, commas, question marks, etc.)\n\
+             - Fix words that were likely misrecognized based on context\n\
+             - Remove filler words (um, uh, like, you know) and false starts\n\
+             - Capitalize properly (sentence starts, proper nouns)\n\
+             - Do NOT summarize, shorten, or change the meaning\n\
+             - Do NOT add any content that wasn't spoken\n\
+             - Do NOT change the speaker's tone or style\n\
+             - Preserve the full content — every idea and sentence must remain\n\
+             Output ONLY the cleaned text, nothing else:\n\n{text}"
+        ),
         "cleanup" => format!(
             "Clean up this voice transcript. Fix grammar, remove filler words (um, uh, like, you know), \
              fix punctuation, and improve readability. Keep the original meaning and speaker's tone intact. \

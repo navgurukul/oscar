@@ -7,7 +7,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { load } from "@tauri-apps/plugin-store";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { User, Session } from "@supabase/supabase-js";
-import { supabase, SUPABASE_URL } from "./supabase";
+import { supabase } from "./supabase";
 import { SparklesCore } from "@/components/ui/sparkles";
 import { Cover } from "@/components/ui/cover";
 import { Navigation } from "./components/Navigation";
@@ -661,9 +661,9 @@ const MODEL_URL =
 const MODEL_PATH = ".oscar/models/ggml-small.bin";
 const OLD_MODEL_PATH = ".oscar/models/ggml-base.bin";
 
-// Local AI model (Phi-3.5-mini quantized)
+// Local AI model (Phi-3.5-mini quantized — public community GGUF)
 const AI_MODEL_URL =
-  "https://huggingface.co/microsoft/Phi-3.5-mini-instruct-gguf/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf";
+  "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf";
 const AI_MODEL_PATH = ".oscar/models/phi-3.5-mini-Q4_K_M.gguf";
 const AI_TOKENIZER_URL =
   "https://huggingface.co/microsoft/Phi-3.5-mini-instruct/resolve/main/tokenizer.json";
@@ -916,7 +916,7 @@ function App() {
     null,
   );
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
-  const [userApiKey, setUserApiKey] = useState<string>("");
+  const [_userApiKey, setUserApiKey] = useState<string>("");
 
   // Recording & processing (global hotkey functionality)
   const [isRecording, setIsRecording] = useState(false);
@@ -934,14 +934,14 @@ function App() {
   const [_whisperModelPath, setWhisperModelPath] = useState("");
   const [_autoPaste, setAutoPaste] = useState(true);
 
-  // AI editing
+  // AI editing (legacy — kept for settings migration)
   const [_aiEditing, setAiEditing] = useState(false);
   const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
-  // Local AI model state
+  // Local AI model state (invisible — used silently in transcription pipeline)
   const [aiModelReady, setAiModelReady] = useState(false);
-  const [aiDownloading, setAiDownloading] = useState(false);
-  const [selectedTranscriptId, setSelectedTranscriptId] = useState<string | null>(null);
+  const [aiDownloadProgress, setAiDownloadProgress] = useState<{ percentage: number; file: string } | null>(null);
+  const aiModelReadyRef = useRef(false);
 
   // Transcription language ("auto" = whisper auto-detects)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
@@ -1155,7 +1155,8 @@ function App() {
         }
         warmMicrophone(); // pre-warm ASAP so first hotkey press doesn't steal focus
         initWhisper();
-        initAiModel(); // try to load local AI model if already downloaded
+        // Load AI model if already downloaded, otherwise download in background
+        downloadAiModelInBackground();
       }
     })();
 
@@ -1293,6 +1294,11 @@ function App() {
 
   // ── Local AI model helpers ──────────────────────────────────────────────────
 
+  const setAiReady = useCallback((ready: boolean) => {
+    setAiModelReady(ready);
+    aiModelReadyRef.current = ready;
+  }, []);
+
   const initAiModel = useCallback(async () => {
     try {
       const home = await homeDir();
@@ -1313,28 +1319,48 @@ function App() {
       // Check if already loaded
       const loaded = await invoke<boolean>("is_ai_model_loaded");
       if (loaded) {
-        setAiModelReady(true);
+        setAiReady(true);
         return;
       }
 
       // Load the model
       console.log("[ai] Loading local AI model...");
       await invoke("load_ai_model", { modelPath, tokenizerPath });
-      setAiModelReady(true);
+      setAiReady(true);
       console.log("[ai] AI model ready");
     } catch (err) {
       console.warn("[ai] Failed to init AI model:", err);
     }
-  }, []);
+  }, [setAiReady]);
 
-  const handleDownloadAI = useCallback(async () => {
-    if (aiDownloading) return;
-    setAiDownloading(true);
-
+  /** Download AI model in background (non-blocking). Called after setup completes. */
+  const downloadAiModelInBackground = useCallback(async () => {
     try {
       const home = await homeDir();
       const modelPath = `${home}/${AI_MODEL_PATH}`;
       const tokenizerPath = `${home}/${AI_TOKENIZER_PATH}`;
+
+      // Skip if already downloaded
+      const [modelExists, tokenizerExists] = await Promise.all([
+        invoke<boolean>("check_file_exists", { path: modelPath }),
+        invoke<boolean>("check_file_exists", { path: tokenizerPath }),
+      ]);
+      if (modelExists && tokenizerExists) {
+        console.log("[ai] Model files already exist, loading...");
+        await initAiModel();
+        return;
+      }
+
+      console.log("[ai] Starting background AI model download...");
+      setAiDownloadProgress({ percentage: 0, file: "model" });
+
+      // Listen for download progress
+      const unlisten = await listen<{ file: string; downloaded: number; total: number; percentage: number }>(
+        "ai-download-progress",
+        (event) => {
+          setAiDownloadProgress({ percentage: event.payload.percentage, file: event.payload.file });
+        },
+      );
 
       await invoke("download_ai_model", {
         modelUrl: AI_MODEL_URL,
@@ -1343,31 +1369,18 @@ function App() {
         tokenizerPath,
       });
 
+      unlisten();
+      setAiDownloadProgress(null);
+
       // Load the model after download
       await invoke("load_ai_model", { modelPath, tokenizerPath });
-      setAiModelReady(true);
-      console.log("[ai] AI model downloaded and loaded");
+      setAiReady(true);
+      console.log("[ai] AI model downloaded and loaded in background");
     } catch (err) {
-      console.error("[ai] Download/load failed:", err);
-      alert(`Failed to download AI model: ${err}`);
-    } finally {
-      setAiDownloading(false);
+      console.warn("[ai] Background download/load failed:", err);
+      setAiDownloadProgress(null);
     }
-  }, [aiDownloading]);
-
-  const handleApplyAI = useCallback(
-    (transcriptId: string, newText: string) => {
-      setLocalTranscripts((prev) => {
-        const updated = prev.map((t) =>
-          t.id === transcriptId ? { ...t, text: newText } : t,
-        );
-        saveSetting("localTranscripts", updated);
-        return updated;
-      });
-      setSelectedTranscriptId(null);
-    },
-    [],
-  );
+  }, [initAiModel, setAiReady]);
 
   // ── Dictionary helpers ─────────────────────────────────────────────────────
 
@@ -1527,31 +1540,19 @@ function App() {
 
       let finalText = result.text;
 
-      // AI editing via user's API key or Supabase Edge Function
-      if (aiEditingRef.current) {
-        // Check if user has their own API key
-        const hasUserApiKey = userApiKey && userApiKey.trim().length > 0;
-
-        if (hasUserApiKey || (sessionRef.current && SUPABASE_URL)) {
-          setStatus("✨ Enhancing with AI...");
-          try {
-            finalText = await invoke<string>("enhance_text", {
-              text: finalText,
-              tone: tonePresetRef.current,
-              edgeFunctionUrl: hasUserApiKey
-                ? null
-                : `${SUPABASE_URL}/functions/v1/enhance`,
-              jwt: hasUserApiKey ? null : sessionRef.current?.access_token,
-              apiKey: hasUserApiKey ? userApiKey : null,
-            });
-          } catch (aiErr) {
-            console.warn("[ai] enhance failed, using raw transcript:", aiErr);
-            setStatus(`⚠️ AI edit failed: ${aiErr}`);
-            await new Promise((r) => setTimeout(r, 1500));
+      // Silent AI cleanup — fix transcription artifacts without user seeing anything
+      if (aiModelReadyRef.current) {
+        try {
+          const cleaned = await invoke<string>("ai_process_text", {
+            text: finalText,
+            mode: "transcribe_cleanup",
+          });
+          if (cleaned && cleaned.trim().length > 0) {
+            finalText = cleaned;
           }
-        } else {
-          setStatus("⚠️ Sign in or add an API key to use AI editing.");
-          await new Promise((r) => setTimeout(r, 1500));
+        } catch (aiErr) {
+          // Silently fall back to raw transcript — user never sees this
+          console.warn("[ai] silent cleanup failed, using raw transcript:", aiErr);
         }
       }
 
@@ -1646,9 +1647,11 @@ function App() {
 
   const handleSetupComplete = async () => {
     setSetupComplete(true);
-    // Load the model after setup is complete and pre-warm mic
+    // Load the whisper model after setup is complete and pre-warm mic
     warmMicrophone();
     initWhisper();
+    // Start AI model download in background (non-blocking)
+    downloadAiModelInBackground();
   };
 
   const handleSignOut = async () => {
@@ -1752,18 +1755,11 @@ function App() {
                       saveSetting("localTranscripts", updated);
                       return updated;
                     });
-                    if (selectedTranscriptId === id) setSelectedTranscriptId(null);
                   }}
                   onClearAllTranscripts={() => {
                     setLocalTranscripts([]);
                     saveSetting("localTranscripts", []);
-                    setSelectedTranscriptId(null);
                   }}
-                  aiModelReady={aiModelReady}
-                  onDownloadAI={handleDownloadAI}
-                  onApplyAI={handleApplyAI}
-                  selectedTranscriptId={selectedTranscriptId}
-                  onSelectTranscript={setSelectedTranscriptId}
                 />
               )}
 
@@ -1805,18 +1801,50 @@ function App() {
                   }}
                   onClearData={async () => {
                     try {
+                      // Delete downloaded model files
+                      const home = await homeDir();
+                      const filesToDelete = [
+                        `${home}/${MODEL_PATH}`,
+                        `${home}/${OLD_MODEL_PATH}`,
+                        `${home}/${AI_MODEL_PATH}`,
+                        `${home}/${AI_TOKENIZER_PATH}`,
+                      ];
+                      for (const f of filesToDelete) {
+                        try {
+                          const exists = await invoke<boolean>("check_file_exists", { path: f });
+                          if (exists) await invoke("delete_file", { path: f });
+                        } catch {
+                          // best-effort cleanup
+                        }
+                      }
+                    } catch {
+                      // homeDir or invoke failed — continue with clearing
+                    }
+
+                    // Sign out of Supabase
+                    try {
+                      await supabase.auth.signOut();
+                    } catch {
+                      // may already be signed out
+                    }
+
+                    // Clear all persisted settings
+                    try {
                       const store = await getStore();
                       await store.clear();
                       await store.save();
                     } catch {
                       // clearing store failed — reload will reset state anyway
                     }
+
                     localStorage.clear();
                     window.location.reload();
                   }}
                   userEmail={user?.email}
                   userId={user?.id}
                   onSignOut={handleSignOut}
+                  aiModelReady={aiModelReady}
+                  aiDownloadProgress={aiDownloadProgress}
                 />
               )}
             </div>
