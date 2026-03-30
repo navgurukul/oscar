@@ -51,6 +51,10 @@ export default function NotesPage() {
   const [showStarredOnly, setShowStarredOnly] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<string>("All Notes");
   const [folders, setFolders] = useState<string[]>([]);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [targetNoteId, setTargetNoteId] = useState<string>("");
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
 
   useEffect(() => {
     setContextPrompt(getTimeBasedPrompt());
@@ -344,7 +348,8 @@ export default function NotesPage() {
 
         {/* Folder Tabs */}
         {allNotes.length > 0 && (
-          <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide no-scrollbar">
+          <>
+          <div className="flex items-center gap-2 mb-2 overflow-x-auto pb-2 scrollbar-hide no-scrollbar">
             {["All Notes", ...folders, "Uncategorized"].map((folder) => {
               const isActive = selectedFolder === folder;
               // Only show Uncategorized if there are actually uncategorized notes
@@ -354,18 +359,81 @@ export default function NotesPage() {
                 <button
                   key={folder}
                   onClick={() => setSelectedFolder(folder)}
-                  className={`px-6 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap border-b-2 ${
-                    isActive
-                      ? "bg-cyan-500 text-slate-950 border-cyan-500 shadow-[0_-4px_10px_rgba(6,182,212,0.2)]"
-                      : "bg-slate-900/50 text-gray-400 border-transparent hover:text-gray-200 hover:bg-slate-800"
-                  }`}
+                  className={`px-6 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
+                    isActive ? "bg-cyan-500 text-slate-950" : "bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:bg-slate-800"
+                  } ${folder === "Uncategorized" && isActive ? "border-b-2 border-cyan-500 shadow-[0_-4px_10px_rgba(6,182,212,0.2)]" : ""}`}
                 >
                   {folder}
                 </button>
               );
             })}
+            <button
+              onClick={() => setShowCreateFolder((v) => !v)}
+              className="ml-2 px-3 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-300 hover:text-cyan-200 border border-cyan-500/30 text-xs font-semibold transition-colors"
+              title="Create a new folder and assign a note"
+            >
+              New Folder
+            </button>
           </div>
+          {showCreateFolder && (
+            <div className="mb-6 flex flex-col sm:flex-row items-center gap-2 p-2 bg-slate-900/60 border border-cyan-700/30 rounded-xl">
+              <Input
+                placeholder="Folder name"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                className="h-9 w-full sm:w-56 bg-slate-800 border-cyan-700/30 text-white"
+              />
+              <Select value={targetNoteId} onValueChange={setTargetNoteId}>
+                <SelectTrigger className="h-9 w-full sm:w-64 bg-slate-800 border-cyan-700/30 text-white">
+                  <SelectValue placeholder="Assign to note..." />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-cyan-700/30 text-white max-h-64 overflow-y-auto">
+                  {allNotes.map((n) => (
+                    <SelectItem key={n.id} value={n.id}>
+                      {(n.title || "Untitled").slice(0, 50)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <button
+                onClick={async () => {
+                  if (!newFolderName.trim() || !targetNoteId) return;
+                  setIsCreatingFolder(true);
+                  const { data, error } = await notesService.updateNote(targetNoteId, { folder: newFolderName.trim() });
+                  setIsCreatingFolder(false);
+                  if (!error && data) {
+                    setAllNotes(prev => prev.map(n => n.id === data.id ? { ...n, folder: data.folder } : n));
+                    if (!folders.includes(newFolderName.trim())) {
+                      setFolders(prev => [...prev, newFolderName.trim()]);
+                    }
+                    setSelectedFolder(newFolderName.trim());
+                    setShowCreateFolder(false);
+                    setNewFolderName("");
+                    setTargetNoteId("");
+                  } else {
+                    alert("Failed to create folder. Please try again.");
+                  }
+                }}
+                disabled={!newFolderName.trim() || !targetNoteId || isCreatingFolder}
+                className="h-9 px-4 rounded-lg bg-cyan-500 text-slate-950 font-semibold disabled:opacity-40"
+              >
+                {isCreatingFolder ? "Creating..." : "Create"}
+              </button>
+              <button
+                onClick={() => {
+                  setShowCreateFolder(false);
+                  setNewFolderName("");
+                  setTargetNoteId("");
+                }}
+                className="h-9 px-3 text-sm text-gray-400 hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          </>
         )}
+
 
         {/* Filter Bar */}
         {allNotes.length > 0 && (

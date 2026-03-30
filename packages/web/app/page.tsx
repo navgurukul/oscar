@@ -10,7 +10,7 @@ import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Settings, Plus, Upload, MoreHorizontal } from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Settings, Plus, MoreHorizontal } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 
 import { notesService } from "@/lib/services/notes.service";
@@ -317,20 +317,13 @@ export default function Home() {
               <Plus className="w-5 h-5 mr-2" />
               New Note
             </Button>
-            <Button
-              variant="outline"
-              className="bg-slate-900/50 border-white/10 text-gray-300 hover:text-white hover:bg-slate-800 px-6 py-6 rounded-full h-auto"
-            >
-              <Upload className="w-5 h-5 mr-2" />
-              Import Audio
-            </Button>
             <Link href={ROUTES.NOTES}>
               <Button
                 variant="outline"
                 className="bg-slate-900/50 border-white/10 text-gray-300 hover:text-white hover:bg-slate-800 px-6 py-6 rounded-full h-auto"
               >
                 <Plus className="w-5 h-5 mr-2" />
-                Saved Notes
+                My Notes
               </Button>
             </Link>
           </div>
