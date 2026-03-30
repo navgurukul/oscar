@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>OSCAR needs microphone access to record and transcribe your voice.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>OSCAR may use camera for future features.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>OSCAR needs this to paste transcribed text into other applications.</string>
+  <key>NSAccessibilityUsageDescription</key>
+  <string>OSCAR needs Accessibility access to paste transcribed text into other apps using your keyboard shortcut.</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.souvikdeb.oscar</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>oscar</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

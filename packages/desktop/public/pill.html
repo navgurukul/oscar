@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=48, height=32">
+  <title>Recording</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 48px;
+      height: 32px;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    .pill {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 32px;
+      background: rgba(15, 23, 42, 0.85);
+      border-radius: 16px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255,255,255,0.08);
+      backdrop-filter: blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
+    }
+
+    /* ── LISTENING STATE: waveform bars + red pulse ring ─── */
+    .listening-state {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 16px;
+    }
+
+    .bar {
+      width: 2px;
+      background: linear-gradient(180deg, #f8fafc 0%, #94a3b8 100%);
+      border-radius: 1px;
+      animation: wave 1s ease-in-out infinite;
+    }
+
+    .bar:nth-child(1)  { height: 6px;  animation-delay: 0s; }
+    .bar:nth-child(2)  { height: 10px; animation-delay: 0.08s; }
+    .bar:nth-child(3)  { height: 14px; animation-delay: 0.16s; }
+    .bar:nth-child(4)  { height: 8px;  animation-delay: 0.24s; }
+    .bar:nth-child(5)  { height: 12px; animation-delay: 0.32s; }
+
+    @keyframes wave {
+      0%, 100% { transform: scaleY(1); opacity: 0.7; }
+      50%      { transform: scaleY(0.4); opacity: 1; }
+    }
+
+    /* ── PROCESSING STATE: spinner ring ─────────────────── */
+    .processing-state {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(248, 250, 252, 0.2);
+      border-top-color: #f8fafc;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* State toggling */
+    body.processing .listening-state { display: none; }
+    body.processing .processing-state { display: flex; }
+  </style>
+</head>
+<body>
+  <div class="pill">
+    <div class="listening-state">
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+    <div class="processing-state">
+      <div class="spinner"></div>
+    </div>
+  </div>
+  <script>
+    // Listen for state changes from the Tauri backend
+    function setupListeners() {
+      const tauriEvent = window.__TAURI__ && window.__TAURI__.event;
+      if (!tauriEvent) {
+        // Retry — Tauri injects the global after DOMContentLoaded in some cases
+        setTimeout(setupListeners, 50);
+        return;
+      }
+      tauriEvent.listen("pill-set-processing", () => {
+        document.body.classList.add("processing");
+      });
+      tauriEvent.listen("pill-set-listening", () => {
+        document.body.classList.remove("processing");
+      });
+    }
+    setupListeners();
+  </script>
+</body>
+</html>

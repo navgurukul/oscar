@@ -1,0 +1,384 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # Create the GitHub release once, before the parallel matrix builds start.
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+
+    steps:
+      - name: Validate tag format
+        run: |
+          if ! echo '${{ github.ref_name }}' | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Tag must be in format vMAJOR.MINOR.PATCH (e.g., v0.2.13)"
+            exit 1
+          fi
+          echo "Tag format valid: ${{ github.ref_name }}"
+
+      - name: Create GitHub Release
+        id: create
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          EXISTING=$(curl -sL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO/releases/tags/$TAG")
+
+          RELEASE_ID=$(echo "$EXISTING" | python3 -c \
+            "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(curl -sL -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"$TAG\",\"name\":\"OSCAR $TAG\",\"body\":\"Bug fixes and improvements.\",\"draft\":false,\"prerelease\":false}" \
+              "https://api.github.com/repos/$REPO/releases" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          fi
+
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          echo "Release ID: $RELEASE_ID"
+
+  release:
+    needs: create-release
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── macOS ──
+          - target: aarch64-apple-darwin
+            label: macos-silicon
+            os: macos-latest
+            cflags: "-march=armv8-a"
+            bundles: "app,dmg"
+          - target: x86_64-apple-darwin
+            label: macos-intel
+            os: macos-latest
+            cflags: ""
+            bundles: "app,dmg"
+          # ── Windows ──
+          - target: x86_64-pc-windows-msvc
+            label: windows-x64
+            os: windows-latest
+            cflags: ""
+            bundles: "nsis"
+          # ── Linux ──
+          - target: x86_64-unknown-linux-gnu
+            label: linux-x64
+            os: ubuntu-22.04
+            cflags: ""
+            bundles: "appimage,deb"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inject version from tag
+        shell: bash
+        run: |
+          # Extract version from tag (remove 'v' prefix)
+          TAG='${{ github.ref_name }}'
+          VERSION="${TAG#v}"
+          
+          echo "Injecting version: $VERSION"
+          
+          # Validate version format
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Invalid version format '$VERSION'. Expected MAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          
+          # Update package.json files
+          for FILE in package.json packages/desktop/package.json; do
+            if [ -f "$FILE" ]; then
+              if command -v jq &> /dev/null; then
+                jq --arg v "$VERSION" '.version = $v' "$FILE" > "${FILE}.tmp" && mv "${FILE}.tmp" "$FILE"
+              else
+                sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$VERSION\"/" "$FILE"
+              fi
+              echo "Updated $FILE: $(grep '"version"' "$FILE")"
+            fi
+          done
+          
+          # Update tauri.conf.json
+          FILE="packages/desktop/src-tauri/tauri.conf.json"
+          if [ -f "$FILE" ]; then
+            if command -v jq &> /dev/null; then
+              jq --arg v "$VERSION" '.version = $v' "$FILE" > "${FILE}.tmp" && mv "${FILE}.tmp" "$FILE"
+            else
+              sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$VERSION\"/" "$FILE"
+            fi
+            echo "Updated $FILE: $(grep '"version"' "$FILE")"
+          fi
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            libasound2-dev \
+            libxdo-dev \
+            libonig-dev
+
+      - name: Install macOS system dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install oniguruma
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './packages/desktop/src-tauri -> target'
+          key: ${{ matrix.target }}
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build frontend
+        working-directory: packages/desktop
+        env:
+          VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
+          VITE_WEB_APP_URL: "https://oscar.samyarth.org"
+        run: pnpm build
+
+      - name: Build Tauri app
+        working-directory: packages/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          RUST_BACKTRACE: "1"
+          CFLAGS: ${{ matrix.cflags }}
+          CXXFLAGS: ${{ matrix.cflags }}
+          VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
+          VITE_WEB_APP_URL: "https://oscar.samyarth.org"
+        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Sign bundles
+        if: runner.os != 'Windows'
+        working-directory: packages/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          shopt -s nullglob
+          TAURI_BIN="../../node_modules/.bin/tauri"
+
+          for F in \
+            src-tauri/target/$TARGET/release/bundle/macos/*.app.tar.gz \
+            src-tauri/target/$TARGET/release/bundle/dmg/*.dmg \
+            src-tauri/target/$TARGET/release/bundle/appimage/*.AppImage.tar.gz; do
+            echo "Signing $(basename "$F")..."
+            "$TAURI_BIN" signer sign "$F"
+            echo "  $(basename "$F").sig created"
+          done
+
+          echo "All signed files:"
+          find src-tauri/target/$TARGET/release/bundle -name "*.sig" | sort
+
+      - name: Sign bundles (Windows)
+        if: runner.os == 'Windows'
+        working-directory: packages/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TARGET: ${{ matrix.target }}
+        shell: pwsh
+        run: |
+          $TAURI_BIN = "../../node_modules/.bin/tauri"
+          $BASE = "src-tauri/target/$env:TARGET/release/bundle/nsis"
+          Get-ChildItem "$BASE/*.nsis.zip" -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "Signing $($_.Name)..."
+            & $TAURI_BIN signer sign $_.FullName
+          }
+
+      - name: Upload release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+          TARGET: ${{ matrix.target }}
+          REPO: ${{ github.repository }}
+          LABEL: ${{ matrix.label }}
+        shell: bash
+        run: |
+          UPLOAD_URL="https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets"
+
+          upload_file() {
+            local FILE="$1"
+            [ -f "$FILE" ] || return 0
+            local NAME
+            NAME=$(basename "$FILE")
+            echo "Uploading $NAME..."
+            curl -sL -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$FILE" \
+              "$UPLOAD_URL?name=$NAME"
+            echo ""
+          }
+
+          shopt -s nullglob
+          BASE="packages/desktop/src-tauri/target/$TARGET/release/bundle"
+
+          # ── macOS ──
+          if [[ "$TARGET" == *apple-darwin* ]]; then
+            ARCH="${TARGET//-apple-darwin/}"
+            # Rename .app.tar.gz to include arch
+            for F in "$BASE/macos/"*.app.tar.gz; do
+              NEWNAME="${F%.app.tar.gz}_${ARCH}.app.tar.gz"
+              mv "$F" "$NEWNAME"
+              echo "Renamed to $(basename "$NEWNAME")"
+            done
+            for F in "$BASE/macos/"*.app.tar.gz.sig; do
+              NEWNAME="${F%.app.tar.gz.sig}_${ARCH}.app.tar.gz.sig"
+              mv "$F" "$NEWNAME"
+            done
+            for F in "$BASE"/macos/*_${ARCH}.app.tar.gz "$BASE"/macos/*_${ARCH}.app.tar.gz.sig; do upload_file "$F"; done
+            for F in "$BASE"/dmg/*.dmg "$BASE"/dmg/*.dmg.sig; do upload_file "$F"; done
+          fi
+
+          # ── Windows ──
+          if [[ "$TARGET" == *windows* ]]; then
+            for F in "$BASE"/nsis/*.exe; do upload_file "$F"; done
+            for F in "$BASE"/nsis/*.nsis.zip "$BASE"/nsis/*.nsis.zip.sig; do upload_file "$F"; done
+          fi
+
+          # ── Linux ──
+          if [[ "$TARGET" == *linux* ]]; then
+            for F in "$BASE"/appimage/*.AppImage; do upload_file "$F"; done
+            for F in "$BASE"/appimage/*.AppImage.tar.gz "$BASE"/appimage/*.AppImage.tar.gz.sig; do upload_file "$F"; done
+            for F in "$BASE"/deb/*.deb; do upload_file "$F"; done
+          fi
+
+  # After ALL builds, generate updates.json with real signatures for auto-updater
+  updater:
+    needs: release
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate and upload updates.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          VERSION="${TAG#v}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          ASSETS=$(curl -sL \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO/releases/tags/$TAG")
+
+          get_url() {
+            echo "$ASSETS" | python3 -c "
+          import sys, json, re
+          data = json.load(sys.stdin)
+          for a in data.get('assets', []):
+              if re.search(sys.argv[1], a['name']):
+                  print(a['browser_download_url']); break
+          " "$1"
+          }
+
+          get_sig() {
+            URL=$(get_url "$1")
+            [ -n "$URL" ] && curl -sL "$URL" || echo ""
+          }
+
+          # macOS updater artifacts (.app.tar.gz)
+          ARM_URL=$(get_url "aarch64.*\.app\.tar\.gz$")
+          X86_URL=$(get_url "x64.*\.app\.tar\.gz$|x86_64.*\.app\.tar\.gz$")
+          ARM_SIG=$(get_sig "aarch64.*\.app\.tar\.gz\.sig$")
+          X86_SIG=$(get_sig "x64.*\.app\.tar\.gz\.sig$|x86_64.*\.app\.tar\.gz\.sig$")
+
+          # Windows updater artifact (.nsis.zip)
+          WIN_URL=$(get_url "\.nsis\.zip$")
+          WIN_SIG=$(get_sig "\.nsis\.zip\.sig$")
+
+          # Linux updater artifact (.AppImage.tar.gz)
+          LINUX_URL=$(get_url "\.AppImage\.tar\.gz$")
+          LINUX_SIG=$(get_sig "\.AppImage\.tar\.gz\.sig$")
+
+          echo "macOS ARM:  $ARM_URL"
+          echo "macOS x86:  $X86_URL"
+          echo "Windows:    $WIN_URL"
+          echo "Linux:      $LINUX_URL"
+
+          python3 -c "
+          import json
+          platforms = {}
+          if '$ARM_URL':
+            platforms['darwin-aarch64'] = {'signature': r'''$ARM_SIG'''.strip(), 'url': '$ARM_URL'}
+          if '$X86_URL':
+            platforms['darwin-x86_64'] = {'signature': r'''$X86_SIG'''.strip(), 'url': '$X86_URL'}
+          if '$WIN_URL':
+            platforms['windows-x86_64'] = {'signature': r'''$WIN_SIG'''.strip(), 'url': '$WIN_URL'}
+          if '$LINUX_URL':
+            platforms['linux-x86_64'] = {'signature': r'''$LINUX_SIG'''.strip(), 'url': '$LINUX_URL'}
+          print(json.dumps({
+            'version': '$VERSION',
+            'notes': 'Bug fixes and improvements.',
+            'pub_date': '$PUB_DATE',
+            'platforms': platforms
+          }, indent=2))
+          " > updates.json
+
+          cat updates.json
+
+          # Delete old updates.json if exists
+          OLD_ID=$(echo "$ASSETS" | python3 -c "
+          import sys,json
+          for a in json.load(sys.stdin).get('assets',[]):
+              if a['name']=='updates.json': print(a['id']); break
+          " 2>/dev/null || true)
+          [ -n "$OLD_ID" ] && curl -sL -X DELETE \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO/releases/assets/$OLD_ID"
+
+          # Upload fresh updates.json
+          RELEASE_ID=$(echo "$ASSETS" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          curl -sL -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @updates.json \
+            "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=updates.json"

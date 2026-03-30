@@ -1,0 +1,69 @@
+"use client";
+
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { Spinner } from "@/components/ui/spinner";
+
+function PostCallbackContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Check query param first (backward compat), then sessionStorage, then default to "/"
+  const queryNext = searchParams?.get("next");
+  const storedNext = typeof window !== "undefined" ? sessionStorage.getItem("auth_redirect_next") : null;
+  const next = queryNext ?? storedNext ?? "/";
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const sync = async () => {
+      try {
+        const supabase = createClient();
+
+        // 1) Read session (this also ensures the client is initialized)
+        const { data: sessionData, error: sessionError } =
+          await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+
+        // 2) Force a refresh attempt (helps when cookies changed during server exchange)
+        // If refresh fails but we still have a session, proceed anyway.
+        if (!sessionData.session) {
+          const { data: refreshData } = await supabase.auth.refreshSession();
+          if (!refreshData.session) {
+            throw new Error("No active session after sign-in");
+          }
+        }
+
+        // Clean up the stored redirect destination
+        sessionStorage.removeItem("auth_redirect_next");
+
+        router.replace(next);
+        router.refresh();
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Could not finalize sign-in";
+        setError(message);
+        // Send user back to auth with error message.
+        router.replace(`/auth?error=${encodeURIComponent(message)}`);
+      }
+    };
+
+    sync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: one-time OAuth session sync
+  }, []);
+
+  if (error) {
+    return <div className="text-sm text-red-400">{error}</div>;
+  }
+
+  return null;
+}
+
+export default function PostCallbackPage() {
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-black">
+      <Suspense fallback={<Spinner className="text-cyan-500" />}>
+        <PostCallbackContent />
+      </Suspense>
+    </main>
+  );
+}
