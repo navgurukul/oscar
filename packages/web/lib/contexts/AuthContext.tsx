@@ -58,13 +58,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = useCallback(
     async (redirectTo: string = "/") => {
-      // prefer explicit public URL from env (set in production). fallback to window.location.origin in browser.
-      const appUrl =
-        (typeof window !== "undefined" && process.env.NEXT_PUBLIC_APP_URL === undefined)
-          ? window.location.origin
-          : process.env.NEXT_PUBLIC_APP_URL;
-
-      const callbackBase = appUrl ? appUrl : (typeof window !== "undefined" ? window.location.origin : "");
+      // Always use the current origin — each environment (prod, dev, localhost)
+      // will naturally redirect back to itself. Never hardcode a URL here or
+      // Supabase will randomly redirect cross-environment when the env var
+      // doesn't match the actual host.
+      const callbackBase = window.location.origin;
       const callbackUrl = `${callbackBase}/auth/callback?next=${encodeURIComponent(redirectTo)}`;
       await supabase.auth.signInWithOAuth({
         provider: "google",
