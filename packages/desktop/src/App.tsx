@@ -1378,6 +1378,9 @@ function App() {
   // ── Hotkey recording ───────────────────────────────────────────────────────
 
   const startHotkeyRecording = async () => {
+    // Show the pill immediately so users see instant feedback
+    invoke("show_recording_pill").catch(console.warn);
+
     // Use the pre-warmed stream if available; fall back to getUserMedia
     let stream: MediaStream;
     if (
@@ -1399,6 +1402,7 @@ function App() {
       } catch (e) {
         console.error("[record] getUserMedia failed:", e);
         setStatus(`Error: Could not access microphone — ${e}`);
+        invoke("hide_recording_pill").catch(console.warn);
         return;
       }
     }
@@ -1432,7 +1436,6 @@ function App() {
     isRecordingRef.current = true;
     setIsRecording(true);
     setStatus("Recording... Release to stop");
-    invoke("show_recording_pill").catch(console.warn);
   };
 
   const stopHotkeyRecording = () => {

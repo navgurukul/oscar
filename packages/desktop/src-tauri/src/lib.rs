@@ -803,7 +803,7 @@ fn create_pill_window(app: &tauri::AppHandle) {
         return; // already exists
     }
 
-    let pill_w = 120.0_f64;
+    let pill_w = 48.0_f64;
     let pill_h = 32.0_f64;
     let (pos_x, pos_y): (f64, f64) = app
         .primary_monitor()

@@ -3826,7 +3826,7 @@ dependencies = [
 
 [[package]]
 name = "oscar"
-version = "0.2.12"
+version = "0.2.17"
 dependencies = [
  "arboard",
  "candle-core",
