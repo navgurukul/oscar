@@ -939,8 +939,7 @@ function App() {
   const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
   // Local AI model state (invisible — used silently in transcription pipeline)
-  const [aiModelReady, setAiModelReady] = useState(false);
-  const [aiDownloadProgress, setAiDownloadProgress] = useState<{ percentage: number; file: string } | null>(null);
+  const [_aiModelReady, setAiModelReady] = useState(false);
   const aiModelReadyRef = useRef(false);
 
   // Transcription language ("auto" = whisper auto-detects)
@@ -1352,15 +1351,6 @@ function App() {
       }
 
       console.log("[ai] Starting background AI model download...");
-      setAiDownloadProgress({ percentage: 0, file: "model" });
-
-      // Listen for download progress
-      const unlisten = await listen<{ file: string; downloaded: number; total: number; percentage: number }>(
-        "ai-download-progress",
-        (event) => {
-          setAiDownloadProgress({ percentage: event.payload.percentage, file: event.payload.file });
-        },
-      );
 
       await invoke("download_ai_model", {
         modelUrl: AI_MODEL_URL,
@@ -1369,16 +1359,12 @@ function App() {
         tokenizerPath,
       });
 
-      unlisten();
-      setAiDownloadProgress(null);
-
       // Load the model after download
       await invoke("load_ai_model", { modelPath, tokenizerPath });
       setAiReady(true);
       console.log("[ai] AI model downloaded and loaded in background");
     } catch (err) {
       console.warn("[ai] Background download/load failed:", err);
-      setAiDownloadProgress(null);
     }
   }, [initAiModel, setAiReady]);
 
@@ -1843,8 +1829,6 @@ function App() {
                   userEmail={user?.email}
                   userId={user?.id}
                   onSignOut={handleSignOut}
-                  aiModelReady={aiModelReady}
-                  aiDownloadProgress={aiDownloadProgress}
                 />
               )}
             </div>

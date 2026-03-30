@@ -79,8 +79,6 @@ interface SettingsTabProps {
   userEmail?: string;
   userId?: string;
   onSignOut: () => void;
-  aiModelReady?: boolean;
-  aiDownloadProgress?: { percentage: number; file: string } | null;
 }
 
 const NAV_ITEMS: {
@@ -104,8 +102,6 @@ export function SettingsTab({
   userEmail,
   userId,
   onSignOut,
-  aiModelReady,
-  aiDownloadProgress,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabType>("billing");
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -307,58 +303,6 @@ export function SettingsTab({
               )}
             </div>
 
-            {/* ── AI Model Status ── */}
-            <div className="st-card">
-              <div className="st-card-hd">
-                <span className="st-ico-pill">
-                  <svg
-                    width="15"
-                    height="15"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                    <path d="M2 17l10 5 10-5" />
-                    <path d="M2 12l10 5 10-5" />
-                  </svg>
-                </span>
-                <div>
-                  <h3 className="st-card-title">AI Text Enhancement</h3>
-                  <p className="st-card-desc">
-                    On-device AI that silently polishes your transcriptions
-                  </p>
-                </div>
-              </div>
-              {aiModelReady ? (
-                <div className="st-ai-status st-ai-status--ready">
-                  <span className="st-ai-dot st-ai-dot--green" />
-                  <span>Ready — Phi-3.5-mini loaded on device</span>
-                </div>
-              ) : aiDownloadProgress ? (
-                <div className="st-ai-status st-ai-status--downloading">
-                  <div className="st-ai-progress-wrap">
-                    <div className="st-ai-progress-bar">
-                      <div
-                        className="st-ai-progress-fill"
-                        style={{ width: `${aiDownloadProgress.percentage}%` }}
-                      />
-                    </div>
-                    <span className="st-ai-progress-text">
-                      Downloading {aiDownloadProgress.file === "tokenizer" ? "tokenizer" : "AI model"}… {aiDownloadProgress.percentage}%
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="st-ai-status st-ai-status--pending">
-                  <span className="st-ai-dot st-ai-dot--gray" />
-                  <span>Not downloaded — will download automatically on next setup</span>
-                </div>
-              )}
-            </div>
           </div>
         )}
 
