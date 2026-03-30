@@ -27,7 +27,6 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const origin = getOrigin(request);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
 
   // Check if this is a desktop app auth flow
   const isDesktopFlow = searchParams.get("desktop") === "true";
