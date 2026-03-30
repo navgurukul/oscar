@@ -1,11 +1,34 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
+/**
+ * Derive the real origin the user is visiting.
+ *
+ * On platforms like AWS Amplify the server-side function runs behind a
+ * reverse-proxy / CDN, so `request.url` may contain an internal address
+ * (e.g. http://localhost:3000).  We check forwarded headers first and
+ * fall back to the URL parsed from the request only as a last resort.
+ */
+function getOrigin(request: Request): string {
+  const headers = new Headers(request.headers);
+
+  // x-forwarded-host is set by most reverse proxies / CDNs
+  const forwardedHost = headers.get("x-forwarded-host") ?? headers.get("host");
+  if (forwardedHost) {
+    const protocol = headers.get("x-forwarded-proto") ?? "https";
+    return `${protocol}://${forwardedHost}`;
+  }
+
+  // Fallback – works fine in local dev / environments without a proxy
+  return new URL(request.url).origin;
+}
+
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = getOrigin(request);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
-  
+
   // Check if this is a desktop app auth flow
   const isDesktopFlow = searchParams.get("desktop") === "true";
   // Get desktop_state from query params for state validation
@@ -26,7 +49,7 @@ export async function GET(request: Request) {
       // still have a stale session until it re-syncs. Redirect through a small
       // client page that forces a session read/refresh before entering the app.
       return NextResponse.redirect(
-        `${origin}/auth/post-callback?next=${encodeURIComponent(next)}`
+        `${origin}/auth/post-callback`
       );
     }
   }
