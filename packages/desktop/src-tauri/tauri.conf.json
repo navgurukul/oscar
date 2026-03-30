@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OSCAR",
-  "version": "0.2.13",
+  "version": "0.2.17",
   "identifier": "com.souvikdeb.oscar",
   "build": {
     "beforeDevCommand": "npm run dev",
