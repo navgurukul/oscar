@@ -9,7 +9,7 @@ type Platform = "mac-intel" | "mac-silicon" | "windows" | "linux" | null;
 
 // Download configuration - GitHub Releases
 const GITHUB_REPO = process.env.NEXT_PUBLIC_GITHUB_REPO ?? "navgurukul/oscar";
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.2.12";
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.2.14";
 const GITHUB_RELEASE_BASE = `https://github.com/${GITHUB_REPO}/releases/download/v${APP_VERSION}`;
 
 const DOWNLOAD_URLS: Record<Exclude<Platform, null>, string> = {
