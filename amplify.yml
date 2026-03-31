@@ -45,3 +45,7 @@ applications:
 
           # DeepSeek AI Configuration
           DEEPSEEK_API_KEY: $DEEPSEEK_API_KEY
+
+          # Desktop App Configuration
+          NEXT_PUBLIC_APP_VERSION: $NEXT_PUBLIC_APP_VERSION
+          NEXT_PUBLIC_GITHUB_REPO: $NEXT_PUBLIC_GITHUB_REPO
