@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, Suspense, useState, useRef } from "react";
+
+// Force dynamic rendering to avoid prerendering at build time
+export const dynamic = "force-dynamic";
 import { useSearchParams } from "next/navigation";
 import { Spinner } from "@/components/ui/spinner";
 import { createClient } from "@/lib/supabase/client";

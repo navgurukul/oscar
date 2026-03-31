@@ -567,7 +567,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be1160c3b63f47d40d91110a3e1e1e566ae38edddbbf492a60b40ffc3bc1ff38"
 dependencies = [
  "candle-core",
+ "candle-metal-kernels",
  "half",
+ "metal 0.27.0",
  "num-traits",
  "rayon",
  "safetensors",
@@ -3826,7 +3828,7 @@ dependencies = [
 
 [[package]]
 name = "oscar"
-version = "0.2.17"
+version = "0.3.0"
 dependencies = [
  "arboard",
  "candle-core",

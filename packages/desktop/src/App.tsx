@@ -942,6 +942,10 @@ function App() {
   const [_aiModelReady, setAiModelReady] = useState(false);
   const aiModelReadyRef = useRef(false);
 
+  // AI Improvement toggle (user-controllable)
+  const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
+  const aiImprovementEnabledRef = useRef(true);
+
   // Transcription language ("auto" = whisper auto-detects)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
 
@@ -1105,6 +1109,7 @@ function App() {
         savedTranscripts,
         savedLanguage,
         savedMicId,
+        savedAiImprovement,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
         loadSetting<TonePreset>("tonePreset", "none"),
@@ -1116,6 +1121,7 @@ function App() {
         loadSetting<LocalTranscript[]>("localTranscripts", []),
         loadSetting<string>("transcriptionLanguage", "auto"),
         loadSetting<string>("selectedMicId", ""),
+        loadSetting<boolean>("aiImprovementEnabled", true),
       ]);
 
       setPermissionsShown(permsDone);
@@ -1132,6 +1138,8 @@ function App() {
       setLocalTranscripts(savedTranscripts);
       setTranscriptionLanguage(savedLanguage);
       setSelectedMicId(savedMicId);
+      setAiImprovementEnabled(savedAiImprovement);
+      aiImprovementEnabledRef.current = savedAiImprovement;
 
       // If setup is complete, load the Whisper model and pre-warm mic
       if (setupDone) {
@@ -1311,7 +1319,9 @@ function App() {
       ]);
 
       if (!modelExists || !tokenizerExists) {
-        console.log("[ai] Model files not found — AI features not available yet");
+        console.log(
+          "[ai] Model files not found — AI features not available yet",
+        );
         return;
       }
 
@@ -1530,7 +1540,7 @@ function App() {
       let finalText = result.text;
 
       // Silent AI cleanup — fix transcription artifacts without user seeing anything
-      if (aiModelReadyRef.current) {
+      if (aiModelReadyRef.current && aiImprovementEnabledRef.current) {
         try {
           const cleaned = await invoke<string>("ai_process_text", {
             text: finalText,
@@ -1541,7 +1551,10 @@ function App() {
           }
         } catch (aiErr) {
           // Silently fall back to raw transcript — user never sees this
-          console.warn("[ai] silent cleanup failed, using raw transcript:", aiErr);
+          console.warn(
+            "[ai] silent cleanup failed, using raw transcript:",
+            aiErr,
+          );
         }
       }
 
@@ -1646,6 +1659,13 @@ function App() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
   };
+
+  // AI Improvement toggle handler
+  const handleAiImprovementChange = useCallback((enabled: boolean) => {
+    setAiImprovementEnabled(enabled);
+    aiImprovementEnabledRef.current = enabled;
+    saveSetting("aiImprovementEnabled", enabled);
+  }, []);
 
   // ── Tab state ──────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabType>("home");
@@ -1800,7 +1820,10 @@ function App() {
                       ];
                       for (const f of filesToDelete) {
                         try {
-                          const exists = await invoke<boolean>("check_file_exists", { path: f });
+                          const exists = await invoke<boolean>(
+                            "check_file_exists",
+                            { path: f },
+                          );
                           if (exists) await invoke("delete_file", { path: f });
                         } catch {
                           // best-effort cleanup
@@ -1832,6 +1855,8 @@ function App() {
                   userEmail={user?.email}
                   userId={user?.id}
                   onSignOut={handleSignOut}
+                  aiImprovementEnabled={aiImprovementEnabled}
+                  onAiImprovementChange={handleAiImprovementChange}
                 />
               )}
             </div>
