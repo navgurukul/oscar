@@ -3,21 +3,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
-import { useAuth } from "@/lib/contexts/AuthContext";
 
 export function FloatingNavbar() {
   const pathname = usePathname();
-  const { session } = useAuth();
   
   const isAuthPage = pathname === ROUTES.AUTH || pathname === ROUTES.PRICING || pathname === ROUTES.DOWNLOAD;
-  const isHomePage = pathname === ROUTES.HOME;
-  
-  // Hide the navbar logo/name on the home page if logged in, 
-  // because we show a large version in the center of the dashboard.
-  const shouldHideLogo = isHomePage && session;
 
   return (
-    <nav className={`fixed top-0 z-50 w-full transition-opacity duration-500 ${shouldHideLogo ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+    <nav className="fixed top-0 z-50 w-full transition-opacity duration-500 opacity-100">
       <div className="pt-8 pl-8 pr-8 pb-4 flex items-center justify-between w-full ">
         <Link
           href={ROUTES.HOME}

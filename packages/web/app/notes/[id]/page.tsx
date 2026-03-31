@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { notesService } from "@/lib/services/notes.service";
 import { feedbackService } from "@/lib/services/feedback.service";
@@ -38,12 +38,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
 
-export default function NoteDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const [id, setId] = useState<string | null>(null);
+export default function NoteDetailPage() {
+  const params = useParams<{ id: string }>();
+  const id = params?.id as string;
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -154,13 +151,8 @@ export default function NoteDetailPage({
   const [newFolderName, setNewFolderName] = useState("");
 
   useEffect(() => {
-    const initializeParams = async () => {
-      const resolvedParams = await params;
-      setId(resolvedParams.id);
-    };
-    initializeParams();
     loadAvailableFolders();
-  }, [params]);
+  }, []);
 
   const loadAvailableFolders = async () => {
     const { data, error } = await notesService.getFolders();

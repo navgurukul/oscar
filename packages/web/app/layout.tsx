@@ -78,7 +78,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${figtree.variable} ${ebGaramond.variable}`}>
+    <html lang="en" className={`${figtree.variable} ${ebGaramond.variable}`} suppressHydrationWarning>
       <head>
         {/* Load ONNX Runtime Web from CDN to avoid bundling issues and fix 'onnxruntime' missing error */}
         <Script
@@ -95,7 +95,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className="bg-slate-950 text-white antialiased font-sans">
+      <body className="bg-slate-950 text-white antialiased font-sans" suppressHydrationWarning>
         <AuthProvider>
           <SubscriptionProvider>
             <LayoutContent>{children}</LayoutContent>
