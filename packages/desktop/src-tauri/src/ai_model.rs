@@ -23,17 +23,22 @@ impl AiModel {
         let device = best_device();
         log::info!("[ai] loading model on {:?}", device);
 
-        let mut f = std::fs::File::open(gguf_path)
-            .map_err(|e| format!("cannot open model: {e}"))?;
-        let content = gguf_file::Content::read(&mut f)
-            .map_err(|e| format!("cannot parse GGUF: {e}"))?;
-        let model = ModelWeights::from_gguf(false, content, &mut f, &device)
-            .map_err(|e| format!("cannot load weights: {e}"))?;
+        let (model, device) = match load_weights(gguf_path, &device) {
+            Ok(m) => (m, device),
+            Err(e) if !matches!(device, Device::Cpu) => {
+                log::warn!("[ai] GPU loading failed: {e} — falling back to CPU");
+                let cpu = Device::Cpu;
+                let m = load_weights(gguf_path, &cpu)
+                    .map_err(|e2| format!("CPU fallback also failed: {e2}"))?;
+                (m, cpu)
+            }
+            Err(e) => return Err(e),
+        };
 
         let tokenizer = Tokenizer::from_file(tokenizer_path)
             .map_err(|e| format!("cannot load tokenizer: {e}"))?;
 
-        log::info!("[ai] model ready");
+        log::info!("[ai] model ready on {:?}", device);
         Ok(Self { model, tokenizer, device })
     }
 
@@ -64,7 +69,17 @@ impl AiModel {
         let logits = self
             .model
             .forward(&input, 0)
-            .map_err(|e| format!("prefill error: {e}"))?;
+            .map_err(|e| {
+                let err_msg = format!("prefill error: {e}");
+                if err_msg.to_lowercase().contains("metal") {
+                    log::warn!("[ai] Metal GPU error during inference: {e}");
+                    format!(
+                        "GPU inference failed (Metal error). The model may need to be reloaded. Error: {e}"
+                    )
+                } else {
+                    err_msg
+                }
+            })?;
         let logits = logits
             .i((.., prompt_len - 1, ..))
             .and_then(|t: Tensor| t.squeeze(0))
@@ -164,4 +179,15 @@ fn best_device() -> Device {
         log::info!("[ai] Metal not available — falling back to CPU");
     }
     Device::Cpu
+}
+
+/// Load model weights from a GGUF file onto the specified device.
+/// The file is opened fresh each call to allow retries on different devices.
+fn load_weights(gguf_path: &str, device: &Device) -> Result<ModelWeights, String> {
+    let mut f = std::fs::File::open(gguf_path)
+        .map_err(|e| format!("cannot open model: {e}"))?;
+    let content = gguf_file::Content::read(&mut f)
+        .map_err(|e| format!("cannot parse GGUF: {e}"))?;
+    ModelWeights::from_gguf(false, content, &mut f, device)
+        .map_err(|e| format!("cannot load weights: {e}"))
 }

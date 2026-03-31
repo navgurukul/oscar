@@ -1,5 +1,9 @@
 "use client";
 
+// Force dynamic rendering - this app uses client-side auth with Supabase
+// which requires environment variables not available at build time
+export const dynamic = "force-dynamic";
+
 import { Figtree, EB_Garamond } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import Script from "next/script";

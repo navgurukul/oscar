@@ -40,6 +40,7 @@ tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.24"
 candle-core = { version = "0.8", features = ["metal"] }
+candle-nn = { version = "0.8", features = ["metal"] }
 
 
 [profile.release]

@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   # Create the GitHub release once, before the parallel matrix builds start.
@@ -94,15 +94,15 @@ jobs:
           # Extract version from tag (remove 'v' prefix)
           TAG='${{ github.ref_name }}'
           VERSION="${TAG#v}"
-          
+
           echo "Injecting version: $VERSION"
-          
+
           # Validate version format
           if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "Error: Invalid version format '$VERSION'. Expected MAJOR.MINOR.PATCH"
             exit 1
           fi
-          
+
           # Update package.json files
           for FILE in package.json packages/desktop/package.json; do
             if [ -f "$FILE" ]; then
@@ -114,7 +114,7 @@ jobs:
               echo "Updated $FILE: $(grep '"version"' "$FILE")"
             fi
           done
-          
+
           # Update tauri.conf.json
           FILE="packages/desktop/src-tauri/tauri.conf.json"
           if [ -f "$FILE" ]; then
@@ -134,8 +134,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
+          node-version: "20"
+          cache: "pnpm"
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -165,7 +165,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './packages/desktop/src-tauri -> target'
+          workspaces: "./packages/desktop/src-tauri -> target"
           key: ${{ matrix.target }}
 
       - name: Install dependencies

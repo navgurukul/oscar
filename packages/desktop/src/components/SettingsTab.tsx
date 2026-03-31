@@ -79,6 +79,8 @@ interface SettingsTabProps {
   userEmail?: string;
   userId?: string;
   onSignOut: () => void;
+  aiImprovementEnabled: boolean;
+  onAiImprovementChange: (enabled: boolean) => void;
 }
 
 const NAV_ITEMS: {
@@ -102,6 +104,8 @@ export function SettingsTab({
   userEmail,
   userId,
   onSignOut,
+  aiImprovementEnabled,
+  onAiImprovementChange,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabType>("billing");
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -303,6 +307,71 @@ export function SettingsTab({
               )}
             </div>
 
+            {/* ── AI Enhancement ── */}
+            <div className="st-card">
+              <div className="st-card-hd">
+                <span className="st-ico-pill">
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                </span>
+                <div>
+                  <h3 className="st-card-title">AI Enhancement</h3>
+                  <p className="st-card-desc">
+                    Improve transcriptions with on-device AI
+                  </p>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontWeight: 500,
+                      color: "#334155",
+                      fontSize: "0.875rem",
+                    }}
+                  >
+                    Improve transcripts with AI
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "#94a3b8",
+                      marginTop: 2,
+                    }}
+                  >
+                    Automatically clean up grammar, filler words, and
+                    punctuation using the on-device AI model.
+                  </div>
+                </div>
+                <label className="gen-toggle-label" style={{ marginBottom: 0 }}>
+                  <div
+                    className={`gen-toggle${aiImprovementEnabled ? " on" : ""}`}
+                    onClick={() => onAiImprovementChange(!aiImprovementEnabled)}
+                    role="switch"
+                    aria-checked={aiImprovementEnabled}
+                  >
+                    <div className="gen-toggle-thumb" />
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
         )}
 
@@ -449,14 +518,16 @@ export function SettingsTab({
                     Clear All Data
                   </h3>
                   <p className="st-card-desc">
-                    Delete all local data, downloaded models, and sign out. You'll need to set up OSCAR again.
+                    Delete all local data, downloaded models, and sign out.
+                    You'll need to set up OSCAR again.
                   </p>
                 </div>
               </div>
               {clearConfirm ? (
                 <div className="st-confirm-row">
                   <span className="st-confirm-msg">
-                    This will delete all data, sign you out, and reset the app. This cannot be undone.
+                    This will delete all data, sign you out, and reset the app.
+                    This cannot be undone.
                   </span>
                   <div className="st-confirm-btns">
                     <button
