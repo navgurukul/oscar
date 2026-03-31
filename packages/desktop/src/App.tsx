@@ -1539,7 +1539,44 @@ function App() {
 
       let finalText = result.text;
 
-      // Silent AI cleanup — fix transcription artifacts without user seeing anything
+      // ── Auto-paste: do this BEFORE AI cleanup ──────────────────────────────
+      // AI cleanup can take 10-30 seconds of on-device inference.  If we paste
+      // after cleanup, the user has almost certainly moved focus away from the
+      // target app by then, so the Cmd+V lands in the wrong window (or nowhere).
+      // Pasting the raw Whisper transcript here — immediately after transcription
+      // finishes — ensures the target app is still frontmost.  The UI is updated
+      // with the AI-cleaned text separately below.
+      if (shouldPaste) {
+        const isMac = navigator.platform.toLowerCase().includes("mac");
+        try {
+          // CGEvent Cmd+V is posted at HID level — reaches the current frontmost
+          // app.  Do NOT pass targetApp: `open -a` disrupts macOS fullscreen
+          // Spaces.  The recording pill is a non-activating overlay so the
+          // target app stays frontmost throughout recording + transcription.
+          const pasteResult = await invoke<string>("paste_transcription", {
+            text: finalText,
+          });
+          if (pasteResult === "CLIPBOARD_ONLY") {
+            setStatus(
+              isMac
+                ? "Copied! Press ⌘V to paste."
+                : "Copied! Press Ctrl+V to paste.",
+            );
+          } else {
+            setStatus("Pasted! ✓");
+          }
+        } catch (pe) {
+          console.error("[paste] FAILED:", pe);
+          setStatus(
+            isMac
+              ? "Copied to clipboard. Press ⌘V to paste."
+              : "Copied to clipboard. Press Ctrl+V to paste.",
+          );
+        }
+      }
+
+      // Silent AI cleanup — fix transcription artifacts for the UI display.
+      // This runs after paste so the paste isn't delayed by inference time.
       if (aiModelReadyRef.current && aiImprovementEnabledRef.current) {
         try {
           const cleaned = await invoke<string>("ai_process_text", {
@@ -1600,35 +1637,7 @@ function App() {
           });
       }
 
-      if (shouldPaste) {
-        try {
-          // Do NOT pass targetApp. CGEvent posted at HID level already reaches
-          // the frontmost app. Passing targetApp triggers `open -a` which disrupts
-          // macOS fullscreen Spaces. Oscar's recording pill is a non-activating
-          // overlay so the target app stays frontmost throughout.
-          const pasteResult = await invoke<string>("paste_transcription", {
-            text: finalText,
-          });
-          if (pasteResult === "CLIPBOARD_ONLY") {
-            const isMac = navigator.platform.toLowerCase().includes("mac");
-            setStatus(
-              isMac
-                ? "Copied! Press ⌘V to paste."
-                : "Copied! Press Ctrl+V to paste.",
-            );
-          } else {
-            setStatus("Pasted! ✓");
-          }
-        } catch (pe) {
-          console.error("[paste] FAILED:", pe);
-          const isMac = navigator.platform.toLowerCase().includes("mac");
-          setStatus(
-            isMac
-              ? "Copied to clipboard. Press ⌘V to paste."
-              : "Copied to clipboard. Press Ctrl+V to paste.",
-          );
-        }
-      } else {
+      if (!shouldPaste) {
         setStatus("Done! ✓");
       }
     } catch (e) {

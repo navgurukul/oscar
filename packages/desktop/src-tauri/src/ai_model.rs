@@ -16,6 +16,13 @@ pub struct AiModel {
     model: ModelWeights,
     tokenizer: Tokenizer,
     device: Device,
+    /// Path to the GGUF file — kept so we can reload weights (which resets the
+    /// KV cache) at the start of each `generate()` call.  ModelWeights has no
+    /// public `clear_kv_cache()` method in candle 0.8.x, so the only way to
+    /// reset state between calls without a local crate fork is to reload from
+    /// disk.  Subsequent loads are typically fast because the OS keeps the file
+    /// in the page cache.
+    gguf_path: String,
 }
 
 impl AiModel {
@@ -39,7 +46,7 @@ impl AiModel {
             .map_err(|e| format!("cannot load tokenizer: {e}"))?;
 
         log::info!("[ai] model ready on {:?}", device);
-        Ok(Self { model, tokenizer, device })
+        Ok(Self { model, tokenizer, device, gguf_path: gguf_path.to_string() })
     }
 
     /// Generate a response, calling `on_token` for each new text piece (streaming).
@@ -49,6 +56,20 @@ impl AiModel {
         max_new_tokens: usize,
         mut on_token: impl FnMut(String),
     ) -> Result<String, String> {
+        // Reset KV cache state from any previous generation by reloading the
+        // model weights fresh from disk.  Without resetting, the stale KV cache
+        // from the last call is concatenated with the new prompt's keys/values,
+        // causing shape mismatches and index-out-of-bounds panics in the
+        // attention layers (e.g. "the len is 2 but the index is 2").
+        //
+        // candle-transformers 0.8.x does not expose a public `clear_kv_cache()`
+        // on `ModelWeights` (the `layers` field and `LayerWeights` struct are
+        // both private), so reloading from the GGUF file is the only viable
+        // approach without forking the crate.  The OS page cache makes
+        // subsequent reloads fast in practice.
+        self.model = load_weights(&self.gguf_path, &self.device)
+            .map_err(|e| format!("KV cache reset (model reload) failed: {e}"))?;
+
         // Phi-3.5 chat format
         let formatted = format!(
             "<|system|>\n{SYSTEM_PROMPT}<|end|>\n<|user|>\n{user_prompt}<|end|>\n<|assistant|>\n"
