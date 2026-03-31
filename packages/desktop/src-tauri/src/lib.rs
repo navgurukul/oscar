@@ -770,22 +770,40 @@ async fn ai_process_text(
     let prompt = ai_model::build_prompt(&mode, &text);
     let app_clone = app.clone();
 
-    // Run generation on a blocking thread (CPU/GPU intensive)
+    // Run generation on a blocking thread (CPU/GPU intensive).
+    // Wrap in catch_unwind: candle's Metal GPU backend can panic internally
+    // (e.g. Metal assertion failures, OOM). Without catch_unwind these panics
+    // would propagate as JoinError::Panicked — catchable with panic="unwind"
+    // but crashing the process with panic="abort". Belt-and-suspenders: catch
+    // the panic here and return it as an error string instead.
     let result = tokio::task::spawn_blocking(move || {
-        let gen_result = model.generate(&prompt, 2048, |token| {
-            let _ = app_clone.emit("ai-token", &token);
-        });
-        (model, gen_result)
+        let gen_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            model.generate(&prompt, 2048, |token| {
+                let _ = app_clone.emit("ai-token", &token);
+            })
+        }));
+        match gen_result {
+            Ok(r) => (Some(model), r),
+            Err(panic_val) => {
+                let msg = panic_val
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| panic_val.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "AI inference panicked (unknown cause)".to_string());
+                log::error!("[ai] inference panic: {}", msg);
+                (None, Err(format!("AI inference error: {msg}")))
+            }
+        }
     })
     .await
     .map_err(|e| format!("spawn_blocking failed: {e}"))?;
 
-    let (model, gen_result) = result;
+    let (returned_model, gen_result) = result;
 
-    // Put the model back
+    // Put the model back (None if it panicked — model state is unknown, drop it)
     {
         let mut ai = state.lock().map_err(|e| e.to_string())?;
-        ai.model = Some(model);
+        ai.model = returned_model;
     }
 
     gen_result
