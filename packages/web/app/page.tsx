@@ -3,20 +3,18 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { motion } from "motion/react";
 import { LampContainer } from "@/components/ui/lamp";
 import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Settings, Plus, MoreHorizontal } from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, MoreHorizontal } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 
 import { notesService } from "@/lib/services/notes.service";
 import type { DBNote } from "@/lib/types/note.types";
 import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency, UI_STRINGS, ROUTES } from "@/lib/constants";
-import { storageService } from "@/lib/services/storage.service";
 import type { BillingCycle } from "@/lib/types/subscription.types";
 import img1 from "@/components/ui/assets/image_1.png";
 import img2 from "@/components/ui/assets/image_2.jpg";
@@ -77,10 +75,7 @@ export default function Home() {
     setIsLoadingNotes(false);
   };
 
-  const handleStartRecording = () => {
-    storageService.clearNote();
-    router.push(ROUTES.RECORDING);
-  };
+  // Recording CTA is currently disabled; uncomment when re-enabling "New Note" button
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -106,52 +101,16 @@ export default function Home() {
     // If no notes exist and not loading, show the empty state UI
     if (!isLoadingNotes && recentNotes.length === 0) {
       return (
-        <main className="w-full min-h-screen flex flex-col items-center justify-center px-4 bg-slate-950 overflow-hidden relative">
-          {/* Dashboard Header - matches reference layout */}
-          <div className="fixed top-0 left-0 w-full p-6 md:p-8 flex items-center justify-between z-40">
-            {/* Profile (Left) */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-3"
-            >
-              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-cyan-500/30 overflow-hidden bg-slate-900 flex items-center justify-center shadow-lg">
-                {user?.user_metadata?.avatar_url ? (
-                  <Image
-                    src={user.user_metadata.avatar_url}
-                    alt="Profile"
-                    width={48}
-                    height={48}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-cyan-400 font-bold">{user?.email?.[0].toUpperCase()}</span>
-                )}
-              </div>
-            </motion.div>
-
-            {/* Settings (Right) */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-            >
-              <Link href={ROUTES.SETTINGS}>
-                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center shadow-lg hover:border-cyan-500/30 transition-colors group">
-                  <Settings className="w-5 h-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
-                </div>
-              </Link>
-            </motion.div>
-          </div>
-
-          {/* Top Decoration */}
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
-          
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="text-center max-w-2xl w-full"
-          >
+        <main className="flex flex-col items-center pt-8 pb-24 px-4 bg-[#020617] relative">
+        {/* Top Decoration */}
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+        
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="text-center max-w-2xl w-full mt-8"
+        >
             {/* Top Badge */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -217,43 +176,11 @@ export default function Home() {
 
     // If notes exist, show the dashboard UI
     return (
-      <main className="w-full min-h-screen flex flex-col items-center pt-24 pb-12 px-4 bg-[#020617] relative">
-        {/* Dashboard Header */}
-        <div className="fixed top-0 left-0 w-full p-6 md:p-8 flex items-center justify-between z-40 bg-[#020617]/80 backdrop-blur-md">
-          {/* Logo (Left) */}
-          <Link href={ROUTES.HOME} className="flex items-center gap-2">
-            <div className="relative w-8 h-8">
-              <Image src="/OSCAR_DARK_LOGO.png" alt="OSCAR Logo" fill className="object-contain" />
-            </div>
-            <span className="text-xl font-bold tracking-tight text-white">{UI_STRINGS.APP_NAME}</span>
-          </Link>
-
-          {/* Right Actions */}
-          <div className="flex items-center gap-4">
-            <Link href={ROUTES.NOTES}>
-              <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center shadow-lg hover:border-cyan-500/30 transition-colors group">
-                <FileText className="w-5 h-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
-              </div>
-            </Link>
-            <Link href={ROUTES.SETTINGS}>
-              <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-center shadow-lg hover:border-cyan-500/30 transition-colors group">
-                <Settings className="w-5 h-5 text-gray-400 group-hover:text-cyan-400 transition-colors" />
-              </div>
-            </Link>
-            <div className="w-10 h-10 rounded-full border-2 border-cyan-500/30 overflow-hidden bg-slate-900 flex items-center justify-center shadow-lg">
-              {user?.user_metadata?.avatar_url ? (
-                <Image src={user.user_metadata.avatar_url} alt="Profile" width={40} height={40} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-cyan-400 font-bold">{user?.email?.[0].toUpperCase()}</span>
-              )}
-            </div>
-          </div>
-        </div>
-
+      <main className="flex flex-col items-center pt-8 pb-24 px-4 bg-[#020617] relative">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-2xl flex flex-col items-center"
+          className="w-full max-w-2xl flex flex-col items-center mt-8"
         >
           {/* Welcome Text */}
           <div className="text-center mb-12">
@@ -309,7 +236,7 @@ export default function Home() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap justify-center gap-4">
+          {/* <div className="flex flex-wrap justify-center gap-4">
             <Button
               onClick={handleStartRecording}
               className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold px-6 py-6 rounded-full h-auto"
@@ -326,16 +253,16 @@ export default function Home() {
                 My Notes
               </Button>
             </Link>
-          </div>
+          </div> */}
         </motion.div>
       </main>
     );
   }
 
   return (
-    <main className="w-full flex flex-col">
-      {/* Hero Section with Lamp Effect */}
-      <section className="snap-start flex items-center justify-center">
+      <main className="flex flex-col items-center pt-8 pb-24 px-4">
+        {/* Hero Section */}
+        <section className="flex items-center justify-center min-h-[80vh]">
         <LampContainer >
           <motion.div
             initial={{ opacity: 0.5, y: 100 }}
@@ -391,7 +318,7 @@ export default function Home() {
       {!session && (
         <>
           {/* Problem Statement Section */}
-          <section className="min-h-screen snap-start flex items-center justify-center py-16 sm:py-24 px-4 bg-gradient-to-b from-slate-950 to-slate-900">
+      <section className="min-h-[80vh] flex items-center justify-center py-16 sm:py-24 px-4 bg-gradient-to-b from-slate-950 to-slate-900 mt-8">
             <div className="max-w-6xl mx-auto">
               <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
@@ -429,7 +356,7 @@ export default function Home() {
                   </div>
                   <h3 className="text-xl font-semibold text-white mb-3">Typing Kills Momentum</h3>
                   <p className="text-gray-400">
-                    Switching to your phone or laptop breaks your flow. By the time you&apos;re typing, the moment&apos;s gone.
+                    Switching to your phone or laptop breaks your flow. By the time you&apos;re typing, the moment&apos;gone.
                   </p>
                 </div>
               </div>
@@ -437,7 +364,7 @@ export default function Home() {
           </section>
 
           {/* How It Works Section */}
-          <section id="how-it-works" className="md:min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-slate-900">
+        <section id="how-it-works" className="md:min-h-[80vh] flex items-center justify-center py-16 px-4 bg-slate-900 mt-8">
             <div className="max-w-6xl mx-auto">
               <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
@@ -566,7 +493,7 @@ export default function Home() {
           </section>
 
           {/* Testimonials Section */}
-          <section className="md:min-h-screen snap-start flex items-center justify-center py-8 md:py-16 bg-slate-900">
+          <section className="md:min-h-[80vh] flex items-center justify-center py-8 md:py-16 bg-slate-900 mt-8">
             <div className="w-full">
               <div className="mx-auto max-w-4xl px-4 md:px-8 lg:px-12 text-center mb-6 md:mb-12">
                 <h2 className="text-2xl md:text-5xl font-bold text-white mb-3 md:mb-6">
@@ -581,7 +508,7 @@ export default function Home() {
           </section>
 
           {/* Pricing Section */}
-          <section className="min-h-auto md:min-h-screen snap-start flex items-center justify-center py-16 md:py-20 px-4">
+          <section className="min-h-auto md:min-h-[80vh] flex items-center justify-center py-16 md:py-20 px-4 mt-8">
             <div className="max-w-5xl mx-auto w-full">
               <div className="text-center mb-8 md:mb-12">
                 <h2 className="text-2xl md:text-4xl font-bold text-white mb-3 md:mb-4">
@@ -749,7 +676,7 @@ export default function Home() {
           </section>
 
           {/* Final CTA Section */}
-          <section className="min-h-auto md:min-h-[60vh] snap-start flex items-center justify-center py-12 md:py-16 px-4 bg-gradient-to-b from-slate-950 to-black">
+          <section className="min-h-auto md:min-h-[80vh] flex items-center justify-center py-12 md:py-16 px-4 bg-gradient-to-b from-slate-950 to-black mt-8">
             <div className="max-w-4xl mx-auto text-center">
               <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
                 Stop Losing Your <span className="text-cyan-500">Best Ideas</span>
