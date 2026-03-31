@@ -52,7 +52,10 @@ function DesktopCallbackContent() {
             refresh_token: refreshToken,
           });
         } catch (err) {
-          console.error("[desktop-callback] Failed to establish web session:", err);
+          console.error(
+            "[desktop-callback] Failed to establish web session:",
+            err,
+          );
           // Non-fatal — still open the desktop app
         }
 
@@ -78,7 +81,9 @@ function DesktopCallbackContent() {
 
       // Nothing usable
       setDeepLinkUrl("oscar://auth/callback?error=no_tokens");
-      setErrorMessage("No authentication tokens were received. Please try signing in again.");
+      setErrorMessage(
+        "No authentication tokens were received. Please try signing in again.",
+      );
       setState("error");
     }
 
@@ -116,11 +121,23 @@ function DesktopCallbackContent() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-black">
         <div className="text-center max-w-sm px-6">
           <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-6 h-6 text-red-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </div>
-          <h2 className="text-white font-semibold text-lg mb-2">Authentication failed</h2>
+          <h2 className="text-white font-semibold text-lg mb-2">
+            Authentication failed
+          </h2>
           <p className="text-gray-400 text-sm mb-6">{errorMessage}</p>
           <a
             href="/auth"
@@ -139,12 +156,24 @@ function DesktopCallbackContent() {
       <div className="text-center max-w-sm px-6">
         {/* Success check */}
         <div className="w-12 h-12 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mx-auto mb-5">
-          <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          <svg
+            className="w-6 h-6 text-cyan-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 13l4 4L19 7"
+            />
           </svg>
         </div>
 
-        <h2 className="text-white font-semibold text-xl mb-2">You&apos;re signed in</h2>
+        <h2 className="text-white font-semibold text-xl mb-2">
+          You&apos;re signed in
+        </h2>
         <p className="text-gray-400 text-sm mb-7">
           Click the button below to open the Oscar desktop app.
         </p>
@@ -158,7 +187,10 @@ function DesktopCallbackContent() {
 
         <p className="mt-4 text-xs text-gray-600">
           If Oscar doesn&apos;t open,{" "}
-          <a href="/download" className="text-gray-400 hover:text-gray-300 underline">
+          <a
+            href="/download"
+            className="text-gray-400 hover:text-gray-300 underline"
+          >
             download the app
           </a>{" "}
           first.

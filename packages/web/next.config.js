@@ -1,10 +1,10 @@
 /** @type {import('next').NextConfig} */
-const path = require('path');
+const path = require("path");
 
 const nextConfig = {
   reactStrictMode: false,
-  transpilePackages: ['@oscar/shared'],
-  outputFileTracingRoot: path.join(__dirname, '../../'),
+  transpilePackages: ["@oscar/shared"],
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   images: {
     remotePatterns: [
       {
@@ -80,7 +80,7 @@ const nextConfig = {
         config.externals.push(
           "onnxruntime-node",
           "onnxruntime-common",
-          "onnxruntime-web"
+          "onnxruntime-web",
         );
       } else {
         config.externals = [
