@@ -970,6 +970,7 @@ function App() {
   const tonePresetRef = useRef<TonePreset>("none");
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
+  const authInitRef = useRef(false);
 
   // Auto-updater
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -996,6 +997,16 @@ function App() {
   // ── Supabase auth listener ─────────────────────────────────────────────────
 
   useEffect(() => {
+    // Guard against double-mount (React StrictMode / hot-reload).  The first
+    // getSession() call may consume the refresh token; a concurrent second call
+    // with the same (now-consumed) token triggers "Invalid Refresh Token:
+    // Already Used" + lock-steal cascades.
+    if (authInitRef.current) {
+      setAuthLoading(false);
+      return;
+    }
+    authInitRef.current = true;
+
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       sessionRef.current = s;
@@ -1055,15 +1066,12 @@ function App() {
             sessionRef.current = data.session;
           }
         } else if (success === "true") {
-          // Fallback: no tokens in URL, try to get session (for backward compatibility)
-          const {
-            data: { session },
-          } = await supabase.auth.getSession();
-          if (session) {
-            setSession(session);
-            setUser(session.user);
-            sessionRef.current = session;
-          }
+          // No tokens in the deep link — the onAuthStateChange listener will
+          // pick up any session change automatically.  Avoid calling
+          // getSession() here because it races with the auth effect's
+          // getSession() and can trigger "Invalid Refresh Token: Already Used"
+          // when both try to consume the same refresh token concurrently.
+          console.log("[deep-link] success=true but no tokens; relying on onAuthStateChange");
         }
       }
     };

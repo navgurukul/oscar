@@ -11,4 +11,12 @@ export const SUPABASE_URL =
 export const SUPABASE_ANON =
   import.meta.env.VITE_SUPABASE_ANON_KEY ?? "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR";
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    // Desktop app handles auth via deep-link callback — don't let the client
+    // try to detect tokens in the URL (there's no URL bar in a WebView).
+    detectSessionInUrl: false,
+  },
+});
