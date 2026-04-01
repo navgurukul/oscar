@@ -59,6 +59,39 @@ mod macos_paste {
         unsafe { AXIsProcessTrusted() }
     }
 
+    /// Re-register the current binary with TCC **without** showing a system
+    /// dialog (kAXTrustedCheckOptionPrompt = false).  This is called when
+    /// AXIsProcessTrusted() returns false after a rebuild so that the new
+    /// binary hash is written to the TCC database.  Returns true if the
+    /// process is now trusted (e.g., the user had it toggled on for a
+    /// previous build).
+    pub fn reregister_without_prompt() -> bool {
+        unsafe {
+            let key = CFStringCreateWithCString(
+                std::ptr::null(),
+                b"AXTrustedCheckOptionPrompt\0".as_ptr() as *const _,
+                CF_STRING_ENCODING_UTF8,
+            );
+            // kCFBooleanFalse — we just want re-registration, not a dialog
+            // We pass a zero pointer for the value (treated as false by CF)
+            let value: *const c_void = std::ptr::null();
+            let mut keys_arr: *const c_void = key as *const c_void;
+            let mut vals_arr: *const c_void = value;
+            let dict = CFDictionaryCreate(
+                std::ptr::null(),
+                &mut keys_arr as *mut _,
+                &mut vals_arr as *mut _,
+                1,
+                &kCFTypeDictionaryKeyCallBacks as *const c_void,
+                &kCFTypeDictionaryValueCallBacks as *const c_void,
+            );
+            let trusted = AXIsProcessTrustedWithOptions(dict);
+            CFRelease(dict);
+            CFRelease(key as *mut c_void);
+            trusted
+        }
+    }
+
     /// Request accessibility permission with a system prompt.
     /// Uses AXIsProcessTrustedWithOptions which registers the current binary
     /// with macOS and opens System Settings if not already trusted.
@@ -84,80 +117,6 @@ mod macos_paste {
             CFRelease(dict);
             CFRelease(key as *mut c_void);
             trusted
-        }
-    }
-
-    /// Activate a macOS app by name using NSRunningApplication (in-process, no osascript).
-    /// Returns true if the app was found and activated.
-    pub fn activate_app(app_name: &str) -> Result<bool, String> {
-        unsafe {
-            let ws_class = objc_getClass(b"NSWorkspace\0".as_ptr() as *const _);
-            let sel_shared = sel_registerName(b"sharedWorkspace\0".as_ptr() as *const _);
-            let sel_running = sel_registerName(b"runningApplications\0".as_ptr() as *const _);
-            let sel_count = sel_registerName(b"count\0".as_ptr() as *const _);
-            let sel_object_at = sel_registerName(b"objectAtIndex:\0".as_ptr() as *const _);
-            let sel_localized_name = sel_registerName(b"localizedName\0".as_ptr() as *const _);
-            let sel_activate =
-                sel_registerName(b"activateWithOptions:\0".as_ptr() as *const _);
-
-            type NoArgFn =
-                unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
-            type CountFn =
-                unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
-            type IndexFn =
-                unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
-            type ActivateFn =
-                unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> bool;
-            type UTF8Fn =
-                unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const std::ffi::c_char;
-
-            let shared: NoArgFn = std::mem::transmute(objc_msgSend as *const ());
-            let ws = shared(ws_class, sel_shared);
-            if ws.is_null() {
-                return Err("NSWorkspace.sharedWorkspace is null".into());
-            }
-
-            let running_fn: NoArgFn = std::mem::transmute(objc_msgSend as *const ());
-            let apps = running_fn(ws, sel_running);
-            if apps.is_null() {
-                return Err("runningApplications is null".into());
-            }
-
-            let count_fn: CountFn = std::mem::transmute(objc_msgSend as *const ());
-            let count = count_fn(apps, sel_count);
-
-            let obj_at: IndexFn = std::mem::transmute(objc_msgSend as *const ());
-            let name_fn: NoArgFn = std::mem::transmute(objc_msgSend as *const ());
-            let sel_utf8 = sel_registerName(b"UTF8String\0".as_ptr() as *const _);
-            let utf8_fn: UTF8Fn = std::mem::transmute(objc_msgSend as *const ());
-            let activate_fn: ActivateFn = std::mem::transmute(objc_msgSend as *const ());
-
-            for i in 0..count {
-                let app = obj_at(apps, sel_object_at, i);
-                if app.is_null() {
-                    continue;
-                }
-                let ns_name = name_fn(app, sel_localized_name);
-                if ns_name.is_null() {
-                    continue;
-                }
-                let cstr = utf8_fn(ns_name, sel_utf8);
-                if cstr.is_null() {
-                    continue;
-                }
-                let name = std::ffi::CStr::from_ptr(cstr).to_string_lossy();
-                if name == app_name {
-                    // NSApplicationActivateIgnoringOtherApps = 1 << 1 = 2
-                    let activated = activate_fn(app, sel_activate, 2);
-                    log::info!(
-                        "[paste] NSRunningApplication.activate({}) = {}",
-                        app_name,
-                        activated
-                    );
-                    return Ok(activated);
-                }
-            }
-            Err(format!("App '{}' not found in running apps", app_name))
         }
     }
 
@@ -228,6 +187,56 @@ mod macos_paste {
                 "[pill] NSPanel configured: level=1000, floating=YES, hidesOnDeactivate=NO, \
                  behavior=canJoinAll|stationary|ignoresCycle|fullScreenAux, style |= NonactivatingPanel"
             );
+        }
+    }
+
+    /// Activate a running macOS app by its display name using NSRunningApplication.
+    /// Unlike `open -a`, this does NOT trigger a Space-switch animation, so it is
+    /// safe to use with fullscreen apps.  Returns Ok(true) if the app was found and
+    /// activated, Ok(false) if the app was not in the running-applications list.
+    pub fn activate_app(app_name: &str) -> Result<bool, String> {
+        unsafe {
+            // NSWorkspace.sharedWorkspace.runningApplications
+            let ws_class = objc_getClass(b"NSWorkspace\0".as_ptr() as *const _);
+            if ws_class.is_null() { return Err("NSWorkspace class not found".into()); }
+            let sel_shared   = sel_registerName(b"sharedWorkspace\0".as_ptr() as *const _);
+            let sel_running  = sel_registerName(b"runningApplications\0".as_ptr() as *const _);
+            let sel_count    = sel_registerName(b"count\0".as_ptr() as *const _);
+            let sel_obj_at   = sel_registerName(b"objectAtIndex:\0".as_ptr() as *const _);
+            let sel_loc_name = sel_registerName(b"localizedName\0".as_ptr() as *const _);
+            let sel_activate = sel_registerName(b"activateWithOptions:\0".as_ptr() as *const _);
+
+            type MsgId  = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
+            type MsgIdx = unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
+            type MsgU64 = unsafe extern "C" fn(*mut c_void, *mut c_void, u64) -> bool;
+            type MsgStr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const std::ffi::c_char;
+            type MsgCnt = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
+
+            let msg_id:  MsgId  = std::mem::transmute(objc_msgSend as *const ());
+            let msg_idx: MsgIdx = std::mem::transmute(objc_msgSend as *const ());
+            let msg_act: MsgU64 = std::mem::transmute(objc_msgSend as *const ());
+            let msg_str: MsgStr = std::mem::transmute(objc_msgSend as *const ());
+            let msg_cnt: MsgCnt = std::mem::transmute(objc_msgSend as *const ());
+
+            let shared = msg_id(ws_class, sel_shared);
+            let apps   = msg_id(shared, sel_running);
+            let count  = msg_cnt(apps, sel_count);
+
+            let target = app_name.to_lowercase();
+            for i in 0..count {
+                let app = msg_idx(apps, sel_obj_at, i);
+                let name_ptr = msg_str(app, sel_loc_name);
+                if name_ptr.is_null() { continue; }
+                let name = std::ffi::CStr::from_ptr(name_ptr)
+                    .to_string_lossy()
+                    .to_lowercase();
+                if name == target || name.contains(&target) || target.contains(&name) {
+                    // NSApplicationActivateIgnoringOtherApps = 1 << 1 = 2
+                    msg_act(app, sel_activate, 2);
+                    return Ok(true);
+                }
+            }
+            Ok(false)
         }
     }
 
@@ -868,31 +877,6 @@ fn get_frontmost_app() -> Result<String, String> {
     }
 }
 
-/// Activates (brings to front) the application with the given name.
-#[tauri::command]
-fn activate_app(app_name: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let script = format!(
-            r#"tell application "{}" to activate"#,
-            app_name.replace('\\', "\\\\").replace('"', "\\\"")
-        );
-        std::process::Command::new("osascript")
-            .args(["-e", &script])
-            .output()
-            .map_err(|e| format!("Failed to activate {}: {}", app_name, e))?;
-        // Allow time for the app to come to the foreground and Space to switch
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        Ok(())
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = app_name;
-        Ok(())
-    }
-}
-
 // ── Paste Transcription ───────────────────────────────────────────────────────
 
 /// Writes `text` to the system clipboard and simulates Cmd+V (macOS) or Ctrl+V (Windows/Linux).
@@ -910,56 +894,49 @@ fn paste_transcription(text: String, target_app: Option<String>) -> Result<Strin
     #[cfg(target_os = "macos")]
     {
         // Check Accessibility permission.
-        // NOTE: Without Apple Developer ID code signing, AXIsProcessTrusted()
-        // will return false after every app update because macOS TCC stores a
-        // cryptographic code signature hash (csreq) that changes with each
-        // ad-hoc signed build. The toggle in System Settings may show ON but
-        // the actual check fails. We gracefully fall back to clipboard-only.
-        let trusted = macos_paste::is_accessibility_trusted();
+        // AXIsProcessTrusted() can return false after a new build because macOS
+        // TCC stores a cryptographic hash of the binary — any rebuild invalidates
+        // the hash even if the user's System Settings toggle is still ON.
+        // When that happens, call AXIsProcessTrustedWithOptions(prompt=false) to
+        // re-register the new binary hash silently, then re-check once.  If it
+        // is still false, fall back to CLIPBOARD_ONLY and let the frontend guide
+        // the user.
+        let mut trusted = macos_paste::is_accessibility_trusted();
+        if !trusted {
+            // Re-register current binary with TCC (no dialog shown)
+            trusted = macos_paste::reregister_without_prompt();
+            log::info!("[paste] re-registered binary, AXIsProcessTrusted = {}", trusted);
+        }
         log::info!("[paste] AXIsProcessTrusted = {}", trusted);
 
         if !trusted {
-            // Text is already on the clipboard from step 1.
-            // Return a special status so the frontend can show a helpful hint
-            // instead of an error. Do NOT prompt every time — it's disruptive.
             return Ok("CLIPBOARD_ONLY".into());
         }
 
-        // 2. Activate target app via `open -a` (Launch Services).
-        //    Unlike NSRunningApplication.activate, `open -a` properly navigates
-        //    to fullscreen Spaces without breaking macOS window management.
+        // 2. Re-activate the target app using NSRunningApplication so that
+        //    Cmd+V lands in the correct window even if the Tauri IPC call
+        //    caused Oscar's process to become active on the main thread.
+        //    We use NSRunningApplication (not `open -a`) because `open -a`
+        //    triggers a Space-switch animation which breaks fullscreen apps.
         if let Some(ref app_name) = target_app {
             if !app_name.is_empty() {
-                log::info!("[paste] activating '{}' via open -a", app_name);
-                match std::process::Command::new("open")
-                    .args(["-a", app_name])
-                    .output()
-                {
-                    Ok(out) => {
-                        log::info!(
-                            "[paste] open -a exit={}, stderr={}",
-                            out.status,
-                            String::from_utf8_lossy(&out.stderr).trim()
-                        );
+                log::info!("[paste] re-activating '{}' via NSRunningApplication", app_name);
+                match macos_paste::activate_app(app_name) {
+                    Ok(true)  => {
+                        // Brief wait for the window manager to finish activating
+                        std::thread::sleep(std::time::Duration::from_millis(120));
                     }
-                    Err(e) => log::warn!("[paste] open -a failed: {}", e),
+                    Ok(false) => log::warn!("[paste] app '{}' not found in running apps", app_name),
+                    Err(e)    => log::warn!("[paste] activate_app failed: {}", e),
                 }
-                // Wait for macOS to switch to the correct Space / bring app forward
-                log::info!("[paste] sleeping 400ms for Space switch...");
-                std::thread::sleep(std::time::Duration::from_millis(400));
-                log::info!("[paste] sleep done, about to post Cmd+V");
             }
         }
 
         // 3. Post Cmd+V via CGEvent (from main thread)
         macos_paste::post_cmd_v()?;
-        log::info!("[paste] CGEvent Cmd+V posted from main thread");
+        log::info!("[paste] CGEvent Cmd+V posted");
 
-        return Ok(format!(
-            "paste OK: trusted={}, target={:?}",
-            trusted,
-            target_app
-        ));
+        return Ok(format!("paste OK: trusted=true, target={:?}", target_app));
     }
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]

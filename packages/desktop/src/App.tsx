@@ -1382,7 +1382,7 @@ function App() {
   const processAudio = async (
     _stream: MediaStream,
     shouldPaste: boolean,
-    _targetApp?: string,
+    _targetApp?: string,   // used in paste_transcription for NSRunningApplication re-focus
   ) => {
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
@@ -1465,18 +1465,21 @@ function App() {
       if (shouldPaste) {
         const isMac = navigator.platform.toLowerCase().includes("mac");
         try {
-          // CGEvent Cmd+V is posted at HID level — reaches the current frontmost
-          // app.  Do NOT pass targetApp: `open -a` disrupts macOS fullscreen
-          // Spaces.  The recording pill is a non-activating overlay so the
-          // target app stays frontmost throughout recording + transcription.
+          // Pass targetApp so the Rust command can re-activate it via
+          // NSRunningApplication before posting Cmd+V.  This handles the case
+          // where the Tauri IPC call causes Oscar's process to take focus on
+          // the main thread.  The Rust side uses NSRunningApplication (NOT
+          // `open -a`) so there's no Space-switch animation or Spaces disruption.
           const pasteResult = await invoke<string>("paste_transcription", {
             text: finalText,
+            targetApp: _targetApp || undefined,
           });
           if (pasteResult === "CLIPBOARD_ONLY") {
+            // Accessibility not granted — text is in clipboard, guide user
             setStatus(
               isMac
-                ? "Copied! Press ⌘V to paste."
-                : "Copied! Press Ctrl+V to paste.",
+                ? "📋 Copied! Grant Accessibility in System Settings for auto-paste, or press ⌘V."
+                : "📋 Copied! Press Ctrl+V to paste.",
             );
           } else {
             setStatus("Pasted! ✓");
@@ -1485,8 +1488,8 @@ function App() {
           console.error("[paste] FAILED:", pe);
           setStatus(
             isMac
-              ? "Copied to clipboard. Press ⌘V to paste."
-              : "Copied to clipboard. Press Ctrl+V to paste.",
+              ? "📋 Copied to clipboard. Press ⌘V to paste."
+              : "📋 Copied to clipboard. Press Ctrl+V to paste.",
           );
         }
       }
