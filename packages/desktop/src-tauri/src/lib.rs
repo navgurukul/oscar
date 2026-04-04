@@ -48,6 +48,7 @@ mod macos_paste {
         ) -> *mut c_void;
         fn CFRelease(cf: *mut c_void);
         static kCFBooleanTrue: *const c_void;
+        static kCFBooleanFalse: *const c_void;
         static kCFTypeDictionaryKeyCallBacks: c_void;
         static kCFTypeDictionaryValueCallBacks: c_void;
     }
@@ -72,9 +73,8 @@ mod macos_paste {
                 b"AXTrustedCheckOptionPrompt\0".as_ptr() as *const _,
                 CF_STRING_ENCODING_UTF8,
             );
-            // kCFBooleanFalse — we just want re-registration, not a dialog
-            // We pass a zero pointer for the value (treated as false by CF)
-            let value: *const c_void = std::ptr::null();
+            // kCFBooleanFalse — re-register the binary hash, no dialog shown
+            let value = kCFBooleanFalse;
             let mut keys_arr: *const c_void = key as *const c_void;
             let mut vals_arr: *const c_void = value;
             let dict = CFDictionaryCreate(
