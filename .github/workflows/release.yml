@@ -62,12 +62,12 @@ jobs:
           - target: aarch64-apple-darwin
             label: macos-silicon
             os: macos-latest
-            cflags: "-march=armv8-a"
+            cflags: "-march=armv8-a -mmacosx-version-min=11.0"
             bundles: "app,dmg"
           - target: x86_64-apple-darwin
             label: macos-intel
             os: macos-latest
-            cflags: ""
+            cflags: "-mmacosx-version-min=11.0"
             bundles: "app,dmg"
           # ── Windows ──
           - target: x86_64-pc-windows-msvc
