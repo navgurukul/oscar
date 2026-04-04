@@ -63,23 +63,27 @@ jobs:
             label: macos-silicon
             os: macos-latest
             cflags: "-march=armv8-a -mmacosx-version-min=12.0"
+            macosx_deployment_target: "12.0"
             bundles: "app,dmg"
           - target: x86_64-apple-darwin
             label: macos-intel
             os: macos-latest
             cflags: "-mmacosx-version-min=12.0"
+            macosx_deployment_target: "12.0"
             bundles: "app,dmg"
           # ── Windows ──
           - target: x86_64-pc-windows-msvc
             label: windows-x64
             os: windows-latest
             cflags: ""
+            macosx_deployment_target: ""
             bundles: "nsis"
           # ── Linux ──
           - target: x86_64-unknown-linux-gnu
             label: linux-x64
             os: ubuntu-22.04
             cflags: ""
+            macosx_deployment_target: ""
             bundles: "appimage,deb"
 
     runs-on: ${{ matrix.os }}
@@ -187,6 +191,7 @@ jobs:
           RUST_BACKTRACE: "1"
           CFLAGS: ${{ matrix.cflags }}
           CXXFLAGS: ${{ matrix.cflags }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macosx_deployment_target }}
           VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
           VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
