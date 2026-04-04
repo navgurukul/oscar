@@ -661,13 +661,6 @@ const MODEL_URL =
 const MODEL_PATH = ".oscar/models/ggml-small.bin";
 const OLD_MODEL_PATH = ".oscar/models/ggml-base.bin";
 
-// Local AI model (Phi-3.5-mini quantized — public community GGUF)
-const AI_MODEL_URL =
-  "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf";
-const AI_MODEL_PATH = ".oscar/models/phi-3.5-mini-Q4_K_M.gguf";
-const AI_TOKENIZER_URL =
-  "https://huggingface.co/microsoft/Phi-3.5-mini-instruct/resolve/main/tokenizer.json";
-const AI_TOKENIZER_PATH = ".oscar/models/phi-3.5-tokenizer.json";
 
 interface DownloadProgress {
   downloaded: number;
@@ -938,11 +931,7 @@ function App() {
   const [_aiEditing, setAiEditing] = useState(false);
   const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
-  // Local AI model state (invisible — used silently in transcription pipeline)
-  const [_aiModelReady, setAiModelReady] = useState(false);
-  const aiModelReadyRef = useRef(false);
-
-  // AI Improvement toggle (user-controllable)
+  // AI Improvement toggle (user-controllable — controls DeepSeek cleanup)
   const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
   const aiImprovementEnabledRef = useRef(true);
 
@@ -970,6 +959,7 @@ function App() {
   const tonePresetRef = useRef<TonePreset>("none");
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
+  const authInitRef = useRef(false);
 
   // Auto-updater
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -996,6 +986,16 @@ function App() {
   // ── Supabase auth listener ─────────────────────────────────────────────────
 
   useEffect(() => {
+    // Guard against double-mount (React StrictMode / hot-reload).  The first
+    // getSession() call may consume the refresh token; a concurrent second call
+    // with the same (now-consumed) token triggers "Invalid Refresh Token:
+    // Already Used" + lock-steal cascades.
+    if (authInitRef.current) {
+      setAuthLoading(false);
+      return;
+    }
+    authInitRef.current = true;
+
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       sessionRef.current = s;
@@ -1055,15 +1055,12 @@ function App() {
             sessionRef.current = data.session;
           }
         } else if (success === "true") {
-          // Fallback: no tokens in URL, try to get session (for backward compatibility)
-          const {
-            data: { session },
-          } = await supabase.auth.getSession();
-          if (session) {
-            setSession(session);
-            setUser(session.user);
-            sessionRef.current = session;
-          }
+          // No tokens in the deep link — the onAuthStateChange listener will
+          // pick up any session change automatically.  Avoid calling
+          // getSession() here because it races with the auth effect's
+          // getSession() and can trigger "Invalid Refresh Token: Already Used"
+          // when both try to consume the same refresh token concurrently.
+          console.log("[deep-link] success=true but no tokens; relying on onAuthStateChange");
         }
       }
     };
@@ -1162,8 +1159,6 @@ function App() {
         }
         warmMicrophone(); // pre-warm ASAP so first hotkey press doesn't steal focus
         initWhisper();
-        // Load AI model if already downloaded, otherwise download in background
-        downloadAiModelInBackground();
       }
     })();
 
@@ -1299,85 +1294,6 @@ function App() {
     setStatus("Whisper model not found. Set the path in Settings.");
   };
 
-  // ── Local AI model helpers ──────────────────────────────────────────────────
-
-  const setAiReady = useCallback((ready: boolean) => {
-    setAiModelReady(ready);
-    aiModelReadyRef.current = ready;
-  }, []);
-
-  const initAiModel = useCallback(async () => {
-    try {
-      const home = await homeDir();
-      const modelPath = `${home}/${AI_MODEL_PATH}`;
-      const tokenizerPath = `${home}/${AI_TOKENIZER_PATH}`;
-
-      // Check if files exist
-      const [modelExists, tokenizerExists] = await Promise.all([
-        invoke<boolean>("check_file_exists", { path: modelPath }),
-        invoke<boolean>("check_file_exists", { path: tokenizerPath }),
-      ]);
-
-      if (!modelExists || !tokenizerExists) {
-        console.log(
-          "[ai] Model files not found — AI features not available yet",
-        );
-        return;
-      }
-
-      // Check if already loaded
-      const loaded = await invoke<boolean>("is_ai_model_loaded");
-      if (loaded) {
-        setAiReady(true);
-        return;
-      }
-
-      // Load the model
-      console.log("[ai] Loading local AI model...");
-      await invoke("load_ai_model", { modelPath, tokenizerPath });
-      setAiReady(true);
-      console.log("[ai] AI model ready");
-    } catch (err) {
-      console.warn("[ai] Failed to init AI model:", err);
-    }
-  }, [setAiReady]);
-
-  /** Download AI model in background (non-blocking). Called after setup completes. */
-  const downloadAiModelInBackground = useCallback(async () => {
-    try {
-      const home = await homeDir();
-      const modelPath = `${home}/${AI_MODEL_PATH}`;
-      const tokenizerPath = `${home}/${AI_TOKENIZER_PATH}`;
-
-      // Skip if already downloaded
-      const [modelExists, tokenizerExists] = await Promise.all([
-        invoke<boolean>("check_file_exists", { path: modelPath }),
-        invoke<boolean>("check_file_exists", { path: tokenizerPath }),
-      ]);
-      if (modelExists && tokenizerExists) {
-        console.log("[ai] Model files already exist, loading...");
-        await initAiModel();
-        return;
-      }
-
-      console.log("[ai] Starting background AI model download...");
-
-      await invoke("download_ai_model", {
-        modelUrl: AI_MODEL_URL,
-        modelPath,
-        tokenizerUrl: AI_TOKENIZER_URL,
-        tokenizerPath,
-      });
-
-      // Load the model after download
-      await invoke("load_ai_model", { modelPath, tokenizerPath });
-      setAiReady(true);
-      console.log("[ai] AI model downloaded and loaded in background");
-    } catch (err) {
-      console.warn("[ai] Background download/load failed:", err);
-    }
-  }, [initAiModel, setAiReady]);
-
   // ── Dictionary helpers ─────────────────────────────────────────────────────
 
   const buildInitialPrompt = () => {
@@ -1466,7 +1382,7 @@ function App() {
   const processAudio = async (
     _stream: MediaStream,
     shouldPaste: boolean,
-    _targetApp?: string,
+    _targetApp?: string,   // used in paste_transcription for NSRunningApplication re-focus
   ) => {
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
@@ -1549,18 +1465,21 @@ function App() {
       if (shouldPaste) {
         const isMac = navigator.platform.toLowerCase().includes("mac");
         try {
-          // CGEvent Cmd+V is posted at HID level — reaches the current frontmost
-          // app.  Do NOT pass targetApp: `open -a` disrupts macOS fullscreen
-          // Spaces.  The recording pill is a non-activating overlay so the
-          // target app stays frontmost throughout recording + transcription.
+          // Pass targetApp so the Rust command can re-activate it via
+          // NSRunningApplication before posting Cmd+V.  This handles the case
+          // where the Tauri IPC call causes Oscar's process to take focus on
+          // the main thread.  The Rust side uses NSRunningApplication (NOT
+          // `open -a`) so there's no Space-switch animation or Spaces disruption.
           const pasteResult = await invoke<string>("paste_transcription", {
             text: finalText,
+            targetApp: _targetApp || undefined,
           });
           if (pasteResult === "CLIPBOARD_ONLY") {
+            // Accessibility not granted — text is in clipboard, guide user
             setStatus(
               isMac
-                ? "Copied! Press ⌘V to paste."
-                : "Copied! Press Ctrl+V to paste.",
+                ? "📋 Copied! Grant Accessibility in System Settings for auto-paste, or press ⌘V."
+                : "📋 Copied! Press Ctrl+V to paste.",
             );
           } else {
             setStatus("Pasted! ✓");
@@ -1569,15 +1488,15 @@ function App() {
           console.error("[paste] FAILED:", pe);
           setStatus(
             isMac
-              ? "Copied to clipboard. Press ⌘V to paste."
-              : "Copied to clipboard. Press Ctrl+V to paste.",
+              ? "📋 Copied to clipboard. Press ⌘V to paste."
+              : "📋 Copied to clipboard. Press Ctrl+V to paste.",
           );
         }
       }
 
-      // Silent AI cleanup — fix transcription artifacts for the UI display.
-      // This runs after paste so the paste isn't delayed by inference time.
-      if (aiModelReadyRef.current && aiImprovementEnabledRef.current) {
+      // Silent AI cleanup via DeepSeek — fix transcription artifacts for the UI.
+      // Runs after paste so paste latency is unaffected by the API call.
+      if (aiImprovementEnabledRef.current) {
         try {
           const cleaned = await invoke<string>("ai_process_text", {
             text: finalText,
@@ -1661,8 +1580,6 @@ function App() {
     // Load the whisper model after setup is complete and pre-warm mic
     warmMicrophone();
     initWhisper();
-    // Start AI model download in background (non-blocking)
-    downloadAiModelInBackground();
   };
 
   const handleSignOut = async () => {
@@ -1824,8 +1741,9 @@ function App() {
                       const filesToDelete = [
                         `${home}/${MODEL_PATH}`,
                         `${home}/${OLD_MODEL_PATH}`,
-                        `${home}/${AI_MODEL_PATH}`,
-                        `${home}/${AI_TOKENIZER_PATH}`,
+                        // Legacy local AI model files (removed in favour of DeepSeek)
+                        `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
+                        `${home}/.oscar/models/phi-3.5-tokenizer.json`,
                       ];
                       for (const f of filesToDelete) {
                         try {

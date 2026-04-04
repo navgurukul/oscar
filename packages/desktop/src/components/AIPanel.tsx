@@ -5,21 +5,19 @@ import { Sparkles, FileText, List, Mail, Check, X, Copy, RotateCcw } from "lucid
 
 interface AIPanelProps {
   transcript: string;
-  aiModelReady: boolean;
   onApply: (text: string) => void;
-  onDownloadAI: () => void;
 }
 
 type AIMode = "cleanup" | "summary" | "bullets" | "email";
 
 const AI_ACTIONS: { mode: AIMode; icon: typeof Sparkles; label: string; desc: string }[] = [
-  { mode: "cleanup",  icon: Sparkles,  label: "Clean Up",     desc: "Fix grammar & remove fillers" },
-  { mode: "summary",  icon: FileText,  label: "Summary",      desc: "3-5 sentence overview" },
+  { mode: "cleanup",  icon: Sparkles,  label: "Clean Up",      desc: "Fix grammar & remove fillers" },
+  { mode: "summary",  icon: FileText,  label: "Summary",       desc: "3-5 sentence overview" },
   { mode: "bullets",  icon: List,      label: "Bullet Points", desc: "Key points as bullets" },
-  { mode: "email",    icon: Mail,      label: "Email Draft",  desc: "Ready-to-send professional email" },
+  { mode: "email",    icon: Mail,      label: "Email Draft",   desc: "Ready-to-send professional email" },
 ];
 
-export function AIPanel({ transcript, aiModelReady, onApply, onDownloadAI }: AIPanelProps) {
+export function AIPanel({ transcript, onApply }: AIPanelProps) {
   const [activeMode, setActiveMode] = useState<AIMode | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [result, setResult] = useState("");
@@ -45,7 +43,7 @@ export function AIPanel({ transcript, aiModelReady, onApply, onDownloadAI }: AIP
     setResult("");
     setError("");
 
-    // Set up streaming listener
+    // Set up streaming listener for DeepSeek token events
     unlistenRef.current?.();
     const unlisten = await listen<string>("ai-token", (evt) => {
       setResult(prev => prev + evt.payload);
@@ -82,25 +80,6 @@ export function AIPanel({ transcript, aiModelReady, onApply, onDownloadAI }: AIP
     setError("");
     setStreaming(false);
   };
-
-  if (!aiModelReady) {
-    return (
-      <div className="ai-panel ai-panel--cta">
-        <div className="ai-panel-cta-inner">
-          <div className="ai-panel-cta-icon">
-            <Sparkles size={20} />
-          </div>
-          <div className="ai-panel-cta-text">
-            <span className="ai-panel-cta-title">AI Enhancement Available</span>
-            <span className="ai-panel-cta-desc">Clean up, summarize, or draft emails from your transcripts — all on-device.</span>
-          </div>
-          <button className="ai-panel-cta-btn" onClick={onDownloadAI}>
-            Enable AI
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="ai-panel">

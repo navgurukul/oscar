@@ -22,7 +22,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-whisper-rs = "0.15"
+whisper-rs = { version = "0.15", features = ["metal"] }
 log = "0.4"
 env_logger = "0.11"
 arboard = "3"
@@ -31,23 +31,10 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio = { version = "1", features = ["fs", "io-util"] }
 futures-util = "0.3"
 
-# AI inference (candle — pure Rust, Metal GPU on macOS)
-candle-core = { version = "0.8" }
-candle-transformers = "0.8"
-candle-nn = "0.8"
-tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
-
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.24"
-candle-core = { version = "0.8", features = ["metal"] }
-candle-nn = { version = "0.8", features = ["metal"] }
-
 
 [profile.release]
 strip = true
 lto = true
 codegen-units = 1
-# panic = "abort" removed: with abort, any panic in spawn_blocking (e.g. candle
-# Metal GPU inference) immediately kills the process with SIGABRT before
-# tokio can convert it to a JoinError. Using the default "unwind" lets
-# spawn_blocking catch panics and propagate them as errors to the caller.

@@ -327,7 +327,7 @@ export function SettingsTab({
                 <div>
                   <h3 className="st-card-title">AI Enhancement</h3>
                   <p className="st-card-desc">
-                    Improve transcriptions with on-device AI
+                    Improve transcriptions with DeepSeek AI
                   </p>
                 </div>
               </div>
@@ -357,7 +357,7 @@ export function SettingsTab({
                     }}
                   >
                     Automatically clean up grammar, filler words, and
-                    punctuation using the on-device AI model.
+                    punctuation using DeepSeek AI.
                   </div>
                 </div>
                 <label className="gen-toggle-label" style={{ marginBottom: 0 }}>
