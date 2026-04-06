@@ -1604,7 +1604,7 @@ function App() {
   const connectGoogleCalendar = async () => {
     // Bypass Supabase OAuth (which doesn't support additional scopes via UI).
     // Build a direct Google OAuth implicit-flow URL so we control the scope.
-    const GOOGLE_CLIENT_ID = "34917283366-b806koktimo2pod1cjas8kn2lcpn7bse.apps.googleusercontent.com";
+    const GOOGLE_CLIENT_ID = "332965035815-v8fnucr2ho5tm0c1jvsd84lch5n8m654.apps.googleusercontent.com";
     const redirectUri = `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`;
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
