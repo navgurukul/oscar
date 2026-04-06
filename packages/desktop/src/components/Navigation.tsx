@@ -1,8 +1,8 @@
 import React from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Home, Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle } from "lucide-react";
+import { Home, Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle, Users } from "lucide-react";
 
-type TabType = "home" | "notes" | "vocabulary" | "billing" | "settings";
+type TabType = "home" | "meetings" | "notes" | "vocabulary" | "billing" | "settings";
 
 interface UpdaterState {
   checking: boolean;
@@ -69,6 +69,7 @@ export function Navigation({
 }: NavigationProps) {
   const navItems: { id: TabType; label: string; icon: React.ElementType }[] = [
     { id: "home", label: "Home", icon: Home },
+    { id: "meetings", label: "Meetings", icon: Users },
     { id: "notes", label: "Notes", icon: FileText },
   ];
 

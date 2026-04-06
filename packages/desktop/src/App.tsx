@@ -17,10 +17,11 @@ import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
+import { MeetingsTab } from "./components/MeetingsTab";
 import type { LocalTranscript } from "./types/note.types";
 import "./App.css";
 
-type TabType = "home" | "notes" | "vocabulary" | "billing" | "settings";
+type TabType = "home" | "meetings" | "notes" | "vocabulary" | "billing" | "settings";
 
 interface Transcription {
   text: string;
@@ -941,6 +942,17 @@ function App() {
   // Selected microphone device id ("" = system default)
   const [selectedMicId, setSelectedMicId] = useState("");
 
+  // Google Calendar OAuth provider token (set after OAuth callback)
+  const [googleCalendarToken, setGoogleCalendarToken] = useState("");
+
+  // Meeting recording state (separate from hold-to-talk dictation)
+  const [isMeetingRecording, setIsMeetingRecording] = useState(false);
+  const [meetingRecordingTime, setMeetingRecordingTime] = useState(0);
+  const [meetingTranscript, setMeetingTranscript] = useState("");
+  const meetingMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const meetingAudioChunksRef = useRef<Blob[]>([]);
+  const meetingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Personal dictionary (local state; synced to Supabase when logged in)
   const [_dictWords, setDictWords] = useState<string[]>([]);
   const [, setDictSyncing] = useState(false);
@@ -1054,6 +1066,14 @@ function App() {
             setUser(data.session.user);
             sessionRef.current = data.session;
           }
+
+          // Extract Google Calendar provider_token if present
+          const providerToken = urlObj.searchParams.get("provider_token");
+          if (providerToken) {
+            setGoogleCalendarToken(providerToken);
+            saveSetting("googleCalendarToken", providerToken);
+            console.log("[deep-link] Google Calendar token stored");
+          }
         } else if (success === "true") {
           // No tokens in the deep link — the onAuthStateChange listener will
           // pick up any session change automatically.  Avoid calling
@@ -1107,6 +1127,7 @@ function App() {
         savedLanguage,
         savedMicId,
         savedAiImprovement,
+        savedCalToken,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
         loadSetting<TonePreset>("tonePreset", "none"),
@@ -1119,6 +1140,7 @@ function App() {
         loadSetting<string>("transcriptionLanguage", "auto"),
         loadSetting<string>("selectedMicId", ""),
         loadSetting<boolean>("aiImprovementEnabled", true),
+        loadSetting<string>("googleCalendarToken", ""),
       ]);
 
       setPermissionsShown(permsDone);
@@ -1137,6 +1159,7 @@ function App() {
       setSelectedMicId(savedMicId);
       setAiImprovementEnabled(savedAiImprovement);
       aiImprovementEnabledRef.current = savedAiImprovement;
+      if (savedCalToken) setGoogleCalendarToken(savedCalToken);
 
       // If setup is complete, load the Whisper model and pre-warm mic
       if (setupDone) {
@@ -1566,6 +1589,139 @@ function App() {
     // Don't stop the stream — keep it warm for next recording
   };
 
+  // ── Google Calendar OAuth connection ────────────────────────────────────
+
+  const connectGoogleCalendar = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          scopes: "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+          queryParams: {
+            access_type: "online",
+            prompt: "consent",
+          },
+          redirectTo: `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) {
+        console.error("[calendar] OAuth error:", error.message);
+        return;
+      }
+      if (data?.url) {
+        await openUrl(data.url);
+      }
+    } catch (err) {
+      console.error("[calendar] signInWithOAuth failed:", err);
+    }
+  };
+
+  // ── Meeting recording (click to start/stop, no auto-paste) ──────────────
+
+  const startMeetingRecording = async () => {
+    let stream: MediaStream;
+    if (
+      warmStreamRef.current &&
+      warmStreamRef.current.getAudioTracks().some((t) => t.readyState === "live")
+    ) {
+      stream = warmStreamRef.current;
+    } else {
+      try {
+        const audioConstraints = selectedMicId
+          ? { deviceId: { ideal: selectedMicId } }
+          : true;
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+        });
+        warmStreamRef.current = stream;
+      } catch (e) {
+        console.error("[meeting-record] getUserMedia failed:", e);
+        return;
+      }
+    }
+
+    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
+      ? "audio/mp4"
+      : "audio/webm";
+    const mediaRecorder = new MediaRecorder(stream, { mimeType });
+    meetingMediaRecorderRef.current = mediaRecorder;
+    meetingAudioChunksRef.current = [];
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) meetingAudioChunksRef.current.push(e.data);
+    };
+    mediaRecorder.onstop = () => {
+      processMeetingAudio();
+    };
+
+    mediaRecorder.start(100);
+    setIsMeetingRecording(true);
+    setMeetingRecordingTime(0);
+    setMeetingTranscript("");
+    meetingTimerRef.current = setInterval(() => {
+      setMeetingRecordingTime((prev) => prev + 1);
+    }, 1000);
+  };
+
+  const stopMeetingRecording = () => {
+    setIsMeetingRecording(false);
+    if (meetingTimerRef.current) {
+      clearInterval(meetingTimerRef.current);
+      meetingTimerRef.current = null;
+    }
+    if (
+      meetingMediaRecorderRef.current &&
+      meetingMediaRecorderRef.current.state === "recording"
+    ) {
+      meetingMediaRecorderRef.current.stop();
+    }
+  };
+
+  const processMeetingAudio = async () => {
+    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
+      ? "audio/mp4"
+      : "audio/webm";
+    const audioBlob = new Blob(meetingAudioChunksRef.current, {
+      type: mimeType,
+    });
+    if (audioBlob.size < 500) {
+      setMeetingTranscript("");
+      return;
+    }
+
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const audioContext = new AudioContext({ sampleRate: 16000 });
+    try {
+      const decoded = await audioContext.decodeAudioData(arrayBuffer);
+      const numChannels = decoded.numberOfChannels;
+      const length = decoded.length;
+      const mono = new Float32Array(length);
+      for (let ch = 0; ch < numChannels; ch++) {
+        const channel = decoded.getChannelData(ch);
+        for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
+      }
+
+      const result = await invoke<Transcription>("transcribe_audio", {
+        audioData: Array.from(mono),
+        initialPrompt:
+          dictWordsRef.current.length > 0
+            ? dictWordsRef.current.join(", ")
+            : undefined,
+        language:
+          transcriptionLanguage === "auto" ? undefined : transcriptionLanguage,
+      });
+
+      if (result.text) {
+        setMeetingTranscript(result.text);
+      }
+    } catch (e) {
+      console.error("[meeting] audio decode failed:", e);
+    } finally {
+      audioContext.close();
+    }
+  };
+
   const handlePermissionsContinue = async () => {
     await saveSetting("permissionsDone", true);
     setPermissionsShown(true);
@@ -1690,6 +1846,23 @@ function App() {
                   onClearAllTranscripts={() => {
                     setLocalTranscripts([]);
                     saveSetting("localTranscripts", []);
+                  }}
+                />
+              )}
+
+              {activeTab === "meetings" && user && (
+                <MeetingsTab
+                  isRecording={isMeetingRecording}
+                  onStartRecording={startMeetingRecording}
+                  onStopRecording={stopMeetingRecording}
+                  recordingTime={meetingRecordingTime}
+                  transcript={meetingTranscript}
+                  onClearTranscript={() => setMeetingTranscript("")}
+                  googleCalendarToken={googleCalendarToken}
+                  onConnectCalendar={connectGoogleCalendar}
+                  onCalendarTokenInvalid={() => {
+                    setGoogleCalendarToken("");
+                    saveSetting("googleCalendarToken", "");
                   }}
                 />
               )}
