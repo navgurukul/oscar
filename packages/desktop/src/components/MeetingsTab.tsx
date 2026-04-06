@@ -19,6 +19,8 @@ import {
   Mail,
   CalendarDays,
   Info,
+  Play,
+  PenLine,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -60,30 +62,10 @@ const TEMPLATES: {
   name: string;
   desc: string;
 }[] = [
-  {
-    id: "meeting_general",
-    icon: FileText,
-    name: "General Meeting",
-    desc: "Key points, decisions, and action items",
-  },
-  {
-    id: "meeting_standup",
-    icon: Users,
-    name: "Standup",
-    desc: "Done, doing, and blockers",
-  },
-  {
-    id: "meeting_1on1",
-    icon: MessageSquare,
-    name: "1:1 Meeting",
-    desc: "Discussion, actions, and follow-ups",
-  },
-  {
-    id: "meeting_brainstorm",
-    icon: Lightbulb,
-    name: "Brainstorm",
-    desc: "Ideas, themes, and next steps",
-  },
+  { id: "meeting_general",   icon: FileText,      name: "General",    desc: "Key points, decisions, action items" },
+  { id: "meeting_standup",   icon: Users,         name: "Standup",    desc: "Done, doing, blockers" },
+  { id: "meeting_1on1",      icon: MessageSquare, name: "1:1",        desc: "Discussion & follow-ups" },
+  { id: "meeting_brainstorm",icon: Lightbulb,     name: "Brainstorm", desc: "Ideas & next steps" },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -94,7 +76,6 @@ function formatTime(seconds: number): string {
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
-/** Best-guess template for a meeting title */
 function guessTemplate(title: string): MeetingTemplate {
   const t = title.toLowerCase();
   if (t.includes("standup") || t.includes("stand-up") || t.includes("scrum") || t.includes("daily"))
@@ -106,37 +87,59 @@ function guessTemplate(title: string): MeetingTemplate {
   return "meeting_general";
 }
 
-// ── Sub-components ───────────────────────────────────────────────────────────
+/** Returns minutes since midnight for a "HH:MM" string */
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/**
+ * Returns the first event that is currently happening or starting
+ * within the next 5 minutes. Returns null if none.
+ */
+function findLiveEvent(events: CalendarEvent[]): CalendarEvent | null {
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  return (
+    events.find((evt) => {
+      const start = timeToMinutes(evt.start_time);
+      const end   = timeToMinutes(evt.end_time);
+      return nowMins >= start && nowMins <= end;          // happening now
+    }) ||
+    events.find((evt) => {
+      const start = timeToMinutes(evt.start_time);
+      return start > nowMins && start - nowMins <= 5;    // starting in ≤5 min
+    }) ||
+    null
+  );
+}
+
+// ── Compact calendar event card (whole card is clickable) ───────────────────
 
 function CalendarEventCard({
   event,
   onUse,
+  isLive,
 }: {
   event: CalendarEvent;
   onUse: (event: CalendarEvent) => void;
+  isLive?: boolean;
 }) {
   return (
-    <div className="cal-event-card">
+    <button className={`cal-event-card${isLive ? " cal-event-live" : ""}`} onClick={() => onUse(event)}>
       <div className="cal-event-time">
-        <Clock size={12} />
+        <Clock size={11} />
         {event.start_time} – {event.end_time}
+        {isLive && <span className="cal-live-dot" />}
       </div>
       <div className="cal-event-title">{event.title}</div>
-      <div className="cal-event-meta">
-        {event.attendees.length > 0 && (
-          <span className="cal-event-attendees">
-            <Users size={11} />
-            {event.attendees.length} participant{event.attendees.length !== 1 ? "s" : ""}
-          </span>
-        )}
-        {event.calendar_name && (
-          <span className="cal-event-cal-name">{event.calendar_name}</span>
-        )}
-      </div>
-      <button className="cal-event-use-btn" onClick={() => onUse(event)}>
-        Use this meeting
-      </button>
-    </div>
+      {event.attendees.length > 0 && (
+        <div className="cal-event-attendees">
+          <Users size={10} />
+          {event.attendees.length} participant{event.attendees.length !== 1 ? "s" : ""}
+        </div>
+      )}
+    </button>
   );
 }
 
@@ -153,42 +156,42 @@ export function MeetingsTab({
   onConnectCalendar,
   onCalendarTokenInvalid,
 }: MeetingsTabProps) {
-  const [selectedTemplate, setSelectedTemplate] =
-    useState<MeetingTemplate | null>(null);
-  const [meetingTitle, setMeetingTitle] = useState("");
-  const [participants, setParticipants] = useState("");
-  const [phase, setPhase] = useState<Phase>("select");
-  const [result, setResult] = useState("");
-  const [streaming, setStreaming] = useState(false);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<MeetingTemplate | null>(null);
+  const [meetingTitle, setMeetingTitle]         = useState("");
+  const [participants, setParticipants]         = useState("");
+  const [manualNotes, setManualNotes]           = useState("");
+  const [phase, setPhase]                       = useState<Phase>("select");
+  const [result, setResult]                     = useState("");
+  const [streaming, setStreaming]               = useState(false);
+  const [error, setError]                       = useState("");
+  const [copied, setCopied]                     = useState(false);
 
   // Calendar state
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [calendarEvents, setCalendarEvents]   = useState<CalendarEvent[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
-  const [calendarError, setCalendarError] = useState<"needs_reconnect" | "fetch_error" | null>(null);
+  const [calendarError, setCalendarError]     = useState<"needs_reconnect" | "fetch_error" | null>(null);
   const [calendarErrorMsg, setCalendarErrorMsg] = useState("");
+  const [liveEvent, setLiveEvent]             = useState<CalendarEvent | null>(null);
 
-  const outputRef = useRef<HTMLDivElement>(null);
+  const outputRef   = useRef<HTMLDivElement>(null);
   const unlistenRef = useRef<(() => void) | null>(null);
+  const notesRef    = useRef<HTMLTextAreaElement>(null);
 
   // Fetch Google Calendar events when token is available
   useEffect(() => {
     if (!googleCalendarToken) {
       setCalendarEvents([]);
       setCalendarError(null);
+      setLiveEvent(null);
       return;
     }
 
     setCalendarLoading(true);
     setCalendarError(null);
 
-    // Fetch events for a 24-hour window around today
     const now = new Date();
-    const timeMin = new Date(now);
-    timeMin.setHours(0, 0, 0, 0);
-    const timeMax = new Date(now);
-    timeMax.setHours(23, 59, 59, 999);
+    const timeMin = new Date(now); timeMin.setHours(0, 0, 0, 0);
+    const timeMax = new Date(now); timeMax.setHours(23, 59, 59, 999);
 
     invoke<CalendarEvent[]>("get_calendar_events", {
       token: googleCalendarToken,
@@ -198,6 +201,7 @@ export function MeetingsTab({
       .then((events) => {
         setCalendarEvents(events);
         setCalendarError(null);
+        setLiveEvent(findLiveEvent(events));
       })
       .catch((e: unknown) => {
         const msg = String(e);
@@ -208,38 +212,43 @@ export function MeetingsTab({
         } else {
           console.warn("[meetings] calendar fetch failed:", e);
           setCalendarError("fetch_error");
-          // Surface the actual API error so it's visible in the UI
           setCalendarErrorMsg(msg.replace(/^Error:\s*/i, "").slice(0, 200));
         }
       })
       .finally(() => setCalendarLoading(false));
   }, [googleCalendarToken, onCalendarTokenInvalid]);
 
+  // Re-check live event every minute
+  useEffect(() => {
+    if (!calendarEvents.length) return;
+    const id = setInterval(() => setLiveEvent(findLiveEvent(calendarEvents)), 60_000);
+    return () => clearInterval(id);
+  }, [calendarEvents]);
+
   // Auto-scroll streaming output
   useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
-    }
+    if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
   }, [result]);
 
   // Cleanup listener on unmount
   useEffect(() => () => { unlistenRef.current?.(); }, []);
 
-  // Run AI processing when transcript is ready and we're in processing phase
+  // AI processing
   const processTranscript = useCallback(async () => {
-    if (!selectedTemplate || !transcript.trim()) return;
+    if (!selectedTemplate || (!transcript.trim() && !manualNotes.trim())) return;
 
-    // Build enriched prompt context from participants and title
     const context = [
       meetingTitle ? `Meeting: ${meetingTitle}` : "",
       participants.trim() ? `Participants: ${participants.trim()}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    ].filter(Boolean).join("\n");
 
-    const enrichedText = context
-      ? `${context}\n\n---\n\n${transcript}`
-      : transcript;
+    const parts = [
+      context,
+      manualNotes.trim() ? `My notes:\n${manualNotes.trim()}` : "",
+      transcript.trim() ? `Transcript:\n${transcript.trim()}` : "",
+    ].filter(Boolean);
+
+    const enrichedText = parts.join("\n\n---\n\n");
 
     setStreaming(true);
     setResult("");
@@ -252,10 +261,7 @@ export function MeetingsTab({
     unlistenRef.current = unlisten;
 
     try {
-      await invoke("ai_process_text", {
-        text: enrichedText,
-        mode: selectedTemplate,
-      });
+      await invoke("ai_process_text", { text: enrichedText, mode: selectedTemplate });
       setPhase("result");
     } catch (err) {
       setError(`${err}`);
@@ -265,30 +271,32 @@ export function MeetingsTab({
       unlistenRef.current = null;
       setStreaming(false);
     }
-  }, [selectedTemplate, transcript, meetingTitle, participants]);
+  }, [selectedTemplate, transcript, manualNotes, meetingTitle, participants]);
 
   useEffect(() => {
-    if (phase === "processing" && transcript.trim()) {
+    if (phase === "processing" && (transcript.trim() || manualNotes.trim())) {
       processTranscript();
     }
-  }, [phase, transcript, processTranscript]);
+  }, [phase, transcript, manualNotes, processTranscript]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
-  const handleSelectTemplate = (template: MeetingTemplate) => {
-    setSelectedTemplate(template);
-    setPhase("recording");
-    setResult("");
-    setError("");
-  };
-
-  const handleUseCalendarEvent = (event: CalendarEvent) => {
+  const startFromEvent = (event: CalendarEvent) => {
     setMeetingTitle(event.title);
     setParticipants(event.attendees.join(", "));
     setSelectedTemplate(guessTemplate(event.title));
     setPhase("recording");
     setResult("");
     setError("");
+    setManualNotes("");
+  };
+
+  const handleSelectTemplate = (template: MeetingTemplate) => {
+    setSelectedTemplate(template);
+    setPhase("recording");
+    setResult("");
+    setError("");
+    setManualNotes("");
   };
 
   const handleStopRecording = () => {
@@ -304,24 +312,10 @@ export function MeetingsTab({
   };
 
   const handleShareByEmail = async () => {
-    const emails = participants
-      .split(/[,;]+/)
-      .map((e) => e.trim())
-      .filter((e) => e.includes("@"))
-      .join(",");
-
-    const subject = encodeURIComponent(
-      `Meeting Notes: ${meetingTitle || "Meeting"}`
-    );
-    const body = encodeURIComponent(
-      `Hi,\n\nPlease find the meeting notes below.\n\n---\n\n${result}\n\n---\n\nGenerated by OSCAR`
-    );
-
-    const mailto = emails
-      ? `mailto:${emails}?subject=${subject}&body=${body}`
-      : `mailto:?subject=${subject}&body=${body}`;
-
-    await openUrl(mailto);
+    const emails = participants.split(/[,;]+/).map((e) => e.trim()).filter((e) => e.includes("@")).join(",");
+    const subject = encodeURIComponent(`Meeting Notes: ${meetingTitle || "Meeting"}`);
+    const body    = encodeURIComponent(`Hi,\n\nPlease find the meeting notes below.\n\n---\n\n${result}\n\n---\n\nGenerated by OSCAR`);
+    await openUrl(emails ? `mailto:${emails}?subject=${subject}&body=${body}` : `mailto:?subject=${subject}&body=${body}`);
   };
 
   const handleNewMeeting = () => {
@@ -330,6 +324,7 @@ export function MeetingsTab({
     setSelectedTemplate(null);
     setMeetingTitle("");
     setParticipants("");
+    setManualNotes("");
     setPhase("select");
     setResult("");
     setError("");
@@ -343,96 +338,96 @@ export function MeetingsTab({
     setSelectedTemplate(null);
     setResult("");
     setError("");
+    setManualNotes("");
     onClearTranscript();
   };
 
   const templateInfo = TEMPLATES.find((t) => t.id === selectedTemplate);
-  const hasEmailableParticipants = participants
-    .split(/[,;]+/)
-    .some((e) => e.trim().includes("@"));
+  const hasEmailableParticipants = participants.split(/[,;]+/).some((e) => e.trim().includes("@"));
 
-  // ── Phase: Template Selection ────────────────────────────────────────────
+  // ── Phase: Select ────────────────────────────────────────────────────────
 
   if (phase === "select") {
     return (
       <div className="meetings-tab">
         <div className="meetings-container">
           <h1 className="meetings-title">Meetings</h1>
-          <p className="meetings-subtitle">
-            Choose a meeting type to record and generate structured notes
-            automatically.
-          </p>
 
-          {/* Today's calendar events */}
+          {/* ── Live meeting banner (Granola-style) ── */}
+          {liveEvent && (
+            <motion.div
+              className="meeting-live-banner"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="meeting-live-banner-dot" />
+              <div className="meeting-live-banner-text">
+                <span className="meeting-live-banner-label">
+                  {timeToMinutes(liveEvent.start_time) > new Date().getHours() * 60 + new Date().getMinutes()
+                    ? "Starting soon"
+                    : "In progress"}
+                </span>
+                <span className="meeting-live-banner-title">{liveEvent.title}</span>
+              </div>
+              <button
+                className="meeting-live-banner-btn"
+                onClick={() => startFromEvent(liveEvent)}
+              >
+                <Play size={12} fill="currentColor" />
+                Record
+              </button>
+            </motion.div>
+          )}
+
+          {/* ── Today's calendar events ── */}
           <div className="cal-section">
             <div className="cal-section-header">
-              <CalendarDays size={15} />
-              <span>Today's Meetings</span>
+              <CalendarDays size={14} />
+              <span>Today</span>
               {calendarLoading && <Loader2 size={12} className="spin" />}
             </div>
 
-            {/* No token — prompt user to connect */}
             {!googleCalendarToken && !calendarLoading && (
               <div className="cal-empty">
-                <Calendar size={28} className="cal-empty-icon" />
+                <Calendar size={24} className="cal-empty-icon" />
                 <p className="cal-empty-text">Connect Google Calendar</p>
-                <p className="cal-empty-hint">
-                  See today's meetings here and auto-fill participant lists from your calendar.
-                </p>
+                <p className="cal-empty-hint">See today's meetings and start recording in one tap.</p>
                 <button className="cal-connect-btn" onClick={onConnectCalendar}>
                   Connect Google Calendar
                 </button>
-                <div className="cal-empty-note">
-                  <Info size={12} />
-                  You can still record and generate notes using any template below.
-                </div>
               </div>
             )}
 
-            {/* Token expired / revoked */}
             {calendarError === "needs_reconnect" && (
               <div className="cal-empty">
-                <Calendar size={28} className="cal-empty-icon" />
                 <p className="cal-empty-text">Calendar access expired</p>
-                <p className="cal-empty-hint">
-                  Your Google Calendar connection has expired. Reconnect to see today's events.
-                </p>
                 <button className="cal-connect-btn" onClick={onConnectCalendar}>
-                  Reconnect Google Calendar
+                  Reconnect
                 </button>
               </div>
             )}
 
-            {/* Generic fetch error */}
             {calendarError === "fetch_error" && (
               <div className="cal-empty">
-                <p className="cal-empty-text">Couldn't load calendar events</p>
+                <p className="cal-empty-text">Couldn't load events</p>
                 <p className="cal-empty-hint">
                   {calendarErrorMsg.includes("not been used") || calendarErrorMsg.includes("disabled")
-                    ? "Google Calendar API is not enabled. Enable it in Google Cloud Console → APIs & Services → Library."
+                    ? "Enable the Google Calendar API in Cloud Console."
                     : calendarErrorMsg.includes("403") || calendarErrorMsg.includes("PERMISSION_DENIED")
-                    ? "Permission denied. Make sure the Google Calendar API is enabled and the calendar.readonly scope is added to your OAuth consent screen."
-                    : calendarErrorMsg || "Check your internet connection and try again."}
+                    ? "Permission denied — check Calendar API & OAuth scopes."
+                    : calendarErrorMsg || "Check your internet connection."}
                 </p>
-                {calendarErrorMsg && (
-                  <p className="cal-error-detail">{calendarErrorMsg}</p>
-                )}
-                <button className="cal-connect-btn" onClick={onConnectCalendar} style={{ marginTop: 10 }}>
-                  Reconnect &amp; retry
+                <button className="cal-connect-btn" onClick={onConnectCalendar} style={{ marginTop: 8 }}>
+                  Reconnect
                 </button>
               </div>
             )}
 
-            {/* Loaded events */}
             {googleCalendarToken && !calendarError && !calendarLoading && (
               calendarEvents.length === 0 ? (
                 <div className="cal-empty">
-                  <Calendar size={28} className="cal-empty-icon" />
-                  <p className="cal-empty-text">No meetings scheduled for today.</p>
-                  <div className="cal-empty-note">
-                    <Info size={12} />
-                    You can still record and generate notes using any template below.
-                  </div>
+                  <p className="cal-empty-hint">No meetings scheduled for today.</p>
                 </div>
               ) : (
                 <div className="cal-events-list">
@@ -440,7 +435,8 @@ export function MeetingsTab({
                     <CalendarEventCard
                       key={i}
                       event={evt}
-                      onUse={handleUseCalendarEvent}
+                      onUse={startFromEvent}
+                      isLive={liveEvent?.title === evt.title && liveEvent?.start_time === evt.start_time}
                     />
                   ))}
                 </div>
@@ -448,10 +444,10 @@ export function MeetingsTab({
             )}
           </div>
 
-          {/* Template grid */}
-          <div className="cal-section-header" style={{ marginTop: 24, marginBottom: 12 }}>
-            <FileText size={15} />
-            <span>Or choose a template</span>
+          {/* ── Template grid ── */}
+          <div className="cal-section-header" style={{ marginTop: 20, marginBottom: 10 }}>
+            <FileText size={14} />
+            <span>Start without calendar</span>
           </div>
           <div className="meetings-templates">
             {TEMPLATES.map(({ id, icon: Icon, name, desc }) => (
@@ -462,14 +458,19 @@ export function MeetingsTab({
                 whileHover={{ y: -2 }}
                 transition={{ duration: 0.15 }}
               >
-                <div className="meeting-template-icon">
-                  <Icon size={20} />
-                </div>
+                <div className="meeting-template-icon"><Icon size={18} /></div>
                 <span className="meeting-template-name">{name}</span>
                 <span className="meeting-template-desc">{desc}</span>
               </motion.button>
             ))}
           </div>
+
+          {!googleCalendarToken && (
+            <div className="cal-empty-note" style={{ marginTop: 16 }}>
+              <Info size={11} />
+              Connect Google Calendar above to auto-detect meetings.
+            </div>
+          )}
         </div>
       </div>
     );
@@ -482,75 +483,70 @@ export function MeetingsTab({
       <div className="meetings-tab">
         <div className="meetings-container">
           <button className="meeting-back-btn" onClick={handleBack}>
-            <ChevronLeft size={18} />
+            <ChevronLeft size={16} />
             Back
           </button>
 
-          {/* Meeting title */}
+          {/* Title + participants row */}
           <div className="meeting-meta-fields">
-            <div className="meeting-field">
-              <label className="meeting-field-label">Meeting Title</label>
-              <input
-                className="meeting-field-input"
-                type="text"
-                placeholder="e.g. Product Weekly Sync"
-                value={meetingTitle}
-                onChange={(e) => setMeetingTitle(e.target.value)}
-              />
-            </div>
-            <div className="meeting-field">
-              <label className="meeting-field-label">
-                Participants
-                <span className="meeting-field-hint">
-                  — names or emails, comma-separated
-                </span>
-              </label>
-              <input
-                className="meeting-field-input"
-                type="text"
-                placeholder="Alice, bob@company.com, Charlie"
-                value={participants}
-                onChange={(e) => setParticipants(e.target.value)}
-              />
-            </div>
+            <input
+              className="meeting-field-input meeting-title-input"
+              type="text"
+              placeholder="Meeting title"
+              value={meetingTitle}
+              onChange={(e) => setMeetingTitle(e.target.value)}
+            />
+            <input
+              className="meeting-field-input"
+              type="text"
+              placeholder="Participants — names or emails, comma-separated"
+              value={participants}
+              onChange={(e) => setParticipants(e.target.value)}
+            />
           </div>
-
-          {/* Template badge */}
-          {templateInfo && (
-            <div className="meeting-recording-header">
-              <div className="meeting-template-badge">
-                <templateInfo.icon size={14} />
-                {templateInfo.name}
-              </div>
-            </div>
-          )}
 
           {/* Record button + timer */}
           <div className="meeting-recording">
-            <div className="meeting-timer">{formatTime(recordingTime)}</div>
-
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+            <motion.button
+              className={`meeting-record-btn ${isRecording ? "recording" : ""}`}
+              onClick={isRecording ? handleStopRecording : onStartRecording}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
               transition={{ duration: 0.15 }}
             >
-              <button
-                onClick={isRecording ? handleStopRecording : onStartRecording}
-                className={`meeting-record-btn ${isRecording ? "recording" : ""}`}
-              >
-                {isRecording ? (
-                  <Square size={32} fill="currentColor" />
-                ) : (
-                  <Mic size={32} />
-                )}
-              </button>
-            </motion.div>
+              {isRecording ? <Square size={28} fill="currentColor" /> : <Mic size={28} />}
+            </motion.button>
 
-            <span className="meeting-recording-label">
+            <div className="meeting-recording-status">
               {isRecording
-                ? "Recording… Click to stop"
-                : "Click to start recording"}
-            </span>
+                ? <><span className="meeting-rec-dot" /><span className="meeting-timer">{formatTime(recordingTime)}</span></>
+                : <span className="meeting-recording-label">Tap to start recording</span>
+              }
+            </div>
+
+            {templateInfo && (
+              <div className="meeting-template-badge">
+                <templateInfo.icon size={12} />
+                {templateInfo.name}
+              </div>
+            )}
+          </div>
+
+          {/* ── Simultaneous notes area (Granola-style) ── */}
+          <div className="meeting-notes-section">
+            <div className="meeting-notes-header">
+              <PenLine size={13} />
+              <span>Your notes</span>
+              <span className="meeting-notes-hint">type freely while recording</span>
+            </div>
+            <textarea
+              ref={notesRef}
+              className="meeting-notes-area"
+              placeholder="Jot down key points, action items, or anything worth remembering…"
+              value={manualNotes}
+              onChange={(e) => setManualNotes(e.target.value)}
+              rows={6}
+            />
           </div>
         </div>
       </div>
@@ -562,50 +558,44 @@ export function MeetingsTab({
   return (
     <div className="meetings-tab">
       <div className="meetings-container">
-        {/* Header */}
         <div className="meeting-result-top">
           <div>
-            <h1 className="meetings-title">
-              {meetingTitle || "Meeting Notes"}
-            </h1>
-            {meetingTitle && <p className="meetings-subtitle" style={{ marginBottom: 0 }}>
-              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-            </p>}
+            <h1 className="meetings-title">{meetingTitle || "Meeting Notes"}</h1>
+            {meetingTitle && (
+              <p className="meetings-subtitle" style={{ marginBottom: 0 }}>
+                {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              </p>
+            )}
           </div>
           {templateInfo && (
             <div className="meeting-template-badge">
-              <templateInfo.icon size={14} />
+              <templateInfo.icon size={13} />
               {templateInfo.name}
             </div>
           )}
         </div>
 
-        {/* Participants pill row */}
         {participants.trim() && (
           <div className="meeting-participants-row">
-            <Users size={13} />
+            <Users size={12} />
             <span>{participants}</span>
           </div>
         )}
 
-        {/* Processing spinner */}
         {phase === "processing" && !result && !error && (
           <div className="meeting-processing">
-            <Loader2 size={32} className="spin" />
+            <Loader2 size={28} className="spin" />
             <span className="meeting-processing-label">
-              {!transcript.trim()
-                ? "Transcribing audio…"
-                : "Generating meeting notes…"}
+              {!transcript.trim() ? "Transcribing audio…" : "Generating meeting notes…"}
             </span>
           </div>
         )}
 
-        {/* Result card */}
         {(result || error) && (
           <div className="meeting-result">
             <div className="meeting-result-header">
               <div className="meeting-result-title">
-                <FileText size={14} />
+                <FileText size={13} />
                 <span>Notes</span>
                 {streaming && <span className="ai-thinking-dot" />}
               </div>
@@ -615,51 +605,31 @@ export function MeetingsTab({
               <div className="meeting-result-error">{error}</div>
             ) : (
               <div className="meeting-result-text" ref={outputRef}>
-                {result || (streaming && (
-                  <span className="ai-cursor-blink">&#9613;</span>
-                ))}
+                {result || (streaming && <span className="ai-cursor-blink">&#9613;</span>)}
               </div>
             )}
 
             {!streaming && result && !error && (
               <div className="meeting-result-footer">
-                <button
-                  className="meeting-footer-btn meeting-footer-btn-primary"
-                  onClick={handleCopy}
-                >
-                  {copied ? <Check size={13} /> : <Copy size={13} />}
-                  {copied ? "Copied!" : "Copy Notes"}
+                <button className="meeting-footer-btn meeting-footer-btn-primary" onClick={handleCopy}>
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  {copied ? "Copied!" : "Copy"}
                 </button>
-
-                {/* Share via email — shown when participants have email addresses */}
                 <button
                   className={`meeting-footer-btn ${!hasEmailableParticipants ? "meeting-footer-btn-disabled" : ""}`}
                   onClick={handleShareByEmail}
-                  title={
-                    hasEmailableParticipants
-                      ? "Open mail draft with notes"
-                      : "Add participant email addresses to share"
-                  }
+                  title={hasEmailableParticipants ? "Open mail draft" : "Add participant emails to share"}
                 >
-                  <Mail size={13} />
-                  Share via Email
+                  <Mail size={12} />
+                  Email
                 </button>
-
-                <button
-                  className="meeting-footer-btn"
-                  onClick={() => {
-                    setResult("");
-                    setError("");
-                    setPhase("processing");
-                    processTranscript();
-                  }}
-                >
-                  <RotateCcw size={13} />
+                <button className="meeting-footer-btn" onClick={() => { setResult(""); setError(""); setPhase("processing"); processTranscript(); }}>
+                  <RotateCcw size={12} />
                   Retry
                 </button>
                 <button className="meeting-footer-btn" onClick={handleNewMeeting}>
-                  <Mic size={13} />
-                  New Meeting
+                  <Mic size={12} />
+                  New
                 </button>
               </div>
             )}
