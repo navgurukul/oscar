@@ -683,6 +683,11 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
              ## Next Steps\n\n\
              Output only the structured notes in markdown format:\n\n{text}"
         ),
+        "meeting_custom" => format!(
+            "You are a meeting notes assistant. Analyze the following meeting transcript and produce \
+             structured meeting notes following the instructions included in the text. \
+             Output only the structured notes in markdown format:\n\n{text}"
+        ),
         _ => format!("Process the following text:\n\n{text}"),
     };
     (system, user)
@@ -960,6 +965,17 @@ async fn get_calendar_events(
         .filter_map(|item| {
             let title = item.get("summary")?.as_str()?.trim().to_string();
             if title.is_empty() {
+                return None;
+            }
+
+            // Skip non-default event types (working location, focus time, out of office)
+            let event_type = item.get("eventType").and_then(|v| v.as_str()).unwrap_or("default");
+            if event_type != "default" {
+                return None;
+            }
+
+            // Skip all-day events (no dateTime, only date)
+            if item.pointer("/start/dateTime").is_none() {
                 return None;
             }
 

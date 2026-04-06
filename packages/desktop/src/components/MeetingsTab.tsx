@@ -5,14 +5,13 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   FileText,
   Users,
-  MessageSquare,
-  Lightbulb,
   Mic,
   Square,
   Copy,
   Check,
   RotateCcw,
   ChevronLeft,
+  ChevronDown,
   Loader2,
   Calendar,
   Clock,
@@ -21,16 +20,20 @@ import {
   Info,
   Play,
   PenLine,
+  Plus,
+  Settings,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type MeetingTemplate =
-  | "meeting_general"
-  | "meeting_standup"
-  | "meeting_1on1"
-  | "meeting_brainstorm";
+export interface MeetingTemplateData {
+  id: string;
+  name: string;
+  desc: string;
+  prompt: string;    // for built-in: "" (uses id as mode). for custom: the full instruction text.
+  builtin: boolean;
+}
 
 type Phase = "select" | "recording" | "processing" | "result";
 
@@ -52,20 +55,17 @@ interface MeetingsTabProps {
   googleCalendarToken: string;
   onConnectCalendar: () => void;
   onCalendarTokenInvalid: () => void;
+  templates: MeetingTemplateData[];
+  onManageTemplates: () => void;
 }
 
-// ── Template definitions ─────────────────────────────────────────────────────
+// ── Default templates ───────────────────────────────────────────────────────
 
-const TEMPLATES: {
-  id: MeetingTemplate;
-  icon: typeof FileText;
-  name: string;
-  desc: string;
-}[] = [
-  { id: "meeting_general",   icon: FileText,      name: "General",    desc: "Key points, decisions, action items" },
-  { id: "meeting_standup",   icon: Users,         name: "Standup",    desc: "Done, doing, blockers" },
-  { id: "meeting_1on1",      icon: MessageSquare, name: "1:1",        desc: "Discussion & follow-ups" },
-  { id: "meeting_brainstorm",icon: Lightbulb,     name: "Brainstorm", desc: "Ideas & next steps" },
+export const DEFAULT_TEMPLATES: MeetingTemplateData[] = [
+  { id: "meeting_general",    name: "General",    desc: "Key points, decisions, action items", prompt: "", builtin: true },
+  { id: "meeting_standup",    name: "Standup",    desc: "Done, doing, blockers",              prompt: "", builtin: true },
+  { id: "meeting_1on1",       name: "1:1",        desc: "Discussion & follow-ups",            prompt: "", builtin: true },
+  { id: "meeting_brainstorm", name: "Brainstorm", desc: "Ideas & next steps",                 prompt: "", builtin: true },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ function formatTime(seconds: number): string {
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
-function guessTemplate(title: string): MeetingTemplate {
+function guessTemplateId(title: string): string {
   const t = title.toLowerCase();
   if (t.includes("standup") || t.includes("stand-up") || t.includes("scrum") || t.includes("daily"))
     return "meeting_standup";
@@ -87,34 +87,28 @@ function guessTemplate(title: string): MeetingTemplate {
   return "meeting_general";
 }
 
-/** Returns minutes since midnight for a "HH:MM" string */
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(":").map(Number);
   return (h || 0) * 60 + (m || 0);
 }
 
-/**
- * Returns the first event that is currently happening or starting
- * within the next 5 minutes. Returns null if none.
- */
 function findLiveEvent(events: CalendarEvent[]): CalendarEvent | null {
-  const now = new Date();
-  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
   return (
     events.find((evt) => {
       const start = timeToMinutes(evt.start_time);
       const end   = timeToMinutes(evt.end_time);
-      return nowMins >= start && nowMins <= end;          // happening now
+      return nowMins >= start && nowMins <= end;
     }) ||
     events.find((evt) => {
       const start = timeToMinutes(evt.start_time);
-      return start > nowMins && start - nowMins <= 5;    // starting in ≤5 min
+      return start > nowMins && start - nowMins <= 5;
     }) ||
     null
   );
 }
 
-// ── Compact calendar event card (whole card is clickable) ───────────────────
+// ── Compact calendar event card ─────────────────────────────────────────────
 
 function CalendarEventCard({
   event,
@@ -136,10 +130,58 @@ function CalendarEventCard({
       {event.attendees.length > 0 && (
         <div className="cal-event-attendees">
           <Users size={10} />
-          {event.attendees.length} participant{event.attendees.length !== 1 ? "s" : ""}
+          {event.attendees.length}
         </div>
       )}
     </button>
+  );
+}
+
+// ── Template picker dropdown ────────────────────────────────────────────────
+
+function TemplatePicker({
+  templates,
+  selectedId,
+  onChange,
+}: {
+  templates: MeetingTemplateData[];
+  selectedId: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = templates.find((t) => t.id === selectedId);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div className="tpl-picker" ref={ref}>
+      <button className="tpl-picker-btn" onClick={() => setOpen(!open)}>
+        <FileText size={12} />
+        <span>{selected?.name || "Template"}</span>
+        <ChevronDown size={12} className={open ? "tpl-chevron-open" : ""} />
+      </button>
+      {open && (
+        <div className="tpl-picker-menu">
+          {templates.map((t) => (
+            <button
+              key={t.id}
+              className={`tpl-picker-item${t.id === selectedId ? " active" : ""}`}
+              onClick={() => { onChange(t.id); setOpen(false); }}
+            >
+              <span className="tpl-picker-item-name">{t.name}</span>
+              <span className="tpl-picker-item-desc">{t.desc}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -155,60 +197,48 @@ export function MeetingsTab({
   googleCalendarToken,
   onConnectCalendar,
   onCalendarTokenInvalid,
+  templates,
+  onManageTemplates,
 }: MeetingsTabProps) {
-  const [selectedTemplate, setSelectedTemplate] = useState<MeetingTemplate | null>(null);
-  const [meetingTitle, setMeetingTitle]         = useState("");
-  const [participants, setParticipants]         = useState("");
-  const [manualNotes, setManualNotes]           = useState("");
-  const [phase, setPhase]                       = useState<Phase>("select");
-  const [result, setResult]                     = useState("");
-  const [streaming, setStreaming]               = useState(false);
-  const [error, setError]                       = useState("");
-  const [copied, setCopied]                     = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("meeting_general");
+  const [meetingTitle, setMeetingTitle]   = useState("");
+  const [participants, setParticipants]   = useState("");
+  const [manualNotes, setManualNotes]     = useState("");
+  const [phase, setPhase]                 = useState<Phase>("select");
+  const [result, setResult]               = useState("");
+  const [streaming, setStreaming]         = useState(false);
+  const [error, setError]                 = useState("");
+  const [copied, setCopied]               = useState(false);
 
   // Calendar state
-  const [calendarEvents, setCalendarEvents]   = useState<CalendarEvent[]>([]);
-  const [calendarLoading, setCalendarLoading] = useState(false);
-  const [calendarError, setCalendarError]     = useState<"needs_reconnect" | "fetch_error" | null>(null);
+  const [calendarEvents, setCalendarEvents]     = useState<CalendarEvent[]>([]);
+  const [calendarLoading, setCalendarLoading]   = useState(false);
+  const [calendarError, setCalendarError]       = useState<"needs_reconnect" | "fetch_error" | null>(null);
   const [calendarErrorMsg, setCalendarErrorMsg] = useState("");
-  const [liveEvent, setLiveEvent]             = useState<CalendarEvent | null>(null);
+  const [liveEvent, setLiveEvent]               = useState<CalendarEvent | null>(null);
 
   const outputRef   = useRef<HTMLDivElement>(null);
   const unlistenRef = useRef<(() => void) | null>(null);
-  const notesRef    = useRef<HTMLTextAreaElement>(null);
 
-  // Fetch Google Calendar events when token is available
+  // Fetch Google Calendar events
   useEffect(() => {
     if (!googleCalendarToken) {
-      setCalendarEvents([]);
-      setCalendarError(null);
-      setLiveEvent(null);
+      setCalendarEvents([]); setCalendarError(null); setLiveEvent(null);
       return;
     }
-
-    setCalendarLoading(true);
-    setCalendarError(null);
-
+    setCalendarLoading(true); setCalendarError(null);
     const now = new Date();
     const timeMin = new Date(now); timeMin.setHours(0, 0, 0, 0);
     const timeMax = new Date(now); timeMax.setHours(23, 59, 59, 999);
 
     invoke<CalendarEvent[]>("get_calendar_events", {
-      token: googleCalendarToken,
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
+      token: googleCalendarToken, timeMin: timeMin.toISOString(), timeMax: timeMax.toISOString(),
     })
-      .then((events) => {
-        setCalendarEvents(events);
-        setCalendarError(null);
-        setLiveEvent(findLiveEvent(events));
-      })
+      .then((events) => { setCalendarEvents(events); setCalendarError(null); setLiveEvent(findLiveEvent(events)); })
       .catch((e: unknown) => {
         const msg = String(e);
         if (msg.includes("NEEDS_RECONNECT")) {
-          setCalendarError("needs_reconnect");
-          setCalendarErrorMsg("");
-          onCalendarTokenInvalid();
+          setCalendarError("needs_reconnect"); setCalendarErrorMsg(""); onCalendarTokenInvalid();
         } else {
           console.warn("[meetings] calendar fetch failed:", e);
           setCalendarError("fetch_error");
@@ -225,35 +255,37 @@ export function MeetingsTab({
     return () => clearInterval(id);
   }, [calendarEvents]);
 
-  // Auto-scroll streaming output
-  useEffect(() => {
-    if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
-  }, [result]);
-
-  // Cleanup listener on unmount
+  useEffect(() => { if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight; }, [result]);
   useEffect(() => () => { unlistenRef.current?.(); }, []);
 
-  // AI processing
+  // AI processing — resolve template to mode
   const processTranscript = useCallback(async () => {
-    if (!selectedTemplate || (!transcript.trim() && !manualNotes.trim())) return;
+    if (!selectedTemplateId || (!transcript.trim() && !manualNotes.trim())) return;
+
+    const tpl = templates.find((t) => t.id === selectedTemplateId);
+    const isCustom = tpl && !tpl.builtin;
 
     const context = [
       meetingTitle ? `Meeting: ${meetingTitle}` : "",
       participants.trim() ? `Participants: ${participants.trim()}` : "",
     ].filter(Boolean).join("\n");
 
+    // For custom templates, prepend the custom instructions
+    const customInstructions = isCustom && tpl?.prompt
+      ? `Template instructions: ${tpl.prompt}`
+      : "";
+
     const parts = [
+      customInstructions,
       context,
       manualNotes.trim() ? `My notes:\n${manualNotes.trim()}` : "",
       transcript.trim() ? `Transcript:\n${transcript.trim()}` : "",
     ].filter(Boolean);
 
     const enrichedText = parts.join("\n\n---\n\n");
+    const mode = isCustom ? "meeting_custom" : selectedTemplateId;
 
-    setStreaming(true);
-    setResult("");
-    setError("");
-
+    setStreaming(true); setResult(""); setError("");
     unlistenRef.current?.();
     const unlisten = await listen<string>("ai-token", (evt) => {
       setResult((prev) => prev + evt.payload);
@@ -261,22 +293,17 @@ export function MeetingsTab({
     unlistenRef.current = unlisten;
 
     try {
-      await invoke("ai_process_text", { text: enrichedText, mode: selectedTemplate });
+      await invoke("ai_process_text", { text: enrichedText, mode });
       setPhase("result");
     } catch (err) {
-      setError(`${err}`);
-      setPhase("result");
+      setError(`${err}`); setPhase("result");
     } finally {
-      unlisten();
-      unlistenRef.current = null;
-      setStreaming(false);
+      unlisten(); unlistenRef.current = null; setStreaming(false);
     }
-  }, [selectedTemplate, transcript, manualNotes, meetingTitle, participants]);
+  }, [selectedTemplateId, transcript, manualNotes, meetingTitle, participants, templates]);
 
   useEffect(() => {
-    if (phase === "processing" && (transcript.trim() || manualNotes.trim())) {
-      processTranscript();
-    }
+    if (phase === "processing" && (transcript.trim() || manualNotes.trim())) processTranscript();
   }, [phase, transcript, manualNotes, processTranscript]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
@@ -284,31 +311,25 @@ export function MeetingsTab({
   const startFromEvent = (event: CalendarEvent) => {
     setMeetingTitle(event.title);
     setParticipants(event.attendees.join(", "));
-    setSelectedTemplate(guessTemplate(event.title));
+    setSelectedTemplateId(guessTemplateId(event.title));
     setPhase("recording");
-    setResult("");
-    setError("");
-    setManualNotes("");
+    setResult(""); setError(""); setManualNotes("");
   };
 
-  const handleSelectTemplate = (template: MeetingTemplate) => {
-    setSelectedTemplate(template);
+  const startNewMeeting = () => {
+    setMeetingTitle("");
+    setParticipants("");
+    setSelectedTemplateId("meeting_general");
     setPhase("recording");
-    setResult("");
-    setError("");
-    setManualNotes("");
+    setResult(""); setError(""); setManualNotes("");
   };
 
-  const handleStopRecording = () => {
-    onStopRecording();
-    setPhase("processing");
-  };
+  const handleStopRecording = () => { onStopRecording(); setPhase("processing"); };
 
   const handleCopy = async () => {
     if (!result) return;
     await navigator.clipboard.writeText(result);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
   };
 
   const handleShareByEmail = async () => {
@@ -319,30 +340,18 @@ export function MeetingsTab({
   };
 
   const handleNewMeeting = () => {
-    unlistenRef.current?.();
-    unlistenRef.current = null;
-    setSelectedTemplate(null);
-    setMeetingTitle("");
-    setParticipants("");
-    setManualNotes("");
-    setPhase("select");
-    setResult("");
-    setError("");
-    setStreaming(false);
-    onClearTranscript();
+    unlistenRef.current?.(); unlistenRef.current = null;
+    setSelectedTemplateId("meeting_general"); setMeetingTitle(""); setParticipants(""); setManualNotes("");
+    setPhase("select"); setResult(""); setError(""); setStreaming(false); onClearTranscript();
   };
 
   const handleBack = () => {
     if (isRecording) onStopRecording();
-    setPhase("select");
-    setSelectedTemplate(null);
-    setResult("");
-    setError("");
-    setManualNotes("");
-    onClearTranscript();
+    setPhase("select"); setSelectedTemplateId("meeting_general");
+    setResult(""); setError(""); setManualNotes(""); onClearTranscript();
   };
 
-  const templateInfo = TEMPLATES.find((t) => t.id === selectedTemplate);
+  const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
   const hasEmailableParticipants = participants.split(/[,;]+/).some((e) => e.trim().includes("@"));
 
   // ── Phase: Select ────────────────────────────────────────────────────────
@@ -351,9 +360,15 @@ export function MeetingsTab({
     return (
       <div className="meetings-tab">
         <div className="meetings-container">
-          <h1 className="meetings-title">Meetings</h1>
+          <div className="meetings-header-row">
+            <h1 className="meetings-title">Meetings</h1>
+            <button className="meetings-manage-tpl-btn" onClick={onManageTemplates} title="Manage templates">
+              <Settings size={14} />
+              Templates
+            </button>
+          </div>
 
-          {/* ── Live meeting banner (Granola-style) ── */}
+          {/* ── Live meeting banner ── */}
           {liveEvent && (
             <motion.div
               className="meeting-live-banner"
@@ -370,17 +385,14 @@ export function MeetingsTab({
                 </span>
                 <span className="meeting-live-banner-title">{liveEvent.title}</span>
               </div>
-              <button
-                className="meeting-live-banner-btn"
-                onClick={() => startFromEvent(liveEvent)}
-              >
+              <button className="meeting-live-banner-btn" onClick={() => startFromEvent(liveEvent)}>
                 <Play size={12} fill="currentColor" />
                 Record
               </button>
             </motion.div>
           )}
 
-          {/* ── Today's calendar events ── */}
+          {/* ── Today's calendar ── */}
           <div className="cal-section">
             <div className="cal-section-header">
               <CalendarDays size={14} />
@@ -393,18 +405,14 @@ export function MeetingsTab({
                 <Calendar size={24} className="cal-empty-icon" />
                 <p className="cal-empty-text">Connect Google Calendar</p>
                 <p className="cal-empty-hint">See today's meetings and start recording in one tap.</p>
-                <button className="cal-connect-btn" onClick={onConnectCalendar}>
-                  Connect Google Calendar
-                </button>
+                <button className="cal-connect-btn" onClick={onConnectCalendar}>Connect Google Calendar</button>
               </div>
             )}
 
             {calendarError === "needs_reconnect" && (
               <div className="cal-empty">
                 <p className="cal-empty-text">Calendar access expired</p>
-                <button className="cal-connect-btn" onClick={onConnectCalendar}>
-                  Reconnect
-                </button>
+                <button className="cal-connect-btn" onClick={onConnectCalendar}>Reconnect</button>
               </div>
             )}
 
@@ -418,9 +426,7 @@ export function MeetingsTab({
                     ? "Permission denied — check Calendar API & OAuth scopes."
                     : calendarErrorMsg || "Check your internet connection."}
                 </p>
-                <button className="cal-connect-btn" onClick={onConnectCalendar} style={{ marginTop: 8 }}>
-                  Reconnect
-                </button>
+                <button className="cal-connect-btn" onClick={onConnectCalendar} style={{ marginTop: 8 }}>Reconnect</button>
               </div>
             )}
 
@@ -444,29 +450,14 @@ export function MeetingsTab({
             )}
           </div>
 
-          {/* ── Template grid ── */}
-          <div className="cal-section-header" style={{ marginTop: 20, marginBottom: 10 }}>
-            <FileText size={14} />
-            <span>Start without calendar</span>
-          </div>
-          <div className="meetings-templates">
-            {TEMPLATES.map(({ id, icon: Icon, name, desc }) => (
-              <motion.button
-                key={id}
-                className="meeting-template-card"
-                onClick={() => handleSelectTemplate(id)}
-                whileHover={{ y: -2 }}
-                transition={{ duration: 0.15 }}
-              >
-                <div className="meeting-template-icon"><Icon size={18} /></div>
-                <span className="meeting-template-name">{name}</span>
-                <span className="meeting-template-desc">{desc}</span>
-              </motion.button>
-            ))}
-          </div>
+          {/* ── New meeting button ── */}
+          <button className="meeting-new-btn" onClick={startNewMeeting}>
+            <Plus size={16} />
+            New meeting
+          </button>
 
           {!googleCalendarToken && (
-            <div className="cal-empty-note" style={{ marginTop: 16 }}>
+            <div className="cal-empty-note" style={{ marginTop: 14 }}>
               <Info size={11} />
               Connect Google Calendar above to auto-detect meetings.
             </div>
@@ -483,11 +474,10 @@ export function MeetingsTab({
       <div className="meetings-tab">
         <div className="meetings-container">
           <button className="meeting-back-btn" onClick={handleBack}>
-            <ChevronLeft size={16} />
-            Back
+            <ChevronLeft size={16} /> Back
           </button>
 
-          {/* Title + participants row */}
+          {/* Title + participants */}
           <div className="meeting-meta-fields">
             <input
               className="meeting-field-input meeting-title-input"
@@ -505,7 +495,7 @@ export function MeetingsTab({
             />
           </div>
 
-          {/* Record button + timer */}
+          {/* Record button + timer + template picker */}
           <div className="meeting-recording">
             <motion.button
               className={`meeting-record-btn ${isRecording ? "recording" : ""}`}
@@ -524,15 +514,14 @@ export function MeetingsTab({
               }
             </div>
 
-            {templateInfo && (
-              <div className="meeting-template-badge">
-                <templateInfo.icon size={12} />
-                {templateInfo.name}
-              </div>
-            )}
+            <TemplatePicker
+              templates={templates}
+              selectedId={selectedTemplateId}
+              onChange={setSelectedTemplateId}
+            />
           </div>
 
-          {/* ── Simultaneous notes area (Granola-style) ── */}
+          {/* ── Simultaneous notes area ── */}
           <div className="meeting-notes-section">
             <div className="meeting-notes-header">
               <PenLine size={13} />
@@ -540,7 +529,6 @@ export function MeetingsTab({
               <span className="meeting-notes-hint">type freely while recording</span>
             </div>
             <textarea
-              ref={notesRef}
               className="meeting-notes-area"
               placeholder="Jot down key points, action items, or anything worth remembering…"
               value={manualNotes}
@@ -567,10 +555,10 @@ export function MeetingsTab({
               </p>
             )}
           </div>
-          {templateInfo && (
+          {selectedTpl && (
             <div className="meeting-template-badge">
-              <templateInfo.icon size={13} />
-              {templateInfo.name}
+              <FileText size={12} />
+              {selectedTpl.name}
             </div>
           )}
         </div>
@@ -618,18 +606,15 @@ export function MeetingsTab({
                 <button
                   className={`meeting-footer-btn ${!hasEmailableParticipants ? "meeting-footer-btn-disabled" : ""}`}
                   onClick={handleShareByEmail}
-                  title={hasEmailableParticipants ? "Open mail draft" : "Add participant emails to share"}
+                  title={hasEmailableParticipants ? "Open mail draft" : "Add emails to share"}
                 >
-                  <Mail size={12} />
-                  Email
+                  <Mail size={12} /> Email
                 </button>
                 <button className="meeting-footer-btn" onClick={() => { setResult(""); setError(""); setPhase("processing"); processTranscript(); }}>
-                  <RotateCcw size={12} />
-                  Retry
+                  <RotateCcw size={12} /> Retry
                 </button>
                 <button className="meeting-footer-btn" onClick={handleNewMeeting}>
-                  <Mic size={12} />
-                  New
+                  <Mic size={12} /> New
                 </button>
               </div>
             )}
