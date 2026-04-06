@@ -1816,6 +1816,12 @@ function App() {
                   recordingTime={meetingRecordingTime}
                   transcript={meetingTranscript}
                   onClearTranscript={() => setMeetingTranscript("")}
+                  googleCalendarToken={googleCalendarToken}
+                  onConnectCalendar={connectGoogleCalendar}
+                  onCalendarTokenInvalid={() => {
+                    setGoogleCalendarToken("");
+                    saveSetting("googleCalendarToken", "");
+                  }}
                 />
               )}
 
