@@ -1455,13 +1455,29 @@ function App() {
 
       let finalText = result.text;
 
-      // ── Auto-paste: do this BEFORE AI cleanup ──────────────────────────────
-      // AI cleanup can take 10-30 seconds of on-device inference.  If we paste
-      // after cleanup, the user has almost certainly moved focus away from the
-      // target app by then, so the Cmd+V lands in the wrong window (or nowhere).
-      // Pasting the raw Whisper transcript here — immediately after transcription
-      // finishes — ensures the target app is still frontmost.  The UI is updated
-      // with the AI-cleaned text separately below.
+      // Silent AI cleanup via DeepSeek — fix transcription artifacts.
+      // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
+      if (aiImprovementEnabledRef.current) {
+        setStatus("Improving with AI...");
+        try {
+          const cleaned = await invoke<string>("ai_process_text", {
+            text: finalText,
+            mode: "transcribe_cleanup",
+          });
+          if (cleaned && cleaned.trim().length > 0) {
+            finalText = cleaned;
+          }
+        } catch (aiErr) {
+          // Silently fall back to raw transcript — user never sees this
+          console.warn(
+            "[ai] silent cleanup failed, using raw transcript:",
+            aiErr,
+          );
+        }
+      }
+
+      // ── Auto-paste: do this AFTER AI cleanup ──────────────────────────────
+      // Now that AI cleanup is complete, paste the improved text to the target app.
       if (shouldPaste) {
         const isMac = navigator.platform.toLowerCase().includes("mac");
         try {
@@ -1490,26 +1506,6 @@ function App() {
             isMac
               ? "📋 Copied to clipboard. Press ⌘V to paste."
               : "📋 Copied to clipboard. Press Ctrl+V to paste.",
-          );
-        }
-      }
-
-      // Silent AI cleanup via DeepSeek — fix transcription artifacts for the UI.
-      // Runs after paste so paste latency is unaffected by the API call.
-      if (aiImprovementEnabledRef.current) {
-        try {
-          const cleaned = await invoke<string>("ai_process_text", {
-            text: finalText,
-            mode: "transcribe_cleanup",
-          });
-          if (cleaned && cleaned.trim().length > 0) {
-            finalText = cleaned;
-          }
-        } catch (aiErr) {
-          // Silently fall back to raw transcript — user never sees this
-          console.warn(
-            "[ai] silent cleanup failed, using raw transcript:",
-            aiErr,
           );
         }
       }

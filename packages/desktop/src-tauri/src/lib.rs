@@ -204,19 +204,20 @@ mod macos_paste {
             let sel_count    = sel_registerName(b"count\0".as_ptr() as *const _);
             let sel_obj_at   = sel_registerName(b"objectAtIndex:\0".as_ptr() as *const _);
             let sel_loc_name = sel_registerName(b"localizedName\0".as_ptr() as *const _);
+            let sel_utf8     = sel_registerName(b"UTF8String\0".as_ptr() as *const _);
             let sel_activate = sel_registerName(b"activateWithOptions:\0".as_ptr() as *const _);
 
             type MsgId  = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
             type MsgIdx = unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
             type MsgU64 = unsafe extern "C" fn(*mut c_void, *mut c_void, u64) -> bool;
-            type MsgStr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const std::ffi::c_char;
+            type MsgCStr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const std::ffi::c_char;
             type MsgCnt = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
 
-            let msg_id:  MsgId  = std::mem::transmute(objc_msgSend as *const ());
-            let msg_idx: MsgIdx = std::mem::transmute(objc_msgSend as *const ());
-            let msg_act: MsgU64 = std::mem::transmute(objc_msgSend as *const ());
-            let msg_str: MsgStr = std::mem::transmute(objc_msgSend as *const ());
-            let msg_cnt: MsgCnt = std::mem::transmute(objc_msgSend as *const ());
+            let msg_id:   MsgId   = std::mem::transmute(objc_msgSend as *const ());
+            let msg_idx:  MsgIdx  = std::mem::transmute(objc_msgSend as *const ());
+            let msg_act:  MsgU64  = std::mem::transmute(objc_msgSend as *const ());
+            let msg_cstr: MsgCStr = std::mem::transmute(objc_msgSend as *const ());
+            let msg_cnt:  MsgCnt  = std::mem::transmute(objc_msgSend as *const ());
 
             let shared = msg_id(ws_class, sel_shared);
             let apps   = msg_id(shared, sel_running);
@@ -225,7 +226,12 @@ mod macos_paste {
             let target = app_name.to_lowercase();
             for i in 0..count {
                 let app = msg_idx(apps, sel_obj_at, i);
-                let name_ptr = msg_str(app, sel_loc_name);
+                // localizedName returns NSString*, so we must call [nsString UTF8String]
+                // to get a C string pointer. Treating NSString* as *const c_char directly
+                // causes a SIGSEGV in strlen.
+                let ns_string = msg_id(app, sel_loc_name);
+                if ns_string.is_null() { continue; }
+                let name_ptr = msg_cstr(ns_string, sel_utf8);
                 if name_ptr.is_null() { continue; }
                 let name = std::ffi::CStr::from_ptr(name_ptr)
                     .to_string_lossy()

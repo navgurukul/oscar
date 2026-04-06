@@ -57,7 +57,7 @@
       50%      { transform: scaleY(0.4); opacity: 1; }
     }
 
-    /* ── PROCESSING STATE: spinner ring ─────────────────── */
+    /* ── PROCESSING STATE: refined spinner ──────────────── */
     .processing-state {
       display: none;
       align-items: center;
@@ -67,12 +67,12 @@
     }
 
     .spinner {
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(248, 250, 252, 0.2);
-      border-top-color: #f8fafc;
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid rgba(248, 250, 252, 0.15);
+      border-top-color: #22d3ee;
       border-radius: 50%;
-      animation: spin 0.7s linear infinite;
+      animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
 
     @keyframes spin {
