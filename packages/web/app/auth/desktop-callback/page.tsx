@@ -34,6 +34,29 @@ function DesktopCallbackContent() {
       const expiresIn = hashParams.get("expires_in");
       const authError = hashParams.get("error");
       const errorDescription = hashParams.get("error_description");
+      // state is returned in the fragment for implicit-flow responses
+      const oauthState = hashParams.get("state") || queryParams.get("state") || "";
+
+      // ── Calendar-only OAuth (direct Google implicit flow) ─────────────────
+      if (oauthState === "calendar_connect") {
+        if (authError) {
+          const url = `oscar://auth/callback?error=${encodeURIComponent(authError)}`;
+          setDeepLinkUrl(url);
+          setErrorMessage(decodeURIComponent(errorDescription || authError));
+          setState("error");
+          return;
+        }
+        if (accessToken) {
+          const url = `oscar://auth/callback?calendar_token=${encodeURIComponent(accessToken)}`;
+          setDeepLinkUrl(url);
+          setState("ready");
+          return;
+        }
+        setDeepLinkUrl("oscar://auth/callback?error=no_calendar_token");
+        setErrorMessage("No calendar token received. Please try again.");
+        setState("error");
+        return;
+      }
 
       if (authError) {
         const url = `oscar://auth/callback?error=${encodeURIComponent(authError)}&error_description=${encodeURIComponent(errorDescription || "")}`;

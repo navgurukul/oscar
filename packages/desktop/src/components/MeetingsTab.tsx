@@ -167,6 +167,7 @@ export function MeetingsTab({
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState<"needs_reconnect" | "fetch_error" | null>(null);
+  const [calendarErrorMsg, setCalendarErrorMsg] = useState("");
 
   const outputRef = useRef<HTMLDivElement>(null);
   const unlistenRef = useRef<(() => void) | null>(null);
@@ -202,10 +203,13 @@ export function MeetingsTab({
         const msg = String(e);
         if (msg.includes("NEEDS_RECONNECT")) {
           setCalendarError("needs_reconnect");
+          setCalendarErrorMsg("");
           onCalendarTokenInvalid();
         } else {
           console.warn("[meetings] calendar fetch failed:", e);
           setCalendarError("fetch_error");
+          // Surface the actual API error so it's visible in the UI
+          setCalendarErrorMsg(msg.replace(/^Error:\s*/i, "").slice(0, 200));
         }
       })
       .finally(() => setCalendarLoading(false));
@@ -403,7 +407,19 @@ export function MeetingsTab({
             {calendarError === "fetch_error" && (
               <div className="cal-empty">
                 <p className="cal-empty-text">Couldn't load calendar events</p>
-                <p className="cal-empty-hint">Check your internet connection and try again.</p>
+                <p className="cal-empty-hint">
+                  {calendarErrorMsg.includes("not been used") || calendarErrorMsg.includes("disabled")
+                    ? "Google Calendar API is not enabled. Enable it in Google Cloud Console → APIs & Services → Library."
+                    : calendarErrorMsg.includes("403") || calendarErrorMsg.includes("PERMISSION_DENIED")
+                    ? "Permission denied. Make sure the Google Calendar API is enabled and the calendar.readonly scope is added to your OAuth consent screen."
+                    : calendarErrorMsg || "Check your internet connection and try again."}
+                </p>
+                {calendarErrorMsg && (
+                  <p className="cal-error-detail">{calendarErrorMsg}</p>
+                )}
+                <button className="cal-connect-btn" onClick={onConnectCalendar} style={{ marginTop: 10 }}>
+                  Reconnect &amp; retry
+                </button>
               </div>
             )}
 

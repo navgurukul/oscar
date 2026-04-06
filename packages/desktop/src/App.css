@@ -5508,6 +5508,14 @@ kbd {
   color: #94a3b8;
 }
 
+.cal-error-detail {
+  margin-top: 6px;
+  font-size: 0.7rem;
+  color: #64748b;
+  word-break: break-all;
+  max-width: 300px;
+}
+
 .cal-connect-btn {
   margin-top: 12px;
   padding: 8px 18px;
