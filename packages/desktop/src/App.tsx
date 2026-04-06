@@ -942,6 +942,9 @@ function App() {
   // Selected microphone device id ("" = system default)
   const [selectedMicId, setSelectedMicId] = useState("");
 
+  // Google Calendar OAuth provider token
+  const [googleCalendarToken, setGoogleCalendarToken] = useState("");
+
   // Meeting recording state (separate from hold-to-talk dictation)
   const [isMeetingRecording, setIsMeetingRecording] = useState(false);
   const [meetingRecordingTime, setMeetingRecordingTime] = useState(0);
@@ -1063,6 +1066,14 @@ function App() {
             setUser(data.session.user);
             sessionRef.current = data.session;
           }
+
+          // Store Google Calendar provider_token if present
+          const providerToken = urlObj.searchParams.get("provider_token");
+          if (providerToken) {
+            setGoogleCalendarToken(providerToken);
+            saveSetting("googleCalendarToken", providerToken);
+            console.log("[deep-link] Google Calendar token stored");
+          }
         } else if (success === "true") {
           // No tokens in the deep link — the onAuthStateChange listener will
           // pick up any session change automatically.  Avoid calling
@@ -1116,6 +1127,7 @@ function App() {
         savedLanguage,
         savedMicId,
         savedAiImprovement,
+        savedCalToken,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
         loadSetting<TonePreset>("tonePreset", "none"),
@@ -1128,6 +1140,7 @@ function App() {
         loadSetting<string>("transcriptionLanguage", "auto"),
         loadSetting<string>("selectedMicId", ""),
         loadSetting<boolean>("aiImprovementEnabled", true),
+        loadSetting<string>("googleCalendarToken", ""),
       ]);
 
       setPermissionsShown(permsDone);
@@ -1146,6 +1159,7 @@ function App() {
       setSelectedMicId(savedMicId);
       setAiImprovementEnabled(savedAiImprovement);
       aiImprovementEnabledRef.current = savedAiImprovement;
+      if (savedCalToken) setGoogleCalendarToken(savedCalToken);
 
       // If setup is complete, load the Whisper model and pre-warm mic
       if (setupDone) {
@@ -1573,6 +1587,26 @@ function App() {
     }
 
     // Don't stop the stream — keep it warm for next recording
+  };
+
+  // ── Google Calendar OAuth ────────────────────────────────────────────────
+
+  const connectGoogleCalendar = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          scopes: "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+          queryParams: { access_type: "online", prompt: "consent" },
+          redirectTo: `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) { console.error("[calendar] OAuth error:", error.message); return; }
+      if (data?.url) await openUrl(data.url);
+    } catch (err) {
+      console.error("[calendar] signInWithOAuth failed:", err);
+    }
   };
 
   // ── Meeting recording (click to start/stop, no auto-paste) ──────────────
