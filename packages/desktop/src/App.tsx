@@ -1603,7 +1603,14 @@ function App() {
         },
       });
       if (error) { console.error("[calendar] OAuth error:", error.message); return; }
-      if (data?.url) await openUrl(data.url);
+      if (data?.url) {
+        // Log the OAuth URL — confirm `calendar.readonly` is in the `scope` param
+        try {
+          const u = new URL(data.url);
+          console.log("[calendar] OAuth scope:", u.searchParams.get("scope") ?? u.searchParams.get("scopes"));
+        } catch { /* ignore */ }
+        await openUrl(data.url);
+      }
     } catch (err) {
       console.error("[calendar] signInWithOAuth failed:", err);
     }
