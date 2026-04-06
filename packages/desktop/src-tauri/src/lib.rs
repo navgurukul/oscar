@@ -204,19 +204,20 @@ mod macos_paste {
             let sel_count    = sel_registerName(b"count\0".as_ptr() as *const _);
             let sel_obj_at   = sel_registerName(b"objectAtIndex:\0".as_ptr() as *const _);
             let sel_loc_name = sel_registerName(b"localizedName\0".as_ptr() as *const _);
+            let sel_utf8     = sel_registerName(b"UTF8String\0".as_ptr() as *const _);
             let sel_activate = sel_registerName(b"activateWithOptions:\0".as_ptr() as *const _);
 
             type MsgId  = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
             type MsgIdx = unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
             type MsgU64 = unsafe extern "C" fn(*mut c_void, *mut c_void, u64) -> bool;
-            type MsgStr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const std::ffi::c_char;
+            type MsgCStr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const std::ffi::c_char;
             type MsgCnt = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
 
-            let msg_id:  MsgId  = std::mem::transmute(objc_msgSend as *const ());
-            let msg_idx: MsgIdx = std::mem::transmute(objc_msgSend as *const ());
-            let msg_act: MsgU64 = std::mem::transmute(objc_msgSend as *const ());
-            let msg_str: MsgStr = std::mem::transmute(objc_msgSend as *const ());
-            let msg_cnt: MsgCnt = std::mem::transmute(objc_msgSend as *const ());
+            let msg_id:   MsgId   = std::mem::transmute(objc_msgSend as *const ());
+            let msg_idx:  MsgIdx  = std::mem::transmute(objc_msgSend as *const ());
+            let msg_act:  MsgU64  = std::mem::transmute(objc_msgSend as *const ());
+            let msg_cstr: MsgCStr = std::mem::transmute(objc_msgSend as *const ());
+            let msg_cnt:  MsgCnt  = std::mem::transmute(objc_msgSend as *const ());
 
             let shared = msg_id(ws_class, sel_shared);
             let apps   = msg_id(shared, sel_running);
@@ -225,7 +226,12 @@ mod macos_paste {
             let target = app_name.to_lowercase();
             for i in 0..count {
                 let app = msg_idx(apps, sel_obj_at, i);
-                let name_ptr = msg_str(app, sel_loc_name);
+                // localizedName returns NSString*, so we must call [nsString UTF8String]
+                // to get a C string pointer. Treating NSString* as *const c_char directly
+                // causes a SIGSEGV in strlen.
+                let ns_string = msg_id(app, sel_loc_name);
+                if ns_string.is_null() { continue; }
+                let name_ptr = msg_cstr(ns_string, sel_utf8);
                 if name_ptr.is_null() { continue; }
                 let name = std::ffi::CStr::from_ptr(name_ptr)
                     .to_string_lossy()
@@ -641,6 +647,42 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
             "Rewrite the following text as a clear, professional, ready-to-send email. \
              Output only the email body:\n\n{text}"
         ),
+        // ── Meeting templates ──────────────────────────────────────────────
+        "meeting_general" => format!(
+            "You are a meeting notes assistant. Analyze the following meeting transcript and produce \
+             structured meeting notes with these sections:\n\
+             ## Key Discussion Points\n\
+             ## Decisions Made\n\
+             ## Action Items\n(include owner if mentioned and deadline if mentioned)\n\
+             ## Follow-ups\n\n\
+             Output only the structured notes in markdown format:\n\n{text}"
+        ),
+        "meeting_standup" => format!(
+            "You are a standup meeting notes assistant. Analyze the following standup transcript and \
+             produce structured notes with these sections:\n\
+             ## What Was Done (Yesterday/Recently)\n\
+             ## What's Being Worked On (Today/Next)\n\
+             ## Blockers & Risks\n\n\
+             If multiple people spoke, organize by person. Output only the structured notes in markdown:\n\n{text}"
+        ),
+        "meeting_1on1" => format!(
+            "You are a 1:1 meeting notes assistant. Analyze the following 1:1 meeting transcript and \
+             produce structured notes with these sections:\n\
+             ## Discussion Points\n\
+             ## Feedback & Recognition\n\
+             ## Action Items\n(include owner and deadline if mentioned)\n\
+             ## Follow-ups for Next Meeting\n\n\
+             Output only the structured notes in markdown format:\n\n{text}"
+        ),
+        "meeting_brainstorm" => format!(
+            "You are a brainstorming session notes assistant. Analyze the following brainstorm transcript \
+             and produce structured notes with these sections:\n\
+             ## Ideas Generated\n(list each idea with a brief description)\n\
+             ## Key Themes\n\
+             ## Top Ideas (Ranked by Discussion Energy)\n\
+             ## Next Steps\n\n\
+             Output only the structured notes in markdown format:\n\n{text}"
+        ),
         _ => format!("Process the following text:\n\n{text}"),
     };
     (system, user)
@@ -846,6 +888,148 @@ fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// ── Calendar Integration ─────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+struct CalendarEvent {
+    title: String,
+    start_time: String,
+    end_time: String,
+    attendees: Vec<String>,
+    calendar_name: String,
+}
+
+/// Fetch calendar events from the Google Calendar API using the user's OAuth provider token.
+///
+/// - `token`    – Google OAuth access token (provider_token from Supabase)
+/// - `time_min` – RFC3339 start of the window, e.g. "2024-06-01T00:00:00Z"
+/// - `time_max` – RFC3339 end of the window
+///
+/// Returns `Err("NEEDS_RECONNECT")` on HTTP 401 so the frontend can prompt the user
+/// to reconnect their Google account.
+#[tauri::command]
+async fn get_calendar_events(
+    token: String,
+    time_min: String,
+    time_max: String,
+) -> Result<Vec<CalendarEvent>, String> {
+    if token.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events\
+         ?timeMin={}&timeMax={}&singleEvents=true&orderBy=startTime&maxResults=30",
+        time_min, time_max
+    );
+
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+        .map_err(|e| format!("Calendar API request failed: {e}"))?;
+
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("NEEDS_RECONNECT".into());
+    }
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Calendar API error {status}: {body}"));
+    }
+
+    let body: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse calendar response: {e}"))?;
+
+    let items = match body.get("items").and_then(|v| v.as_array()) {
+        Some(arr) => arr.clone(),
+        None => return Ok(vec![]),
+    };
+
+    let mut events: Vec<CalendarEvent> = items
+        .iter()
+        .filter_map(|item| {
+            let title = item.get("summary")?.as_str()?.trim().to_string();
+            if title.is_empty() {
+                return None;
+            }
+
+            // Prefer dateTime (timed events) over date (all-day events)
+            let start_time = item
+                .pointer("/start/dateTime")
+                .and_then(|v| v.as_str())
+                .map(format_rfc3339_time)
+                .or_else(|| {
+                    item.pointer("/start/date")
+                        .and_then(|v| v.as_str())
+                        .map(|d| d.to_string())
+                })
+                .unwrap_or_default();
+
+            let end_time = item
+                .pointer("/end/dateTime")
+                .and_then(|v| v.as_str())
+                .map(format_rfc3339_time)
+                .or_else(|| {
+                    item.pointer("/end/date")
+                        .and_then(|v| v.as_str())
+                        .map(|d| d.to_string())
+                })
+                .unwrap_or_default();
+
+            // Attendees: prefer displayName, fall back to email
+            let attendees: Vec<String> = item
+                .get("attendees")
+                .and_then(|a| a.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|att| {
+                            att.get("displayName")
+                                .and_then(|v| v.as_str())
+                                .map(str::to_string)
+                                .or_else(|| {
+                                    att.get("email")
+                                        .and_then(|v| v.as_str())
+                                        .map(str::to_string)
+                                })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            Some(CalendarEvent {
+                title,
+                start_time,
+                end_time,
+                attendees,
+                calendar_name: "Google Calendar".into(),
+            })
+        })
+        .collect();
+
+    events.sort_by(|a, b| a.start_time.cmp(&b.start_time));
+    Ok(events)
+}
+
+/// Extract "HH:MM" from an RFC3339 datetime string like "2024-06-01T14:30:00+05:30".
+fn format_rfc3339_time(dt: &str) -> String {
+    // The time part starts at index 11 (after "YYYY-MM-DDT")
+    if dt.len() >= 16 {
+        dt[11..16].to_string()
+    } else {
+        dt.to_string()
+    }
+}
+
 // ── Focus Management ────────────────────────────────────────────────────────
 
 /// Returns the name of the frontmost application (macOS only).
@@ -1044,6 +1228,7 @@ pub fn run() {
             check_file_exists,
             delete_file,
             ai_process_text,
+            get_calendar_events,
         ])
         .setup(move |app| {
             // Set overlay titlebar on macOS only (not supported on Linux/GTK)
