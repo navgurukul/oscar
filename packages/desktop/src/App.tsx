@@ -1036,6 +1036,16 @@ function App() {
       // Parse the deep link URL
       if (url.startsWith("oscar://auth/callback")) {
         const urlObj = new URL(url);
+
+        // Calendar-only OAuth callback (direct Google OAuth, not Supabase)
+        const calendarToken = urlObj.searchParams.get("calendar_token");
+        if (calendarToken) {
+          setGoogleCalendarToken(calendarToken);
+          saveSetting("googleCalendarToken", calendarToken);
+          console.log("[deep-link] Google Calendar token stored");
+          return;
+        }
+
         const error = urlObj.searchParams.get("error");
         const success = urlObj.searchParams.get("success");
         let accessToken = urlObj.searchParams.get("access_token");
@@ -1592,28 +1602,21 @@ function App() {
   // ── Google Calendar OAuth ────────────────────────────────────────────────
 
   const connectGoogleCalendar = async () => {
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          scopes: "openid email profile https://www.googleapis.com/auth/calendar.readonly",
-          queryParams: { access_type: "online", prompt: "consent" },
-          redirectTo: `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`,
-          skipBrowserRedirect: true,
-        },
-      });
-      if (error) { console.error("[calendar] OAuth error:", error.message); return; }
-      if (data?.url) {
-        // Log the OAuth URL — confirm `calendar.readonly` is in the `scope` param
-        try {
-          const u = new URL(data.url);
-          console.log("[calendar] OAuth scope:", u.searchParams.get("scope") ?? u.searchParams.get("scopes"));
-        } catch { /* ignore */ }
-        await openUrl(data.url);
-      }
-    } catch (err) {
-      console.error("[calendar] signInWithOAuth failed:", err);
-    }
+    // Bypass Supabase OAuth (which doesn't support additional scopes via UI).
+    // Build a direct Google OAuth implicit-flow URL so we control the scope.
+    const GOOGLE_CLIENT_ID = "34917283366-b806koktimo2pod1cjas8kn2lcpn7bse.apps.googleusercontent.com";
+    const redirectUri = `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`;
+    const params = new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: redirectUri,
+      response_type: "token",
+      scope: "https://www.googleapis.com/auth/calendar.readonly",
+      state: "calendar_connect",
+      prompt: "consent",
+    });
+    const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    console.log("[calendar] Opening OAuth URL:", oauthUrl);
+    await openUrl(oauthUrl);
   };
 
   // ── Meeting recording (click to start/stop, no auto-paste) ──────────────
