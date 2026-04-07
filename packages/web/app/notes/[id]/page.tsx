@@ -10,12 +10,9 @@ import { aiService } from "@/lib/services/ai.service";
 import { ROUTES } from "@/lib/constants";
 import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { Button } from "@/components/ui/button";
 import {
   Copy,
   Download,
-  Edit3,
-  Save,
   X,
   Share2,
   Mail,
@@ -47,10 +44,9 @@ export default function NoteDetailPage() {
 
   const [note, setNote] = useState<DBNote | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editedText, setEditedText] = useState("");
-  const [showRawTranscript, setShowRawTranscript] = useState(false);
+  const [activeTab, setActiveTab] = useState<"notes" | "transcript">("transcript");
   const [, setIsShareModalOpen] = useState(false);
   // const [isSharing, setIsSharing] = useState(false);
   // Gmail AI format now applies directly to the main editor text (no separate box)
@@ -74,11 +70,11 @@ export default function NoteDetailPage() {
       translateControllerRef.current = null;
       setSelectedLanguage("original");
       setModeContent(prev => ({ ...prev, translate: "" }));
-      if (isEditing) setEditedText(note.edited_text || note.original_formatted_text || "");
+      setEditedText(note.edited_text || note.original_formatted_text || "");
       return;
     }
 
-    const baseNote = note.edited_text || note.original_formatted_text || "";
+    const baseNote = editedText || note.edited_text || note.original_formatted_text || "";
     if (!baseNote) return;
 
     if (isTranslating && translateControllerRef.current) {
@@ -91,7 +87,7 @@ export default function NoteDetailPage() {
     if (cachedNote) {
       setSelectedLanguage(lang);
       setModeContent(prev => ({ ...prev, translate: cachedNote }));
-      if (isEditing) setEditedText(cachedNote);
+      setEditedText(cachedNote);
       toast({
         title: "Language updated",
         description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
@@ -123,7 +119,7 @@ export default function NoteDetailPage() {
 
       setSelectedLanguage(lang);
       setModeContent(prev => ({ ...prev, translate: noteText }));
-      if (isEditing) setEditedText(noteText);
+      setEditedText(noteText);
 
       toast({
         title: "Language updated",
@@ -232,20 +228,8 @@ export default function NoteDetailPage() {
     loadNote();
   }, [id, router, user, authLoading]);
 
-  const handleStartEditing = () => {
-    setIsEditing(true);
-    const baseText = modeContent[activeMode] || (activeMode === "translate" ? modeContent["translate"] : null) || note?.edited_text || note?.original_formatted_text || "";
-    setEditedText(baseText);
-  };
-
-  const handleCancelEditing = () => {
-    const base = modeContent[activeMode] || (activeMode === "translate" ? modeContent["translate"] : null) || note?.edited_text || note?.original_formatted_text;
-    setEditedText(base || "");
-    setIsEditing(false);
-  };
-
   const handleSaveEdit = async () => {
-    if (!note) return;
+    if (!note || !editedText) return;
     setIsSaving(true);
 
     const { error } = await notesService.updateNote(note.id, {
@@ -260,27 +244,17 @@ export default function NoteDetailPage() {
       });
     } else {
       setNote({ ...note, edited_text: editedText });
-      
-      // Update modeContent cache for current mode
       if (activeMode !== "normal") {
         setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
       }
-
-      setIsEditing(false);
-      toast({
-        title: "Saved!",
-        description: "Your changes have been saved.",
-      });
     }
     setIsSaving(false);
   };
 
   const handleCopy = async () => {
-    const text = isEditing 
-      ? editedText 
-      : activeMode === "normal"
-      ? (note?.edited_text || note?.original_formatted_text || "")
-      : (modeContent[activeMode] || note?.edited_text || note?.original_formatted_text || "");
+    const text = activeMode === "normal"
+      ? (editedText || note?.edited_text || note?.original_formatted_text || "")
+      : (modeContent[activeMode] || editedText || note?.edited_text || note?.original_formatted_text || "");
     await navigator.clipboard.writeText(text);
     toast({
       title: "Copied!",
@@ -290,11 +264,9 @@ export default function NoteDetailPage() {
 
   const handleDownload = () => {
     if (!note) return;
-    const text = isEditing 
-      ? editedText 
-      : activeMode === "normal"
-      ? (note.edited_text || note.original_formatted_text)
-      : (modeContent[activeMode] || note.edited_text || note.original_formatted_text);
+    const text = activeMode === "normal"
+      ? (editedText || note.edited_text || note.original_formatted_text)
+      : (modeContent[activeMode] || editedText || note.edited_text || note.original_formatted_text);
     const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -391,10 +363,6 @@ export default function NoteDetailPage() {
     return null;
   }
 
-  const displayText = activeMode === "normal"
-    ? (note.edited_text || note.original_formatted_text)
-    : (modeContent[activeMode] || note.edited_text || note.original_formatted_text);
-
   return (
     <main className="min-h-screen bg-[#020617] text-white flex flex-col items-center pt-16 pb-32 px-4 relative overflow-x-hidden">
       {/* Note Header Info (Centered) */}
@@ -486,12 +454,12 @@ export default function NoteDetailPage() {
               onClick={async () => {
                 if (mode.id === "normal") {
                   setActiveMode("normal");
-                  if (isEditing) setEditedText(note.edited_text || note.original_formatted_text || "");
+                  setEditedText(note.edited_text || note.original_formatted_text || "");
                   return;
                 }
-                
+
                 setActiveMode(mode.id as typeof activeMode);
-                const baseText = note.edited_text || note.original_formatted_text || note.raw_text || "";
+                const baseText = editedText || note.edited_text || note.original_formatted_text || note.raw_text || "";
 
                 if (!modeContent[mode.id] && mode.id !== "translate") {
                   setIsLoadingMode(true);
@@ -506,10 +474,10 @@ export default function NoteDetailPage() {
                     resultText = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
                   }
                   setModeContent(prev => ({ ...prev, [mode.id]: resultText }));
-                  if (isEditing) setEditedText(resultText);
+                  setEditedText(resultText);
                   setIsLoadingMode(false);
-                } else {
-                  if (isEditing && mode.id !== "translate") setEditedText(modeContent[mode.id] || baseText);
+                } else if (mode.id !== "translate") {
+                  setEditedText(modeContent[mode.id] || baseText);
                 }
               }}
               className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
@@ -593,31 +561,22 @@ export default function NoteDetailPage() {
               >
                 <Star className={`w-4 h-4 ${note.is_starred ? 'fill-yellow-400' : ''}`} />
               </button>
-              <button 
-                onClick={() => {
-                  if (isEditing) handleCancelEditing();
-                  else handleStartEditing();
-                }}
-                className={`p-2 rounded-lg transition-all duration-300 ${isEditing ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
-                title="Edit note"
-              >
-                <Edit3 className="w-4 h-4" />
-              </button>
-              <button 
+              {isSaving && <Spinner className="w-4 h-4 text-cyan-500" />}
+              <button
                 onClick={handleCopy}
                 className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
                 title="Copy text"
               >
                 <Copy className="w-4 h-4" />
               </button>
-              <button 
+              <button
                 onClick={handleDownload}
                 className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
                 title="Download txt"
               >
                 <Download className="w-4 h-4" />
               </button>
-              <button 
+              <button
                 onClick={() => setIsShareModalOpen(true)}
                 className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
                 title="Share"
@@ -628,77 +587,88 @@ export default function NoteDetailPage() {
           </div>
 
           {/* Cyan Underline */}
-          <div className="w-16 h-0.5 bg-cyan-500/80 rounded-full mb-6" />
+          <div className="w-16 h-0.5 bg-cyan-500/80 rounded-full mb-4" />
 
-          {/* Note Content Area */}
-          <div className="relative min-h-[120px]">
-            {isEditing ? (
+          {/* Tabs */}
+          <div className="flex gap-1 mb-4">
+            <button
+              onClick={() => setActiveTab("notes")}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === "notes"
+                  ? "bg-cyan-500/10 text-cyan-400"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              Notes
+            </button>
+            <button
+              onClick={() => setActiveTab("transcript")}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === "transcript"
+                  ? "bg-cyan-500/10 text-cyan-400"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              Transcript
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="min-h-[120px]">
+            {activeTab === "notes" ? (
+              <div className="text-gray-300 text-base leading-relaxed whitespace-pre-wrap">
+                {note.raw_text || "No notes available."}
+              </div>
+            ) : (
               <textarea
                 value={editedText}
                 onChange={(e) => setEditedText(e.target.value)}
-                className="w-full bg-slate-900/50 border border-cyan-500/30 rounded-xl p-4 text-gray-200 leading-relaxed focus:outline-none focus:ring-1 focus:ring-cyan-500/20 min-h-[200px] resize-none"
-                placeholder="Write your note here..."
+                onBlur={handleSaveEdit}
+                placeholder="AI output will appear here..."
+                className="w-full bg-transparent text-base text-gray-300 leading-relaxed focus:outline-none resize-none border-none p-0 min-h-[120px] placeholder:text-gray-600"
               />
-            ) : (
-              <div className="text-gray-300 text-base leading-relaxed whitespace-pre-wrap font-medium">
-                {displayText || "No content available."}
-              </div>
-            )}
-
-            {isEditing && (
-              <div className="flex justify-end gap-2 mt-4">
-                <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)} className="text-gray-400 hover:text-white">
-                  Cancel
-                </Button>
-                <Button onClick={handleSaveEdit} size="sm" disabled={isSaving} className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold px-6">
-                  {isSaving ? <Spinner className="mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                  Save
-                </Button>
-              </div>
             )}
           </div>
 
-          {!isEditing && (
-            <div className=" flex   border-white/5 border-t-4px  mt-4 pt-4">
-              <button 
-                onClick={() => {
-                  const raw = note.raw_text;
-                  if (!raw) {
-                    toast({
-                      title: "Error",
-                      description: "Original recording not found. Cannot continue.",
-                      variant: "destructive"
-                    });
-                    return;
-                  }
-                  storageService.updateRawText(raw);
-                  storageService.setCurrentNoteId(note.id);
-                  storageService.setContinueMode(true);
-                  router.push("/recording");
-                }}
-                className="bg-cyan-500/10 hover:bg-cyan-500/20 gap-3 text-cyan-400 px-8 py-3 rounded-full font-bold text-sm transition-all duration-300 flex items-center  border border-cyan-500/20 group hover:-translate-y-1"
-              >
-                <div className="bg-cyan-500 text-slate-950 p-1.5 rounded-full group-hover:scale-110 transition-transform shadow-[0_0_15px_rgba(6,182,212,0.5)]">
-                  <Mic className="w-4 h-4" />
-                </div>
-                <span>Append to notes</span>
-              </button>
-            </div>
-          )}
+          <div className="flex border-white/5 border-t mt-4 pt-4">
+            <button
+              onClick={() => {
+                const raw = note.raw_text;
+                if (!raw) {
+                  toast({
+                    title: "Error",
+                    description: "Original recording not found. Cannot continue.",
+                    variant: "destructive"
+                  });
+                  return;
+                }
+                storageService.updateRawText(raw);
+                storageService.setCurrentNoteId(note.id);
+                storageService.setContinueMode(true);
+                router.push("/recording");
+              }}
+              className="bg-cyan-500/10 hover:bg-cyan-500/20 gap-3 text-cyan-400 px-8 py-3 rounded-full font-bold text-sm transition-all duration-300 flex items-center border border-cyan-500/20 group hover:-translate-y-1"
+            >
+              <div className="bg-cyan-500 text-slate-950 p-1.5 rounded-full group-hover:scale-110 transition-transform shadow-[0_0_15px_rgba(6,182,212,0.5)]">
+                <Mic className="w-4 h-4" />
+              </div>
+              <span>Append to notes</span>
+            </button>
+          </div>
         </div>
 
         {/* Feedback Section (Below Card) */}
         <div className="mt-4 bg-[#0f172a]/40 border border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-gray-400 text-sm font-medium">Was this formatting helpful?</p>
           <div className="flex items-center gap-2">
-            <button 
+            <button
               onClick={() => handleFeedbackSubmit(true)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${hasFeedbackSubmitted && feedbackValue === true ? 'bg-cyan-500 text-slate-950' : 'bg-slate-900/50 text-gray-400 hover:text-white hover:bg-slate-800'}`}
             >
               <ThumbsUp className="w-4 h-4" />
               <span className="font-semibold text-sm">Yes</span>
             </button>
-            <button 
+            <button
               onClick={() => handleFeedbackSubmit(false)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${hasFeedbackSubmitted && feedbackValue === false ? 'bg-red-500/20 text-red-400' : 'bg-slate-900/50 text-gray-400 hover:text-white hover:bg-slate-800'}`}
             >
@@ -707,35 +677,6 @@ export default function NoteDetailPage() {
             </button>
           </div>
         </div>
-
-        {/* View Original Transcript Button */}
-        <div className="flex justify-center mt-4">
-          <button 
-            onClick={() => setShowRawTranscript(!showRawTranscript)}
-            className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 px-6 py-2.5 rounded-xl font-bold text-sm transition-all duration-300 hover:-translate-y-0.5"
-          >
-            {showRawTranscript ? "hide original transcript" : "view original transcript"}
-          </button>
-        </div>
-
-        {/* Raw Transcript (Collapsible) */}
-        <AnimatePresence>
-          {showRawTranscript && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mt-4 w-full overflow-hidden"
-            >
-              <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-6">
-                <h3 className="text-gray-500 font-bold uppercase tracking-widest text-xs mb-4">Original Recording</h3>
-                <div className="text-gray-400 leading-relaxed italic text-sm">
-                  &ldquo;{note.raw_text}&rdquo;
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </motion.div>
     </main>
   );
