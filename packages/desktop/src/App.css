@@ -5583,25 +5583,23 @@ kbd {
 .meeting-notes-area {
   width: 100%;
   min-height: 140px;
-  padding: 12px 14px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  padding: 12px 2px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   font-size: 0.875rem;
   font-family: inherit;
   color: #1e293b;
   line-height: 1.6;
   resize: vertical;
   outline: none;
-  transition: border-color 0.15s;
   box-sizing: border-box;
 }
 
-.meeting-notes-area::placeholder { color: #cbd5e1; }
+.meeting-notes-area::placeholder { color: #b0b8c4; }
 
 .meeting-notes-area:focus {
-  border-color: #06b6d4;
-  background: #fff;
+  background: transparent;
 }
 
 /* Processing state */
@@ -5810,6 +5808,99 @@ kbd {
   margin-top: 1px;
 }
 
+/* ── Previous meetings section ──────────────────────────────────────── */
+
+.prev-meetings-section {
+  margin-top: 20px;
+}
+
+.prev-meetings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prev-meeting-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 13px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s, border-color 0.12s;
+  font-family: "Figtree", -apple-system, sans-serif;
+}
+
+.prev-meeting-card:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.prev-meeting-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prev-meeting-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.prev-meeting-date {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.prev-meeting-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+.prev-meeting-preview {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prev-meeting-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e2e8f0;
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.prev-meeting-delete-btn:hover {
+  border-color: #fca5a5;
+  color: #dc2626;
+  background: #fef2f2;
+}
+
 /* ── Live meeting banner (Granola-style) ──────────────────────────────── */
 
 .meeting-live-banner {
@@ -5976,6 +6067,173 @@ kbd {
   margin-left: 4px;
 }
 
+/* ── Borderless editable fields ────────────────────────────────────── */
+
+.meeting-field-borderless {
+  padding: 6px 2px;
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  font-size: 0.875rem;
+  color: #1e293b;
+  background: transparent;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: "Figtree", -apple-system, sans-serif;
+  width: 100%;
+}
+
+.meeting-field-borderless:focus {
+  border-bottom-color: #e2e8f0;
+}
+
+.meeting-field-borderless::placeholder {
+  color: #94a3b8;
+}
+
+.meeting-field-borderless.meeting-title-input {
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+  padding: 4px 2px;
+}
+
+/* ── Participant pills ─────────────────────────────────────────────── */
+
+.meeting-participants-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  min-height: 32px;
+}
+
+.meeting-participants-pills.result-pills {
+  padding: 4px 0;
+  margin-bottom: 12px;
+}
+
+.participant-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  color: #475569;
+  line-height: 1.3;
+  max-width: 220px;
+}
+
+.participant-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.participant-pill-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  border-radius: 50%;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+
+.participant-pill-remove:hover {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.meeting-participant-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.8125rem;
+  color: #1e293b;
+  font-family: "Figtree", -apple-system, sans-serif;
+  min-width: 120px;
+  flex: 1;
+  padding: 4px 2px;
+}
+
+.meeting-participant-input::placeholder {
+  color: #94a3b8;
+}
+
+/* ── Result tabs (Notes / Transcript) ──────────────────────────────── */
+
+.meeting-result-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 16px;
+}
+
+.meeting-result-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+  font-family: "Figtree", -apple-system, sans-serif;
+}
+
+.meeting-result-tab:hover {
+  color: #64748b;
+}
+
+.meeting-result-tab.active {
+  color: #0891b2;
+  border-bottom-color: #0891b2;
+}
+
+/* ── Transcript view ───────────────────────────────────────────────── */
+
+.meeting-transcript-view {
+  padding: 0;
+}
+
+.meeting-transcript-text {
+  font-size: 0.8125rem;
+  color: #374151;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.meeting-transcript-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: #94a3b8;
+  font-size: 0.8125rem;
+}
+
+/* Legacy support for bordered fields (kept for backward compat) */
 .meeting-field-input {
   padding: 9px 12px;
   border: 1px solid #e2e8f0;
@@ -5995,20 +6253,4 @@ kbd {
 
 .meeting-field-input::placeholder {
   color: #94a3b8;
-}
-
-/* ── Participants display row ───────────────────────────────────────── */
-
-.meeting-participants-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.8125rem;
-  color: #64748b;
-  margin-bottom: 16px;
-  line-height: 1.4;
 }

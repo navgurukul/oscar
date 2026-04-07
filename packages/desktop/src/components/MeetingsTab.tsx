@@ -20,8 +20,10 @@ import {
   Info,
   Play,
   PenLine,
-  Plus,
   Settings,
+  X,
+  Trash2,
+  History,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -35,7 +37,17 @@ export interface MeetingTemplateData {
   builtin: boolean;
 }
 
-type Phase = "select" | "recording" | "processing" | "result";
+export interface SavedMeeting {
+  id: string;
+  title: string;
+  date: string;        // ISO string
+  participants: string[];
+  transcript: string;
+  notes: string;
+  templateId: string;
+}
+
+type Phase = "select" | "recording" | "processing" | "result" | "view_saved";
 
 interface CalendarEvent {
   title: string;
@@ -57,6 +69,9 @@ interface MeetingsTabProps {
   onCalendarTokenInvalid: () => void;
   templates: MeetingTemplateData[];
   onManageTemplates: () => void;
+  savedMeetings: SavedMeeting[];
+  onSaveMeeting: (meeting: SavedMeeting) => void;
+  onDeleteMeeting: (id: string) => void;
 }
 
 // ── Default templates ───────────────────────────────────────────────────────
@@ -199,16 +214,22 @@ export function MeetingsTab({
   onCalendarTokenInvalid,
   templates,
   onManageTemplates,
+  savedMeetings,
+  onSaveMeeting,
+  onDeleteMeeting,
 }: MeetingsTabProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("meeting_general");
   const [meetingTitle, setMeetingTitle]   = useState("");
-  const [participants, setParticipants]   = useState("");
+  const [participantsList, setParticipantsList] = useState<string[]>([]);
+  const [participantInput, setParticipantInput] = useState("");
   const [manualNotes, setManualNotes]     = useState("");
   const [phase, setPhase]                 = useState<Phase>("select");
   const [result, setResult]               = useState("");
   const [streaming, setStreaming]         = useState(false);
   const [error, setError]                 = useState("");
   const [copied, setCopied]               = useState(false);
+  const [resultTab, setResultTab]         = useState<"notes" | "transcript">("notes");
+  const [viewingSaved, setViewingSaved]   = useState<SavedMeeting | null>(null);
 
   // Calendar state
   const [calendarEvents, setCalendarEvents]     = useState<CalendarEvent[]>([]);
@@ -216,25 +237,66 @@ export function MeetingsTab({
   const [calendarError, setCalendarError]       = useState<"needs_reconnect" | "fetch_error" | null>(null);
   const [calendarErrorMsg, setCalendarErrorMsg] = useState("");
   const [liveEvent, setLiveEvent]               = useState<CalendarEvent | null>(null);
+  const lastCalendarFetchRef = useRef<string>("");
 
   const outputRef   = useRef<HTMLDivElement>(null);
   const unlistenRef = useRef<(() => void) | null>(null);
 
-  // Fetch Google Calendar events
+  // Participant pill helpers
+  const addParticipant = (value: string) => {
+    const trimmed = value.trim().replace(/,+$/, "").trim();
+    if (trimmed && !participantsList.includes(trimmed)) {
+      setParticipantsList((prev) => [...prev, trimmed]);
+    }
+    setParticipantInput("");
+  };
+
+  const removeParticipant = (index: number) => {
+    setParticipantsList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleParticipantKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.key === "Enter" || e.key === "," || e.key === "Tab") && participantInput.trim()) {
+      e.preventDefault();
+      addParticipant(participantInput);
+    } else if (e.key === "Backspace" && !participantInput && participantsList.length > 0) {
+      setParticipantsList((prev) => prev.slice(0, -1));
+    }
+  };
+
+  const handleParticipantBlur = () => {
+    if (participantInput.trim()) addParticipant(participantInput);
+  };
+
+  // Derived participants string for AI/email
+  const participants = participantsList.join(", ");
+
+  // Fetch Google Calendar events (cached — skip if same token + date)
   useEffect(() => {
     if (!googleCalendarToken) {
       setCalendarEvents([]); setCalendarError(null); setLiveEvent(null);
+      lastCalendarFetchRef.current = "";
+      return;
+    }
+    const now = new Date();
+    const dateKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const cacheKey = `${googleCalendarToken.slice(0, 16)}:${dateKey}`;
+    if (cacheKey === lastCalendarFetchRef.current && calendarEvents.length > 0) {
+      // Same token + date, already have data — just refresh live event
+      setLiveEvent(findLiveEvent(calendarEvents));
       return;
     }
     setCalendarLoading(true); setCalendarError(null);
-    const now = new Date();
     const timeMin = new Date(now); timeMin.setHours(0, 0, 0, 0);
     const timeMax = new Date(now); timeMax.setHours(23, 59, 59, 999);
 
     invoke<CalendarEvent[]>("get_calendar_events", {
       token: googleCalendarToken, timeMin: timeMin.toISOString(), timeMax: timeMax.toISOString(),
     })
-      .then((events) => { setCalendarEvents(events); setCalendarError(null); setLiveEvent(findLiveEvent(events)); })
+      .then((events) => {
+        setCalendarEvents(events); setCalendarError(null); setLiveEvent(findLiveEvent(events));
+        lastCalendarFetchRef.current = cacheKey;
+      })
       .catch((e: unknown) => {
         const msg = String(e);
         if (msg.includes("NEEDS_RECONNECT")) {
@@ -306,22 +368,33 @@ export function MeetingsTab({
     if (phase === "processing" && (transcript.trim() || manualNotes.trim())) processTranscript();
   }, [phase, transcript, manualNotes, processTranscript]);
 
+  // Auto-save meeting when notes are generated
+  const savedMeetingIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (phase === "result" && !streaming && result && !error && !savedMeetingIdRef.current) {
+      const id = `meeting_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      savedMeetingIdRef.current = id;
+      onSaveMeeting({
+        id,
+        title: meetingTitle || "Untitled Meeting",
+        date: new Date().toISOString(),
+        participants: participantsList,
+        transcript: transcript,
+        notes: result,
+        templateId: selectedTemplateId,
+      });
+    }
+  }, [phase, streaming, result, error, meetingTitle, participantsList, transcript, selectedTemplateId, onSaveMeeting]);
+
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   const startFromEvent = (event: CalendarEvent) => {
     setMeetingTitle(event.title);
-    setParticipants(event.attendees.join(", "));
+    setParticipantsList(event.attendees.filter(Boolean));
+    setParticipantInput("");
     setSelectedTemplateId(guessTemplateId(event.title));
     setPhase("recording");
-    setResult(""); setError(""); setManualNotes("");
-  };
-
-  const startNewMeeting = () => {
-    setMeetingTitle("");
-    setParticipants("");
-    setSelectedTemplateId("meeting_general");
-    setPhase("recording");
-    setResult(""); setError(""); setManualNotes("");
+    setResult(""); setError(""); setManualNotes(""); setResultTab("notes");
   };
 
   const handleStopRecording = () => { onStopRecording(); setPhase("processing"); };
@@ -341,14 +414,15 @@ export function MeetingsTab({
 
   const handleNewMeeting = () => {
     unlistenRef.current?.(); unlistenRef.current = null;
-    setSelectedTemplateId("meeting_general"); setMeetingTitle(""); setParticipants(""); setManualNotes("");
-    setPhase("select"); setResult(""); setError(""); setStreaming(false); onClearTranscript();
+    setSelectedTemplateId("meeting_general"); setMeetingTitle(""); setParticipantsList([]); setParticipantInput(""); setManualNotes("");
+    setPhase("select"); setResult(""); setError(""); setStreaming(false); setResultTab("notes"); onClearTranscript();
+    savedMeetingIdRef.current = null; setViewingSaved(null);
   };
 
   const handleBack = () => {
     if (isRecording) onStopRecording();
     setPhase("select"); setSelectedTemplateId("meeting_general");
-    setResult(""); setError(""); setManualNotes(""); onClearTranscript();
+    setResult(""); setError(""); setManualNotes(""); setResultTab("notes"); onClearTranscript();
   };
 
   const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
@@ -450,16 +524,147 @@ export function MeetingsTab({
             )}
           </div>
 
-          {/* ── New meeting button ── */}
-          <button className="meeting-new-btn" onClick={startNewMeeting}>
-            <Plus size={16} />
-            New meeting
-          </button>
-
           {!googleCalendarToken && (
             <div className="cal-empty-note" style={{ marginTop: 14 }}>
               <Info size={11} />
               Connect Google Calendar above to auto-detect meetings.
+            </div>
+          )}
+
+          {/* ── Previous meetings ── */}
+          {savedMeetings.length > 0 && (
+            <div className="prev-meetings-section">
+              <div className="cal-section-header">
+                <History size={14} />
+                <span>Previous meetings</span>
+              </div>
+              <div className="prev-meetings-list">
+                {savedMeetings
+                  .slice()
+                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                  .map((m) => (
+                    <button
+                      key={m.id}
+                      className="prev-meeting-card"
+                      onClick={() => { setViewingSaved(m); setResultTab("notes"); setPhase("view_saved"); }}
+                    >
+                      <div className="prev-meeting-top">
+                        <span className="prev-meeting-title">{m.title}</span>
+                        <span className="prev-meeting-date">
+                          {new Date(m.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </span>
+                      </div>
+                      {m.participants.length > 0 && (
+                        <div className="prev-meeting-meta">
+                          <Users size={10} />
+                          <span>{m.participants.length} participant{m.participants.length !== 1 ? "s" : ""}</span>
+                        </div>
+                      )}
+                      <div className="prev-meeting-preview">
+                        {m.notes.slice(0, 100)}{m.notes.length > 100 ? "…" : ""}
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Phase: View Saved Meeting ───────────────────────────────────────────
+
+  if (phase === "view_saved" && viewingSaved) {
+    return (
+      <div className="meetings-tab">
+        <div className="meetings-container">
+          <button className="meeting-back-btn" onClick={() => { setPhase("select"); setViewingSaved(null); }}>
+            <ChevronLeft size={16} /> Back
+          </button>
+
+          <div className="meeting-result-top">
+            <div>
+              <h1 className="meetings-title">{viewingSaved.title}</h1>
+              <p className="meetings-subtitle" style={{ marginBottom: 0 }}>
+                {new Date(viewingSaved.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              </p>
+            </div>
+            <button
+              className="prev-meeting-delete-btn"
+              onClick={() => {
+                onDeleteMeeting(viewingSaved.id);
+                setPhase("select"); setViewingSaved(null);
+              }}
+              title="Delete meeting"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+
+          {viewingSaved.participants.length > 0 && (
+            <div className="meeting-participants-pills result-pills">
+              {viewingSaved.participants.map((p, i) => (
+                <span key={i} className="participant-pill">
+                  <span className="participant-pill-text">{p}</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Tabs: Notes / Transcript */}
+          <div className="meeting-result-tabs">
+            <button
+              className={`meeting-result-tab${resultTab === "notes" ? " active" : ""}`}
+              onClick={() => setResultTab("notes")}
+            >
+              <FileText size={13} />
+              Notes
+            </button>
+            <button
+              className={`meeting-result-tab${resultTab === "transcript" ? " active" : ""}`}
+              onClick={() => setResultTab("transcript")}
+            >
+              <Mic size={13} />
+              Transcript
+            </button>
+          </div>
+
+          {resultTab === "notes" && (
+            <div className="meeting-result">
+              <div className="meeting-result-text">
+                {viewingSaved.notes}
+              </div>
+              <div className="meeting-result-footer">
+                <button className="meeting-footer-btn meeting-footer-btn-primary" onClick={async () => {
+                  await navigator.clipboard.writeText(viewingSaved.notes);
+                  setCopied(true); setTimeout(() => setCopied(false), 2000);
+                }}>
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+                <button className="meeting-footer-btn" onClick={async () => {
+                  const emails = viewingSaved.participants.filter((e) => e.includes("@")).join(",");
+                  const subject = encodeURIComponent(`Meeting Notes: ${viewingSaved.title}`);
+                  const body = encodeURIComponent(`Hi,\n\nPlease find the meeting notes below.\n\n---\n\n${viewingSaved.notes}\n\n---\n\nGenerated by OSCAR`);
+                  await openUrl(emails ? `mailto:${emails}?subject=${subject}&body=${body}` : `mailto:?subject=${subject}&body=${body}`);
+                }}>
+                  <Mail size={12} /> Email
+                </button>
+              </div>
+            </div>
+          )}
+
+          {resultTab === "transcript" && (
+            <div className="meeting-transcript-view">
+              {viewingSaved.transcript.trim() ? (
+                <div className="meeting-transcript-text">{viewingSaved.transcript}</div>
+              ) : (
+                <div className="meeting-transcript-empty">
+                  <Mic size={20} />
+                  <span>No transcript available.</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -477,22 +682,34 @@ export function MeetingsTab({
             <ChevronLeft size={16} /> Back
           </button>
 
-          {/* Title + participants */}
+          {/* Title + participants (borderless, inline editing) */}
           <div className="meeting-meta-fields">
             <input
-              className="meeting-field-input meeting-title-input"
+              className="meeting-field-borderless meeting-title-input"
               type="text"
               placeholder="Meeting title"
               value={meetingTitle}
               onChange={(e) => setMeetingTitle(e.target.value)}
             />
-            <input
-              className="meeting-field-input"
-              type="text"
-              placeholder="Participants — names or emails, comma-separated"
-              value={participants}
-              onChange={(e) => setParticipants(e.target.value)}
-            />
+            <div className="meeting-participants-pills">
+              {participantsList.map((p, i) => (
+                <span key={i} className="participant-pill">
+                  <span className="participant-pill-text">{p}</span>
+                  <button className="participant-pill-remove" onClick={() => removeParticipant(i)}>
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+              <input
+                className="meeting-participant-input"
+                type="text"
+                placeholder={participantsList.length === 0 ? "Add participants (email or name, press Enter)" : "Add more..."}
+                value={participantInput}
+                onChange={(e) => setParticipantInput(e.target.value)}
+                onKeyDown={handleParticipantKeyDown}
+                onBlur={handleParticipantBlur}
+              />
+            </div>
           </div>
 
           {/* Record button + timer + template picker */}
@@ -563,59 +780,93 @@ export function MeetingsTab({
           )}
         </div>
 
-        {participants.trim() && (
-          <div className="meeting-participants-row">
-            <Users size={12} />
-            <span>{participants}</span>
+        {participantsList.length > 0 && (
+          <div className="meeting-participants-pills result-pills">
+            {participantsList.map((p, i) => (
+              <span key={i} className="participant-pill">
+                <span className="participant-pill-text">{p}</span>
+                <button className="participant-pill-remove" onClick={() => removeParticipant(i)}>
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
           </div>
         )}
 
-        {phase === "processing" && !result && !error && (
-          <div className="meeting-processing">
-            <Loader2 size={28} className="spin" />
-            <span className="meeting-processing-label">
-              {!transcript.trim() ? "Transcribing audio…" : "Generating meeting notes…"}
-            </span>
-          </div>
-        )}
+        {/* Tabs: Notes / Transcript */}
+        <div className="meeting-result-tabs">
+          <button
+            className={`meeting-result-tab${resultTab === "notes" ? " active" : ""}`}
+            onClick={() => setResultTab("notes")}
+          >
+            <FileText size={13} />
+            Notes
+            {streaming && resultTab === "notes" && <span className="ai-thinking-dot" />}
+          </button>
+          <button
+            className={`meeting-result-tab${resultTab === "transcript" ? " active" : ""}`}
+            onClick={() => setResultTab("transcript")}
+          >
+            <Mic size={13} />
+            Transcript
+          </button>
+        </div>
 
-        {(result || error) && (
-          <div className="meeting-result">
-            <div className="meeting-result-header">
-              <div className="meeting-result-title">
-                <FileText size={13} />
-                <span>Notes</span>
-                {streaming && <span className="ai-thinking-dot" />}
-              </div>
-            </div>
-
-            {error ? (
-              <div className="meeting-result-error">{error}</div>
-            ) : (
-              <div className="meeting-result-text" ref={outputRef}>
-                {result || (streaming && <span className="ai-cursor-blink">&#9613;</span>)}
+        {resultTab === "notes" && (
+          <>
+            {phase === "processing" && !result && !error && (
+              <div className="meeting-processing">
+                <Loader2 size={28} className="spin" />
+                <span className="meeting-processing-label">
+                  {!transcript.trim() ? "Transcribing audio…" : "Generating meeting notes…"}
+                </span>
               </div>
             )}
 
-            {!streaming && result && !error && (
-              <div className="meeting-result-footer">
-                <button className="meeting-footer-btn meeting-footer-btn-primary" onClick={handleCopy}>
-                  {copied ? <Check size={12} /> : <Copy size={12} />}
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-                <button
-                  className={`meeting-footer-btn ${!hasEmailableParticipants ? "meeting-footer-btn-disabled" : ""}`}
-                  onClick={handleShareByEmail}
-                  title={hasEmailableParticipants ? "Open mail draft" : "Add emails to share"}
-                >
-                  <Mail size={12} /> Email
-                </button>
-                <button className="meeting-footer-btn" onClick={() => { setResult(""); setError(""); setPhase("processing"); processTranscript(); }}>
-                  <RotateCcw size={12} /> Retry
-                </button>
-                <button className="meeting-footer-btn" onClick={handleNewMeeting}>
-                  <Mic size={12} /> New
-                </button>
+            {(result || error) && (
+              <div className="meeting-result">
+                {error ? (
+                  <div className="meeting-result-error">{error}</div>
+                ) : (
+                  <div className="meeting-result-text" ref={outputRef}>
+                    {result || (streaming && <span className="ai-cursor-blink">&#9613;</span>)}
+                  </div>
+                )}
+
+                {!streaming && result && !error && (
+                  <div className="meeting-result-footer">
+                    <button className="meeting-footer-btn meeting-footer-btn-primary" onClick={handleCopy}>
+                      {copied ? <Check size={12} /> : <Copy size={12} />}
+                      {copied ? "Copied!" : "Copy"}
+                    </button>
+                    <button
+                      className={`meeting-footer-btn ${!hasEmailableParticipants ? "meeting-footer-btn-disabled" : ""}`}
+                      onClick={handleShareByEmail}
+                      title={hasEmailableParticipants ? "Open mail draft" : "Add emails to share"}
+                    >
+                      <Mail size={12} /> Email
+                    </button>
+                    <button className="meeting-footer-btn" onClick={() => { setResult(""); setError(""); setPhase("processing"); processTranscript(); }}>
+                      <RotateCcw size={12} /> Retry
+                    </button>
+                    <button className="meeting-footer-btn" onClick={handleNewMeeting}>
+                      <Mic size={12} /> New
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {resultTab === "transcript" && (
+          <div className="meeting-transcript-view">
+            {transcript.trim() ? (
+              <div className="meeting-transcript-text">{transcript}</div>
+            ) : (
+              <div className="meeting-transcript-empty">
+                <Mic size={20} />
+                <span>No transcript yet.</span>
               </div>
             )}
           </div>

@@ -53,8 +53,6 @@ export default function ResultsPage() {
   const { isLoading, formattedNote, rawText, title, updateFormattedNote } =
     useNoteStorage();
 
-  const [showRawTranscript, setShowRawTranscript] = useState<boolean>(false);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editedText, setEditedText] = useState("");
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [noteId, setNoteId] = useState<string | null>(null);
@@ -183,11 +181,9 @@ export default function ResultsPage() {
 
     setIsCopying(true);
     try {
-      const textToCopy = isEditing
-        ? editedText
-        : activeMode === "normal"
-        ? formattedNote || ""
-        : modeContent[activeMode] || formattedNote || "";
+      const textToCopy = activeMode === "normal"
+        ? editedText || ""
+        : modeContent[activeMode] || editedText || "";
       await navigator.clipboard.writeText(textToCopy);
       toast({
         title: "Copied!",
@@ -210,11 +206,9 @@ export default function ResultsPage() {
 
     setIsDownloading(true);
     try {
-      const textToDownload = isEditing
-        ? editedText
-        : activeMode === "normal"
-        ? formattedNote || ""
-        : modeContent[activeMode] || formattedNote || "";
+      const textToDownload = activeMode === "normal"
+        ? editedText || ""
+        : modeContent[activeMode] || editedText || "";
       const blob = new Blob([textToDownload], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -250,12 +244,12 @@ export default function ResultsPage() {
       setTranslatedNote(null);
       setTranslatedRaw(null);
       setModeContent(prev => ({ ...prev, translate: "" }));
-      if (isEditing) setEditedText(formattedNote || "");
+      setEditedText(formattedNote || "");
       return;
     }
 
     // Always translate the simple content, not other modes.
-    const baseNote = (isEditing && activeMode === "normal" ? editedText : formattedNote) || "";
+    const baseNote = (activeMode === "normal" ? editedText : formattedNote) || "";
     const baseRaw = rawText || "";
     if (!baseNote && !baseRaw) return;
 
@@ -332,7 +326,7 @@ export default function ResultsPage() {
       
       // Update modeContent for translate mode
       setModeContent(prev => ({ ...prev, translate: noteText }));
-      if (isEditing) setEditedText(noteText);
+      setEditedText(noteText);
 
       toast({
         title: "Language updated",
@@ -376,36 +370,14 @@ export default function ResultsPage() {
     setIsShareModalOpen(true);
   };
 
-  // Build a formal email body for Gmail and mailto
-
-
-  const handleStartEditing = async () => {
-    setIsEditing(true);
-    const baseText = (modeContent[activeMode] || (activeMode === "translate" ? translatedNote : null) || formattedNote || rawText || "");
-    setEditedText(baseText);
-  };
-
-  const handleCancelEditing = () => {
-    const base = modeContent[activeMode] || (activeMode === "translate" ? translatedNote : null) || formattedNote;
-    setEditedText(base || "");
-    setIsEditing(false);
-  };
-
   const handleSaveEdit = async () => {
+    if (!editedText) return;
+
     if (!noteId) {
-      // If not saved to DB yet, just update local state
       updateFormattedNote(editedText);
-      
-      // Update modeContent cache for current mode
       if (activeMode !== "normal") {
         setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
       }
-      
-      toast({
-        title: "Updated!",
-        description: "Your changes have been saved locally.",
-      });
-      setIsEditing(false);
       return;
     }
 
@@ -421,19 +393,10 @@ export default function ResultsPage() {
         variant: "destructive",
       });
     } else {
-      // Update session storage and internal state to keep UI in sync
       updateFormattedNote(editedText);
-      
-      // Update modeContent cache for current mode
       if (activeMode !== "normal") {
         setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
       }
-
-      toast({
-        title: "Saved!",
-        description: "Your changes have been saved.",
-      });
-      setIsEditing(false);
     }
     setIsSaving(false);
   };
@@ -454,7 +417,7 @@ export default function ResultsPage() {
           title: title || "Untitled Note",
           raw_text: rawText || "",
           original_formatted_text: formattedNote || "",
-          edited_text: isEditing ? editedText : undefined,
+          edited_text: editedText || undefined,
         });
       } else {
         // Create new note
@@ -544,8 +507,8 @@ export default function ResultsPage() {
   }
 
   const displayText = activeMode === "normal"
-    ? (isEditing ? editedText : formattedNote)
-    : (modeContent[activeMode] || (isEditing ? editedText : formattedNote));
+    ? editedText
+    : (modeContent[activeMode] || editedText);
 
   return (
     <main className="flex flex-col items-center px-4 pt-8 pb-24 min-h-screen bg-[#020617] text-white overflow-x-hidden">
@@ -644,13 +607,13 @@ export default function ResultsPage() {
                 onClick={async () => {
                   if (mode.id === "normal") {
                     setActiveMode("normal");
-                    if (isEditing) setEditedText(formattedNote || "");
+                    setEditedText(formattedNote || "");
                     return;
                   }
-                  
+
                   setActiveMode(mode.id as typeof activeMode);
-                  const baseText = (isEditing ? editedText : formattedNote) || rawText || "";
-                  
+                  const baseText = editedText || formattedNote || rawText || "";
+
                   if (!modeContent[mode.id] && mode.id !== "translate") {
                     setIsLoadingMode(true);
                     let resultText = baseText;
@@ -664,10 +627,10 @@ export default function ResultsPage() {
                       resultText = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
                     }
                     setModeContent(prev => ({ ...prev, [mode.id]: resultText }));
-                    if (isEditing) setEditedText(resultText);
+                    setEditedText(resultText);
                     setIsLoadingMode(false);
-                  } else {
-                    if (isEditing && mode.id !== "translate") setEditedText(modeContent[mode.id] || baseText);
+                  } else if (mode.id !== "translate") {
+                    setEditedText(modeContent[mode.id] || baseText);
                   }
                 }}
                 className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
@@ -722,36 +685,16 @@ export default function ResultsPage() {
           </AnimatePresence>
         </div>
 
-        {/* Inline subject editor when Email mode + editing */}
-        {activeMode === "email" && isEditing && (
-          <div className="w-full max-w-[650px]">
-            <label className="text-sm text-gray-400 block mb-1">Email subject</label>
-            <input
-              type="text"
-              value={shareSubject ?? (title || UI_STRINGS.UNTITLED_NOTE)}
-              onChange={(e) => setShareSubject(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              placeholder="Subject"
-            />
-          </div>
-        )}
-
         <NoteEditor
           formattedNote={displayText || ""}
           title={title || UI_STRINGS.UNTITLED_NOTE}
           onCopy={handleCopyNote}
           onDownload={handleDownloadNote}
           onShare={handleShareNote}
-          showRawTranscript={showRawTranscript}
-          onToggleTranscript={() => setShowRawTranscript(!showRawTranscript)}
-          rawText={translatedRaw ?? rawText}
-          isEditing={isEditing}
-          onStartEditing={handleStartEditing}
-          onCancelEditing={handleCancelEditing}
+          rawText={translatedRaw ?? rawText ?? ""}
           onSaveEdit={handleSaveEdit}
           onTextChange={setEditedText}
           isSaving={isSaving}
-          canEdit={!!noteId}
           isCopying={isCopying}
           isDownloading={isDownloading}
           isSharing={isSharing}
@@ -813,7 +756,7 @@ export default function ResultsPage() {
               {/* WhatsApp */}
               <button
                 onClick={async () => {
-                  const textToShare = (isEditing ? editedText : (translatedNote ?? formattedNote)) || "";
+                  const textToShare = (translatedNote ?? editedText ?? formattedNote) || "";
                   const shareTitle = title || UI_STRINGS.UNTITLED_NOTE;
                   const payload = `${shareTitle}\n\n${textToShare}`.trim();
                   const url = `https://wa.me/?text=${encodeURIComponent(payload)}`;
@@ -832,11 +775,9 @@ export default function ResultsPage() {
               const shareTitle = title || UI_STRINGS.UNTITLED_NOTE;
               const subjectText = shareSubject ?? shareTitle;
               const subject = encodeURIComponent(subjectText);
-              const bodyText = isEditing
-                ? editedText
-                : activeMode === "normal"
-                ? formattedNote || ""
-                : modeContent[activeMode] || formattedNote || "";
+              const bodyText = activeMode === "normal"
+                ? editedText || ""
+                : modeContent[activeMode] || editedText || "";
                   const body = encodeURIComponent(bodyText);
                   const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}&tf=1`;
                   window.open(gmailUrl, "_blank", "noopener,noreferrer");
@@ -857,11 +798,9 @@ export default function ResultsPage() {
               const shareTitle = title || UI_STRINGS.UNTITLED_NOTE;
               const subjectText = shareSubject ?? shareTitle;
               const subject = encodeURIComponent(subjectText);
-              const bodyText = isEditing
-                ? editedText
-                : activeMode === "normal"
-                ? formattedNote || ""
-                : modeContent[activeMode] || formattedNote || "";
+              const bodyText = activeMode === "normal"
+                ? editedText || ""
+                : modeContent[activeMode] || editedText || "";
                   const body = encodeURIComponent(bodyText);
                   window.location.href = `mailto:?subject=${subject}&body=${body}`;
                   setIsShareModalOpen(false);
@@ -879,7 +818,7 @@ export default function ResultsPage() {
               {typeof navigator !== "undefined" && "share" in navigator && (
                 <button
                   onClick={async () => {
-                    const textToShare = (isEditing ? editedText : formattedNote) || "";
+                    const textToShare = editedText || formattedNote || "";
                     const shareTitle = title || UI_STRINGS.UNTITLED_NOTE;
                     const payload = `${shareTitle}\n\n${textToShare}`.trim();
                     try {

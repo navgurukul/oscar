@@ -18,7 +18,7 @@ import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
 import { MeetingsTab, DEFAULT_TEMPLATES } from "./components/MeetingsTab";
-import type { MeetingTemplateData } from "./components/MeetingsTab";
+import type { MeetingTemplateData, SavedMeeting } from "./components/MeetingsTab";
 import type { LocalTranscript } from "./types/note.types";
 import "./App.css";
 
@@ -948,6 +948,7 @@ function App() {
 
   // Meeting templates (built-in + custom)
   const [meetingTemplates, setMeetingTemplates] = useState<MeetingTemplateData[]>(DEFAULT_TEMPLATES);
+  const [savedMeetings, setSavedMeetings] = useState<SavedMeeting[]>([]);
   const [settingsInitialSection, setSettingsInitialSection] = useState<string | undefined>(undefined);
 
   // Meeting recording state (separate from hold-to-talk dictation)
@@ -1144,6 +1145,7 @@ function App() {
         savedAiImprovement,
         savedCalToken,
         savedTemplates,
+        savedMeetingsData,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
         loadSetting<TonePreset>("tonePreset", "none"),
@@ -1158,6 +1160,7 @@ function App() {
         loadSetting<boolean>("aiImprovementEnabled", true),
         loadSetting<string>("googleCalendarToken", ""),
         loadSetting<MeetingTemplateData[]>("meetingTemplates", []),
+        loadSetting<SavedMeeting[]>("savedMeetings", []),
       ]);
 
       setPermissionsShown(permsDone);
@@ -1188,6 +1191,9 @@ function App() {
         });
         // Append any custom templates
         setMeetingTemplates([...merged, ...customs]);
+      }
+      if (savedMeetingsData && savedMeetingsData.length > 0) {
+        setSavedMeetings(savedMeetingsData);
       }
 
       // If setup is complete, load the Whisper model and pre-warm mic
@@ -1889,6 +1895,17 @@ function App() {
                   onManageTemplates={() => {
                     setSettingsInitialSection("meetingTemplates");
                     setActiveTab("settings");
+                  }}
+                  savedMeetings={savedMeetings}
+                  onSaveMeeting={(meeting) => {
+                    const updated = [meeting, ...savedMeetings.filter((m) => m.id !== meeting.id)];
+                    setSavedMeetings(updated);
+                    saveSetting("savedMeetings", updated);
+                  }}
+                  onDeleteMeeting={(id) => {
+                    const updated = savedMeetings.filter((m) => m.id !== id);
+                    setSavedMeetings(updated);
+                    saveSetting("savedMeetings", updated);
                   }}
                 />
               )}
