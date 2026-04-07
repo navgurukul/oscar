@@ -848,49 +848,88 @@ fn create_pill_window(app: &tauri::AppHandle) {
 
 #[tauri::command]
 fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
-    // Ensure the pill exists (no-op if already created at startup)
-    create_pill_window(&app);
+    // On Linux, creating a secondary webview window causes tao's event loop
+    // to panic (unwrap on None window handle at event_loop.rs:448).
+    // Skip the pill entirely — recording state is shown in the main window.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        return Ok(());
+    }
 
-    if let Some(w) = app.get_webview_window("recording-pill") {
-        let _ = app.emit_to("recording-pill", "pill-set-listening", ());
-        w.show().map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "linux"))]
+    {
+        // Ensure the pill exists (no-op if already created at startup)
+        create_pill_window(&app);
 
-        // Re-apply window level AFTER show() — macOS can reset level on show.
-        // This runs from a Tauri command (may not be main thread), so dispatch
-        // the NSWindow calls to the main thread.
-        #[cfg(target_os = "macos")]
-        {
-            if let Ok(ns_win) = w.ns_window() {
-                let ptr = ns_win as usize; // safe to send across threads
-                let _ = app.run_on_main_thread(move || {
-                    macos_paste::set_window_above_fullscreen(
-                        ptr as *mut std::ffi::c_void,
-                    );
-                });
+        if let Some(w) = app.get_webview_window("recording-pill") {
+            let _ = app.emit_to("recording-pill", "pill-set-listening", ());
+            w.show().map_err(|e| e.to_string())?;
+
+            // Re-apply window level AFTER show() — macOS can reset level on show.
+            // This runs from a Tauri command (may not be main thread), so dispatch
+            // the NSWindow calls to the main thread.
+            #[cfg(target_os = "macos")]
+            {
+                if let Ok(ns_win) = w.ns_window() {
+                    let ptr = ns_win as usize; // safe to send across threads
+                    let _ = app.run_on_main_thread(move || {
+                        macos_paste::set_window_above_fullscreen(
+                            ptr as *mut std::ffi::c_void,
+                        );
+                    });
+                }
             }
         }
+        Ok(())
     }
-    Ok(())
 }
 
 #[tauri::command]
 fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(w) = app.get_webview_window("recording-pill") {
-        w.hide().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        return Ok(());
     }
-    Ok(())
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        if let Some(w) = app.get_webview_window("recording-pill") {
+            w.hide().map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
 }
 
 #[tauri::command]
 fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
-    let _ = app.emit_to("recording-pill", "pill-set-processing", ());
-    Ok(())
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app.emit_to("recording-pill", "pill-set-processing", ());
+        Ok(())
+    }
 }
 
 #[tauri::command]
 fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
-    let _ = app.emit_to("recording-pill", "pill-set-listening", ());
-    Ok(())
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app.emit_to("recording-pill", "pill-set-listening", ());
+        Ok(())
+    }
 }
 
 // ── Calendar Integration ─────────────────────────────────────────────────────
