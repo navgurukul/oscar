@@ -5583,25 +5583,23 @@ kbd {
 .meeting-notes-area {
   width: 100%;
   min-height: 140px;
-  padding: 12px 14px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  padding: 12px 2px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   font-size: 0.875rem;
   font-family: inherit;
   color: #1e293b;
   line-height: 1.6;
   resize: vertical;
   outline: none;
-  transition: border-color 0.15s;
   box-sizing: border-box;
 }
 
-.meeting-notes-area::placeholder { color: #cbd5e1; }
+.meeting-notes-area::placeholder { color: #b0b8c4; }
 
 .meeting-notes-area:focus {
-  border-color: #06b6d4;
-  background: #fff;
+  background: transparent;
 }
 
 /* Processing state */
