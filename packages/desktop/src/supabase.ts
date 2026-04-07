@@ -18,5 +18,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
     // Desktop app handles auth via deep-link callback — don't let the client
     // try to detect tokens in the URL (there's no URL bar in a WebView).
     detectSessionInUrl: false,
+    // MUST use implicit flow for desktop OAuth.  The default PKCE flow stores
+    // a code_verifier in the Tauri webview, but the OAuth callback lands in
+    // the system browser which doesn't have access to that verifier — so the
+    // code exchange always fails.  Implicit flow returns tokens directly in
+    // the URL hash fragment, which the desktop-callback page can relay back
+    // to the app via the oscar:// deep link.
+    flowType: "implicit",
   },
 });

@@ -37,12 +37,22 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error && data.session) {
-      // If this is a desktop app flow, redirect back to the desktop app via deep link
-      // with the session tokens so the desktop app can establish its own session
+      // If this is a desktop app flow, redirect back to the desktop-callback page
+      // with tokens in the hash fragment.  We CANNOT redirect directly to
+      // oscar:// because browsers silently drop 3xx redirects to custom URL
+      // schemes.  The desktop-callback page will parse the tokens from the
+      // hash and open the deep link client-side (which works from a click).
       if (isDesktopFlow) {
         const { access_token, refresh_token, expires_in } = data.session;
-        const redirectUrl = `oscar://auth/callback?success=true&access_token=${encodeURIComponent(access_token)}&refresh_token=${encodeURIComponent(refresh_token)}&expires_in=${expires_in}${desktopState ? `&state=${encodeURIComponent(desktopState)}` : ""}`;
-        return NextResponse.redirect(redirectUrl);
+        const provider_token = data.session.provider_token || "";
+        const fragment = [
+          `access_token=${encodeURIComponent(access_token)}`,
+          `refresh_token=${encodeURIComponent(refresh_token)}`,
+          `expires_in=${expires_in}`,
+          provider_token ? `provider_token=${encodeURIComponent(provider_token)}` : "",
+        ].filter(Boolean).join("&");
+        const desktopCallbackUrl = `${origin}/auth/desktop-callback${desktopState ? `?desktop_state=${encodeURIComponent(desktopState)}` : ""}#${fragment}`;
+        return NextResponse.redirect(desktopCallbackUrl);
       }
       // Important: after server-side code exchange, the browser Supabase client may
       // still have a stale session until it re-syncs. Redirect through a small
@@ -53,9 +63,9 @@ export async function GET(request: Request) {
     }
   }
 
-  // If desktop flow failed, redirect to desktop app with error
+  // If desktop flow failed, redirect back to the desktop-callback page with error
   if (isDesktopFlow) {
-    return NextResponse.redirect("oscar://auth/callback?error=authentication_failed");
+    return NextResponse.redirect(`${origin}/auth/desktop-callback#error=authentication_failed`);
   }
 
   // Return the user to an error page with instructions
