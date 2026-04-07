@@ -5810,6 +5810,99 @@ kbd {
   margin-top: 1px;
 }
 
+/* ── Previous meetings section ──────────────────────────────────────── */
+
+.prev-meetings-section {
+  margin-top: 20px;
+}
+
+.prev-meetings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prev-meeting-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 13px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s, border-color 0.12s;
+  font-family: "Figtree", -apple-system, sans-serif;
+}
+
+.prev-meeting-card:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.prev-meeting-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prev-meeting-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.prev-meeting-date {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.prev-meeting-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+.prev-meeting-preview {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prev-meeting-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e2e8f0;
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.prev-meeting-delete-btn:hover {
+  border-color: #fca5a5;
+  color: #dc2626;
+  background: #fef2f2;
+}
+
 /* ── Live meeting banner (Granola-style) ──────────────────────────────── */
 
 .meeting-live-banner {
