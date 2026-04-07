@@ -524,12 +524,6 @@ export function MeetingsTab({
             )}
           </div>
 
-          {!googleCalendarToken && (
-            <div className="cal-empty-note" style={{ marginTop: 14 }}>
-              <Info size={11} />
-              Connect Google Calendar above to auto-detect meetings.
-            </div>
-          )}
 
           {/* ── Previous meetings ── */}
           {savedMeetings.length > 0 && (
