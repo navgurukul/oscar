@@ -375,11 +375,16 @@ fn load_whisper_model(
     path: String,
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> Result<String, String> {
+    log::info!("[whisper] Loading model from: {}", path);
     let params = WhisperContextParameters::default();
     let context =
-        WhisperContext::new_with_params(&path, params).map_err(|e| e.to_string())?;
+        WhisperContext::new_with_params(&path, params).map_err(|e| {
+            log::error!("[whisper] Failed to load model: {}", e);
+            e.to_string()
+        })?;
     let mut app_state = state.lock().map_err(|e| e.to_string())?;
     app_state.whisper_context = Some(context);
+    log::info!("[whisper] Model loaded successfully");
     Ok("Whisper model loaded successfully".to_string())
 }
 
@@ -392,12 +397,16 @@ fn transcribe_audio(
     language: Option<String>,
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> Result<TranscriptionResult, String> {
+    log::info!("[whisper] transcribe_audio called — {} samples, lang={:?}", audio_data.len(), language);
     let app_state = state.lock().map_err(|e| e.to_string())?;
 
     let context = app_state
         .whisper_context
         .as_ref()
-        .ok_or("Whisper model not loaded")?;
+        .ok_or_else(|| {
+            log::error!("[whisper] Model not loaded when transcribe was called");
+            "Whisper model not loaded".to_string()
+        })?;
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     // "auto" or None → let Whisper auto-detect the language from the audio
@@ -411,16 +420,25 @@ fn transcribe_audio(
     // Inject personal dictionary words as Whisper initial prompt
     if let Some(prompt) = initial_prompt {
         if !prompt.is_empty() {
+            log::debug!("[whisper] Using initial prompt ({} chars)", prompt.len());
             params.set_initial_prompt(&prompt);
         }
     }
 
-    let mut state = context.create_state().map_err(|e| e.to_string())?;
+    let mut state = context.create_state().map_err(|e| {
+        log::error!("[whisper] Failed to create state: {}", e);
+        e.to_string()
+    })?;
+    log::info!("[whisper] Running inference...");
     state
         .full(params, &audio_data)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            log::error!("[whisper] Inference failed: {}", e);
+            e.to_string()
+        })?;
 
     let num_segments = state.full_n_segments();
+    log::info!("[whisper] Inference complete — {} segments", num_segments);
     let mut full_text = String::new();
 
     for i in 0..num_segments {
@@ -431,6 +449,9 @@ fn transcribe_audio(
             }
         }
     }
+
+    let result_len = full_text.trim().len();
+    log::info!("[whisper] Transcription result: {} chars", result_len);
 
     Ok(TranscriptionResult {
         text: full_text.trim().to_string(),
@@ -475,19 +496,23 @@ async fn enhance_text(
     jwt: Option<String>,
     api_key: Option<String>,
 ) -> Result<String, String> {
+    log::info!("[enhance] enhance_text called — {} chars, tone={}", text.len(), tone);
     if text.trim().is_empty() {
+        log::debug!("[enhance] Empty text, returning as-is");
         return Ok(text);
     }
 
     // If user provided their own API key, call DeepSeek directly
     if let Some(key) = api_key {
+        log::info!("[enhance] Using direct DeepSeek API key");
         return enhance_with_deepseek(text, tone, &key).await;
     }
 
     // Otherwise, use the Supabase Edge Function (requires auth)
+    log::info!("[enhance] Using Supabase Edge Function");
     let url = edge_function_url.ok_or("No Edge Function URL configured")?;
     let token = jwt.ok_or("No auth token — please sign in or provide an API key")?;
-    
+
     enhance_with_edge_function(text, tone, &url, &token).await
 }
 
@@ -853,26 +878,27 @@ fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     // Skip the pill entirely — recording state is shown in the main window.
     #[cfg(target_os = "linux")]
     {
+        log::debug!("[pill] show_recording_pill skipped on Linux");
         let _ = app;
         return Ok(());
     }
 
     #[cfg(not(target_os = "linux"))]
     {
+        log::info!("[pill] show_recording_pill called");
         // Ensure the pill exists (no-op if already created at startup)
         create_pill_window(&app);
 
         if let Some(w) = app.get_webview_window("recording-pill") {
             let _ = app.emit_to("recording-pill", "pill-set-listening", ());
             w.show().map_err(|e| e.to_string())?;
+            log::info!("[pill] pill window shown");
 
             // Re-apply window level AFTER show() — macOS can reset level on show.
-            // This runs from a Tauri command (may not be main thread), so dispatch
-            // the NSWindow calls to the main thread.
             #[cfg(target_os = "macos")]
             {
                 if let Ok(ns_win) = w.ns_window() {
-                    let ptr = ns_win as usize; // safe to send across threads
+                    let ptr = ns_win as usize;
                     let _ = app.run_on_main_thread(move || {
                         macos_paste::set_window_above_fullscreen(
                             ptr as *mut std::ffi::c_void,
@@ -889,12 +915,14 @@ fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
 fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
+        log::debug!("[pill] hide_recording_pill skipped on Linux");
         let _ = app;
         return Ok(());
     }
 
     #[cfg(not(target_os = "linux"))]
     {
+        log::info!("[pill] hide_recording_pill called");
         if let Some(w) = app.get_webview_window("recording-pill") {
             w.hide().map_err(|e| e.to_string())?;
         }
@@ -906,12 +934,14 @@ fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
 fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
+        log::debug!("[pill] set_pill_processing skipped on Linux");
         let _ = app;
         return Ok(());
     }
 
     #[cfg(not(target_os = "linux"))]
     {
+        log::info!("[pill] set_pill_processing called");
         let _ = app.emit_to("recording-pill", "pill-set-processing", ());
         Ok(())
     }
@@ -921,12 +951,14 @@ fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
 fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
+        log::debug!("[pill] set_pill_listening skipped on Linux");
         let _ = app;
         return Ok(());
     }
 
     #[cfg(not(target_os = "linux"))]
     {
+        log::info!("[pill] set_pill_listening called");
         let _ = app.emit_to("recording-pill", "pill-set-listening", ());
         Ok(())
     }
@@ -1254,8 +1286,17 @@ fn delete_file(path: String) -> Result<String, String> {
 pub fn run() {
     env_logger::init();
 
+    log::info!("========================================");
+    log::info!("OSCAR v{} starting", env!("CARGO_PKG_VERSION"));
+    log::info!("OS: {} {}", std::env::consts::OS, std::env::consts::ARCH);
+    log::info!("DISPLAY={}", std::env::var("DISPLAY").unwrap_or_else(|_| "(not set)".into()));
+    log::info!("XDG_SESSION_TYPE={}", std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "(not set)".into()));
+    log::info!("WAYLAND_DISPLAY={}", std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "(not set)".into()));
+    log::info!("========================================");
+
     let is_recording = Arc::new(AtomicBool::new(false));
 
+    log::info!("[init] Initializing Tauri plugins...");
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -1286,23 +1327,27 @@ pub fn run() {
             get_calendar_events,
         ])
         .setup(move |app| {
+            log::info!("[setup] Tauri setup started");
+
             // Set overlay titlebar on macOS only (not supported on Linux/GTK)
             #[cfg(target_os = "macos")]
             {
                 if let Some(main_window) = app.get_webview_window("main") {
                     use tauri::TitleBarStyle;
                     let _ = main_window.set_title_bar_style(TitleBarStyle::Overlay);
+                    log::info!("[setup] macOS overlay titlebar set");
                 }
             }
 
             let app_handle = app.handle().clone();
 
             // Set up deep link handler (may not be available on all Linux desktops)
+            log::info!("[setup] Registering deep link handler...");
             if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 app.deep_link().on_open_url(move |event| {
                     for url in event.urls() {
                         let url_str = url.to_string();
-                        log::info!("Deep link received: {}", url_str);
+                        log::info!("[deep-link] received: {}", url_str);
 
                         // Store the deep link
                         set_pending_deep_link(url_str.clone());
@@ -1312,10 +1357,13 @@ pub fn run() {
                     }
                 });
             })) {
-                log::warn!("Deep link handler not available on this platform: {:?}", e);
+                log::warn!("[setup] Deep link handler not available on this platform: {:?}", e);
+            } else {
+                log::info!("[setup] Deep link handler registered OK");
             }
 
             // Right Ctrl as hold-to-record hotkey (avoids conflicts on both macOS & Windows)
+            log::info!("[setup] Registering global shortcut (Ctrl+Space)...");
             let shortcut = Shortcut::new(
                 Some(Modifiers::CONTROL),
                 tauri_plugin_global_shortcut::Code::Space,
@@ -1367,19 +1415,25 @@ pub fn run() {
             }
 
             // Initialize the persistent store (creates file on first run)
+            log::info!("[setup] Initializing persistent store...");
             let _store = app.store("app-settings.json")
-                .map_err(|e| log::warn!("Could not open store: {e}"))
+                .map_err(|e| log::warn!("[setup] Could not open store: {e}"))
                 .ok();
+            log::info!("[setup] Store initialized OK");
 
             // Pre-create the recording pill window (hidden) so that the first
             // hotkey press doesn't steal focus by creating a new window.
-            // On Linux/GTK, pre-creating a hidden secondary webview window causes
-            // a panic in tao's event loop (the window handle is None when the GLib
-            // channel dispatches). Defer creation to when it's actually needed —
-            // show_recording_pill() calls create_pill_window() lazily.
+            // On Linux/GTK, creating a secondary webview window causes tao's
+            // event loop to panic (unwrap on None window handle). Skip entirely.
             #[cfg(not(target_os = "linux"))]
-            create_pill_window(app.handle());
+            {
+                log::info!("[setup] Pre-creating pill window...");
+                create_pill_window(app.handle());
+            }
+            #[cfg(target_os = "linux")]
+            log::info!("[setup] Skipping pill window on Linux (tao secondary window bug)");
 
+            log::info!("[setup] ✓ Setup complete — app ready");
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1393,5 +1447,10 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .unwrap_or_else(|e| {
+            log::error!("========================================");
+            log::error!("FATAL: Tauri application crashed: {}", e);
+            log::error!("========================================");
+            panic!("error while running tauri application: {}", e);
+        });
 }
