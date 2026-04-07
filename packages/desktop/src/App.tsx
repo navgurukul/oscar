@@ -17,7 +17,8 @@ import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
-import { MeetingsTab } from "./components/MeetingsTab";
+import { MeetingsTab, DEFAULT_TEMPLATES } from "./components/MeetingsTab";
+import type { MeetingTemplateData } from "./components/MeetingsTab";
 import type { LocalTranscript } from "./types/note.types";
 import "./App.css";
 
@@ -945,6 +946,10 @@ function App() {
   // Google Calendar OAuth provider token
   const [googleCalendarToken, setGoogleCalendarToken] = useState("");
 
+  // Meeting templates (built-in + custom)
+  const [meetingTemplates, setMeetingTemplates] = useState<MeetingTemplateData[]>(DEFAULT_TEMPLATES);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<string | undefined>(undefined);
+
   // Meeting recording state (separate from hold-to-talk dictation)
   const [isMeetingRecording, setIsMeetingRecording] = useState(false);
   const [meetingRecordingTime, setMeetingRecordingTime] = useState(0);
@@ -1138,6 +1143,7 @@ function App() {
         savedMicId,
         savedAiImprovement,
         savedCalToken,
+        savedTemplates,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
         loadSetting<TonePreset>("tonePreset", "none"),
@@ -1151,6 +1157,7 @@ function App() {
         loadSetting<string>("selectedMicId", ""),
         loadSetting<boolean>("aiImprovementEnabled", true),
         loadSetting<string>("googleCalendarToken", ""),
+        loadSetting<MeetingTemplateData[]>("meetingTemplates", []),
       ]);
 
       setPermissionsShown(permsDone);
@@ -1170,6 +1177,18 @@ function App() {
       setAiImprovementEnabled(savedAiImprovement);
       aiImprovementEnabledRef.current = savedAiImprovement;
       if (savedCalToken) setGoogleCalendarToken(savedCalToken);
+      // Merge stored templates with defaults (so new built-ins are always present)
+      if (savedTemplates && savedTemplates.length > 0) {
+        const storedBuiltins = savedTemplates.filter((t: MeetingTemplateData) => t.builtin);
+        const customs = savedTemplates.filter((t: MeetingTemplateData) => !t.builtin);
+        // Use stored version for built-ins if present, else default
+        const merged = DEFAULT_TEMPLATES.map((def) => {
+          const stored = storedBuiltins.find((s: MeetingTemplateData) => s.id === def.id);
+          return stored ? { ...def, ...stored, builtin: true } : def;
+        });
+        // Append any custom templates
+        setMeetingTemplates([...merged, ...customs]);
+      }
 
       // If setup is complete, load the Whisper model and pre-warm mic
       if (setupDone) {
@@ -1866,6 +1885,11 @@ function App() {
                     setGoogleCalendarToken("");
                     saveSetting("googleCalendarToken", "");
                   }}
+                  templates={meetingTemplates}
+                  onManageTemplates={() => {
+                    setSettingsInitialSection("meetingTemplates");
+                    setActiveTab("settings");
+                  }}
                 />
               )}
 
@@ -1955,6 +1979,25 @@ function App() {
                   onSignOut={handleSignOut}
                   aiImprovementEnabled={aiImprovementEnabled}
                   onAiImprovementChange={handleAiImprovementChange}
+                  meetingTemplates={meetingTemplates}
+                  onSaveTemplate={(tpl) => {
+                    setMeetingTemplates((prev) => {
+                      const exists = prev.findIndex((t) => t.id === tpl.id);
+                      const updated = exists >= 0
+                        ? prev.map((t) => (t.id === tpl.id ? tpl : t))
+                        : [...prev, tpl];
+                      saveSetting("meetingTemplates", updated);
+                      return updated;
+                    });
+                  }}
+                  onDeleteTemplate={(id) => {
+                    setMeetingTemplates((prev) => {
+                      const updated = prev.filter((t) => t.id !== id);
+                      saveSetting("meetingTemplates", updated);
+                      return updated;
+                    });
+                  }}
+                  initialSection={settingsInitialSection as any}
                 />
               )}
             </div>
