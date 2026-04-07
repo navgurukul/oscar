@@ -1334,6 +1334,11 @@ pub fn run() {
 
             // Pre-create the recording pill window (hidden) so that the first
             // hotkey press doesn't steal focus by creating a new window.
+            // On Linux/GTK, pre-creating a hidden secondary webview window causes
+            // a panic in tao's event loop (the window handle is None when the GLib
+            // channel dispatches). Defer creation to when it's actually needed —
+            // show_recording_pill() calls create_pill_window() lazily.
+            #[cfg(not(target_os = "linux"))]
             create_pill_window(app.handle());
 
             Ok(())
