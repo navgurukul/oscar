@@ -349,7 +349,7 @@ export default function NotesPage() {
         {/* Folder Tabs */}
         {allNotes.length > 0 && (
           <>
-          <div className="flex items-center gap-2 mb-2 overflow-x-auto pb-2 scrollbar-hide no-scrollbar">
+          <div className="flex items-center gap-2 mb-2 overflow-x-auto pb-2 folder-tabs-scrollable">
             {["All Notes", ...folders, "Uncategorized"].map((folder) => {
               const isActive = selectedFolder === folder;
               // Only show Uncategorized if there are actually uncategorized notes

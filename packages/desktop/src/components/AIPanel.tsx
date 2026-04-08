@@ -43,7 +43,7 @@ export function AIPanel({ transcript, onApply }: AIPanelProps) {
     setResult("");
     setError("");
 
-    // Set up streaming listener for DeepSeek token events
+    // Set up streaming listener for Groq AI token events
     unlistenRef.current?.();
     const unlisten = await listen<string>("ai-token", (evt) => {
       setResult(prev => prev + evt.payload);

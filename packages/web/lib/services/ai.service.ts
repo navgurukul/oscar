@@ -3,8 +3,8 @@ import type {
   TitleGenerationResult,
 } from "../types/note.types";
 import type {
-  DeepseekFormatResponse,
-  DeepseekTitleResponse,
+  GroqFormatResponse,
+  GroqTitleResponse,
 } from "../types/api.types";
 import { API_CONFIG, ERROR_MESSAGES, UI_STRINGS } from "../constants";
 import { localFormatterService } from "./localFormatter.service";
@@ -116,7 +116,7 @@ async function parseFormatResponse(
   let formattedText: string;
 
   if (contentType.includes("application/json")) {
-    const data = (await response.json()) as DeepseekFormatResponse;
+    const data = (await response.json()) as GroqFormatResponse;
     formattedText = data?.formattedText?.trim() || "";
   } else {
     formattedText = await readStream(response, onChunk ?? (() => {}));
@@ -288,10 +288,10 @@ export const aiService = {
         } else if (response.status === 429) {
           friendlyError = "Too many translation requests. Please wait a moment.";
         } else if (response.status === 500) {
-          if (serverError?.includes("Server missing DEEPSEEK_API_KEY")) {
+          if (serverError?.includes("Server missing GROQ_API_KEY")) {
             friendlyError = "Server configuration issue: translation API key is missing.";
           } else {
-            friendlyError = ERROR_MESSAGES.DEEPSEEK_REQUEST_FAILED;
+            friendlyError = ERROR_MESSAGES.GROQ_REQUEST_FAILED;
           }
         } else if (response.status >= 400 && response.status < 500) {
           friendlyError = serverError || ERROR_MESSAGES.API_ERROR;
@@ -342,7 +342,7 @@ export const aiService = {
 
           if (!response.ok) return this.generateFallbackTitle(source);
 
-          const data = (await response.json()) as DeepseekTitleResponse;
+          const data = (await response.json()) as GroqTitleResponse;
           const title = data?.title?.trim();
           if (!title) return this.generateFallbackTitle(source);
 

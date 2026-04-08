@@ -429,7 +429,7 @@ export function SettingsTab({
                 <div>
                   <h3 className="st-card-title">AI Enhancement</h3>
                   <p className="st-card-desc">
-                    Improve transcriptions with DeepSeek AI
+                    Improve transcriptions with Groq AI
                   </p>
                 </div>
               </div>
@@ -459,7 +459,7 @@ export function SettingsTab({
                     }}
                   >
                     Automatically clean up grammar, filler words, and
-                    punctuation using DeepSeek AI.
+                    punctuation using Groq AI.
                   </div>
                 </div>
                 <label className="gen-toggle-label" style={{ marginBottom: 0 }}>

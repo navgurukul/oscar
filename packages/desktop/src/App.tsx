@@ -4,6 +4,7 @@ import { notesService } from "./services/notes.service";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { load } from "@tauri-apps/plugin-store";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { User, Session } from "@supabase/supabase-js";
@@ -31,6 +32,8 @@ interface Transcription {
 
 type TonePreset = "none" | "professional" | "casual" | "friendly";
 type MicrophonePermissionState = "granted" | "denied" | "prompt" | "unknown";
+const WINDOW_DRAG_BLOCKERS =
+  "button, a, input, textarea, select, [role='button'], [contenteditable='true']";
 
 // ── Persistent store helpers ──────────────────────────────────────────────────
 
@@ -92,8 +95,21 @@ function StepIndicator({
 
   const currentIndex = steps.findIndex((s) => s.id === currentStep);
 
+  const handleTitleBarDoubleClick = (
+    event: React.MouseEvent<HTMLDivElement>,
+  ) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest(WINDOW_DRAG_BLOCKERS)) return;
+
+    void getCurrentWindow().toggleMaximize().catch(() => {});
+  };
+
   return (
-    <div className="step-indicator">
+    <div
+      data-tauri-drag-region
+      className="step-indicator onboarding-titlebar drag-region"
+      onDoubleClick={handleTitleBarDoubleClick}
+    >
       {steps.map((step, index) => (
         <React.Fragment key={step.id}>
           <div className={`step-item ${index <= currentIndex ? "active" : ""}`}>
@@ -803,6 +819,7 @@ function PermissionsScreen({
 
             <button
               className={`perm-continue-btn-modern ${canContinue ? "active" : ""}`}
+              style={{ marginTop: 24 }}
               disabled={!canContinue}
               onClick={onContinue}
             >
@@ -1010,7 +1027,7 @@ function App() {
   const [_aiEditing, setAiEditing] = useState(false);
   const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
-  // AI Improvement toggle (user-controllable — controls DeepSeek cleanup)
+  // AI Improvement toggle (user-controllable — controls Groq AI cleanup)
   const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
   const aiImprovementEnabledRef = useRef(true);
 
@@ -1640,7 +1657,7 @@ function App() {
 
       let finalText = result.text;
 
-      // Silent AI cleanup via DeepSeek — fix transcription artifacts.
+      // Silent AI cleanup via Groq — fix transcription artifacts.
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
       if (aiImprovementEnabledRef.current) {
         setStatus("Improving with AI...");
@@ -2146,7 +2163,7 @@ function App() {
                       const filesToDelete = [
                         `${home}/${MODEL_PATH}`,
                         `${home}/${OLD_MODEL_PATH}`,
-                        // Legacy local AI model files (removed in favour of DeepSeek)
+                        // Legacy local AI model files (removed in favour of Groq)
                         `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
                         `${home}/.oscar/models/phi-3.5-tokenizer.json`,
                       ];

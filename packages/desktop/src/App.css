@@ -1220,6 +1220,16 @@ kbd {
   border-bottom: 1px solid #e5e7eb;
 }
 
+.onboarding-titlebar {
+  user-select: none;
+  cursor: default;
+}
+
+.onboarding-titlebar,
+.onboarding-titlebar * {
+  -webkit-app-region: drag;
+}
+
 .step-item {
   display: flex;
   align-items: center;

@@ -1,6 +1,6 @@
 // Web-specific constants for the OSCAR application.
 // Base constants are defined in @oscar/shared/constants — keep in sync.
-// This file overrides API_CONFIG (Groq vs DeepSeek) and adds ROUTES.DOWNLOAD.
+// This file overrides API_CONFIG for Groq and adds ROUTES.DOWNLOAD.
 
 /**
  * Error messages and tips
@@ -40,11 +40,11 @@ export const ERROR_MESSAGES = {
   // API Errors
   API_ERROR: "API request failed. Please try again.",
   NETWORK_ERROR: "Network error. Please check your connection.",
-  DEEPSEEK_API_ERROR: "Deepseek API error",
-  DEEPSEEK_REQUEST_FAILED: "Deepseek request failed",
+  GROQ_API_ERROR: "Groq API error",
+  GROQ_REQUEST_FAILED: "Groq request failed",
   INVALID_JSON_BODY: "Invalid JSON body",
-  INVALID_DEEPSEEK_RESPONSE: "Invalid Deepseek response",
-  SERVER_MISSING_API_KEY: "Server missing DEEPSEEK_API_KEY",
+  INVALID_GROQ_RESPONSE: "Invalid Groq response",
+  SERVER_MISSING_API_KEY: "Server missing GROQ_API_KEY",
   RAW_TEXT_REQUIRED: "rawText is required",
   TEXT_REQUIRED: "text is required",
   NO_TEXT_PROVIDED_FOR_FORMATTING: "No text provided for formatting",
@@ -76,11 +76,11 @@ export const ERROR_TIPS = {
  */
 // lib/constants.ts — API_CONFIG mein yeh badlo
 export const API_CONFIG = {
-  // Internal API routes — same rehenge
-  FORMAT_ENDPOINT: "/api/deepseek/format",
-  FORMAT_EMAIL_ENDPOINT: "/api/deepseek/format-email",
-  TITLE_ENDPOINT: "/api/deepseek/title",
-  TRANSLATE_ENDPOINT: "/api/deepseek/translate",
+  // Internal API routes
+  FORMAT_ENDPOINT: "/api/groq/format",
+  FORMAT_EMAIL_ENDPOINT: "/api/groq/format-email",
+  TITLE_ENDPOINT: "/api/groq/title",
+  TRANSLATE_ENDPOINT: "/api/groq/translate",
 
   // ✅ Groq — primary (fast + free)
   GROQ_API_URL: "https://api.groq.com/openai/v1/chat/completions",
@@ -283,7 +283,7 @@ export type Currency = "INR" | "USD";
  * Protects APIs from abuse and runaway costs
  */
 export const RATE_LIMITS = {
-  // AI API Endpoints (DeepSeek) - More restrictive due to cost
+  // AI API Endpoints (Groq) - More restrictive due to cost
   AI_FORMAT: {
     maxRequests: 20, // 20 requests per user
     windowMs: 60 * 1000, // Per 1 minute
