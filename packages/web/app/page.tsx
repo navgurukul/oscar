@@ -9,7 +9,7 @@ import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, MoreHorizontal, Radio, BookOpen, Users } from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Radio, BookOpen, Users } from "lucide-react";
 import { FadeIn, listVariants, itemVariants } from "@/components/ui/fade-in";
 import { useAuth } from "@/lib/contexts/AuthContext";
 
@@ -205,26 +205,23 @@ export default function Home() {
               ) : recentNotes.length > 0 ? (
                 recentNotes.map((note) => (
                   <Link key={note.id} href={`${ROUTES.NOTES}/${note.id}`}>
-                    <div className="w-full p-4 mb-3 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-cyan-500/20 rounded-2xl flex items-center justify-between transition-all group">
-                      <div className="flex items-center gap-4 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
-                          <FileText className="w-5 h-5 text-orange-500" />
-                        </div>
-                        <div className="min-w-0">
+                    <div className="w-full p-4 mb-3 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-cyan-500/20 rounded-2xl flex flex-col transition-all group">
+                      <div className="flex items-center justify-between gap-4 mb-1">
+                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                          <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
+                            <FileText className="w-5 h-5 text-orange-500" />
+                          </div>
                           <h4 className="text-white font-semibold truncate">
                             {note.title || UI_STRINGS.UNTITLED_NOTE}
                           </h4>
-                          <p className="text-gray-500 text-xs mt-1">
-                            {formatDate(note.created_at)}
-                          </p>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <p className="text-gray-400 text-sm hidden md:block max-w-[200px] truncate">
-                          {note.original_formatted_text}
+                        <p className="text-gray-500 text-xs ml-4 shrink-0">
+                          {formatDate(note.created_at)}
                         </p>
-                        <MoreHorizontal className="w-5 h-5 text-gray-600" />
                       </div>
+                      <p className="text-gray-400 text-sm line-clamp-1 ml-14">
+                        {note.original_formatted_text}
+                      </p>
                     </div>
                   </Link>
                 ))

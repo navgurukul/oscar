@@ -410,9 +410,10 @@ export default function NoteDetailPage() {
                 <button
                   onClick={() => setIsAddingNewFolder(true)}
                   className="text-[11px] px-3 py-1 rounded-full bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-all flex items-center gap-1 font-medium"
+                  title="Create a new folder to organize this note"
                 >
                   <Plus className="w-3 h-3" />
-                  New
+                  New Folder
                 </button>
               </div>
             ) : (
@@ -558,10 +559,10 @@ export default function NoteDetailPage() {
             <div className="flex items-center gap-1 self-end md:self-start">
               <button 
                 onClick={handleToggleStar}
-                className={`p-2 rounded-lg transition-all duration-300 ${note.is_starred ? 'text-yellow-400 bg-yellow-400/10' : 'text-gray-500 hover:text-yellow-400 hover:bg-yellow-400/5'}`}
+                className={`p-2 rounded-lg transition-all duration-300 ${note.is_starred ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
                 title="Star note"
               >
-                <Star className={`w-4 h-4 ${note.is_starred ? 'fill-yellow-400' : ''}`} />
+                <Star className={`w-4 h-4 ${note.is_starred ? 'fill-cyan-400' : ''}`} />
               </button>
               {isSaving && <Spinner className="w-4 h-4 text-cyan-500" />}
               <button
@@ -627,12 +628,12 @@ export default function NoteDetailPage() {
                 onChange={(e) => setEditedText(e.target.value)}
                 onBlur={handleSaveEdit}
                 placeholder="AI output will appear here..."
-                className="w-full bg-transparent text-base text-gray-300 leading-relaxed focus:outline-none resize-none border-none p-0 min-h-[120px] placeholder:text-gray-600"
+                className="w-full bg-transparent text-base text-gray-300 leading-relaxed focus:outline-none resize-none border-none p-0 min-h-[120px] max-h-[500px] overflow-y-auto placeholder:text-gray-600"
               />
             )}
           </div>
 
-          <div className="flex border-white/5 border-t mt-4 pt-4">
+          <div className="flex border-white/5 border-t mt-4 pt-4 justify-end">
             <button
               onClick={() => {
                 const raw = note.raw_text;
@@ -649,11 +650,10 @@ export default function NoteDetailPage() {
                 storageService.setContinueMode(true);
                 router.push("/recording");
               }}
-              className="bg-cyan-500/10 hover:bg-cyan-500/20 gap-3 text-cyan-400 px-8 py-3 rounded-full font-bold text-sm transition-all duration-300 flex items-center border border-cyan-500/20 group hover:-translate-y-1"
+              className="bg-cyan-500/5 hover:bg-cyan-500/15 gap-2 text-cyan-400 px-4 py-2 rounded-lg font-medium text-xs transition-all duration-300 flex items-center border border-cyan-500/10 group"
+              title="Continue recording and append to this note"
             >
-              <div className="bg-cyan-500 text-slate-950 p-1.5 rounded-full group-hover:scale-110 transition-transform shadow-[0_0_15px_rgba(6,182,212,0.5)]">
-                <Mic className="w-4 h-4" />
-              </div>
+              <Mic className="w-3 h-3" />
               <span>Append to notes</span>
             </button>
           </div>

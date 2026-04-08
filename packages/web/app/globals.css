@@ -50,6 +50,74 @@ html.text-size-lg {
     background-color: #a5f3fc; /* cyan-200 */
     color: #111827; /* gray-900 */
   }
+
+  /* Custom Scrollbar Styling - Cyan Theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(6, 182, 212, 0); /* Hidden by default */
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(6, 182, 212, 0.8); /* Show on hover */
+  }
+
+  /* Show scrollbar when scrolling */
+  ::-webkit-scrollbar-thumb:active {
+    background: rgba(6, 182, 212, 0.8);
+  }
+
+  /* Firefox Scrollbar - Hide by default */
+  textarea {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: thin;
+  }
+
+  textarea:hover {
+    scrollbar-color: rgba(6, 182, 212, 0.5) transparent;
+  }
+
+  /* Folder tabs container - Custom cyan scrollbar */
+  .folder-tabs-scrollable {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: thin;
+  }
+
+  .folder-tabs-scrollable:hover {
+    scrollbar-color: rgba(6, 182, 212, 0.6) transparent;
+  }
+
+  .folder-tabs-scrollable::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .folder-tabs-scrollable::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .folder-tabs-scrollable::-webkit-scrollbar-thumb {
+    background: rgba(6, 182, 212, 0);
+    border-radius: 3px;
+    transition: background-color 0.2s ease;
+  }
+
+  .folder-tabs-scrollable:hover::-webkit-scrollbar-thumb {
+    background: rgba(6, 182, 212, 0.6);
+  }
+
+  .folder-tabs-scrollable::-webkit-scrollbar-thumb:active {
+    background: rgba(6, 182, 212, 0.8);
+  }
+
   :root {
     --background: 0 0% 100%;
     --foreground: 0 0% 3.9%;
