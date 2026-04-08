@@ -17,7 +17,7 @@ applications:
             - echo "RAZORPAY_KEY_ID=$RAZORPAY_KEY_ID" >> .env.production
             - echo "RAZORPAY_PLAN_MONTHLY=$RAZORPAY_PLAN_MONTHLY" >> .env.production
             - echo "RAZORPAY_PLAN_YEARLY=$RAZORPAY_PLAN_YEARLY" >> .env.production
-            - echo "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY" >> .env.production
+            - echo "GROQ_API_KEY=$GROQ_API_KEY" >> .env.production
             - npx next build
       artifacts:
         baseDirectory: .next
@@ -45,8 +45,8 @@ applications:
           RAZORPAY_PLAN_YEARLY: $RAZORPAY_PLAN_YEARLY
           NEXT_PUBLIC_RAZORPAY_KEY_ID: $NEXT_PUBLIC_RAZORPAY_KEY_ID
 
-          # DeepSeek AI Configuration
-          DEEPSEEK_API_KEY: $DEEPSEEK_API_KEY
+          # Groq AI Configuration
+          GROQ_API_KEY: $GROQ_API_KEY
 
           # Desktop App Configuration
           NEXT_PUBLIC_APP_VERSION: $NEXT_PUBLIC_APP_VERSION

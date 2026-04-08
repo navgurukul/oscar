@@ -66,10 +66,10 @@ export default function PrivacyPolicyPage() {
             <ul className="space-y-5 list-disc pl-6">
               <li className="mb-4">
                 <h3 className="text-lg font-semibold text-white mb-2">
-                  DeepSeek
+                  Groq
                 </h3>
                 <p className="ml-6 text-base leading-relaxed">
-                  For processing your voice recordings and formatting the resulting text, OSCAR uses APIs provided by DeepSeek. As a result, your transcribed text is transmitted to DeepSeek&apos;s servers during processing. DeepSeek is operated by a China-based company. Your data is not used to train their models. Further information can be found on the DeepSeek website. By using OSCAR, you consent to this transfer.
+                  For processing your voice recordings and formatting the resulting text, OSCAR uses APIs provided by Groq. As a result, your transcribed text is transmitted to Groq&apos;s servers during processing. Groq is a US-based company providing fast AI inference. Your data is not used to train their models. Further information can be found on the Groq website. By using OSCAR, you consent to this transfer.
                 </p>
               </li>
 

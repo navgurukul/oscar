@@ -1027,7 +1027,7 @@ function App() {
   const [_aiEditing, setAiEditing] = useState(false);
   const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
-  // AI Improvement toggle (user-controllable — controls DeepSeek cleanup)
+  // AI Improvement toggle (user-controllable — controls Groq AI cleanup)
   const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
   const aiImprovementEnabledRef = useRef(true);
 
@@ -1657,7 +1657,7 @@ function App() {
 
       let finalText = result.text;
 
-      // Silent AI cleanup via DeepSeek — fix transcription artifacts.
+      // Silent AI cleanup via Groq — fix transcription artifacts.
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
       if (aiImprovementEnabledRef.current) {
         setStatus("Improving with AI...");
@@ -2163,7 +2163,7 @@ function App() {
                       const filesToDelete = [
                         `${home}/${MODEL_PATH}`,
                         `${home}/${OLD_MODEL_PATH}`,
-                        // Legacy local AI model files (removed in favour of DeepSeek)
+                        // Legacy local AI model files (removed in favour of Groq)
                         `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
                         `${home}/.oscar/models/phi-3.5-tokenizer.json`,
                       ];

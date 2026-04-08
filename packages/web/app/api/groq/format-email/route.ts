@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text();
       return NextResponse.json(
-        { error: ERROR_MESSAGES.DEEPSEEK_API_ERROR, details: errorText, status: response.status },
+        { error: ERROR_MESSAGES.GROQ_API_ERROR, details: errorText, status: response.status },
         { status: response.status }
       );
     }
@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const error = err as Error;
     return NextResponse.json(
-      { error: ERROR_MESSAGES.DEEPSEEK_REQUEST_FAILED, details: error?.message || String(err) },
+      { error: ERROR_MESSAGES.GROQ_REQUEST_FAILED, details: error?.message || String(err) },
       { status: 500 }
     );
   }

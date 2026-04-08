@@ -65,8 +65,8 @@ async function pipeStreamToController(
   }
 }
 
-// app/api/deepseek/format/route.ts
-// Sirf callDeepSeek function badlo — baaki sab same
+// app/api/groq/format/route.ts
+// Groq API for text formatting
 
 async function callGroq(
   apiKey: string,
@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const error = err as Error;
     return NextResponse.json(
-      { error: ERROR_MESSAGES.DEEPSEEK_REQUEST_FAILED, details: error?.message || String(err) },
+      { error: ERROR_MESSAGES.GROQ_REQUEST_FAILED, details: error?.message || String(err) },
       { status: 500 }
     );
   }

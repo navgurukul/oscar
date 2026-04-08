@@ -195,6 +195,7 @@ jobs:
           VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
           VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
       - name: Sign bundles

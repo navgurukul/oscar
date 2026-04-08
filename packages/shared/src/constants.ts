@@ -38,11 +38,11 @@ export const ERROR_MESSAGES = {
   // API Errors
   API_ERROR: "API request failed. Please try again.",
   NETWORK_ERROR: "Network error. Please check your connection.",
-  DEEPSEEK_API_ERROR: "Deepseek API error",
-  DEEPSEEK_REQUEST_FAILED: "Deepseek request failed",
+  GROQ_API_ERROR: "Groq API error",
+  GROQ_REQUEST_FAILED: "Groq request failed",
   INVALID_JSON_BODY: "Invalid JSON body",
-  INVALID_DEEPSEEK_RESPONSE: "Invalid Deepseek response",
-  SERVER_MISSING_API_KEY: "Server missing DEEPSEEK_API_KEY",
+  INVALID_GROQ_RESPONSE: "Invalid Groq response",
+  SERVER_MISSING_API_KEY: "Server missing GROQ_API_KEY",
   RAW_TEXT_REQUIRED: "rawText is required",
   TEXT_REQUIRED: "text is required",
   NO_TEXT_PROVIDED_FOR_FORMATTING: "No text provided for formatting",
@@ -74,16 +74,16 @@ export const ERROR_TIPS = {
  */
 export const API_CONFIG = {
   // Internal API routes
-  FORMAT_ENDPOINT: "/api/deepseek/format",
-  FORMAT_EMAIL_ENDPOINT: "/api/deepseek/format-email",
-  TITLE_ENDPOINT: "/api/deepseek/title",
-  TRANSLATE_ENDPOINT: "/api/deepseek/translate",
+  FORMAT_ENDPOINT: "/api/groq/format",
+  FORMAT_EMAIL_ENDPOINT: "/api/groq/format-email",
+  TITLE_ENDPOINT: "/api/groq/title",
+  TRANSLATE_ENDPOINT: "/api/groq/translate",
 
   // External APIs
-  DEEPSEEK_API_URL: "https://api.deepseek.com/chat/completions",
+  GROQ_API_URL: "https://api.groq.com/openai/v1/chat/completions",
 
-  // DeepSeek model configuration
-  DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+  // Groq model configuration
+  GROQ_MODEL: process.env.GROQ_MODEL || "llama-3.1-8b-instant",
 
   // Format API settings
   FORMAT_TEMPERATURE: 0.0,
@@ -274,7 +274,7 @@ export type Currency = "INR" | "USD";
  * Protects APIs from abuse and runaway costs
  */
 export const RATE_LIMITS = {
-  // AI API Endpoints (DeepSeek) - More restrictive due to cost
+  // AI API Endpoints (Groq) - More restrictive due to cost
   AI_FORMAT: {
     maxRequests: 20, // 20 requests per user
     windowMs: 60 * 1000, // Per 1 minute

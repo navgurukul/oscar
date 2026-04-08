@@ -1,18 +1,18 @@
 // API-related type definitions
 
-export interface DeepseekFormatRequest {
+export interface GroqFormatRequest {
   rawText: string;
 }
 
-export interface DeepseekFormatResponse {
+export interface GroqFormatResponse {
   formattedText: string;
 }
 
-export interface DeepseekTitleRequest {
+export interface GroqTitleRequest {
   text: string;
 }
 
-export interface DeepseekTitleResponse {
+export interface GroqTitleResponse {
   title: string;
 }
 

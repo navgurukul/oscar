@@ -658,16 +658,16 @@ fn transcribe_meeting_audio(
     )
 }
 
-// ── DeepSeek AI: Text Processing ─────────────────────────────────────────────
+// ── Groq AI: Text Processing ─────────────────────────────────────────────
 
-// API key embedded at build time via DEEPSEEK_API_KEY env var; falls back to
-// the hardcoded value so release builds work without extra CI configuration.
-const DEEPSEEK_API_KEY: &str = match option_env!("DEEPSEEK_API_KEY") {
+// API key embedded at build time via GROQ_API_KEY env var; falls back to
+// empty string - you must set GROQ_API_KEY at build time for release builds.
+const GROQ_API_KEY: &str = match option_env!("GROQ_API_KEY") {
     Some(k) => k,
-    None => "sk-4a59b3ee436944f5b3d1ef4e49b7ddc4",
+    None => "",
 };
-const DEEPSEEK_API_URL: &str = "https://api.deepseek.com/v1/chat/completions";
-const DEEPSEEK_MODEL: &str = "deepseek-chat";
+const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL: &str = "llama-3.1-8b-instant";
 
 fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
     let system = "You are a precise transcript assistant. Follow instructions exactly. \
@@ -750,7 +750,7 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
     (system, user)
 }
 
-/// Process text with DeepSeek AI. Streams tokens via "ai-token" events.
+/// Process text with Groq AI. Streams tokens via "ai-token" events.
 #[tauri::command]
 async fn ai_process_text(
     text: String,
@@ -762,7 +762,7 @@ async fn ai_process_text(
     let (system_prompt, user_prompt) = build_ai_prompt(&mode, &text);
 
     let body = serde_json::json!({
-        "model": DEEPSEEK_MODEL,
+        "model": GROQ_MODEL,
         "messages": [
             { "role": "system", "content": system_prompt },
             { "role": "user",   "content": user_prompt   }
@@ -778,18 +778,18 @@ async fn ai_process_text(
         .map_err(|e| format!("HTTP client error: {e}"))?;
 
     let response = client
-        .post(DEEPSEEK_API_URL)
-        .header("Authorization", format!("Bearer {DEEPSEEK_API_KEY}"))
+        .post(GROQ_API_URL)
+        .header("Authorization", format!("Bearer {GROQ_API_KEY}"))
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("DeepSeek request failed: {e}"))?;
+        .map_err(|e| format!("Groq request failed: {e}"))?;
 
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("DeepSeek API error {status}: {body}"));
+        return Err(format!("Groq API error {status}: {body}"));
     }
 
     let mut full_text = String::new();

@@ -87,23 +87,23 @@ Deno.serve(async (req: Request) => {
 
       `Return ONLY the corrected text. No explanations, no bullet points, no commentary, no surrounding quotes.`;
 
-    // ── Call DeepSeek ─────────────────────────────────────────────────────────
-    const DEEPSEEK_API_KEY = Deno.env.get("DEEPSEEK_API_KEY");
-    if (!DEEPSEEK_API_KEY) {
-      return new Response(JSON.stringify({ error: "DEEPSEEK_API_KEY is not configured on the server." }), {
+    // ── Call Groq ─────────────────────────────────────────────────────────
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) {
+      return new Response(JSON.stringify({ error: "GROQ_API_KEY is not configured on the server." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const upstream = await fetch("https://api.deepseek.com/chat/completions", {
+    const upstream = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`,
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "deepseek-chat",
+        model: "llama-3.1-8b-instant",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user",   content: text },
@@ -116,7 +116,7 @@ Deno.serve(async (req: Request) => {
     if (!upstream.ok) {
       const errBody = await upstream.text();
       return new Response(
-        JSON.stringify({ error: `DeepSeek API error ${upstream.status}: ${errBody}` }),
+        JSON.stringify({ error: `Groq API error ${upstream.status}: ${errBody}` }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

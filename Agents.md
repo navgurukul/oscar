@@ -4,7 +4,7 @@ This document provides an overview of the AI agents and services used in the OSC
 
 ## Overview
 
-OSCAR uses AI agents powered by DeepSeek to transform voice recordings into clean, formatted text. The system consists of two primary AI agents that work together to process and organize voice notes.
+OSCAR uses AI agents powered by Groq to transform voice recordings into clean, formatted text. The system consists of two primary AI agents that work together to process and organize voice notes.
 
 ## Architecture
 
@@ -18,7 +18,7 @@ Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent �
 
 **Purpose**: Converts raw speech-to-text transcripts into clean, well-formatted text.
 
-**Location**: [`/app/api/deepseek/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/deepseek/format/route.ts)
+**Location**: [`/app/api/groq/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/format/route.ts)
 
 **Key Responsibilities**:
 
@@ -37,7 +37,7 @@ Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent �
 
 **Configuration**:
 
-- Model: DeepSeek (configured in `API_CONFIG.DEEPSEEK_MODEL`)
+- Model: Groq (configured in `API_CONFIG.GROQ_MODEL`)
 - Temperature: Configured via `API_CONFIG.FORMAT_TEMPERATURE`
 - Top P: Configured via `API_CONFIG.FORMAT_TOP_P`
 - Max Tokens: Configured via `API_CONFIG.FORMAT_MAX_TOKENS`
@@ -53,7 +53,7 @@ Output: "How to create a React app."
 
 **Purpose**: Generates concise, descriptive titles for formatted notes.
 
-**Location**: [`/app/api/deepseek/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/deepseek/title/route.ts)
+**Location**: [`/app/api/groq/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/title/route.ts)
 
 **Key Responsibilities**:
 
@@ -71,7 +71,7 @@ If AI title generation fails, the system uses a heuristic approach:
 
 **Configuration**:
 
-- Model: DeepSeek (configured in `API_CONFIG.DEEPSEEK_MODEL`)
+- Model: Groq (configured in `API_CONFIG.GROQ_MODEL`)
 - Temperature: Configured via `API_CONFIG.TITLE_TEMPERATURE`
 - Top P: Configured via `API_CONFIG.TITLE_TOP_P`
 - Max Tokens: Configured via `API_CONFIG.TITLE_MAX_TOKENS`
@@ -142,8 +142,8 @@ All AI agent configurations are centralized in [`/lib/constants.ts`](file:///Use
 
 ```typescript
 API_CONFIG = {
-  DEEPSEEK_API_URL: "https://api.deepseek.com/chat/completions",
-  DEEPSEEK_MODEL: "deepseek-chat",
+  GROQ_API_URL: "https://api.groq.com/openai/v1/chat/completions",
+  GROQ_MODEL: "llama-3.1-8b-instant",
   FORMAT_TEMPERATURE: // Configured value
   FORMAT_TOP_P: // Configured value
   FORMAT_MAX_TOKENS: // Configured value
@@ -159,7 +159,7 @@ API_CONFIG = {
 Required environment variable:
 
 ```
-DEEPSEEK_API_KEY=your_api_key_here
+GROQ_API_KEY=your_api_key_here
 ```
 
 ## Error Handling
@@ -334,8 +334,8 @@ Potential improvements to the AI agent system:
 - [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts) - Configuration constants
 - [`/lib/types/note.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/note.types.ts) - Type definitions
 - [`/lib/types/api.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/api.types.ts) - API type definitions
-- [`/app/api/deepseek/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/deepseek/format/route.ts) - Format endpoint
-- [`/app/api/deepseek/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/deepseek/title/route.ts) - Title endpoint
+- [`/app/api/groq/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/format/route.ts) - Format endpoint
+- [`/app/api/groq/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/title/route.ts) - Title endpoint
 - [`/components/results/FeedbackWidget.tsx`](file:///Users/souvik/Desktop/oscar/components/results/FeedbackWidget.tsx) - Feedback UI component
 
 ## Support
@@ -344,5 +344,5 @@ For issues or questions about the AI agents:
 
 1. Check the error messages in the browser console
 2. Review the API logs in the terminal
-3. Verify the DEEPSEEK_API_KEY is set correctly
+3. Verify the GROQ_API_KEY is set correctly
 4. Test with the fallback mechanisms disabled to isolate issues

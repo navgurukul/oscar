@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { API_CONFIG, ERROR_MESSAGES, RATE_LIMITS } from "@/lib/constants";
-import { SYSTEM_PROMPTS, validateUserInput, wrapUserInput } from "@/lib/prompts";
+import { SYSTEM_PROMPTS, USER_PROMPTS, validateUserInput, wrapUserInput } from "@/lib/prompts";
 import {
   applyRateLimit,
   getClientIdentifier,
@@ -9,6 +9,9 @@ import {
 
 const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
 
+/**
+ * Fetch with timeout using AbortController
+ */
 async function fetchWithTimeout(
   url: string,
   options: RequestInit,
@@ -33,11 +36,6 @@ async function fetchWithTimeout(
   }
 }
 
-type TranslateRequestBody = {
-  text?: string;
-  targetLanguage?: "en" | "hi";
-};
-
 export async function POST(req: NextRequest) {
   // Check authentication
   const supabase = await createClient();
@@ -53,8 +51,8 @@ export async function POST(req: NextRequest) {
   const clientId = getClientIdentifier(user.id, req);
   const rateLimitResult = applyRateLimit(
     clientId,
-    "ai-translate",
-    RATE_LIMITS.AI_TRANSLATE
+    "ai-title",
+    RATE_LIMITS.AI_TITLE
   );
   if (rateLimitResult) return rateLimitResult;
 
@@ -66,9 +64,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: TranslateRequestBody;
+  let body: { text?: string };
   try {
-    body = (await req.json()) as TranslateRequestBody;
+    body = await req.json();
   } catch {
     return NextResponse.json(
       { error: ERROR_MESSAGES.INVALID_JSON_BODY },
@@ -77,18 +75,9 @@ export async function POST(req: NextRequest) {
   }
 
   const text = (body.text || "").trim();
-  const targetLanguage = body.targetLanguage || "en";
-
   if (!text) {
     return NextResponse.json(
-      { error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_TRANSLATION },
-      { status: 400 }
-    );
-  }
-
-  if (targetLanguage !== "en" && targetLanguage !== "hi") {
-    return NextResponse.json(
-      { error: "targetLanguage must be 'en' or 'hi'" },
+      { error: ERROR_MESSAGES.TEXT_REQUIRED },
       { status: 400 }
     );
   }
@@ -106,11 +95,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const languageLabel = targetLanguage === "hi" ? "Hindi" : "English";
-
   try {
     // SECURITY: Wrap user input in explicit delimiters
-    const secureUserContent = wrapUserInput(text, 'text');
+    const secureUserContent = wrapUserInput(text, 'content');
     
     const response = await fetchWithTimeout(API_CONFIG.GROQ_API_URL, {
       method: "POST",
@@ -121,14 +108,18 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: API_CONFIG.GROQ_MODEL_FAST,
         messages: [
-          { role: "system", content: SYSTEM_PROMPTS.TRANSLATE },
+          {
+            role: "system",
+            content: SYSTEM_PROMPTS.TITLE,
+          },
           {
             role: "user",
-            content: `TARGET LANGUAGE: ${languageLabel}\n\n${secureUserContent}`,
+            content: `${USER_PROMPTS.TITLE_TEMPLATE}${secureUserContent}`,
           },
         ],
-        temperature: API_CONFIG.TRANSLATE_TEMPERATURE,
-        max_tokens: API_CONFIG.TRANSLATE_MAX_TOKENS,
+        temperature: API_CONFIG.TITLE_TEMPERATURE,
+        top_p: API_CONFIG.TITLE_TOP_P,
+        max_tokens: API_CONFIG.TITLE_MAX_TOKENS,
         stream: false,
       }),
     });
@@ -137,7 +128,7 @@ export async function POST(req: NextRequest) {
       const errorText = await response.text();
       return NextResponse.json(
         {
-          error: ERROR_MESSAGES.DEEPSEEK_API_ERROR,
+          error: ERROR_MESSAGES.GROQ_API_ERROR,
           details: errorText,
           status: response.status,
         },
@@ -146,21 +137,25 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await response.json();
-    const translatedText = data?.choices?.[0]?.message?.content?.trim() || "";
-
-    if (!translatedText) {
+    const content = data?.choices?.[0]?.message?.content?.trim() || "";
+    if (!content) {
       return NextResponse.json(
-        { error: ERROR_MESSAGES.EMPTY_RESPONSE_FROM_TRANSLATION },
+        { error: ERROR_MESSAGES.INVALID_GROQ_RESPONSE },
         { status: 502 }
       );
     }
 
-    return NextResponse.json({ translatedText });
+    // Strip potential markdown code fences
+    const title = content
+      .replace(/^```[\w]*\n/, "")
+      .replace(/\n```$/, "")
+      .trim();
+    return NextResponse.json({ title });
   } catch (err: unknown) {
     const error = err as Error;
     return NextResponse.json(
       {
-        error: ERROR_MESSAGES.DEEPSEEK_REQUEST_FAILED,
+        error: ERROR_MESSAGES.GROQ_REQUEST_FAILED,
         details: error?.message || String(err),
       },
       { status: 500 }
