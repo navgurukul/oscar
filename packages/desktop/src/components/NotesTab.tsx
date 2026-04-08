@@ -295,7 +295,7 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
   return (
     <div className="notes-tab">
       <div className="notes-container">
-        <h1 className="notes-title">Your Notes</h1>
+        <h1 className="notes-title">Scribble</h1>
 
         {error && (
           <div className="notes-error">

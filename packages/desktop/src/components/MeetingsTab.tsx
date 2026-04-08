@@ -434,7 +434,7 @@ export function MeetingsTab({
       <div className="meetings-tab">
         <div className="meetings-container">
           <div className="meetings-header-row">
-            <h1 className="meetings-title">Meetings</h1>
+            <h1 className="meetings-title">Minutes</h1>
             <button className="meetings-manage-tpl-btn" onClick={onManageTemplates} title="Manage templates">
               <Settings size={14} />
               Templates

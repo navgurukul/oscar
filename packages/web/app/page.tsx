@@ -9,7 +9,7 @@ import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, MoreHorizontal } from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, MoreHorizontal, Radio, BookOpen, Users } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 
 import { notesService } from "@/lib/services/notes.service";
@@ -287,8 +287,13 @@ export default function Home() {
               />
             </div>
             <p className="mt-10 text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
-              Turn messy voice notes into clean text. Instantly.
+              Stream into any app. Capture every meeting. Build your knowledge base.
             </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">oscar Stream</span>
+              <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-400">oscar Minutes</span>
+              <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">Scribble</span>
+            </div>
             {!session && (
               <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
                 <Button
@@ -363,69 +368,162 @@ export default function Home() {
             </div>
           </section>
 
-          {/* How It Works Section */}
-        <section id="how-it-works" className="md:min-h-[80vh] flex items-center justify-center py-16 px-4 bg-slate-900 mt-8">
+          {/* Three Modes Section */}
+          <section id="how-it-works" className="py-24 px-4 bg-slate-900 mt-8">
             <div className="max-w-6xl mx-auto">
-              <div className="text-center mb-16">
+              <div className="text-center mb-20">
+                <p className="text-cyan-400 text-sm font-semibold uppercase tracking-widest mb-4">Three ways to use OSCAR</p>
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                  Speak It. <span className="text-cyan-500">OSCAR</span> Writes It.
+                  One app. Three <span className="text-cyan-500">superpowers.</span>
                 </h2>
                 <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
-                  From messy voice note to polished text in 3 steps. No typing, no cleanup, no hassle.
+                  Whether you&apos;re dictating on the fly, capturing a full meeting, or building a personal knowledge base — OSCAR has a mode built for it.
                 </p>
               </div>
 
-              <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-                <div className="relative">
-                  <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded-xl p-8">
-                    <div className="w-16 h-16 bg-cyan-500 rounded-full flex items-center justify-center mb-6 mx-auto">
-                      <Mic className="w-8 h-8 text-white" />
+              {/* oscar Stream */}
+              <div className="mb-16 rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden">
+                <div className="grid md:grid-cols-2 gap-0">
+                  <div className="p-10 flex flex-col justify-center">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center">
+                        <Radio className="w-5 h-5 text-cyan-400" />
+                      </div>
+                      <span className="text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1">oscar Stream</span>
                     </div>
-                    <div className="text-center">
-                      <h3 className="text-2xl font-bold text-white mb-3">1. Speak</h3>
-                      <p className="text-gray-300">
-                        Hit record and talk. Walk, drive, commute. Capture your thoughts wherever inspiration strikes.
-                      </p>
-                    </div>
+                    <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                      Dictate into <span className="text-cyan-400">anything</span>, anywhere.
+                    </h3>
+                    <p className="text-gray-300 text-lg mb-6 leading-relaxed">
+                      Hold <kbd className="inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Ctrl</kbd> + <kbd className="inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Space</kbd> from anywhere on your computer and speak. OSCAR types the cleaned, AI-polished text directly into Slack, Notion, Gmail, VS Code — whatever app you&apos;re in.
+                    </p>
+                    <ul className="space-y-3">
+                      {["Global hotkey — no switching apps", "AI removes filler words & fixes grammar instantly", "Works in every app on your system", "Hinglish & 30+ language support"].map((f) => (
+                        <li key={f} className="flex items-center gap-3 text-gray-300">
+                          <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-gradient-to-r from-cyan-500/50 to-transparent"></div>
-                </div>
-
-                <div className="relative">
-                  <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded-xl p-8">
-                    <div className="w-16 h-16 bg-cyan-500 rounded-full flex items-center justify-center mb-6 mx-auto">
-                      <Brain className="w-8 h-8 text-white" />
-                    </div>
-                    <div className="text-center">
-                      <h3 className="text-2xl font-bold text-white mb-3">2. AI Cleans</h3>
-                      <p className="text-gray-300">
-                        OSCAR removes filler words, fixes grammar, formats paragraphs. All automatically in seconds.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-gradient-to-r from-cyan-500/50 to-transparent"></div>
-                </div>
-
-                <div className="relative">
-                  <div className="bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/30 rounded-xl p-8">
-                    <div className="w-16 h-16 bg-cyan-500 rounded-full flex items-center justify-center mb-6 mx-auto">
-                      <FileText className="w-8 h-8 text-white" />
-                    </div>
-                    <div className="text-center">
-                      <h3 className="text-2xl font-bold text-white mb-3">3. Use It</h3>
-                      <p className="text-gray-300">
-                        Copy, share, or download your polished note. Ready for docs, emails, or wherever you need it.
-                      </p>
+                  <div className="bg-slate-950/60 p-10 flex items-center justify-center min-h-[280px]">
+                    <div className="text-center space-y-6">
+                      <div className="flex items-center justify-center gap-3">
+                        <kbd className="px-4 py-2.5 text-base font-mono font-bold bg-slate-800 border border-slate-600 border-b-[3px] rounded-lg text-white shadow-lg">Ctrl</kbd>
+                        <span className="text-slate-500 text-lg font-bold">+</span>
+                        <kbd className="px-4 py-2.5 text-base font-mono font-bold bg-slate-800 border border-slate-600 border-b-[3px] rounded-lg text-white shadow-lg">Space</kbd>
+                      </div>
+                      <p className="text-slate-400 text-sm">Hold to speak · Release to insert text</p>
+                      <div className="flex flex-wrap justify-center gap-2 max-w-[260px]">
+                        {["Slack", "Notion", "Gmail", "VS Code", "Docs", "Discord"].map((app) => (
+                          <span key={app} className="text-xs px-2.5 py-1 bg-slate-800 text-slate-400 rounded-lg border border-slate-700">{app}</span>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
+              {/* oscar Minutes */}
+              <div className="mb-16 rounded-2xl border border-violet-500/20 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden">
+                <div className="grid md:grid-cols-2 gap-0">
+                  <div className="bg-slate-950/60 p-10 flex items-center justify-center min-h-[280px] order-last md:order-first">
+                    <div className="text-center space-y-5 max-w-[280px]">
+                      <div className="w-16 h-16 bg-violet-500/20 rounded-2xl flex items-center justify-center mx-auto">
+                        <Users className="w-8 h-8 text-violet-400" />
+                      </div>
+                      <div className="space-y-2">
+                        {[
+                          { label: "Key Discussion Points", w: "w-40" },
+                          { label: "Decisions Made", w: "w-32" },
+                          { label: "Action Items", w: "w-36" },
+                          { label: "Follow-ups", w: "w-28" },
+                        ].map((item) => (
+                          <div key={item.label} className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 bg-violet-400 rounded-full shrink-0" />
+                            <span className="text-xs text-slate-400">{item.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-500">AI-generated in seconds after your meeting</p>
+                    </div>
+                  </div>
+                  <div className="p-10 flex flex-col justify-center">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-violet-500/20 rounded-xl flex items-center justify-center">
+                        <Users className="w-5 h-5 text-violet-400" />
+                      </div>
+                      <span className="text-xs font-bold uppercase tracking-widest text-violet-400 bg-violet-500/10 border border-violet-500/30 rounded-full px-3 py-1">oscar Minutes</span>
+                    </div>
+                    <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                      Full meeting notes, <span className="text-violet-400">automatically.</span>
+                    </h3>
+                    <p className="text-gray-300 text-lg mb-6 leading-relaxed">
+                      Record your Zoom, Teams, or in-person meeting. OSCAR captures both your voice and other participants&apos; audio, transcribes everything, and generates structured AI notes the moment you stop.
+                    </p>
+                    <ul className="space-y-3">
+                      {["Records mic + system audio (Zoom, Teams, etc.)", "AI-structured notes: decisions, action items, follow-ups", "Google Calendar integration — one tap from your schedule", "Standup, 1:1, brainstorm & custom templates"].map((f) => (
+                        <li key={f} className="flex items-center gap-3 text-gray-300">
+                          <Check className="w-4 h-4 text-violet-400 shrink-0" />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* oscar Scribble */}
+              <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden">
+                <div className="grid md:grid-cols-2 gap-0">
+                  <div className="p-10 flex flex-col justify-center">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                        <BookOpen className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <span className="text-xs font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-3 py-1">Scribble</span>
+                    </div>
+                    <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                      Your voice notes, <span className="text-emerald-400">beautifully organized.</span>
+                    </h3>
+                    <p className="text-gray-300 text-lg mb-6 leading-relaxed">
+                      Every Stream dictation and idea you capture lives in Scribble — searchable, editable, and synced across devices. Build your personal knowledge base without ever typing a thing.
+                    </p>
+                    <ul className="space-y-3">
+                      {["All your voice notes in one searchable place", "Synced to the cloud, accessible anywhere", "AI-cleaned text ready to share or export", "Custom vocabulary for your industry & jargon"].map((f) => (
+                        <li key={f} className="flex items-center gap-3 text-gray-300">
+                          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="bg-slate-950/60 p-10 flex items-center justify-center min-h-[280px]">
+                    <div className="space-y-3 w-full max-w-[260px]">
+                      {[
+                        { title: "Product brainstorm", time: "Today, 2:14 PM" },
+                        { title: "Weekly goals", time: "Yesterday, 9:30 AM" },
+                        { title: "Client call ideas", time: "3 days ago" },
+                      ].map((note) => (
+                        <div key={note.title} className="flex items-center gap-3 p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
+                          <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center shrink-0">
+                            <FileText className="w-4 h-4 text-emerald-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-white font-medium">{note.title}</p>
+                            <p className="text-xs text-slate-500">{note.time}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
-          {/* Benefits Section */}
-          <section className="md:min-h-screen snap-start flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
+          {/* Why OSCAR Section */}
+          <section className="md:min-h-screen flex items-center justify-center py-16 px-4 bg-gradient-to-b from-slate-900 to-slate-950">
             <div className="max-w-6xl mx-auto">
               <div className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
@@ -446,7 +544,7 @@ export default function Home() {
                     You speak at 150+ words per minute. You type at 40. Stop wasting time transcribing your own thoughts.
                   </p>
                   <p className="text-cyan-200 text-sm">
-                    Perfect for: Meeting notes, blog drafts, task lists, brainstorming sessions
+                    Stream directly into Slack, email, docs — zero copy-paste
                   </p>
                 </div>
 
@@ -456,10 +554,10 @@ export default function Home() {
                   </div>
                   <h3 className="text-2xl font-semibold text-white mb-4">AI That Understands Context</h3>
                   <p className="text-gray-300 mb-4">
-                    Not just speech-to-text. OSCAR formats your ideas intelligently with proper paragraphs, punctuation, and structure.
+                    Not just speech-to-text. OSCAR formats your ideas intelligently — and Minutes turns raw conversation into structured, actionable notes.
                   </p>
                   <p className="text-cyan-200 text-sm">
-                    Perfect for: Long-form content, complex ideas, multi-step plans
+                    Hinglish support, 30+ languages, custom vocabulary
                   </p>
                 </div>
 
@@ -469,10 +567,10 @@ export default function Home() {
                   </div>
                   <h3 className="text-2xl font-semibold text-white mb-4">Always Shareable</h3>
                   <p className="text-gray-300 mb-4">
-                    Every note is clean enough to send directly to your team, paste into docs, or post online. No embarrassing filler words.
+                    Every Scribble note and Minutes summary is clean enough to send directly. No embarrassing filler words or messy raw transcripts.
                   </p>
                   <p className="text-cyan-200 text-sm">
-                    Perfect for: Collaboration, client updates, content creation
+                    Email, copy, or export with one click
                   </p>
                 </div>
 
@@ -480,12 +578,12 @@ export default function Home() {
                   <div className="text-cyan-400 mb-4">
                     <Sparkles className="w-10 h-10" />
                   </div>
-                  <h3 className="text-2xl font-semibold text-white mb-4">Custom Vocabulary</h3>
+                  <h3 className="text-2xl font-semibold text-white mb-4">Runs Locally. Private by Default.</h3>
                   <p className="text-gray-300 mb-4">
-                    Teach OSCAR your industry terms, product names, or company jargon. It learns and adapts to your world.
+                    Whisper transcription runs on-device — your audio never leaves your computer. AI processing is opt-in and uses only the text.
                   </p>
                   <p className="text-cyan-200 text-sm">
-                    Perfect for: Technical notes, business contexts, specialized fields
+                    No audio uploads. No surveillance. Just your ideas.
                   </p>
                 </div>
               </div>
@@ -679,18 +777,20 @@ export default function Home() {
           <section className="min-h-auto md:min-h-[80vh] flex items-center justify-center py-12 md:py-16 px-4 bg-gradient-to-b from-slate-950 to-black mt-8">
             <div className="max-w-4xl mx-auto text-center">
               <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                Stop Losing Your <span className="text-cyan-500">Best Ideas</span>
+                Stream. Minutes. Scribble.<br />
+                <span className="text-cyan-500">All in one app.</span>
               </h2>
               <p className="text-gray-300 text-lg md:text-xl mb-8 max-w-2xl mx-auto">
-                Start free. No credit card required. Turn messy thoughts into clean text in seconds.
+                Start free. No credit card required. Your voice, working for you everywhere.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button
-                  onClick={handleViewPricing}
+                  onClick={() => router.push("/download")}
                   size="lg"
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-10 py-7 text-xl font-semibold"
+                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-10 py-7 text-xl font-semibold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-105"
                 >
-                  Try OSCAR Free
+                  <Download className="w-6 h-6 mr-3" />
+                  Download Free
                 </Button>
               </div>
               <p className="text-gray-500 text-sm mt-6">
