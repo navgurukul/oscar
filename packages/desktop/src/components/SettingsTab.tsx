@@ -35,6 +35,7 @@ type SettingsTabType =
 
 // All languages Whisper small supports, with flag + native name
 const LANGUAGES = [
+  { code: "hi-en", flag: "🇮🇳", name: "Hinglish", native: "Hindi + English" },
   { code: "en", flag: "🇺🇸", name: "English", native: "English" },
   { code: "hi", flag: "🇮🇳", name: "Hindi", native: "हिन्दी" },
   { code: "es", flag: "🇪🇸", name: "Spanish", native: "Español" },
@@ -92,6 +93,9 @@ interface SettingsTabProps {
   onSaveTemplate: (tpl: MeetingTemplateData) => void;
   onDeleteTemplate: (id: string) => void;
   initialSection?: SettingsTabType;
+  systemAudioSupported?: boolean;
+  systemAudioEnabled?: boolean;
+  onSystemAudioToggle?: (enabled: boolean) => void;
 }
 
 const NAV_ITEMS: {
@@ -122,6 +126,9 @@ export function SettingsTab({
   onSaveTemplate,
   onDeleteTemplate,
   initialSection,
+  systemAudioSupported = false,
+  systemAudioEnabled = true,
+  onSystemAudioToggle,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabType>(initialSection || "billing");
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -330,6 +337,77 @@ export function SettingsTab({
                 </p>
               )}
             </div>
+
+            {/* ── System Audio (Meetings) ── */}
+            {systemAudioSupported && (
+              <div className="st-card">
+                <div className="st-card-hd">
+                  <span className="st-ico-pill">
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h3 className="st-card-title">System Audio Capture</h3>
+                    <p className="st-card-desc">
+                      Capture other participants' audio during meetings
+                    </p>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontWeight: 500,
+                        color: "#334155",
+                        fontSize: "0.875rem",
+                      }}
+                    >
+                      Record system audio in meetings
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: "#94a3b8",
+                        marginTop: 2,
+                      }}
+                    >
+                      Captures audio from Zoom, Teams, and other apps so
+                      everyone's voice is transcribed. Requires Screen Recording
+                      permission.
+                    </div>
+                  </div>
+                  <label className="gen-toggle-label" style={{ marginBottom: 0 }}>
+                    <div
+                      className={`gen-toggle${systemAudioEnabled ? " on" : ""}`}
+                      onClick={() => onSystemAudioToggle?.(!systemAudioEnabled)}
+                      role="switch"
+                      aria-checked={systemAudioEnabled}
+                    >
+                      <div className="gen-toggle-thumb" />
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
 
             {/* ── AI Enhancement ── */}
             <div className="st-card">

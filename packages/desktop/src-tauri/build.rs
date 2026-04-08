@@ -2,12 +2,108 @@ fn main() {
     #[cfg(target_os = "macos")]
     {
         link_clang_runtime();
+        compile_swift_system_audio();
         println!("cargo:rustc-link-framework=Metal");
         println!("cargo:rustc-link-framework=Foundation");
         println!("cargo:rustc-link-framework=CoreGraphics");
     }
 
     tauri_build::build()
+}
+
+/// Compile the Swift SystemAudioCapture helper into a static library and link it.
+///
+/// The Swift code uses ScreenCaptureKit (macOS 13.0+) to capture system audio
+/// and exposes a C-compatible API via `@_cdecl`.
+#[cfg(target_os = "macos")]
+fn compile_swift_system_audio() {
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    let obj_path = format!("{}/SystemAudioCapture.o", out_dir);
+    let lib_path = format!("{}/libSystemAudioCapture.a", out_dir);
+
+    // Detect target architecture from Cargo's TARGET env var
+    let target = std::env::var("TARGET").unwrap_or_else(|_| "aarch64-apple-darwin".to_string());
+    let arch = if target.contains("x86_64") {
+        "x86_64"
+    } else {
+        "arm64"
+    };
+    let swift_target = format!("{}-apple-macosx12.0", arch);
+
+    // Compile Swift → object file
+    let status = std::process::Command::new("swiftc")
+        .args([
+            "swift/SystemAudioCapture.swift",
+            "-emit-object",
+            "-parse-as-library",
+            "-whole-module-optimization",
+            "-module-name",
+            "SystemAudioCapture",
+            "-target",
+            &swift_target,
+            "-o",
+            &obj_path,
+        ])
+        .status()
+        .expect("Failed to run swiftc — is Xcode installed?");
+
+    assert!(status.success(), "Swift compilation failed");
+
+    // Create static library from the object file
+    let status = std::process::Command::new("ar")
+        .args(["rcs", &lib_path, &obj_path])
+        .status()
+        .expect("Failed to run ar");
+
+    assert!(status.success(), "Failed to create static library");
+
+    // Link the static library
+    println!("cargo:rustc-link-search=native={}", out_dir);
+    println!("cargo:rustc-link-lib=static=SystemAudioCapture");
+
+    // Link ScreenCaptureKit weakly so the app still launches on macOS < 12.3
+    // (the Swift code uses @available guards and returns "not supported" at runtime)
+    println!("cargo:rustc-link-arg=-Wl,-weak_framework,ScreenCaptureKit");
+    println!("cargo:rustc-link-framework=CoreMedia");
+
+    // Link the Swift standard library (shipped with macOS since 10.14.4)
+    println!("cargo:rustc-link-search=native=/usr/lib/swift");
+    println!("cargo:rustc-link-lib=dylib=swiftCore");
+    println!("cargo:rustc-link-lib=dylib=swiftFoundation");
+    println!("cargo:rustc-link-lib=dylib=swiftDispatch");
+    println!("cargo:rustc-link-lib=dylib=swiftObjectiveC");
+    println!("cargo:rustc-link-lib=dylib=swiftCoreFoundation");
+
+    // Also search the SDK's Swift lib directory (needed during development)
+    if let Ok(output) = std::process::Command::new("xcrun")
+        .args(["--show-sdk-path"])
+        .output()
+    {
+        let sdk = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !sdk.is_empty() {
+            println!("cargo:rustc-link-search=native={}/usr/lib/swift", sdk);
+        }
+    }
+
+    // Also add the Xcode toolchain's lib/swift/macosx directory
+    if let Ok(output) = std::process::Command::new("xcrun")
+        .args(["--toolchain", "default", "--find", "swiftc"])
+        .output()
+    {
+        let swiftc_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if let Some(toolchain_dir) = std::path::Path::new(&swiftc_path)
+            .parent() // bin/
+            .and_then(|p| p.parent())
+        // toolchain/
+        {
+            let swift_lib = toolchain_dir.join("lib/swift/macosx");
+            if swift_lib.exists() {
+                println!("cargo:rustc-link-search=native={}", swift_lib.display());
+            }
+        }
+    }
+
+    println!("cargo:rerun-if-changed=swift/SystemAudioCapture.swift");
 }
 
 /// Link the clang compiler-rt builtins library.
