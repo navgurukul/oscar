@@ -130,13 +130,6 @@ function HomeTab({
           </p>
         )}
 
-        {/* Stream mode label */}
-        <div className="flex items-center gap-2">
-          <span className="text-[0.6875rem] font-semibold uppercase tracking-widest text-cyan-600 bg-cyan-50 border border-cyan-200 rounded-full px-3 py-1">
-            oscar Stream
-          </span>
-        </div>
-
         {/* Shortcut Section */}
         <div className="w-full max-w-[520px] bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center self-center">
           <p className="text-[0.9375rem] text-slate-600 mb-5 leading-relaxed">
