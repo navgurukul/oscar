@@ -3802,8 +3802,31 @@ kbd {
   font-weight: 700;
   color: #0f172a;
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
   font-family: 'EB Garamond', Georgia, serif;
+}
+
+/* Scribble info card */
+.scribble-info-card {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 16px;
+  padding: 14px 20px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+.scribble-info-card-title {
+  font-size: 0.9rem;
+  color: #065f46;
+  margin-bottom: 5px;
+  line-height: 1.5;
+}
+.scribble-info-card-sub {
+  font-size: 0.6875rem;
+  color: #059669;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
 }
 
 /* Error State */
@@ -5076,6 +5099,29 @@ kbd {
   color: #64748b;
   margin-bottom: 28px;
   line-height: 1.5;
+}
+
+/* Minutes info card */
+.minutes-info-card {
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 16px;
+  padding: 14px 20px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+.minutes-info-card-title {
+  font-size: 0.9rem;
+  color: #5b21b6;
+  margin-bottom: 5px;
+  line-height: 1.5;
+}
+.minutes-info-card-sub {
+  font-size: 0.6875rem;
+  color: #7c3aed;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
 }
 
 /* Template cards grid */

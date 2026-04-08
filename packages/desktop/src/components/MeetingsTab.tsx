@@ -460,6 +460,12 @@ export function MeetingsTab({
             </button>
           </div>
 
+          {/* Info card */}
+          <div className="minutes-info-card">
+            <p className="minutes-info-card-title">Record your meeting — AI writes structured notes the moment you stop.</p>
+            <p className="minutes-info-card-sub">Key Decisions · Action Items · Follow-ups</p>
+          </div>
+
           {systemAudioNotice}
 
           {/* ── Live meeting banner ── */}
