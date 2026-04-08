@@ -71,9 +71,6 @@ interface MeetingsTabProps {
   savedMeetings: SavedMeeting[];
   onSaveMeeting: (meeting: SavedMeeting) => void;
   onDeleteMeeting: (id: string) => void;
-  systemAudioSupported?: boolean;
-  systemAudioEnabled?: boolean;
-  onSystemAudioToggle?: (enabled: boolean) => void;
 }
 
 // ── Default templates ───────────────────────────────────────────────────────
@@ -219,9 +216,6 @@ export function MeetingsTab({
   savedMeetings,
   onSaveMeeting,
   onDeleteMeeting,
-  systemAudioSupported = false,
-  systemAudioEnabled = true,
-  onSystemAudioToggle,
 }: MeetingsTabProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("meeting_general");
   const [meetingTitle, setMeetingTitle]   = useState("");
@@ -675,7 +669,7 @@ export function MeetingsTab({
 
   if (phase === "recording") {
     return (
-      <div className="meetings-tab">
+      <div className="meetings-tab meeting-recording-phase">
         <div className="meetings-container">
           <button className="meeting-back-btn" onClick={handleBack}>
             <ChevronLeft size={16} /> Back
@@ -711,44 +705,14 @@ export function MeetingsTab({
             </div>
           </div>
 
-          {/* Record button + timer + template picker */}
-          <div className="meeting-recording">
-            <motion.button
-              className={`meeting-record-btn ${isRecording ? "recording" : ""}`}
-              onClick={isRecording ? handleStopRecording : onStartRecording}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              transition={{ duration: 0.15 }}
-            >
-              {isRecording ? <Square size={28} fill="currentColor" /> : <Mic size={28} />}
-            </motion.button>
-
-            <div className="meeting-recording-status">
-              {isRecording
-                ? <><span className="meeting-rec-dot" /><span className="meeting-timer">{formatTime(recordingTime)}</span></>
-                : <span className="meeting-recording-label">Tap to start recording</span>
-              }
-            </div>
-
+          {/* Template picker */}
+          <div className="meeting-recording-toolbar">
             <TemplatePicker
               templates={templates}
               selectedId={selectedTemplateId}
               onChange={setSelectedTemplateId}
             />
           </div>
-
-          {/* ── System audio toggle (macOS 13+ only) ── */}
-          {systemAudioSupported && (
-            <button
-              className={`meeting-sysaudio-toggle${systemAudioEnabled ? " active" : ""}`}
-              onClick={() => onSystemAudioToggle?.(!systemAudioEnabled)}
-              disabled={isRecording}
-              title={isRecording ? "Cannot change audio source while recording" : systemAudioEnabled ? "Capturing mic + system audio (other participants)" : "Capturing microphone only"}
-            >
-              <Mic size={12} />
-              {systemAudioEnabled ? "Mic + System Audio" : "Mic Only"}
-            </button>
-          )}
 
           {/* ── Simultaneous notes area ── */}
           <div className="meeting-notes-section">
@@ -764,6 +728,25 @@ export function MeetingsTab({
               onChange={(e) => setManualNotes(e.target.value)}
               rows={6}
             />
+          </div>
+        </div>
+
+        {/* ── Fixed bottom-center record button ── */}
+        <div className="meeting-record-dock">
+          <motion.button
+            className={`meeting-record-btn ${isRecording ? "recording" : ""}`}
+            onClick={isRecording ? handleStopRecording : onStartRecording}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ duration: 0.15 }}
+          >
+            {isRecording ? <Square size={28} fill="currentColor" /> : <Mic size={28} />}
+          </motion.button>
+          <div className="meeting-recording-status">
+            {isRecording
+              ? <><span className="meeting-rec-dot" /><span className="meeting-timer">{formatTime(recordingTime)}</span></>
+              : <span className="meeting-recording-label">Tap to start recording</span>
+            }
           </div>
         </div>
       </div>

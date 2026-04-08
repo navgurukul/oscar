@@ -746,7 +746,9 @@ const DEEPSEEK_MODEL: &str = "deepseek-chat";
 fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
     let system = "You are a precise transcript assistant. Follow instructions exactly. \
                   Output only the requested content with no preamble, no explanations, \
-                  no meta-commentary."
+                  no meta-commentary. The transcript may contain Hinglish (Hindi words \
+                  written in Roman script mixed with English). Understand both languages \
+                  and always produce the output in clear English."
         .to_string();
     let user = match mode {
         "transcribe_cleanup" => format!(
@@ -772,8 +774,9 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
         ),
         // ── Meeting templates ──────────────────────────────────────────────
         "meeting_general" => format!(
-            "You are a meeting notes assistant. Analyze the following meeting transcript and produce \
-             structured meeting notes with these sections:\n\
+            "You are a meeting notes assistant. The transcript may be in Hinglish (Hindi words \
+             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
+             Analyze the following meeting transcript and produce structured meeting notes with these sections:\n\
              ## Key Discussion Points\n\
              ## Decisions Made\n\
              ## Action Items\n(include owner if mentioned and deadline if mentioned)\n\
@@ -781,16 +784,18 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
              Output only the structured notes in markdown format:\n\n{text}"
         ),
         "meeting_standup" => format!(
-            "You are a standup meeting notes assistant. Analyze the following standup transcript and \
-             produce structured notes with these sections:\n\
+            "You are a standup meeting notes assistant. The transcript may be in Hinglish (Hindi words \
+             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
+             Analyze the following standup transcript and produce structured notes with these sections:\n\
              ## What Was Done (Yesterday/Recently)\n\
              ## What's Being Worked On (Today/Next)\n\
              ## Blockers & Risks\n\n\
              If multiple people spoke, organize by person. Output only the structured notes in markdown:\n\n{text}"
         ),
         "meeting_1on1" => format!(
-            "You are a 1:1 meeting notes assistant. Analyze the following 1:1 meeting transcript and \
-             produce structured notes with these sections:\n\
+            "You are a 1:1 meeting notes assistant. The transcript may be in Hinglish (Hindi words \
+             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
+             Analyze the following 1:1 meeting transcript and produce structured notes with these sections:\n\
              ## Discussion Points\n\
              ## Feedback & Recognition\n\
              ## Action Items\n(include owner and deadline if mentioned)\n\
@@ -798,8 +803,9 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
              Output only the structured notes in markdown format:\n\n{text}"
         ),
         "meeting_brainstorm" => format!(
-            "You are a brainstorming session notes assistant. Analyze the following brainstorm transcript \
-             and produce structured notes with these sections:\n\
+            "You are a brainstorming session notes assistant. The transcript may be in Hinglish (Hindi words \
+             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
+             Analyze the following brainstorm transcript and produce structured notes with these sections:\n\
              ## Ideas Generated\n(list each idea with a brief description)\n\
              ## Key Themes\n\
              ## Top Ideas (Ranked by Discussion Energy)\n\
@@ -807,8 +813,10 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
              Output only the structured notes in markdown format:\n\n{text}"
         ),
         "meeting_custom" => format!(
-            "You are a meeting notes assistant. Analyze the following meeting transcript and produce \
-             structured meeting notes following the instructions included in the text. \
+            "You are a meeting notes assistant. The transcript may be in Hinglish (Hindi words \
+             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
+             Analyze the following meeting transcript and produce structured meeting notes following \
+             the instructions included in the text. \
              Output only the structured notes in markdown format:\n\n{text}"
         ),
         _ => format!("Process the following text:\n\n{text}"),

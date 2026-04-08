@@ -937,8 +937,8 @@ function App() {
   const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
   const aiImprovementEnabledRef = useRef(true);
 
-  // Transcription language ("auto" = whisper auto-detects)
-  const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
+  // Transcription language ("auto" = whisper auto-detects, "hi-en" = Hinglish)
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState("hi-en");
 
   // Selected microphone device id ("" = system default)
   const [selectedMicId, setSelectedMicId] = useState("");
@@ -1160,7 +1160,7 @@ function App() {
         loadSetting<boolean>("setupComplete", false),
         loadSetting<string>("userApiKey", ""),
         loadSetting<LocalTranscript[]>("localTranscripts", []),
-        loadSetting<string>("transcriptionLanguage", "auto"),
+        loadSetting<string>("transcriptionLanguage", "hi-en"),
         loadSetting<string>("selectedMicId", ""),
         loadSetting<boolean>("aiImprovementEnabled", true),
         loadSetting<string>("googleCalendarToken", ""),
@@ -1364,9 +1364,30 @@ function App() {
 
   // ── Dictionary helpers ─────────────────────────────────────────────────────
 
+  // Hinglish hint: common Hindi words romanized — biases Whisper toward
+  // recognizing Hindi vocabulary when transcription language is "hi-en".
+  const HINGLISH_HINT =
+    "acha, theek hai, haan, nahi, kya, kaise, kab, kyun, lekin, aur, " +
+    "matlab, samajh, baat, kaam, kal, aaj, abhi, sab, log, dekho, " +
+    "bolo, suno, chalo, pehle, baad mein, zaroor, bilkul, thoda, bahut";
+
   const buildInitialPrompt = () => {
-    if (dictWordsRef.current.length === 0) return undefined;
-    return dictWordsRef.current.join(", ");
+    const parts: string[] = [];
+    // Add Hinglish vocabulary hint when language is set to Hinglish
+    if (transcriptionLanguage === "hi-en") {
+      parts.push(HINGLISH_HINT);
+    }
+    if (dictWordsRef.current.length > 0) {
+      parts.push(dictWordsRef.current.join(", "));
+    }
+    return parts.length > 0 ? parts.join(", ") : undefined;
+  };
+
+  // Resolve transcription language for Whisper: "hi-en" → "en", "auto" → undefined
+  const getWhisperLanguage = () => {
+    if (transcriptionLanguage === "auto") return undefined;
+    if (transcriptionLanguage === "hi-en") return "en";
+    return transcriptionLanguage;
   };
 
   // ── Hotkey recording ───────────────────────────────────────────────────────
@@ -1512,7 +1533,7 @@ function App() {
       const result = await invoke<Transcription>("transcribe_audio", {
         audioData: Array.from(audioData),
         initialPrompt: buildInitialPrompt(),
-        language: transcriptionLanguage,
+        language: getWhisperLanguage(),
       });
 
       if (!result.text) {
@@ -1756,12 +1777,8 @@ function App() {
       const useSystemAudio = systemAudioActiveRef.current;
       systemAudioActiveRef.current = false;
 
-      const promptStr =
-        dictWordsRef.current.length > 0
-          ? dictWordsRef.current.join(", ")
-          : undefined;
-      const langStr =
-        transcriptionLanguage === "auto" ? undefined : transcriptionLanguage;
+      const promptStr = buildInitialPrompt();
+      const langStr = getWhisperLanguage();
 
       const result = await invoke<Transcription>(
         useSystemAudio ? "transcribe_meeting_audio" : "transcribe_audio",
@@ -1938,9 +1955,6 @@ function App() {
                     setSavedMeetings(updated);
                     saveSetting("savedMeetings", updated);
                   }}
-                  systemAudioSupported={systemAudioSupported}
-                  systemAudioEnabled={systemAudioEnabled}
-                  onSystemAudioToggle={(enabled) => setSystemAudioEnabled(enabled)}
                 />
               )}
 
@@ -2049,6 +2063,9 @@ function App() {
                     });
                   }}
                   initialSection={settingsInitialSection as any}
+                  systemAudioSupported={systemAudioSupported}
+                  systemAudioEnabled={systemAudioEnabled}
+                  onSystemAudioToggle={(enabled) => setSystemAudioEnabled(enabled)}
                 />
               )}
             </div>
