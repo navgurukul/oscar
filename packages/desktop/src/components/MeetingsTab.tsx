@@ -72,6 +72,9 @@ interface MeetingsTabProps {
   savedMeetings: SavedMeeting[];
   onSaveMeeting: (meeting: SavedMeeting) => void;
   onDeleteMeeting: (id: string) => void;
+  systemAudioSupported?: boolean;
+  systemAudioEnabled?: boolean;
+  onSystemAudioToggle?: (enabled: boolean) => void;
 }
 
 // ── Default templates ───────────────────────────────────────────────────────
@@ -217,6 +220,9 @@ export function MeetingsTab({
   savedMeetings,
   onSaveMeeting,
   onDeleteMeeting,
+  systemAudioSupported = false,
+  systemAudioEnabled = true,
+  onSystemAudioToggle,
 }: MeetingsTabProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("meeting_general");
   const [meetingTitle, setMeetingTitle]   = useState("");
@@ -731,6 +737,19 @@ export function MeetingsTab({
               onChange={setSelectedTemplateId}
             />
           </div>
+
+          {/* ── System audio toggle (macOS 13+ only) ── */}
+          {systemAudioSupported && (
+            <button
+              className={`meeting-sysaudio-toggle${systemAudioEnabled ? " active" : ""}`}
+              onClick={() => onSystemAudioToggle?.(!systemAudioEnabled)}
+              disabled={isRecording}
+              title={isRecording ? "Cannot change audio source while recording" : systemAudioEnabled ? "Capturing mic + system audio (other participants)" : "Capturing microphone only"}
+            >
+              <Mic size={12} />
+              {systemAudioEnabled ? "Mic + System Audio" : "Mic Only"}
+            </button>
+          )}
 
           {/* ── Simultaneous notes area ── */}
           <div className="meeting-notes-section">

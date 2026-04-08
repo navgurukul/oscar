@@ -11,6 +11,8 @@ use tauri_plugin_store::StoreExt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 use tokio::io::AsyncWriteExt;
 
+mod system_audio;
+
 #[cfg(target_os = "macos")]
 mod macos_paste {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
@@ -390,17 +392,23 @@ fn load_whisper_model(
 
 // ── Whisper: Transcribe ───────────────────────────────────────────────────────
 
-#[tauri::command]
-fn transcribe_audio(
-    audio_data: Vec<f32>,
-    initial_prompt: Option<String>,
-    language: Option<String>,
-    state: tauri::State<'_, Mutex<AppState>>,
+/// Shared transcription logic used by both `transcribe_audio` and
+/// `transcribe_meeting_audio`.
+fn transcribe_audio_inner(
+    audio_data: &[f32],
+    initial_prompt: Option<&str>,
+    language: Option<&str>,
+    app_state: &Mutex<AppState>,
 ) -> Result<TranscriptionResult, String> {
-    log::info!("[whisper] transcribe_audio called — {} samples, lang={:?}", audio_data.len(), language);
-    let app_state = state.lock().map_err(|e| e.to_string())?;
+    log::info!(
+        "[whisper] transcribe_audio_inner — {} samples ({:.1}s), lang={:?}",
+        audio_data.len(),
+        audio_data.len() as f64 / 16000.0,
+        language
+    );
+    let locked = app_state.lock().map_err(|e| e.to_string())?;
 
-    let context = app_state
+    let context = locked
         .whisper_context
         .as_ref()
         .ok_or_else(|| {
@@ -410,7 +418,7 @@ fn transcribe_audio(
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     // "auto" or None → let Whisper auto-detect the language from the audio
-    let lang = language.as_deref().filter(|l| *l != "auto" && !l.is_empty());
+    let lang = language.filter(|l| *l != "auto" && !l.is_empty());
     params.set_language(lang);
     params.set_print_special(false);
     params.set_print_progress(false);
@@ -421,7 +429,7 @@ fn transcribe_audio(
     if let Some(prompt) = initial_prompt {
         if !prompt.is_empty() {
             log::debug!("[whisper] Using initial prompt ({} chars)", prompt.len());
-            params.set_initial_prompt(&prompt);
+            params.set_initial_prompt(prompt);
         }
     }
 
@@ -430,12 +438,10 @@ fn transcribe_audio(
         e.to_string()
     })?;
     log::info!("[whisper] Running inference...");
-    state
-        .full(params, &audio_data)
-        .map_err(|e| {
-            log::error!("[whisper] Inference failed: {}", e);
-            e.to_string()
-        })?;
+    state.full(params, audio_data).map_err(|e| {
+        log::error!("[whisper] Inference failed: {}", e);
+        e.to_string()
+    })?;
 
     let num_segments = state.full_n_segments();
     log::info!("[whisper] Inference complete — {} segments", num_segments);
@@ -457,6 +463,98 @@ fn transcribe_audio(
         text: full_text.trim().to_string(),
         error: None,
     })
+}
+
+#[tauri::command]
+fn transcribe_audio(
+    audio_data: Vec<f32>,
+    initial_prompt: Option<String>,
+    language: Option<String>,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Result<TranscriptionResult, String> {
+    transcribe_audio_inner(
+        &audio_data,
+        initial_prompt.as_deref(),
+        language.as_deref(),
+        &state,
+    )
+}
+
+// ── System Audio: Tauri Commands ─────────────────────────────────────────────
+
+#[tauri::command]
+fn is_system_audio_supported() -> bool {
+    system_audio::is_supported()
+}
+
+#[tauri::command]
+fn start_system_audio_capture() -> Result<String, String> {
+    log::info!("[system-audio] start_system_audio_capture called");
+    system_audio::start_capture()?;
+    Ok("System audio capture started".to_string())
+}
+
+#[tauri::command]
+fn stop_system_audio_capture() -> Result<String, String> {
+    log::info!("[system-audio] stop_system_audio_capture called");
+    system_audio::stop_capture();
+    Ok("System audio capture stopped".to_string())
+}
+
+/// Mix two audio buffers (same sample rate) by adding them sample-by-sample
+/// and clamping to [-1.0, 1.0].
+fn mix_audio(a: &[f32], b: &[f32]) -> Vec<f32> {
+    let max_len = a.len().max(b.len());
+    let mut mixed = Vec::with_capacity(max_len);
+    for i in 0..max_len {
+        let sa = if i < a.len() { a[i] } else { 0.0 };
+        let sb = if i < b.len() { b[i] } else { 0.0 };
+        mixed.push((sa + sb).clamp(-1.0, 1.0));
+    }
+    mixed
+}
+
+/// Transcribe meeting audio: receives microphone audio from the frontend,
+/// retrieves system audio captured in the background, mixes them together,
+/// and runs Whisper inference on the combined audio.
+///
+/// This avoids transferring large system audio buffers across the IPC boundary.
+#[tauri::command]
+fn transcribe_meeting_audio(
+    mic_audio_data: Vec<f32>,
+    initial_prompt: Option<String>,
+    language: Option<String>,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Result<TranscriptionResult, String> {
+    // Stop system audio capture and retrieve buffered samples
+    system_audio::stop_capture();
+    let system_audio_data = system_audio::get_audio_data();
+
+    log::info!(
+        "[meeting] mic samples={}, system audio samples={}",
+        mic_audio_data.len(),
+        system_audio_data.len()
+    );
+
+    // Mix microphone + system audio (both are 16 kHz mono)
+    let audio_to_transcribe = if system_audio_data.is_empty() {
+        log::info!("[meeting] No system audio — transcribing mic only");
+        mic_audio_data
+    } else {
+        log::info!(
+            "[meeting] Mixing mic ({:.1}s) + system audio ({:.1}s)",
+            mic_audio_data.len() as f64 / 16000.0,
+            system_audio_data.len() as f64 / 16000.0
+        );
+        mix_audio(&mic_audio_data, &system_audio_data)
+    };
+
+    transcribe_audio_inner(
+        &audio_to_transcribe,
+        initial_prompt.as_deref(),
+        language.as_deref(),
+        &state,
+    )
 }
 
 // ── AI Text Enhancement ──────────────────────────────────────────────────────
@@ -1311,6 +1409,7 @@ pub fn run() {
             download_whisper_model,
             load_whisper_model,
             transcribe_audio,
+            transcribe_meeting_audio,
             paste_transcription,
             enhance_text,
             show_recording_pill,
@@ -1321,6 +1420,9 @@ pub fn run() {
             get_pending_deep_link,
             check_accessibility_permission,
             request_accessibility_permission,
+            is_system_audio_supported,
+            start_system_audio_capture,
+            stop_system_audio_capture,
             check_file_exists,
             delete_file,
             ai_process_text,

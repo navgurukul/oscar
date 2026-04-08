@@ -959,6 +959,11 @@ function App() {
   const meetingAudioChunksRef = useRef<Blob[]>([]);
   const meetingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // System audio capture (other participants' audio via ScreenCaptureKit)
+  const [systemAudioSupported, setSystemAudioSupported] = useState(false);
+  const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
+  const systemAudioActiveRef = useRef(false);
+
   // Personal dictionary (local state; synced to Supabase when logged in)
   const [_dictWords, setDictWords] = useState<string[]>([]);
   const [, setDictSyncing] = useState(false);
@@ -1195,6 +1200,11 @@ function App() {
       if (savedMeetingsData && savedMeetingsData.length > 0) {
         setSavedMeetings(savedMeetingsData);
       }
+
+      // Check system audio capture support (macOS 13+ only)
+      invoke<boolean>("is_system_audio_supported")
+        .then((supported) => setSystemAudioSupported(supported))
+        .catch(() => setSystemAudioSupported(false));
 
       // If setup is complete, load the Whisper model and pre-warm mic
       if (setupDone) {
@@ -1682,6 +1692,20 @@ function App() {
       processMeetingAudio();
     };
 
+    // Start system audio capture (ScreenCaptureKit on macOS) in parallel with mic
+    if (systemAudioEnabled && systemAudioSupported) {
+      try {
+        await invoke("start_system_audio_capture");
+        systemAudioActiveRef.current = true;
+        console.log("[meeting-record] System audio capture started");
+      } catch (e) {
+        console.warn("[meeting-record] System audio capture failed, mic only:", e);
+        systemAudioActiveRef.current = false;
+      }
+    } else {
+      systemAudioActiveRef.current = false;
+    }
+
     mediaRecorder.start(100);
     setIsMeetingRecording(true);
     setMeetingRecordingTime(0);
@@ -1729,15 +1753,22 @@ function App() {
         for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
       }
 
-      const result = await invoke<Transcription>("transcribe_audio", {
-        audioData: Array.from(mono),
-        initialPrompt:
-          dictWordsRef.current.length > 0
-            ? dictWordsRef.current.join(", ")
-            : undefined,
-        language:
-          transcriptionLanguage === "auto" ? undefined : transcriptionLanguage,
-      });
+      const useSystemAudio = systemAudioActiveRef.current;
+      systemAudioActiveRef.current = false;
+
+      const promptStr =
+        dictWordsRef.current.length > 0
+          ? dictWordsRef.current.join(", ")
+          : undefined;
+      const langStr =
+        transcriptionLanguage === "auto" ? undefined : transcriptionLanguage;
+
+      const result = await invoke<Transcription>(
+        useSystemAudio ? "transcribe_meeting_audio" : "transcribe_audio",
+        useSystemAudio
+          ? { micAudioData: Array.from(mono), initialPrompt: promptStr, language: langStr }
+          : { audioData: Array.from(mono), initialPrompt: promptStr, language: langStr }
+      );
 
       if (result.text) {
         setMeetingTranscript(result.text);
@@ -1907,6 +1938,9 @@ function App() {
                     setSavedMeetings(updated);
                     saveSetting("savedMeetings", updated);
                   }}
+                  systemAudioSupported={systemAudioSupported}
+                  systemAudioEnabled={systemAudioEnabled}
+                  onSystemAudioToggle={(enabled) => setSystemAudioEnabled(enabled)}
                 />
               )}
 

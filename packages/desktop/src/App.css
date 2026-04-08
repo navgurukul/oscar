@@ -5555,6 +5555,46 @@ kbd {
   font-weight: 500;
 }
 
+/* ── System audio toggle ────────────────────────────────────────────────── */
+
+.meeting-sysaudio-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-top: 4px;
+}
+
+.meeting-sysaudio-toggle:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  color: #64748b;
+}
+
+.meeting-sysaudio-toggle.active {
+  background: #f0fdfa;
+  border-color: #5eead4;
+  color: #0d9488;
+}
+
+.meeting-sysaudio-toggle.active:hover:not(:disabled) {
+  background: #ccfbf1;
+  border-color: #2dd4bf;
+}
+
+.meeting-sysaudio-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Simultaneous notes area ────────────────────────────────────────────── */
 
 .meeting-notes-section {
