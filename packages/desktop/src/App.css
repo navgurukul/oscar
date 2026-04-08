@@ -1697,49 +1697,6 @@ kbd {
   transition: width 0.2s ease-out;
 }
 
-.setup-apikey-section {
-  margin: 32px 0;
-}
-
-.setup-label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 8px;
-}
-
-.setup-input {
-  width: 100%;
-  padding: 12px 16px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-family: inherit;
-  background: rgba(255, 255, 255, 0.7);
-  color: #111827;
-  transition: all 0.2s;
-}
-
-.setup-input:focus {
-  outline: none;
-  border-color: #22d3ee;
-  background: white;
-}
-
-.setup-hint {
-  font-size: 0.8rem;
-  color: #6b7280;
-  margin-top: 8px;
-}
-
-.setup-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 24px;
-}
-
 .setup-skip-btn {
   width: 100%;
   padding: 12px 24px;
@@ -5498,7 +5455,6 @@ kbd {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
 }
 
 .meeting-rec-dot {
@@ -5553,6 +5509,32 @@ kbd {
   font-size: 0.8125rem;
   color: #94a3b8;
   font-weight: 500;
+}
+
+/* ── Fixed bottom-center record dock ────────────────────────────────────── */
+
+.meeting-recording-phase {
+  position: relative;
+  padding-bottom: 140px !important; /* room for the fixed dock */
+}
+
+.meeting-record-dock {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+}
+
+.meeting-recording-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0 8px;
 }
 
 /* ── Simultaneous notes area ────────────────────────────────────────────── */

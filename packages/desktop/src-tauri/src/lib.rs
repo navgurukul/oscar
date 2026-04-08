@@ -11,6 +11,8 @@ use tauri_plugin_store::StoreExt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 use tokio::io::AsyncWriteExt;
 
+mod system_audio;
+
 #[cfg(target_os = "macos")]
 mod macos_paste {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
@@ -29,6 +31,12 @@ mod macos_paste {
     extern "C" {
         fn AXIsProcessTrusted() -> bool;
         fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
+    }
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGPreflightScreenCaptureAccess() -> bool;
+        fn CGRequestScreenCaptureAccess() -> bool;
     }
 
     #[link(name = "CoreFoundation", kind = "framework")]
@@ -118,6 +126,14 @@ mod macos_paste {
             CFRelease(key as *mut c_void);
             trusted
         }
+    }
+
+    pub fn is_screen_capture_trusted() -> bool {
+        unsafe { CGPreflightScreenCaptureAccess() }
+    }
+
+    pub fn request_screen_capture_with_prompt() -> bool {
+        unsafe { CGRequestScreenCaptureAccess() }
     }
 
     /// Convert an NSWindow to NSPanel and configure it to float above fullscreen apps.
@@ -285,10 +301,97 @@ struct AppState {
     whisper_context: Option<WhisperContext>,
 }
 
+struct HotkeyState {
+    is_recording: Arc<AtomicBool>,
+    last_error: Mutex<Option<String>>,
+}
+
 #[derive(Serialize, Deserialize)]
 struct TranscriptionResult {
     text: String,
     error: Option<String>,
+}
+
+fn recording_shortcut() -> Shortcut {
+    Shortcut::new(
+        Some(Modifiers::CONTROL),
+        tauri_plugin_global_shortcut::Code::Space,
+    )
+}
+
+fn set_hotkey_error<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    hotkey_state: &HotkeyState,
+    message: Option<String>,
+) {
+    if let Ok(mut last_error) = hotkey_state.last_error.lock() {
+        *last_error = message.clone();
+    }
+
+    if let Some(msg) = message {
+        let _ = app.emit("hotkey-permission-error", msg);
+    } else {
+        let _ = app.emit("hotkey-registered", ());
+    }
+}
+
+fn register_recording_hotkey<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    hotkey_state: &HotkeyState,
+) -> Result<bool, String> {
+    let shortcut = recording_shortcut();
+
+    if app.global_shortcut().is_registered(shortcut) {
+        set_hotkey_error(app, hotkey_state, None);
+        return Ok(true);
+    }
+
+    let app_handle = app.clone();
+    let is_rec = hotkey_state.is_recording.clone();
+
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _sc, event| match event.state {
+            ShortcutState::Pressed => {
+                if !is_rec.swap(true, Ordering::SeqCst) {
+                    log::info!("[hotkey] Ctrl+Space PRESSED — capturing frontmost app");
+                    #[cfg(target_os = "macos")]
+                    let frontmost_app = {
+                        std::process::Command::new("osascript")
+                            .args([
+                                "-e",
+                                r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
+                            ])
+                            .output()
+                            .ok()
+                            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                            .unwrap_or_default()
+                    };
+                    #[cfg(not(target_os = "macos"))]
+                    let frontmost_app = String::new();
+
+                    log::info!("[hotkey] frontmost app = '{}'", frontmost_app);
+                    let _ = app_handle.emit("hotkey-recording-start", frontmost_app);
+                }
+            }
+            ShortcutState::Released => {
+                if is_rec.swap(false, Ordering::SeqCst) {
+                    log::info!("[hotkey] Ctrl+Space RELEASED — emitting stop");
+                    let _ = app_handle.emit("hotkey-recording-stop", ());
+                }
+            }
+        })
+        .map_err(|e| {
+            let message = format!(
+                "Could not register hotkey: {e}. Grant Accessibility and close conflicting shortcuts, then retry."
+            );
+            set_hotkey_error(app, hotkey_state, Some(message.clone()));
+            message
+        })?;
+
+    log::info!("Global shortcut (Ctrl+Space) registered successfully");
+    set_hotkey_error(app, hotkey_state, None);
+
+    Ok(true)
 }
 
 // ── Whisper: Model Download ───────────────────────────────────────────────────
@@ -390,17 +493,23 @@ fn load_whisper_model(
 
 // ── Whisper: Transcribe ───────────────────────────────────────────────────────
 
-#[tauri::command]
-fn transcribe_audio(
-    audio_data: Vec<f32>,
-    initial_prompt: Option<String>,
-    language: Option<String>,
-    state: tauri::State<'_, Mutex<AppState>>,
+/// Shared transcription logic used by both `transcribe_audio` and
+/// `transcribe_meeting_audio`.
+fn transcribe_audio_inner(
+    audio_data: &[f32],
+    initial_prompt: Option<&str>,
+    language: Option<&str>,
+    app_state: &Mutex<AppState>,
 ) -> Result<TranscriptionResult, String> {
-    log::info!("[whisper] transcribe_audio called — {} samples, lang={:?}", audio_data.len(), language);
-    let app_state = state.lock().map_err(|e| e.to_string())?;
+    log::info!(
+        "[whisper] transcribe_audio_inner — {} samples ({:.1}s), lang={:?}",
+        audio_data.len(),
+        audio_data.len() as f64 / 16000.0,
+        language
+    );
+    let locked = app_state.lock().map_err(|e| e.to_string())?;
 
-    let context = app_state
+    let context = locked
         .whisper_context
         .as_ref()
         .ok_or_else(|| {
@@ -410,7 +519,7 @@ fn transcribe_audio(
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     // "auto" or None → let Whisper auto-detect the language from the audio
-    let lang = language.as_deref().filter(|l| *l != "auto" && !l.is_empty());
+    let lang = language.filter(|l| *l != "auto" && !l.is_empty());
     params.set_language(lang);
     params.set_print_special(false);
     params.set_print_progress(false);
@@ -421,7 +530,7 @@ fn transcribe_audio(
     if let Some(prompt) = initial_prompt {
         if !prompt.is_empty() {
             log::debug!("[whisper] Using initial prompt ({} chars)", prompt.len());
-            params.set_initial_prompt(&prompt);
+            params.set_initial_prompt(prompt);
         }
     }
 
@@ -430,12 +539,10 @@ fn transcribe_audio(
         e.to_string()
     })?;
     log::info!("[whisper] Running inference...");
-    state
-        .full(params, &audio_data)
-        .map_err(|e| {
-            log::error!("[whisper] Inference failed: {}", e);
-            e.to_string()
-        })?;
+    state.full(params, audio_data).map_err(|e| {
+        log::error!("[whisper] Inference failed: {}", e);
+        e.to_string()
+    })?;
 
     let num_segments = state.full_n_segments();
     log::info!("[whisper] Inference complete — {} segments", num_segments);
@@ -459,179 +566,96 @@ fn transcribe_audio(
     })
 }
 
-// ── AI Text Enhancement ──────────────────────────────────────────────────────
-
-#[derive(Deserialize)]
-struct ProxyResponse {
-    enhanced: Option<String>,
-    error: Option<String>,
+#[tauri::command]
+fn transcribe_audio(
+    audio_data: Vec<f32>,
+    initial_prompt: Option<String>,
+    language: Option<String>,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Result<TranscriptionResult, String> {
+    transcribe_audio_inner(
+        &audio_data,
+        initial_prompt.as_deref(),
+        language.as_deref(),
+        &state,
+    )
 }
 
-#[derive(Deserialize)]
-struct DeepSeekResponse {
-    choices: Option<Vec<DeepSeekChoice>>,
-    error: Option<DeepSeekError>,
-}
+// ── System Audio: Tauri Commands ─────────────────────────────────────────────
 
-#[derive(Deserialize)]
-struct DeepSeekChoice {
-    message: DeepSeekMessage,
-}
-
-#[derive(Deserialize)]
-struct DeepSeekMessage {
-    content: String,
-}
-
-#[derive(Deserialize)]
-struct DeepSeekError {
-    message: String,
+#[tauri::command]
+fn is_system_audio_supported() -> bool {
+    system_audio::is_supported()
 }
 
 #[tauri::command]
-async fn enhance_text(
-    text: String,
-    tone: String,
-    edge_function_url: Option<String>,
-    jwt: Option<String>,
-    api_key: Option<String>,
-) -> Result<String, String> {
-    log::info!("[enhance] enhance_text called — {} chars, tone={}", text.len(), tone);
-    if text.trim().is_empty() {
-        log::debug!("[enhance] Empty text, returning as-is");
-        return Ok(text);
-    }
-
-    // If user provided their own API key, call DeepSeek directly
-    if let Some(key) = api_key {
-        log::info!("[enhance] Using direct DeepSeek API key");
-        return enhance_with_deepseek(text, tone, &key).await;
-    }
-
-    // Otherwise, use the Supabase Edge Function (requires auth)
-    log::info!("[enhance] Using Supabase Edge Function");
-    let url = edge_function_url.ok_or("No Edge Function URL configured")?;
-    let token = jwt.ok_or("No auth token — please sign in or provide an API key")?;
-
-    enhance_with_edge_function(text, tone, &url, &token).await
+fn start_system_audio_capture() -> Result<String, String> {
+    log::info!("[system-audio] start_system_audio_capture called");
+    system_audio::start_capture()?;
+    Ok("System audio capture started".to_string())
 }
 
-async fn enhance_with_deepseek(text: String, tone: String, api_key: &str) -> Result<String, String> {
-    #[derive(Serialize)]
-    struct DeepSeekRequest {
-        model: String,
-        messages: Vec<DeepSeekMessageReq>,
-        temperature: f32,
-        max_tokens: i32,
-    }
+#[tauri::command]
+fn stop_system_audio_capture() -> Result<String, String> {
+    log::info!("[system-audio] stop_system_audio_capture called");
+    system_audio::stop_capture();
+    Ok("System audio capture stopped".to_string())
+}
 
-    #[derive(Serialize)]
-    struct DeepSeekMessageReq {
-        role: String,
-        content: String,
+/// Mix two audio buffers (same sample rate) by adding them sample-by-sample
+/// and clamping to [-1.0, 1.0].
+fn mix_audio(a: &[f32], b: &[f32]) -> Vec<f32> {
+    let max_len = a.len().max(b.len());
+    let mut mixed = Vec::with_capacity(max_len);
+    for i in 0..max_len {
+        let sa = if i < a.len() { a[i] } else { 0.0 };
+        let sb = if i < b.len() { b[i] } else { 0.0 };
+        mixed.push((sa + sb).clamp(-1.0, 1.0));
     }
+    mixed
+}
 
-    let tone_instruction = match tone.as_str() {
-        "professional" => "Make this text more professional and polished",
-        "casual" => "Make this text more casual and conversational",
-        "friendly" => "Make this text warmer and friendlier",
-        _ => "Clean up this text while preserving its original meaning",
+/// Transcribe meeting audio: receives microphone audio from the frontend,
+/// retrieves system audio captured in the background, mixes them together,
+/// and runs Whisper inference on the combined audio.
+///
+/// This avoids transferring large system audio buffers across the IPC boundary.
+#[tauri::command]
+fn transcribe_meeting_audio(
+    mic_audio_data: Vec<f32>,
+    initial_prompt: Option<String>,
+    language: Option<String>,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Result<TranscriptionResult, String> {
+    // Stop system audio capture and retrieve buffered samples
+    system_audio::stop_capture();
+    let system_audio_data = system_audio::get_audio_data();
+
+    log::info!(
+        "[meeting] mic samples={}, system audio samples={}",
+        mic_audio_data.len(),
+        system_audio_data.len()
+    );
+
+    // Mix microphone + system audio (both are 16 kHz mono)
+    let audio_to_transcribe = if system_audio_data.is_empty() {
+        log::info!("[meeting] No system audio — transcribing mic only");
+        mic_audio_data
+    } else {
+        log::info!(
+            "[meeting] Mixing mic ({:.1}s) + system audio ({:.1}s)",
+            mic_audio_data.len() as f64 / 16000.0,
+            system_audio_data.len() as f64 / 16000.0
+        );
+        mix_audio(&mic_audio_data, &system_audio_data)
     };
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let response = client
-        .post("https://api.deepseek.com/chat/completions")
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .json(&DeepSeekRequest {
-            model: "deepseek-chat".to_string(),
-            messages: vec![
-                DeepSeekMessageReq {
-                    role: "system".to_string(),
-                    content: tone_instruction.to_string(),
-                },
-                DeepSeekMessageReq {
-                    role: "user".to_string(),
-                    content: text,
-                },
-            ],
-            temperature: 0.3,
-            max_tokens: 2000,
-        })
-        .send()
-        .await
-        .map_err(|e| format!("DeepSeek API request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("DeepSeek API error {}: {}", status, body));
-    }
-
-    let parsed: DeepSeekResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse DeepSeek response: {}", e))?;
-
-    if let Some(err) = parsed.error {
-        return Err(format!("DeepSeek API error: {}", err.message));
-    }
-
-    parsed
-        .choices
-        .and_then(|choices| choices.into_iter().next())
-        .map(|choice| choice.message.content)
-        .ok_or_else(|| "Empty response from DeepSeek API".to_string())
-}
-
-async fn enhance_with_edge_function(
-    text: String,
-    tone: String,
-    edge_function_url: &str,
-    jwt: &str,
-) -> Result<String, String> {
-    #[derive(Serialize)]
-    struct Body {
-        text: String,
-        tone: String,
-    }
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let response = client
-        .post(edge_function_url)
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", jwt))
-        .json(&Body { text: text.clone(), tone })
-        .send()
-        .await
-        .map_err(|e| format!("Request to Edge Function failed: {}", e))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("Edge Function error {}: {}", status, body));
-    }
-
-    let parsed: ProxyResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse Edge Function response: {}", e))?;
-
-    if let Some(err) = parsed.error {
-        return Err(err);
-    }
-
-    parsed
-        .enhanced
-        .ok_or_else(|| "Empty response from Edge Function".to_string())
+    transcribe_audio_inner(
+        &audio_to_transcribe,
+        initial_prompt.as_deref(),
+        language.as_deref(),
+        &state,
+    )
 }
 
 // ── DeepSeek AI: Text Processing ─────────────────────────────────────────────
@@ -648,7 +672,9 @@ const DEEPSEEK_MODEL: &str = "deepseek-chat";
 fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
     let system = "You are a precise transcript assistant. Follow instructions exactly. \
                   Output only the requested content with no preamble, no explanations, \
-                  no meta-commentary."
+                  no meta-commentary. The transcript may contain Hinglish (Hindi words \
+                  written in Roman script mixed with English). Understand both languages \
+                  and always produce the output in clear English."
         .to_string();
     let user = match mode {
         "transcribe_cleanup" => format!(
@@ -674,8 +700,9 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
         ),
         // ── Meeting templates ──────────────────────────────────────────────
         "meeting_general" => format!(
-            "You are a meeting notes assistant. Analyze the following meeting transcript and produce \
-             structured meeting notes with these sections:\n\
+            "You are a meeting notes assistant. The transcript may be in Hinglish (Hindi words \
+             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
+             Analyze the following meeting transcript and produce structured meeting notes with these sections:\n\
              ## Key Discussion Points\n\
              ## Decisions Made\n\
              ## Action Items\n(include owner if mentioned and deadline if mentioned)\n\
@@ -683,16 +710,18 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
              Output only the structured notes in markdown format:\n\n{text}"
         ),
         "meeting_standup" => format!(
-            "You are a standup meeting notes assistant. Analyze the following standup transcript and \
-             produce structured notes with these sections:\n\
+            "You are a standup meeting notes assistant. The transcript may be in Hinglish (Hindi words \
+             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
+             Analyze the following standup transcript and produce structured notes with these sections:\n\
              ## What Was Done (Yesterday/Recently)\n\
              ## What's Being Worked On (Today/Next)\n\
              ## Blockers & Risks\n\n\
              If multiple people spoke, organize by person. Output only the structured notes in markdown:\n\n{text}"
         ),
         "meeting_1on1" => format!(
-            "You are a 1:1 meeting notes assistant. Analyze the following 1:1 meeting transcript and \
-             produce structured notes with these sections:\n\
+            "You are a 1:1 meeting notes assistant. The transcript may be in Hinglish (Hindi words \
+             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
+             Analyze the following 1:1 meeting transcript and produce structured notes with these sections:\n\
              ## Discussion Points\n\
              ## Feedback & Recognition\n\
              ## Action Items\n(include owner and deadline if mentioned)\n\
@@ -700,8 +729,9 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
              Output only the structured notes in markdown format:\n\n{text}"
         ),
         "meeting_brainstorm" => format!(
-            "You are a brainstorming session notes assistant. Analyze the following brainstorm transcript \
-             and produce structured notes with these sections:\n\
+            "You are a brainstorming session notes assistant. The transcript may be in Hinglish (Hindi words \
+             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
+             Analyze the following brainstorm transcript and produce structured notes with these sections:\n\
              ## Ideas Generated\n(list each idea with a brief description)\n\
              ## Key Themes\n\
              ## Top Ideas (Ranked by Discussion Energy)\n\
@@ -709,8 +739,10 @@ fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
              Output only the structured notes in markdown format:\n\n{text}"
         ),
         "meeting_custom" => format!(
-            "You are a meeting notes assistant. Analyze the following meeting transcript and produce \
-             structured meeting notes following the instructions included in the text. \
+            "You are a meeting notes assistant. The transcript may be in Hinglish (Hindi words \
+             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
+             Analyze the following meeting transcript and produce structured meeting notes following \
+             the instructions included in the text. \
              Output only the structured notes in markdown format:\n\n{text}"
         ),
         _ => format!("Process the following text:\n\n{text}"),
@@ -1263,6 +1295,43 @@ fn request_accessibility_permission() -> bool {
     }
 }
 
+#[tauri::command]
+fn check_system_audio_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos_paste::is_screen_capture_trusted()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        !system_audio::is_supported()
+    }
+}
+
+#[tauri::command]
+fn request_system_audio_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos_paste::request_screen_capture_with_prompt()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        !system_audio::is_supported()
+    }
+}
+
+#[tauri::command]
+fn ensure_recording_hotkey_registered(
+    app: tauri::AppHandle,
+    hotkey_state: tauri::State<'_, HotkeyState>,
+) -> Result<bool, String> {
+    register_recording_hotkey(&app, &hotkey_state)
+}
+
+#[tauri::command]
+fn is_recording_hotkey_registered(app: tauri::AppHandle) -> bool {
+    app.global_shortcut().is_registered(recording_shortcut())
+}
+
 // ── File Utilities ────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -1307,12 +1376,16 @@ pub fn run() {
         .manage(Mutex::new(AppState {
             whisper_context: None,
         }))
+        .manage(HotkeyState {
+            is_recording: is_recording.clone(),
+            last_error: Mutex::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             download_whisper_model,
             load_whisper_model,
             transcribe_audio,
+            transcribe_meeting_audio,
             paste_transcription,
-            enhance_text,
             show_recording_pill,
             hide_recording_pill,
             set_pill_processing,
@@ -1321,6 +1394,13 @@ pub fn run() {
             get_pending_deep_link,
             check_accessibility_permission,
             request_accessibility_permission,
+            check_system_audio_permission,
+            request_system_audio_permission,
+            ensure_recording_hotkey_registered,
+            is_recording_hotkey_registered,
+            is_system_audio_supported,
+            start_system_audio_capture,
+            stop_system_audio_capture,
             check_file_exists,
             delete_file,
             ai_process_text,
@@ -1364,54 +1444,9 @@ pub fn run() {
 
             // Right Ctrl as hold-to-record hotkey (avoids conflicts on both macOS & Windows)
             log::info!("[setup] Registering global shortcut (Ctrl+Space)...");
-            let shortcut = Shortcut::new(
-                Some(Modifiers::CONTROL),
-                tauri_plugin_global_shortcut::Code::Space,
-            );
-            let app_handle = app.handle().clone();
-            let is_rec = is_recording.clone();
-
-            if let Err(e) = app.global_shortcut().on_shortcut(shortcut, move |_app, _sc, event| {
-                match event.state {
-                    ShortcutState::Pressed => {
-                        if !is_rec.swap(true, Ordering::SeqCst) {
-                            log::info!("[hotkey] Ctrl+Space PRESSED — capturing frontmost app");
-                            // Capture the frontmost app NOW, before Oscar's webview steals focus
-                            #[cfg(target_os = "macos")]
-                            let frontmost_app = {
-                                std::process::Command::new("osascript")
-                                    .args([
-                                        "-e",
-                                        r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
-                                    ])
-                                    .output()
-                                    .ok()
-                                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                                    .unwrap_or_default()
-                            };
-                            #[cfg(not(target_os = "macos"))]
-                            let frontmost_app = String::new();
-
-                            log::info!("[hotkey] frontmost app = '{}'", frontmost_app);
-                            let _ = app_handle.emit("hotkey-recording-start", frontmost_app);
-                        }
-                    }
-                    ShortcutState::Released => {
-                        if is_rec.swap(false, Ordering::SeqCst) {
-                            log::info!("[hotkey] Ctrl+Space RELEASED — emitting stop");
-                            let _ = app_handle.emit("hotkey-recording-stop", ());
-                        }
-                    }
-                }
-            }) {
+            let hotkey_state = app.state::<HotkeyState>();
+            if let Err(e) = register_recording_hotkey(&app.handle().clone(), &hotkey_state) {
                 log::warn!("Could not register global shortcut: {e}");
-                let _ = app.handle().emit(
-                    "hotkey-permission-error",
-                    format!("Could not register hotkey: {e}. Check Accessibility permission in System Settings."),
-                );
-            } else {
-                log::info!("Global shortcut (Ctrl+Space) registered successfully");
-                let _ = app.handle().emit("hotkey-registered", ());
             }
 
             // Initialize the persistent store (creates file on first run)

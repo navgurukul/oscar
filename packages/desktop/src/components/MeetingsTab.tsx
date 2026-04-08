@@ -17,7 +17,6 @@ import {
   Clock,
   Mail,
   CalendarDays,
-  Info,
   Play,
   PenLine,
   Settings,
@@ -64,6 +63,7 @@ interface MeetingsTabProps {
   recordingTime: number;
   transcript: string;
   onClearTranscript: () => void;
+  systemAudioWarning?: string;
   googleCalendarToken: string;
   onConnectCalendar: () => void;
   onCalendarTokenInvalid: () => void;
@@ -209,6 +209,7 @@ export function MeetingsTab({
   recordingTime,
   transcript,
   onClearTranscript,
+  systemAudioWarning,
   googleCalendarToken,
   onConnectCalendar,
   onCalendarTokenInvalid,
@@ -428,6 +429,23 @@ export function MeetingsTab({
   const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
   const hasEmailableParticipants = participants.split(/[,;]+/).some((e) => e.trim().includes("@"));
 
+  const systemAudioNotice = systemAudioWarning ? (
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "12px 14px",
+        borderRadius: 12,
+        background: "#fff7ed",
+        border: "1px solid #fdba74",
+        color: "#9a3412",
+        fontSize: "0.9rem",
+        lineHeight: 1.5,
+      }}
+    >
+      {systemAudioWarning}
+    </div>
+  ) : null;
+
   // ── Phase: Select ────────────────────────────────────────────────────────
 
   if (phase === "select") {
@@ -435,12 +453,14 @@ export function MeetingsTab({
       <div className="meetings-tab">
         <div className="meetings-container">
           <div className="meetings-header-row">
-            <h1 className="meetings-title">Meetings</h1>
+            <h1 className="meetings-title">Minutes</h1>
             <button className="meetings-manage-tpl-btn" onClick={onManageTemplates} title="Manage templates">
               <Settings size={14} />
               Templates
             </button>
           </div>
+
+          {systemAudioNotice}
 
           {/* ── Live meeting banner ── */}
           {liveEvent && (
@@ -524,12 +544,6 @@ export function MeetingsTab({
             )}
           </div>
 
-          {!googleCalendarToken && (
-            <div className="cal-empty-note" style={{ marginTop: 14 }}>
-              <Info size={11} />
-              Connect Google Calendar above to auto-detect meetings.
-            </div>
-          )}
 
           {/* ── Previous meetings ── */}
           {savedMeetings.length > 0 && (
@@ -582,6 +596,8 @@ export function MeetingsTab({
           <button className="meeting-back-btn" onClick={() => { setPhase("select"); setViewingSaved(null); }}>
             <ChevronLeft size={16} /> Back
           </button>
+
+          {systemAudioNotice}
 
           <div className="meeting-result-top">
             <div>
@@ -676,11 +692,13 @@ export function MeetingsTab({
 
   if (phase === "recording") {
     return (
-      <div className="meetings-tab">
+      <div className="meetings-tab meeting-recording-phase">
         <div className="meetings-container">
           <button className="meeting-back-btn" onClick={handleBack}>
             <ChevronLeft size={16} /> Back
           </button>
+
+          {systemAudioNotice}
 
           {/* Title + participants (borderless, inline editing) */}
           <div className="meeting-meta-fields">
@@ -712,25 +730,8 @@ export function MeetingsTab({
             </div>
           </div>
 
-          {/* Record button + timer + template picker */}
-          <div className="meeting-recording">
-            <motion.button
-              className={`meeting-record-btn ${isRecording ? "recording" : ""}`}
-              onClick={isRecording ? handleStopRecording : onStartRecording}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              transition={{ duration: 0.15 }}
-            >
-              {isRecording ? <Square size={28} fill="currentColor" /> : <Mic size={28} />}
-            </motion.button>
-
-            <div className="meeting-recording-status">
-              {isRecording
-                ? <><span className="meeting-rec-dot" /><span className="meeting-timer">{formatTime(recordingTime)}</span></>
-                : <span className="meeting-recording-label">Tap to start recording</span>
-              }
-            </div>
-
+          {/* Template picker */}
+          <div className="meeting-recording-toolbar">
             <TemplatePicker
               templates={templates}
               selectedId={selectedTemplateId}
@@ -754,6 +755,25 @@ export function MeetingsTab({
             />
           </div>
         </div>
+
+        {/* ── Fixed bottom-center record button ── */}
+        <div className="meeting-record-dock">
+          <motion.button
+            className={`meeting-record-btn ${isRecording ? "recording" : ""}`}
+            onClick={isRecording ? handleStopRecording : onStartRecording}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ duration: 0.15 }}
+          >
+            {isRecording ? <Square size={28} fill="currentColor" /> : <Mic size={28} />}
+          </motion.button>
+          <div className="meeting-recording-status">
+            {isRecording
+              ? <><span className="meeting-rec-dot" /><span className="meeting-timer">{formatTime(recordingTime)}</span></>
+              : <span className="meeting-recording-label">Tap to start recording</span>
+            }
+          </div>
+        </div>
       </div>
     );
   }
@@ -763,6 +783,8 @@ export function MeetingsTab({
   return (
     <div className="meetings-tab">
       <div className="meetings-container">
+        {systemAudioNotice}
+
         <div className="meeting-result-top">
           <div>
             <h1 className="meetings-title">{meetingTitle || "Meeting Notes"}</h1>

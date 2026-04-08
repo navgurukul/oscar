@@ -10,6 +10,8 @@
   <string>OSCAR needs this to paste transcribed text into other applications.</string>
   <key>NSAccessibilityUsageDescription</key>
   <string>OSCAR needs Accessibility access to paste transcribed text into other apps using your keyboard shortcut.</string>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>OSCAR needs Screen &amp; System Audio Recording access to capture other meeting participants' audio for transcription. No video is recorded.</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>

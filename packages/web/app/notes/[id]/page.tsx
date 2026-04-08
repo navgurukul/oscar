@@ -16,6 +16,7 @@ import {
   X,
   Share2,
   Mail,
+  MessageCircle,
   FileText,
   Languages,
   ListChecks,
@@ -28,6 +29,7 @@ import {
   ThumbsDown,
   Mic,
 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/contexts/AuthContext";
@@ -47,9 +49,9 @@ export default function NoteDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [editedText, setEditedText] = useState("");
   const [activeTab, setActiveTab] = useState<"notes" | "transcript">("transcript");
-  const [, setIsShareModalOpen] = useState(false);
-  // const [isSharing, setIsSharing] = useState(false);
-  // Gmail AI format now applies directly to the main editor text (no separate box)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareSubject, setShareSubject] = useState<string | null>(null);
   const { formatText: gmailFormatText } =
     useAIEmailFormatting();
   const [activeMode, setActiveMode] = useState<"normal" | "email" | "translate" | "summary" | "bullets">("normal");
@@ -678,6 +680,136 @@ export default function NoteDetailPage() {
           </div>
         </div>
       </motion.div>
+
+      {/* Share Modal */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsShareModalOpen(false)}
+          />
+          <div className="relative w-full max-w-md rounded-2xl border border-cyan-700/30 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Share2 className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Share note</h3>
+                  <p className="text-sm text-gray-400">Choose a destination</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsShareModalOpen(false)}
+                className="text-gray-400 hover:text-white text-xl"
+                aria-label="Close share dialog"
+              >
+                ✕
+              </button>
+            </div>
+            <Separator className="bg-cyan-700/30" />
+
+            {/* Subject input */}
+            <div className="mt-4">
+              <label className="text-sm text-gray-400 block mb-1">Email subject</label>
+              <input
+                type="text"
+                value={shareSubject ?? (note.title || "Untitled Note")}
+                onChange={(e) => setShareSubject(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                placeholder="Subject"
+              />
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              {/* WhatsApp */}
+              <button
+                onClick={() => {
+                  const bodyText = activeMode === "normal"
+                    ? editedText || ""
+                    : modeContent[activeMode] || editedText || "";
+                  const payload = `${note.title || "Untitled Note"}\n\n${bodyText}`.trim();
+                  const url = `https://wa.me/?text=${encodeURIComponent(payload)}`;
+                  window.open(url, "_blank", "noopener,noreferrer");
+                  setIsShareModalOpen(false);
+                }}
+                className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+              >
+                <MessageCircle className="w-5 h-5" />
+                <span>WhatsApp</span>
+              </button>
+
+              {/* Gmail */}
+              <button
+                onClick={() => {
+                  const subjectText = shareSubject ?? (note.title || "Untitled Note");
+                  const subject = encodeURIComponent(subjectText);
+                  const bodyText = activeMode === "normal"
+                    ? editedText || ""
+                    : modeContent[activeMode] || editedText || "";
+                  const body = encodeURIComponent(bodyText);
+                  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}&tf=1`;
+                  window.open(gmailUrl, "_blank", "noopener,noreferrer");
+                  setIsShareModalOpen(false);
+                }}
+                className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+              >
+                <Mail className="w-5 h-5" />
+                <div className="flex flex-col items-start">
+                  <span>Gmail</span>
+                  <span className="text-xs text-gray-400">Uses current transcript content</span>
+                </div>
+              </button>
+
+              {/* Default Email Client */}
+              <button
+                onClick={() => {
+                  const subjectText = shareSubject ?? (note.title || "Untitled Note");
+                  const subject = encodeURIComponent(subjectText);
+                  const bodyText = activeMode === "normal"
+                    ? editedText || ""
+                    : modeContent[activeMode] || editedText || "";
+                  const body = encodeURIComponent(bodyText);
+                  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                  setIsShareModalOpen(false);
+                }}
+                className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+              >
+                <Mail className="w-5 h-5" />
+                <div className="flex flex-col items-start">
+                  <span>Email (Default Client)</span>
+                  <span className="text-xs text-gray-400">Uses current transcript content</span>
+                </div>
+              </button>
+
+              {/* Native Share (if available) */}
+              {typeof navigator !== "undefined" && "share" in navigator && (
+                <button
+                  onClick={async () => {
+                    const bodyText = activeMode === "normal"
+                      ? editedText || ""
+                      : modeContent[activeMode] || editedText || "";
+                    const shareTitle = note.title || "Untitled Note";
+                    const payload = `${shareTitle}\n\n${bodyText}`.trim();
+                    try {
+                      setIsSharing(true);
+                      const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+                      await nav.share?.({ title: shareTitle, text: payload });
+                      setIsShareModalOpen(false);
+                    } catch {
+                      // user may have cancelled
+                    } finally {
+                      setIsSharing(false);
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+                >
+                  <Share2 className="w-5 h-5" />
+                  <span>More Options…{isSharing && "…"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
