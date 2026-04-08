@@ -17,7 +17,6 @@ import {
   Clock,
   Mail,
   CalendarDays,
-  Info,
   Play,
   PenLine,
   Settings,
