@@ -1,6 +1,6 @@
 import React from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Home, Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle, Users } from "lucide-react";
+import { Home, Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle, Calendar } from "lucide-react";
 
 type TabType = "home" | "meetings" | "notes" | "vocabulary" | "billing" | "settings";
 
@@ -33,24 +33,28 @@ function NavItem({
   icon: Icon,
   isActive,
   onClick,
+  activeClass = "bg-slate-100 text-slate-800",
+  activeIconClass = "",
 }: {
   id: TabType;
   label: string;
   icon: React.ElementType;
   isActive: boolean;
   onClick: () => void;
+  activeClass?: string;
+  activeIconClass?: string;
 }) {
   return (
     <button
       key={id}
       className={`w-full flex items-center gap-3 py-2.5 px-4 rounded-lg border-none text-[0.9375rem] font-medium cursor-pointer transition-colors duration-150 ${
         isActive
-          ? "bg-slate-100 text-slate-800"
+          ? activeClass
           : "bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700"
       }`}
       onClick={onClick}
     >
-      <Icon size={16} />
+      <Icon size={16} className={isActive ? activeIconClass : ""} />
       <span>{label}</span>
     </button>
   );
@@ -67,10 +71,10 @@ export function Navigation({
   onDownloadUpdate,
   onInstallUpdate
 }: NavigationProps) {
-  const navItems: { id: TabType; label: string; icon: React.ElementType }[] = [
-    { id: "home", label: "Stream", icon: Home },
-    { id: "meetings", label: "Minutes", icon: Users },
-    { id: "notes", label: "Scribble", icon: FileText },
+  const navItems: { id: TabType; label: string; icon: React.ElementType; activeClass: string; activeIconClass: string }[] = [
+    { id: "home",     label: "Stream",  icon: Home,     activeClass: "bg-cyan-50 text-cyan-700",    activeIconClass: "text-cyan-600"    },
+    { id: "meetings", label: "Minutes", icon: Calendar,  activeClass: "bg-violet-50 text-violet-700", activeIconClass: "text-violet-600"  },
+    { id: "notes",    label: "Scribble", icon: FileText, activeClass: "bg-emerald-50 text-emerald-700", activeIconClass: "text-emerald-600" },
   ];
 
   const handleUpgrade = () => {
@@ -103,6 +107,8 @@ export function Navigation({
             icon={item.icon}
             isActive={activeTab === item.id}
             onClick={() => onTabChange(item.id)}
+            activeClass={item.activeClass}
+            activeIconClass={item.activeIconClass}
           />
         ))}
       </div>

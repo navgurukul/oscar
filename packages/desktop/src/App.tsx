@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { notesService } from "./services/notes.service";
+import { meetingsService } from "./services/meetings.service";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
@@ -1127,7 +1128,7 @@ function App() {
       setSession(s);
       sessionRef.current = s;
       setUser(s?.user ?? null);
-      if (s?.user) syncDictionaryFromSupabase(s.user.id);
+      if (s?.user) { syncDictionaryFromSupabase(s.user.id); loadMeetingsFromSupabase(); }
     });
 
     return () => subscription.unsubscribe();
@@ -1384,6 +1385,12 @@ function App() {
   }, []);
 
   // ── Supabase dictionary sync ───────────────────────────────────────────────
+
+  const loadMeetingsFromSupabase = useCallback(async () => {
+    const { data, error } = await meetingsService.getMeetings();
+    if (error) { console.warn("[minutes] Supabase load failed:", error); return; }
+    if (data && data.length > 0) setSavedMeetings(data);
+  }, []);
 
   const syncDictionaryFromSupabase = useCallback(async (userId: string) => {
     setDictSyncing(true);
@@ -2111,11 +2118,13 @@ function App() {
                     const updated = [meeting, ...savedMeetings.filter((m) => m.id !== meeting.id)];
                     setSavedMeetings(updated);
                     saveSetting("savedMeetings", updated);
+                    if (user) meetingsService.saveMeeting(meeting, user.id).catch((e) => console.warn("[minutes] save failed:", e));
                   }}
                   onDeleteMeeting={(id) => {
                     const updated = savedMeetings.filter((m) => m.id !== id);
                     setSavedMeetings(updated);
                     saveSetting("savedMeetings", updated);
+                    meetingsService.deleteMeeting(id).catch((e) => console.warn("[minutes] delete failed:", e));
                   }}
                 />
               )}
