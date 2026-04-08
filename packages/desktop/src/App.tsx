@@ -30,6 +30,7 @@ interface Transcription {
 }
 
 type TonePreset = "none" | "professional" | "casual" | "friendly";
+type MicrophonePermissionState = "granted" | "denied" | "prompt" | "unknown";
 
 // ── Persistent store helpers ──────────────────────────────────────────────────
 
@@ -54,6 +55,25 @@ async function saveSetting<T>(key: string, value: T): Promise<void> {
     await store.save(); // flush to disk immediately — set() is in-memory only
   } catch (e) {
     console.warn("[store] save failed:", e);
+  }
+}
+
+function isMacOS() {
+  return navigator.platform.toLowerCase().includes("mac");
+}
+
+async function getMicrophonePermissionState(): Promise<MicrophonePermissionState> {
+  if (typeof navigator === "undefined" || !navigator.permissions?.query) {
+    return "unknown";
+  }
+
+  try {
+    const result = await navigator.permissions.query({
+      name: "microphone" as PermissionName,
+    });
+    return result.state;
+  } catch {
+    return "unknown";
   }
 }
 
@@ -454,14 +474,28 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
 
 // ── Permissions Screen ────────────────────────────────────────────────────────
 
-function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
+function PermissionsScreen({
+  onContinue,
+  hotkeyWarning,
+  onRetryHotkey,
+}: {
+  onContinue: () => void;
+  hotkeyWarning?: string;
+  onRetryHotkey?: () => Promise<void> | void;
+}) {
   const [micStatus, setMicStatus] = useState<"idle" | "granted" | "denied">(
     "idle",
   );
   const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
 
-  // Check real accessibility status on mount
   useEffect(() => {
+    getMicrophonePermissionState()
+      .then((state) => {
+        if (state === "granted") setMicStatus("granted");
+        if (state === "denied") setMicStatus("denied");
+      })
+      .catch(() => {});
+
     invoke<boolean>("check_accessibility_permission")
       .then(setAccessibilityEnabled)
       .catch(() => {});
@@ -482,6 +516,9 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
       // AXIsProcessTrustedWithOptions registers the current binary and opens System Settings
       const granted = await invoke<boolean>("request_accessibility_permission");
       setAccessibilityEnabled(granted);
+      if (granted) {
+        await onRetryHotkey?.();
+      }
       if (!granted) {
         // Poll until the user enables it in System Settings
         const interval = setInterval(async () => {
@@ -491,6 +528,7 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
           if (trusted) {
             setAccessibilityEnabled(true);
             clearInterval(interval);
+            await onRetryHotkey?.();
           }
         }, 1500);
         // Stop polling after 60s
@@ -498,9 +536,9 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
       }
     } catch {
       // Fallback: open System Settings manually
-      invoke("open_url", {
-        url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-      }).catch(() => {});
+      await openUrl(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+      ).catch(() => {});
     }
   };
 
@@ -637,6 +675,33 @@ function PermissionsScreen({ onContinue }: { onContinue: () => void }) {
                 You can enable Accessibility later in System Settings → Privacy
                 &amp; Security.
               </p>
+            )}
+
+            {hotkeyWarning && (
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  background: "#fff7ed",
+                  border: "1px solid #fdba74",
+                  color: "#9a3412",
+                }}
+              >
+                <p style={{ margin: 0, fontSize: "0.9rem", lineHeight: 1.5 }}>
+                  {hotkeyWarning}
+                </p>
+                {onRetryHotkey && (
+                  <button
+                    type="button"
+                    className="setup-skip-btn"
+                    style={{ marginTop: 10 }}
+                    onClick={() => onRetryHotkey()}
+                  >
+                    Retry Hotkey
+                  </button>
+                )}
+              </div>
             )}
 
             <button
@@ -923,7 +988,7 @@ function App() {
   const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
   const [_isProcessing, setIsProcessing] = useState(false);
-  const [_hotkeyWarning, setHotkeyWarning] = useState("");
+  const [hotkeyWarning, setHotkeyWarning] = useState("");
 
   // Settings panel
   const [_whisperModelPath, setWhisperModelPath] = useState("");
@@ -1168,7 +1233,33 @@ function App() {
         loadSetting<SavedMeeting[]>("savedMeetings", []),
       ]);
 
-      setPermissionsShown(permsDone);
+      const micPermission = await getMicrophonePermissionState().catch(
+        () => "unknown" as MicrophonePermissionState,
+      );
+      const accessibilityGranted = await invoke<boolean>(
+        "check_accessibility_permission",
+      ).catch(() => true);
+
+      let nextPermissionsShown = permsDone;
+      if (permsDone && micPermission === "denied") {
+        nextPermissionsShown = false;
+      }
+      if (permsDone && isMacOS() && !accessibilityGranted) {
+        nextPermissionsShown = false;
+      }
+
+      try {
+        await invoke<boolean>("ensure_recording_hotkey_registered");
+        setHotkeyWarning("");
+      } catch (err) {
+        const message = String(err).replace(/^Error:\s*/i, "");
+        setHotkeyWarning(message);
+        if (permsDone && isMacOS() && !accessibilityGranted) {
+          nextPermissionsShown = false;
+        }
+      }
+
+      setPermissionsShown(nextPermissionsShown);
       setSetupComplete(setupDone);
       setUserApiKey(savedApiKey);
       setAiEditing(savedAiEditing);
@@ -1802,6 +1893,15 @@ function App() {
     setPermissionsShown(true);
   };
 
+  const retryHotkeyRegistration = useCallback(async () => {
+    try {
+      await invoke<boolean>("ensure_recording_hotkey_registered");
+      setHotkeyWarning("");
+    } catch (err) {
+      setHotkeyWarning(String(err).replace(/^Error:\s*/i, ""));
+    }
+  }, []);
+
   const handleSetupComplete = async () => {
     setSetupComplete(true);
     // Load the whisper model after setup is complete and pre-warm mic
@@ -1863,7 +1963,13 @@ function App() {
     );
   if (permissionsShown === null) return null;
   if (!permissionsShown)
-    return <PermissionsScreen onContinue={handlePermissionsContinue} />;
+    return (
+      <PermissionsScreen
+        onContinue={handlePermissionsContinue}
+        hotkeyWarning={hotkeyWarning}
+        onRetryHotkey={retryHotkeyRegistration}
+      />
+    );
   if (setupComplete === null) return null;
   if (!setupComplete) return <SetupScreen onComplete={handleSetupComplete} />;
 
@@ -1875,6 +1981,19 @@ function App() {
         onSignOut={handleSignOut}
         onSettingsClick={() => setActiveTab("settings")}
       />
+
+      {hotkeyWarning && (
+        <div className="px-4 py-3 border-b border-amber-200 bg-amber-50 flex items-center justify-between gap-3">
+          <p className="text-sm text-amber-900 m-0">{hotkeyWarning}</p>
+          <button
+            type="button"
+            className="text-sm font-medium text-amber-900 bg-white border border-amber-300 rounded-md px-3 py-1.5"
+            onClick={() => retryHotkeyRegistration()}
+          >
+            Retry Hotkey
+          </button>
+        </div>
+      )}
 
       {/* Body area: sidebar + content + right gutter */}
       <div className="flex flex-1 overflow-hidden">

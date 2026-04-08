@@ -287,10 +287,97 @@ struct AppState {
     whisper_context: Option<WhisperContext>,
 }
 
+struct HotkeyState {
+    is_recording: Arc<AtomicBool>,
+    last_error: Mutex<Option<String>>,
+}
+
 #[derive(Serialize, Deserialize)]
 struct TranscriptionResult {
     text: String,
     error: Option<String>,
+}
+
+fn recording_shortcut() -> Shortcut {
+    Shortcut::new(
+        Some(Modifiers::CONTROL),
+        tauri_plugin_global_shortcut::Code::Space,
+    )
+}
+
+fn set_hotkey_error<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    hotkey_state: &HotkeyState,
+    message: Option<String>,
+) {
+    if let Ok(mut last_error) = hotkey_state.last_error.lock() {
+        *last_error = message.clone();
+    }
+
+    if let Some(msg) = message {
+        let _ = app.emit("hotkey-permission-error", msg);
+    } else {
+        let _ = app.emit("hotkey-registered", ());
+    }
+}
+
+fn register_recording_hotkey<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    hotkey_state: &HotkeyState,
+) -> Result<bool, String> {
+    let shortcut = recording_shortcut();
+
+    if app.global_shortcut().is_registered(shortcut) {
+        set_hotkey_error(app, hotkey_state, None);
+        return Ok(true);
+    }
+
+    let app_handle = app.clone();
+    let is_rec = hotkey_state.is_recording.clone();
+
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _sc, event| match event.state {
+            ShortcutState::Pressed => {
+                if !is_rec.swap(true, Ordering::SeqCst) {
+                    log::info!("[hotkey] Ctrl+Space PRESSED — capturing frontmost app");
+                    #[cfg(target_os = "macos")]
+                    let frontmost_app = {
+                        std::process::Command::new("osascript")
+                            .args([
+                                "-e",
+                                r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
+                            ])
+                            .output()
+                            .ok()
+                            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                            .unwrap_or_default()
+                    };
+                    #[cfg(not(target_os = "macos"))]
+                    let frontmost_app = String::new();
+
+                    log::info!("[hotkey] frontmost app = '{}'", frontmost_app);
+                    let _ = app_handle.emit("hotkey-recording-start", frontmost_app);
+                }
+            }
+            ShortcutState::Released => {
+                if is_rec.swap(false, Ordering::SeqCst) {
+                    log::info!("[hotkey] Ctrl+Space RELEASED — emitting stop");
+                    let _ = app_handle.emit("hotkey-recording-stop", ());
+                }
+            }
+        })
+        .map_err(|e| {
+            let message = format!(
+                "Could not register hotkey: {e}. Grant Accessibility and close conflicting shortcuts, then retry."
+            );
+            set_hotkey_error(app, hotkey_state, Some(message.clone()));
+            message
+        })?;
+
+    log::info!("Global shortcut (Ctrl+Space) registered successfully");
+    set_hotkey_error(app, hotkey_state, None);
+
+    Ok(true)
 }
 
 // ── Whisper: Model Download ───────────────────────────────────────────────────
@@ -1369,6 +1456,19 @@ fn request_accessibility_permission() -> bool {
     }
 }
 
+#[tauri::command]
+fn ensure_recording_hotkey_registered(
+    app: tauri::AppHandle,
+    hotkey_state: tauri::State<'_, HotkeyState>,
+) -> Result<bool, String> {
+    register_recording_hotkey(&app, &hotkey_state)
+}
+
+#[tauri::command]
+fn is_recording_hotkey_registered(app: tauri::AppHandle) -> bool {
+    app.global_shortcut().is_registered(recording_shortcut())
+}
+
 // ── File Utilities ────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -1413,6 +1513,10 @@ pub fn run() {
         .manage(Mutex::new(AppState {
             whisper_context: None,
         }))
+        .manage(HotkeyState {
+            is_recording: is_recording.clone(),
+            last_error: Mutex::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             download_whisper_model,
             load_whisper_model,
@@ -1428,6 +1532,8 @@ pub fn run() {
             get_pending_deep_link,
             check_accessibility_permission,
             request_accessibility_permission,
+            ensure_recording_hotkey_registered,
+            is_recording_hotkey_registered,
             is_system_audio_supported,
             start_system_audio_capture,
             stop_system_audio_capture,
@@ -1474,54 +1580,9 @@ pub fn run() {
 
             // Right Ctrl as hold-to-record hotkey (avoids conflicts on both macOS & Windows)
             log::info!("[setup] Registering global shortcut (Ctrl+Space)...");
-            let shortcut = Shortcut::new(
-                Some(Modifiers::CONTROL),
-                tauri_plugin_global_shortcut::Code::Space,
-            );
-            let app_handle = app.handle().clone();
-            let is_rec = is_recording.clone();
-
-            if let Err(e) = app.global_shortcut().on_shortcut(shortcut, move |_app, _sc, event| {
-                match event.state {
-                    ShortcutState::Pressed => {
-                        if !is_rec.swap(true, Ordering::SeqCst) {
-                            log::info!("[hotkey] Ctrl+Space PRESSED — capturing frontmost app");
-                            // Capture the frontmost app NOW, before Oscar's webview steals focus
-                            #[cfg(target_os = "macos")]
-                            let frontmost_app = {
-                                std::process::Command::new("osascript")
-                                    .args([
-                                        "-e",
-                                        r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
-                                    ])
-                                    .output()
-                                    .ok()
-                                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                                    .unwrap_or_default()
-                            };
-                            #[cfg(not(target_os = "macos"))]
-                            let frontmost_app = String::new();
-
-                            log::info!("[hotkey] frontmost app = '{}'", frontmost_app);
-                            let _ = app_handle.emit("hotkey-recording-start", frontmost_app);
-                        }
-                    }
-                    ShortcutState::Released => {
-                        if is_rec.swap(false, Ordering::SeqCst) {
-                            log::info!("[hotkey] Ctrl+Space RELEASED — emitting stop");
-                            let _ = app_handle.emit("hotkey-recording-stop", ());
-                        }
-                    }
-                }
-            }) {
+            let hotkey_state = app.state::<HotkeyState>();
+            if let Err(e) = register_recording_hotkey(&app.handle().clone(), &hotkey_state) {
                 log::warn!("Could not register global shortcut: {e}");
-                let _ = app.handle().emit(
-                    "hotkey-permission-error",
-                    format!("Could not register hotkey: {e}. Check Accessibility permission in System Settings."),
-                );
-            } else {
-                log::info!("Global shortcut (Ctrl+Space) registered successfully");
-                let _ = app.handle().emit("hotkey-registered", ());
             }
 
             // Initialize the persistent store (creates file on first run)
