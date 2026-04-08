@@ -487,6 +487,10 @@ function PermissionsScreen({
     "idle",
   );
   const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
+  const [systemAudioSupported, setSystemAudioSupported] = useState(false);
+  const [systemAudioStatus, setSystemAudioStatus] = useState<
+    "idle" | "granted" | "denied"
+  >("idle");
 
   useEffect(() => {
     getMicrophonePermissionState()
@@ -499,6 +503,19 @@ function PermissionsScreen({
     invoke<boolean>("check_accessibility_permission")
       .then(setAccessibilityEnabled)
       .catch(() => {});
+
+    invoke<boolean>("is_system_audio_supported")
+      .then(async (supported) => {
+        setSystemAudioSupported(supported);
+        if (!supported) return;
+
+        const granted = await invoke<boolean>("check_system_audio_permission")
+          .catch(() => false);
+        if (granted) {
+          setSystemAudioStatus("granted");
+        }
+      })
+      .catch(() => setSystemAudioSupported(false));
   }, []);
 
   const requestMic = async () => {
@@ -539,6 +556,27 @@ function PermissionsScreen({
       await openUrl(
         "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
       ).catch(() => {});
+    }
+  };
+
+  const requestSystemAudio = async () => {
+    try {
+      const granted = await invoke<boolean>("request_system_audio_permission");
+      setSystemAudioStatus(granted ? "granted" : "denied");
+
+      if (!granted) {
+        const interval = setInterval(async () => {
+          const trusted = await invoke<boolean>("check_system_audio_permission");
+          if (trusted) {
+            setSystemAudioStatus("granted");
+            clearInterval(interval);
+          }
+        }, 1500);
+        setTimeout(() => clearInterval(interval), 60_000);
+      }
+    } catch {
+      setSystemAudioStatus("denied");
+      await openUrl(SYSTEM_AUDIO_SETTINGS_URL).catch(() => {});
     }
   };
 
@@ -670,10 +708,69 @@ function PermissionsScreen({
               </div>
             </div>
 
+              {systemAudioSupported && (
+                <div className="perm-item-modern">
+                  <div className="perm-item-icon">
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                    </svg>
+                  </div>
+                  <div className="perm-item-content">
+                    <span className="perm-item-label">
+                      System audio in meetings
+                    </span>
+                    <span className="perm-item-sub">
+                      Optional, but needed to capture other participants
+                    </span>
+                  </div>
+                  {systemAudioStatus === "granted" ? (
+                    <span className="perm-badge-modern granted">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </span>
+                  ) : (
+                    <button
+                      className="perm-enable-btn-modern"
+                      onClick={requestSystemAudio}
+                    >
+                      {systemAudioStatus === "denied" ? "Retry" : "Enable"}
+                    </button>
+                  )}
+                </div>
+              )}
+
             {!accessibilityEnabled && (
               <p className="perm-skip-note-modern">
                 You can enable Accessibility later in System Settings → Privacy
                 &amp; Security.
+              </p>
+            )}
+
+            {systemAudioSupported && systemAudioStatus !== "granted" && (
+              <p className="perm-skip-note-modern">
+                System audio is optional. macOS may ask you to restart OSCAR
+                after enabling Screen Recording.
               </p>
             )}
 
@@ -727,6 +824,8 @@ const MODEL_URL =
   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
 const MODEL_PATH = ".oscar/models/ggml-small.bin";
 const OLD_MODEL_PATH = ".oscar/models/ggml-base.bin";
+const SYSTEM_AUDIO_SETTINGS_URL =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
 
 
 interface DownloadProgress {
@@ -735,12 +834,8 @@ interface DownloadProgress {
   percentage: number;
 }
 
-function SetupScreen({ onComplete }: { onComplete: () => void }) {
-  const [step, setStep] = useState<"download" | "apikey" | "loading">(
-    "download",
-  );
-  const [, setDownloadStatus] = useState("");
-  const [apiKey, setApiKey] = useState("");
+function SetupScreen({ onComplete }: { onComplete: () => Promise<void> | void }) {
+  const [step, setStep] = useState<"download" | "loading">("download");
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
 
@@ -768,7 +863,6 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
       });
 
       unlisten();
-      setDownloadStatus("Download complete!");
 
       // Clean up old model file if it exists (migration from base to small)
       try {
@@ -785,31 +879,12 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
         // Non-fatal — don't block setup completion
       }
 
-      // Move to API key step
-      setTimeout(() => {
-        setStep("apikey");
-      }, 500);
+      await onComplete();
     } catch (err) {
       unlisten();
       setError(`Something went wrong: ${err}`);
       setStep("download");
     }
-  };
-
-  const handleComplete = async () => {
-    // Save API key if provided
-    if (apiKey.trim()) {
-      await saveSetting("userApiKey", apiKey.trim());
-    }
-
-    // Mark setup as complete
-    await saveSetting("setupComplete", true);
-
-    onComplete();
-  };
-
-  const handleSkipApiKey = () => {
-    handleComplete();
   };
 
   if (step === "loading") {
@@ -899,68 +974,6 @@ function SetupScreen({ onComplete }: { onComplete: () => void }) {
       </div>
     );
   }
-
-  // API Key step
-  return (
-    <div className="split-layout">
-      <StepIndicator currentStep="setup" />
-      <div className="split-layout-inner">
-        <div className="split-left">
-          <div className="split-content">
-            <div className="brand-header">
-              <img
-                src="/OSCAR_LIGHT_LOGO.png"
-                alt="OSCAR"
-                width="36"
-                height="36"
-              />
-              <span className="brand-name">OSCAR</span>
-            </div>
-
-            <h1 className="split-title">AI Enhancement (Optional)</h1>
-            <p className="split-description">
-              OSCAR can enhance your transcriptions with AI. Use our service
-              (requires sign-in) or provide your own DeepSeek API key.
-            </p>
-
-            <div className="setup-apikey-section">
-              <label className="setup-label">
-                Your DeepSeek API Key (optional)
-              </label>
-              <input
-                type="password"
-                className="setup-input"
-                placeholder="sk-..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-              />
-              <p className="setup-hint">
-                Leave blank to use OSCAR&apos;s AI service. Your key is stored
-                locally.
-              </p>
-            </div>
-
-            <div className="setup-buttons">
-              <button
-                className="perm-continue-btn-modern active"
-                onClick={handleComplete}
-              >
-                {apiKey.trim() ? "Save & Continue" : "Continue"}
-              </button>
-              {!apiKey.trim() && (
-                <button className="setup-skip-btn" onClick={handleSkipApiKey}>
-                  Skip
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="split-right">
-          <CoverShowcase />
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -976,7 +989,6 @@ function App() {
     null,
   );
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
-  const [_userApiKey, setUserApiKey] = useState<string>("");
 
   // Recording & processing (global hotkey functionality)
   const [isRecording, setIsRecording] = useState(false);
@@ -1027,6 +1039,7 @@ function App() {
   // System audio capture (other participants' audio via ScreenCaptureKit)
   const [systemAudioSupported, setSystemAudioSupported] = useState(false);
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
+  const [systemAudioWarning, setSystemAudioWarning] = useState("");
   const systemAudioActiveRef = useRef(false);
 
   // Personal dictionary (local state; synced to Supabase when logged in)
@@ -1208,12 +1221,12 @@ function App() {
         savedDict,
         permsDone,
         setupDone,
-        savedApiKey,
         savedTranscripts,
         savedLanguage,
         savedMicId,
         savedAiImprovement,
         savedCalToken,
+        savedSystemAudioEnabled,
         savedTemplates,
         savedMeetingsData,
       ] = await Promise.all([
@@ -1223,12 +1236,12 @@ function App() {
         loadSetting<string[]>("dictWords", []),
         loadSetting<boolean>("permissionsDone", false),
         loadSetting<boolean>("setupComplete", false),
-        loadSetting<string>("userApiKey", ""),
         loadSetting<LocalTranscript[]>("localTranscripts", []),
         loadSetting<string>("transcriptionLanguage", "hi-en"),
         loadSetting<string>("selectedMicId", ""),
         loadSetting<boolean>("aiImprovementEnabled", true),
         loadSetting<string>("googleCalendarToken", ""),
+        loadSetting<boolean>("systemAudioEnabled", true),
         loadSetting<MeetingTemplateData[]>("meetingTemplates", []),
         loadSetting<SavedMeeting[]>("savedMeetings", []),
       ]);
@@ -1260,8 +1273,9 @@ function App() {
       }
 
       setPermissionsShown(nextPermissionsShown);
-      setSetupComplete(setupDone);
-      setUserApiKey(savedApiKey);
+      if (!setupDone) {
+        setSetupComplete(false);
+      }
       setAiEditing(savedAiEditing);
       aiEditingRef.current = savedAiEditing;
       setTonePreset(savedTone);
@@ -1275,6 +1289,7 @@ function App() {
       setSelectedMicId(savedMicId);
       setAiImprovementEnabled(savedAiImprovement);
       aiImprovementEnabledRef.current = savedAiImprovement;
+      setSystemAudioEnabled(savedSystemAudioEnabled);
       if (savedCalToken) setGoogleCalendarToken(savedCalToken);
       // Merge stored templates with defaults (so new built-ins are always present)
       if (savedTemplates && savedTemplates.length > 0) {
@@ -1297,27 +1312,15 @@ function App() {
         .then((supported) => setSystemAudioSupported(supported))
         .catch(() => setSystemAudioSupported(false));
 
-      // If setup is complete, load the Whisper model and pre-warm mic
+      // If setup is complete, verify that the Whisper model still loads.
       if (setupDone) {
-        // Check if the current model exists — if not, user needs to re-download
-        // (handles migration from ggml-base.bin to ggml-small.bin)
-        try {
-          const home = await homeDir();
-          const modelExists = await invoke<boolean>("check_file_exists", {
-            path: `${home}/${MODEL_PATH}`,
-          });
-          if (!modelExists) {
-            // Model file missing — reset setup so user re-downloads
-            await saveSetting("setupComplete", false);
-            setSetupComplete(false);
-            return; // SetupScreen will render
-          }
-        } catch (err) {
-          console.error("Model migration check failed:", err);
-          // On error, proceed normally — initWhisper will handle fallback
+        const loaded = await initWhisper();
+        if (!loaded) {
+          await saveSetting("setupComplete", false);
+          setSetupComplete(false);
+          return;
         }
-        warmMicrophone(); // pre-warm ASAP so first hotkey press doesn't steal focus
-        initWhisper();
+        setSetupComplete(true);
       }
     })();
 
@@ -1411,46 +1414,48 @@ function App() {
     }
   };
 
-  const initWhisper = async () => {
+  const tryLoadWhisperModel = async (): Promise<string | null> => {
     // Get home directory first so it's available in fallback section
     let home: string;
     try {
       home = await homeDir();
     } catch {
       setStatus("Failed to get home directory.");
-      return;
+      return null;
     }
 
-    // First check the standard OSCAR model location
-    try {
-      const oscarPath = `${home}/.oscar/models/ggml-small.bin`;
-      await invoke("load_whisper_model", { path: oscarPath });
-      setWhisperLoadedAndRef(true);
-      setWhisperModelPath(oscarPath);
-      setStatus("Ready! Hold Ctrl+Space anywhere to record.");
-      warmMicrophone(); // pre-warm mic after whisper loads
-      return;
-    } catch {
-      // Fall back to other common locations
-      const paths = [
-        `${home}/.whisper/ggml-small.bin`,
-        "./models/ggml-small.bin",
-        "/usr/local/share/whisper/ggml-small.bin",
-      ];
-      for (const path of paths) {
-        try {
-          await invoke("load_whisper_model", { path });
-          setWhisperLoadedAndRef(true);
-          setWhisperModelPath(path);
-          setStatus("Ready! Hold Ctrl+Space anywhere to record.");
-          warmMicrophone(); // pre-warm mic after whisper loads
-          return;
-        } catch {
-          continue;
-        }
+    const paths = [
+      `${home}/.oscar/models/ggml-small.bin`,
+      `${home}/.whisper/ggml-small.bin`,
+      "./models/ggml-small.bin",
+      "/usr/local/share/whisper/ggml-small.bin",
+    ];
+
+    for (const path of paths) {
+      try {
+        await invoke("load_whisper_model", { path });
+        return path;
+      } catch {
+        continue;
       }
     }
+
+    return null;
+  };
+
+  const initWhisper = async () => {
+    const loadedPath = await tryLoadWhisperModel();
+    if (loadedPath) {
+      setWhisperLoadedAndRef(true);
+      setWhisperModelPath(loadedPath);
+      setStatus("Ready! Hold Ctrl+Space anywhere to record.");
+      warmMicrophone();
+      return true;
+    }
+
+    setWhisperLoadedAndRef(false);
     setStatus("Whisper model not found. Set the path in Settings.");
+    return false;
   };
 
   // ── Dictionary helpers ─────────────────────────────────────────────────────
@@ -1769,6 +1774,8 @@ function App() {
   // ── Meeting recording (click to start/stop, no auto-paste) ──────────────
 
   const startMeetingRecording = async () => {
+    setSystemAudioWarning("");
+
     let stream: MediaStream;
     if (
       warmStreamRef.current &&
@@ -1809,13 +1816,19 @@ function App() {
       try {
         await invoke("start_system_audio_capture");
         systemAudioActiveRef.current = true;
+        setSystemAudioWarning("");
         console.log("[meeting-record] System audio capture started");
       } catch (e) {
         console.warn("[meeting-record] System audio capture failed, mic only:", e);
         systemAudioActiveRef.current = false;
+        const reason = String(e).replace(/^Error:\s*/i, "");
+        setSystemAudioWarning(
+          `${reason} Meeting recording will continue with your microphone only.`,
+        );
       }
     } else {
       systemAudioActiveRef.current = false;
+      setSystemAudioWarning("");
     }
 
     mediaRecorder.start(100);
@@ -1903,10 +1916,14 @@ function App() {
   }, []);
 
   const handleSetupComplete = async () => {
+    const loaded = await initWhisper();
+    if (!loaded) {
+      throw new Error(
+        "The speech model downloaded, but OSCAR could not load it. Please try setup again.",
+      );
+    }
+    await saveSetting("setupComplete", true);
     setSetupComplete(true);
-    // Load the whisper model after setup is complete and pre-warm mic
-    warmMicrophone();
-    initWhisper();
   };
 
   const handleSignOut = async () => {
@@ -1918,6 +1935,14 @@ function App() {
     setAiImprovementEnabled(enabled);
     aiImprovementEnabledRef.current = enabled;
     saveSetting("aiImprovementEnabled", enabled);
+  }, []);
+
+  const handleSystemAudioToggle = useCallback((enabled: boolean) => {
+    setSystemAudioEnabled(enabled);
+    saveSetting("systemAudioEnabled", enabled);
+    if (!enabled) {
+      setSystemAudioWarning("");
+    }
   }, []);
 
   // ── Tab state ──────────────────────────────────────────────────────────────
@@ -2052,6 +2077,7 @@ function App() {
                   recordingTime={meetingRecordingTime}
                   transcript={meetingTranscript}
                   onClearTranscript={() => setMeetingTranscript("")}
+                  systemAudioWarning={systemAudioWarning}
                   googleCalendarToken={googleCalendarToken}
                   onConnectCalendar={connectGoogleCalendar}
                   onCalendarTokenInvalid={() => {
@@ -2184,7 +2210,7 @@ function App() {
                   initialSection={settingsInitialSection as any}
                   systemAudioSupported={systemAudioSupported}
                   systemAudioEnabled={systemAudioEnabled}
-                  onSystemAudioToggle={(enabled) => setSystemAudioEnabled(enabled)}
+                  onSystemAudioToggle={handleSystemAudioToggle}
                 />
               )}
             </div>

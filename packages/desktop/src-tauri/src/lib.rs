@@ -33,6 +33,12 @@ mod macos_paste {
         fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
     }
 
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGPreflightScreenCaptureAccess() -> bool;
+        fn CGRequestScreenCaptureAccess() -> bool;
+    }
+
     #[link(name = "CoreFoundation", kind = "framework")]
     extern "C" {
         fn CFDictionaryCreate(
@@ -120,6 +126,14 @@ mod macos_paste {
             CFRelease(key as *mut c_void);
             trusted
         }
+    }
+
+    pub fn is_screen_capture_trusted() -> bool {
+        unsafe { CGPreflightScreenCaptureAccess() }
+    }
+
+    pub fn request_screen_capture_with_prompt() -> bool {
+        unsafe { CGRequestScreenCaptureAccess() }
     }
 
     /// Convert an NSWindow to NSPanel and configure it to float above fullscreen apps.
@@ -642,181 +656,6 @@ fn transcribe_meeting_audio(
         language.as_deref(),
         &state,
     )
-}
-
-// ── AI Text Enhancement ──────────────────────────────────────────────────────
-
-#[derive(Deserialize)]
-struct ProxyResponse {
-    enhanced: Option<String>,
-    error: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct DeepSeekResponse {
-    choices: Option<Vec<DeepSeekChoice>>,
-    error: Option<DeepSeekError>,
-}
-
-#[derive(Deserialize)]
-struct DeepSeekChoice {
-    message: DeepSeekMessage,
-}
-
-#[derive(Deserialize)]
-struct DeepSeekMessage {
-    content: String,
-}
-
-#[derive(Deserialize)]
-struct DeepSeekError {
-    message: String,
-}
-
-#[tauri::command]
-async fn enhance_text(
-    text: String,
-    tone: String,
-    edge_function_url: Option<String>,
-    jwt: Option<String>,
-    api_key: Option<String>,
-) -> Result<String, String> {
-    log::info!("[enhance] enhance_text called — {} chars, tone={}", text.len(), tone);
-    if text.trim().is_empty() {
-        log::debug!("[enhance] Empty text, returning as-is");
-        return Ok(text);
-    }
-
-    // If user provided their own API key, call DeepSeek directly
-    if let Some(key) = api_key {
-        log::info!("[enhance] Using direct DeepSeek API key");
-        return enhance_with_deepseek(text, tone, &key).await;
-    }
-
-    // Otherwise, use the Supabase Edge Function (requires auth)
-    log::info!("[enhance] Using Supabase Edge Function");
-    let url = edge_function_url.ok_or("No Edge Function URL configured")?;
-    let token = jwt.ok_or("No auth token — please sign in or provide an API key")?;
-
-    enhance_with_edge_function(text, tone, &url, &token).await
-}
-
-async fn enhance_with_deepseek(text: String, tone: String, api_key: &str) -> Result<String, String> {
-    #[derive(Serialize)]
-    struct DeepSeekRequest {
-        model: String,
-        messages: Vec<DeepSeekMessageReq>,
-        temperature: f32,
-        max_tokens: i32,
-    }
-
-    #[derive(Serialize)]
-    struct DeepSeekMessageReq {
-        role: String,
-        content: String,
-    }
-
-    let tone_instruction = match tone.as_str() {
-        "professional" => "Make this text more professional and polished",
-        "casual" => "Make this text more casual and conversational",
-        "friendly" => "Make this text warmer and friendlier",
-        _ => "Clean up this text while preserving its original meaning",
-    };
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let response = client
-        .post("https://api.deepseek.com/chat/completions")
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .json(&DeepSeekRequest {
-            model: "deepseek-chat".to_string(),
-            messages: vec![
-                DeepSeekMessageReq {
-                    role: "system".to_string(),
-                    content: tone_instruction.to_string(),
-                },
-                DeepSeekMessageReq {
-                    role: "user".to_string(),
-                    content: text,
-                },
-            ],
-            temperature: 0.3,
-            max_tokens: 2000,
-        })
-        .send()
-        .await
-        .map_err(|e| format!("DeepSeek API request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("DeepSeek API error {}: {}", status, body));
-    }
-
-    let parsed: DeepSeekResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse DeepSeek response: {}", e))?;
-
-    if let Some(err) = parsed.error {
-        return Err(format!("DeepSeek API error: {}", err.message));
-    }
-
-    parsed
-        .choices
-        .and_then(|choices| choices.into_iter().next())
-        .map(|choice| choice.message.content)
-        .ok_or_else(|| "Empty response from DeepSeek API".to_string())
-}
-
-async fn enhance_with_edge_function(
-    text: String,
-    tone: String,
-    edge_function_url: &str,
-    jwt: &str,
-) -> Result<String, String> {
-    #[derive(Serialize)]
-    struct Body {
-        text: String,
-        tone: String,
-    }
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let response = client
-        .post(edge_function_url)
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", jwt))
-        .json(&Body { text: text.clone(), tone })
-        .send()
-        .await
-        .map_err(|e| format!("Request to Edge Function failed: {}", e))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("Edge Function error {}: {}", status, body));
-    }
-
-    let parsed: ProxyResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse Edge Function response: {}", e))?;
-
-    if let Some(err) = parsed.error {
-        return Err(err);
-    }
-
-    parsed
-        .enhanced
-        .ok_or_else(|| "Empty response from Edge Function".to_string())
 }
 
 // ── DeepSeek AI: Text Processing ─────────────────────────────────────────────
@@ -1457,6 +1296,30 @@ fn request_accessibility_permission() -> bool {
 }
 
 #[tauri::command]
+fn check_system_audio_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos_paste::is_screen_capture_trusted()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        !system_audio::is_supported()
+    }
+}
+
+#[tauri::command]
+fn request_system_audio_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos_paste::request_screen_capture_with_prompt()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        !system_audio::is_supported()
+    }
+}
+
+#[tauri::command]
 fn ensure_recording_hotkey_registered(
     app: tauri::AppHandle,
     hotkey_state: tauri::State<'_, HotkeyState>,
@@ -1523,7 +1386,6 @@ pub fn run() {
             transcribe_audio,
             transcribe_meeting_audio,
             paste_transcription,
-            enhance_text,
             show_recording_pill,
             hide_recording_pill,
             set_pill_processing,
@@ -1532,6 +1394,8 @@ pub fn run() {
             get_pending_deep_link,
             check_accessibility_permission,
             request_accessibility_permission,
+            check_system_audio_permission,
+            request_system_audio_permission,
             ensure_recording_hotkey_registered,
             is_recording_hotkey_registered,
             is_system_audio_supported,

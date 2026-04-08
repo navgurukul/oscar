@@ -63,6 +63,7 @@ interface MeetingsTabProps {
   recordingTime: number;
   transcript: string;
   onClearTranscript: () => void;
+  systemAudioWarning?: string;
   googleCalendarToken: string;
   onConnectCalendar: () => void;
   onCalendarTokenInvalid: () => void;
@@ -208,6 +209,7 @@ export function MeetingsTab({
   recordingTime,
   transcript,
   onClearTranscript,
+  systemAudioWarning,
   googleCalendarToken,
   onConnectCalendar,
   onCalendarTokenInvalid,
@@ -427,6 +429,23 @@ export function MeetingsTab({
   const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
   const hasEmailableParticipants = participants.split(/[,;]+/).some((e) => e.trim().includes("@"));
 
+  const systemAudioNotice = systemAudioWarning ? (
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "12px 14px",
+        borderRadius: 12,
+        background: "#fff7ed",
+        border: "1px solid #fdba74",
+        color: "#9a3412",
+        fontSize: "0.9rem",
+        lineHeight: 1.5,
+      }}
+    >
+      {systemAudioWarning}
+    </div>
+  ) : null;
+
   // ── Phase: Select ────────────────────────────────────────────────────────
 
   if (phase === "select") {
@@ -440,6 +459,8 @@ export function MeetingsTab({
               Templates
             </button>
           </div>
+
+          {systemAudioNotice}
 
           {/* ── Live meeting banner ── */}
           {liveEvent && (
@@ -576,6 +597,8 @@ export function MeetingsTab({
             <ChevronLeft size={16} /> Back
           </button>
 
+          {systemAudioNotice}
+
           <div className="meeting-result-top">
             <div>
               <h1 className="meetings-title">{viewingSaved.title}</h1>
@@ -675,6 +698,8 @@ export function MeetingsTab({
             <ChevronLeft size={16} /> Back
           </button>
 
+          {systemAudioNotice}
+
           {/* Title + participants (borderless, inline editing) */}
           <div className="meeting-meta-fields">
             <input
@@ -758,6 +783,8 @@ export function MeetingsTab({
   return (
     <div className="meetings-tab">
       <div className="meetings-container">
+        {systemAudioNotice}
+
         <div className="meeting-result-top">
           <div>
             <h1 className="meetings-title">{meetingTitle || "Meeting Notes"}</h1>
