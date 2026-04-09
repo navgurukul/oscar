@@ -37,8 +37,8 @@ function DesktopCallbackContent() {
       // state is returned in the fragment for implicit-flow responses
       const oauthState = hashParams.get("state") || queryParams.get("state") || "";
 
-      // ── Calendar-only OAuth (direct Google implicit flow) ─────────────────
-      if (oauthState === "calendar_connect") {
+      // ── Calendar-only OAuth (PKCE authorization-code flow) ───────────────
+      if (oauthState.startsWith("calendar_connect")) {
         if (authError) {
           const url = `oscar://auth/callback?error=${encodeURIComponent(authError)}`;
           setDeepLinkUrl(url);
@@ -46,12 +46,26 @@ function DesktopCallbackContent() {
           setState("error");
           return;
         }
+
+        // PKCE code flow: Google returns `code` as a query param (not fragment)
+        const calendarCode = queryParams.get("code");
+        if (calendarCode) {
+          // Forward the code to the desktop; the app holds the code_verifier
+          // in memory and will exchange it via the exchange-calendar-token edge fn.
+          const url = `oscar://auth/callback?calendar_code=${encodeURIComponent(calendarCode)}`;
+          setDeepLinkUrl(url);
+          setState("ready");
+          return;
+        }
+
+        // Legacy: implicit flow returned an access_token in the fragment
         if (accessToken) {
           const url = `oscar://auth/callback?calendar_token=${encodeURIComponent(accessToken)}`;
           setDeepLinkUrl(url);
           setState("ready");
           return;
         }
+
         setDeepLinkUrl("oscar://auth/callback?error=no_calendar_token");
         setErrorMessage("No calendar token received. Please try again.");
         setState("error");

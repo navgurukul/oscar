@@ -23,7 +23,7 @@ interface AIProcessResponse {
 }
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.1-8b-instant";
+const GROQ_MODEL = "llama-3.3-70b-versatile";
 const VALID_MODES = new Set<Mode>([
   "transcribe_cleanup",
   "cleanup",
