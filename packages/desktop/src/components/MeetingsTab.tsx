@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { aiService, type DesktopAIMode } from "../services/ai.service";
 import {
   FileText,
   Users,
@@ -241,7 +241,6 @@ export function MeetingsTab({
   const lastCalendarFetchRef = useRef<string>("");
 
   const outputRef   = useRef<HTMLDivElement>(null);
-  const unlistenRef = useRef<(() => void) | null>(null);
 
   // Participant pill helpers
   const addParticipant = (value: string) => {
@@ -319,7 +318,6 @@ export function MeetingsTab({
   }, [calendarEvents]);
 
   useEffect(() => { if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight; }, [result]);
-  useEffect(() => () => { unlistenRef.current?.(); }, []);
 
   // AI processing — resolve template to mode
   const processTranscript = useCallback(async () => {
@@ -346,22 +344,21 @@ export function MeetingsTab({
     ].filter(Boolean);
 
     const enrichedText = parts.join("\n\n---\n\n");
-    const mode = isCustom ? "meeting_custom" : selectedTemplateId;
+    const mode: DesktopAIMode = isCustom
+      ? "meeting_custom"
+      : (selectedTemplateId as DesktopAIMode);
 
     setStreaming(true); setResult(""); setError("");
-    unlistenRef.current?.();
-    const unlisten = await listen<string>("ai-token", (evt) => {
-      setResult((prev) => prev + evt.payload);
-    });
-    unlistenRef.current = unlisten;
 
     try {
-      await invoke("ai_process_text", { text: enrichedText, mode });
+      const processed = await aiService.processText(enrichedText, mode);
+      setResult(processed);
       setPhase("result");
     } catch (err) {
-      setError(`${err}`); setPhase("result");
+      setError(err instanceof Error ? err.message : String(err));
+      setPhase("result");
     } finally {
-      unlisten(); unlistenRef.current = null; setStreaming(false);
+      setStreaming(false);
     }
   }, [selectedTemplateId, transcript, manualNotes, meetingTitle, participants, templates]);
 
@@ -414,7 +411,6 @@ export function MeetingsTab({
   };
 
   const handleNewMeeting = () => {
-    unlistenRef.current?.(); unlistenRef.current = null;
     setSelectedTemplateId("meeting_general"); setMeetingTitle(""); setParticipantsList([]); setParticipantInput(""); setManualNotes("");
     setPhase("select"); setResult(""); setError(""); setStreaming(false); setResultTab("notes"); onClearTranscript();
     savedMeetingIdRef.current = null; setViewingSaved(null);

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { notesService } from "./services/notes.service";
 import { meetingsService } from "./services/meetings.service";
+import { aiService } from "./services/ai.service";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
@@ -1664,15 +1665,15 @@ function App() {
 
       let finalText = result.text;
 
-      // Silent AI cleanup via Groq — fix transcription artifacts.
+      // Silent AI cleanup via the backend AI function.
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
       if (aiImprovementEnabledRef.current) {
         setStatus("Improving with AI...");
         try {
-          const cleaned = await invoke<string>("ai_process_text", {
-            text: finalText,
-            mode: "transcribe_cleanup",
-          });
+          const cleaned = await aiService.processText(
+            finalText,
+            "transcribe_cleanup",
+          );
           if (cleaned && cleaned.trim().length > 0) {
             finalText = cleaned;
           }
@@ -1832,7 +1833,9 @@ function App() {
       if (e.data.size > 0) meetingAudioChunksRef.current.push(e.data);
     };
     mediaRecorder.onstop = () => {
-      processMeetingAudio();
+      window.setTimeout(() => {
+        void processMeetingAudio();
+      }, 0);
     };
 
     // Start system audio capture (ScreenCaptureKit on macOS) in parallel with mic
@@ -1879,6 +1882,10 @@ function App() {
   };
 
   const processMeetingAudio = async () => {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+
     const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
       ? "audio/mp4"
       : "audio/webm";
