@@ -48,7 +48,7 @@ export default function NoteDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [editedText, setEditedText] = useState("");
-  const [activeTab, setActiveTab] = useState<"notes" | "transcript">("transcript");
+  const [activeTab, setActiveTab] = useState<"transcript" | "ai-notes">("ai-notes");
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [shareSubject, setShareSubject] = useState<string | null>(null);
@@ -595,16 +595,6 @@ export default function NoteDetailPage() {
           {/* Tabs */}
           <div className="flex gap-1 mb-4">
             <button
-              onClick={() => setActiveTab("notes")}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "notes"
-                  ? "bg-cyan-500/10 text-cyan-400"
-                  : "text-gray-500 hover:text-gray-300"
-              }`}
-            >
-              Notes
-            </button>
-            <button
               onClick={() => setActiveTab("transcript")}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === "transcript"
@@ -614,20 +604,30 @@ export default function NoteDetailPage() {
             >
               Transcript
             </button>
+            <button
+              onClick={() => setActiveTab("ai-notes")}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === "ai-notes"
+                  ? "bg-cyan-500/10 text-cyan-400"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              AI Notes
+            </button>
           </div>
 
           {/* Tab Content */}
           <div className="min-h-[120px]">
-            {activeTab === "notes" ? (
+            {activeTab === "transcript" ? (
               <div className="text-gray-300 text-base leading-relaxed whitespace-pre-wrap">
-                {note.raw_text || "No notes available."}
+                {note.raw_text || "No transcript available."}
               </div>
             ) : (
               <textarea
                 value={editedText}
                 onChange={(e) => setEditedText(e.target.value)}
                 onBlur={handleSaveEdit}
-                placeholder="AI output will appear here..."
+                placeholder="AI-formatted notes will appear here..."
                 className="w-full bg-transparent text-base text-gray-300 leading-relaxed focus:outline-none resize-none border-none p-0 min-h-[120px] max-h-[500px] overflow-y-auto placeholder:text-gray-600"
               />
             )}
