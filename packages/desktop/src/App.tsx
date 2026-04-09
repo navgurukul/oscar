@@ -1059,7 +1059,7 @@ function App() {
   const [googleCalendarToken, setGoogleCalendarToken] = useState("");
   const [googleCalendarRefreshToken, setGoogleCalendarRefreshToken] = useState("");
   // Unix timestamp (ms) when the access token expires — 0 means unknown
-  const [googleCalendarTokenExpiry, setGoogleCalendarTokenExpiry] = useState(0);
+  const [_googleCalendarTokenExpiry, setGoogleCalendarTokenExpiry] = useState(0);
   // In-flight PKCE code verifier (lives only while the OAuth window is open)
   const pkceCodeVerifierRef = useRef<string>("");
 
