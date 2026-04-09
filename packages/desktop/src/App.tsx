@@ -1881,54 +1881,59 @@ function App() {
     }
   };
 
+  /**
+   * Encode a Uint8Array to base64 in 32 KB chunks to avoid stack overflow
+   * from passing millions of bytes to String.fromCharCode at once.
+   */
+  const uint8ToBase64 = (bytes: Uint8Array): string => {
+    const CHUNK = 32768;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(binary);
+  };
+
   const processMeetingAudio = async () => {
+    // Yield to allow the UI to update (e.g. spinner) before we do any work
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => resolve());
     });
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
-      ? "audio/mp4"
-      : "audio/webm";
-    const audioBlob = new Blob(meetingAudioChunksRef.current, {
-      type: mimeType,
-    });
+    const useMp4 = MediaRecorder.isTypeSupported("audio/mp4");
+    const mimeType = useMp4 ? "audio/mp4" : "audio/webm";
+    const ext = useMp4 ? "mp4" : "webm";
+
+    const audioBlob = new Blob(meetingAudioChunksRef.current, { type: mimeType });
     if (audioBlob.size < 500) {
       setMeetingTranscript("");
       return;
     }
 
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const audioContext = new AudioContext({ sampleRate: 16000 });
-    try {
-      const decoded = await audioContext.decodeAudioData(arrayBuffer);
-      const numChannels = decoded.numberOfChannels;
-      const length = decoded.length;
-      const mono = new Float32Array(length);
-      for (let ch = 0; ch < numChannels; ch++) {
-        const channel = decoded.getChannelData(ch);
-        for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
-      }
+    const useSystemAudio = systemAudioActiveRef.current;
+    systemAudioActiveRef.current = false;
 
-      const useSystemAudio = systemAudioActiveRef.current;
-      systemAudioActiveRef.current = false;
+    try {
+      // Read raw compressed bytes — no AudioContext, no decoding on the renderer
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioB64 = uint8ToBase64(new Uint8Array(arrayBuffer));
 
       const promptStr = buildInitialPrompt();
       const langStr = getWhisperLanguage();
 
-      const result = await invoke<Transcription>(
-        useSystemAudio ? "transcribe_meeting_audio" : "transcribe_audio",
-        useSystemAudio
-          ? { micAudioData: Array.from(mono), initialPrompt: promptStr, language: langStr }
-          : { audioData: Array.from(mono), initialPrompt: promptStr, language: langStr }
-      );
+      const result = await invoke<Transcription>("transcribe_meeting_audio_b64", {
+        audioB64,
+        ext,
+        useSystemAudio,
+        initialPrompt: promptStr,
+        language: langStr,
+      });
 
       if (result.text) {
         setMeetingTranscript(result.text);
       }
     } catch (e) {
-      console.error("[meeting] audio decode failed:", e);
-    } finally {
-      audioContext.close();
+      console.error("[meeting] audio processing failed:", e);
     }
   };
 
