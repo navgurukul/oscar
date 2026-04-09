@@ -3,6 +3,8 @@
 [env]
 CXXFLAGS = { value = "-I/Library/Developer/CommandLineTools/SDKs/MacOSX26.2.sdk/usr/include/c++/v1", force = false }
 PKG_CONFIG_PATH = { value = "/opt/homebrew/lib/pkgconfig", force = false }
+# CMake 4.x compatibility: allow whisper.cpp's cmake_minimum_required(VERSION 3.5) without error
+CMAKE_POLICY_VERSION_MINIMUM = { value = "3.5", force = false }
 
 # Metal framework linking for whisper-rs ggml-metal backend
 # Required for ___isPlatformVersionAtLeast symbol resolution on ARM64
