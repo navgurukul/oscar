@@ -304,15 +304,18 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
   return (
     <div className="notes-tab">
       <div className="notes-container">
-        <h1 className="notes-title">Scribble</h1>
+        <h1 className="notes-title">
+          <span className="text-slate-600 font-light text-lg" style={{ fontFamily: '"Figtree", -apple-system, sans-serif' }}>OSCAR</span>{" "}
+          <span className="font-bold">Scribble</span>
+        </h1>
 
         {/* Info card */}
         <div
-          className="relative mb-6 overflow-hidden rounded-[22px] px-6 py-5 shadow-[0_18px_40px_rgba(8,145,178,0.18)]"
+          className="relative mx-auto mb-6 w-full max-w-[720px] min-h-[158px] overflow-hidden rounded-[22px] px-6 py-5 shadow-[0_18px_40px_rgba(8,145,178,0.18)]"
           style={SCRIBBLE_CTA_STYLE}
         >
           <div className="pointer-events-none absolute inset-0" style={SCRIBBLE_CTA_OVERLAY_STYLE} />
-          <div className="relative z-[1] flex items-center justify-between gap-5 max-md:flex-col max-md:items-start">
+          <div className="relative z-[1] flex min-h-[118px] items-center justify-between gap-5 max-md:flex-col max-md:items-start">
             <div className="max-w-[430px] text-left">
               <h2 className="m-0 text-[1.3rem] font-semibold leading-[1.08] text-slate-50">
                 Voice notes that stay searchable and synced.

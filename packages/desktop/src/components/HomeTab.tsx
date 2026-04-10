@@ -119,11 +119,22 @@ const STREAM_CTA_OVERLAY_STYLE = {
 } as const;
 const STREAM_CTA_GLASS_STYLE = { WebkitBackdropFilter: "blur(10px)" } as const;
 const STREAM_CTA_APPS = [
-  { label: "Slack", Icon: AppIcons.Slack },
-  { label: "Google Docs", Icon: AppIcons.GoogleDocs },
-  { label: "VS Code", Icon: AppIcons.VSCode },
-  { label: "Teams", Icon: AppIcons.Teams },
+  AppIcons.Slack,
+  AppIcons.Notion,
+  AppIcons.VSCode,
+  AppIcons.GoogleDocs,
+  AppIcons.Chrome,
+  AppIcons.Discord,
+  AppIcons.Teams,
+  AppIcons.Figma,
+  AppIcons.GitHub,
+  AppIcons.Zoom,
+  AppIcons.Spotify,
 ] as const;
+const HOME_TAB_CLASS_NAME = "relative flex flex-1 flex-col overflow-y-auto bg-[#fafafa] px-12 pt-8 pb-[120px]";
+const HOME_HEADER_CLASS_NAME = "mx-auto flex w-full max-w-[720px] flex-col items-center";
+const HOME_TITLE_CLASS_NAME = "mb-1 text-center text-[1.75rem] font-semibold tracking-tight text-slate-800";
+const GARAMOND_FONT_STYLE = { fontFamily: '"EB Garamond", Georgia, serif' } as const;
 
 
 function HomeTab({
@@ -135,76 +146,69 @@ function HomeTab({
 }: HomeTabProps) {
   // Extract first name
   const firstName = userName?.split(" ")[0] || "";
-  const greeting = firstName ? `Welcome back, ${firstName}` : "Welcome back";
+  const hasStats = typeof totalNotes === "number";
 
   return (
-    <div className="relative flex-1 flex flex-col min-h-full h-full px-6 py-10 bg-[#fafafa] overflow-y-auto">
+    <div className={HOME_TAB_CLASS_NAME}>
       {/* Top Section: Greeting, Stats, Shortcut */}
-      <div className="flex w-full max-w-[720px] flex-col items-center gap-5 mx-auto">
+      <div className={HOME_HEADER_CLASS_NAME}>
         {/* Greeting */}
-        <h1 className="text-[2rem] font-bold text-slate-900 text-center font-['EB_Garamond',Georgia,serif] tracking-tight">
-          {greeting}
+        <h1 className={`${HOME_TITLE_CLASS_NAME} ${hasStats ? "" : "mb-5"} `} style={GARAMOND_FONT_STYLE}>
+          {firstName ? (
+            <>
+              <span className="text-slate-600 font-light text-lg" style={{ fontFamily: '"Figtree", -apple-system, sans-serif' }}>WELCOME BACK,</span>{" "}
+              <span className="font-bold">{firstName}</span>
+            </>
+          ) : (
+            <span className="font-bold text-slate-900">Welcome back</span>
+          )}
         </h1>
 
         {/* Minimal Stats */}
-        {typeof totalNotes === "number" && (
-          <p className="text-sm text-slate-400 text-center mt-1">
+        {hasStats && (
+          <p className="mb-5 text-center text-sm text-slate-400">
             {totalNotes} {totalNotes === 1 ? "note" : "notes"} recorded
           </p>
         )}
 
         {/* Shortcut Section */}
         <div
-          className="relative w-full overflow-hidden rounded-[22px] px-6 py-5 shadow-[0_18px_40px_rgba(8,145,178,0.18)]"
+          className="relative w-full min-h-[158px] overflow-hidden rounded-[22px] px-6 py-5 shadow-[0_18px_40px_rgba(8,145,178,0.18)]"
           style={STREAM_CTA_STYLE}
         >
           <div className="pointer-events-none absolute inset-0" style={STREAM_CTA_OVERLAY_STYLE} />
-          <div className="relative z-[1] flex items-center justify-between gap-5 max-md:flex-col max-md:items-start">
-            <div className="max-w-[430px] text-left">
-              <h2 className="m-0 text-[1.3rem] font-semibold leading-[1.08] text-slate-50">
-                Dictate into any app without breaking your flow.
-              </h2>
-              <p className="mt-3 text-[0.82rem] leading-[1.6] text-sky-50/90">
-                Hold the shortcut once and speak straight into Slack, Docs, VS Code, Teams, and more.
-              </p>
-              <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/90 bg-white px-[14px] py-2.5 text-[0.82rem] font-semibold text-cyan-700 shadow-[0_12px_24px_rgba(15,23,42,0.14)]">
-                <kbd className="inline-flex min-w-8 items-center justify-center rounded-md bg-slate-100 px-2 py-1 text-[0.75rem] font-semibold text-slate-700 shadow-[inset_0_-1px_0_rgba(148,163,184,0.25)]">
-                  Ctrl
-                </kbd>
-                <span className="text-cyan-500">+</span>
-                <kbd className="inline-flex min-w-8 items-center justify-center rounded-md bg-slate-100 px-2 py-1 text-[0.75rem] font-semibold text-slate-700 shadow-[inset_0_-1px_0_rgba(148,163,184,0.25)]">
-                  Space
-                </kbd>
-              </div>
-              <p className="mt-2 text-[0.72rem] font-medium uppercase tracking-[0.12em] text-sky-50/75">
-                Works across your desktop
-              </p>
-            </div>
-
-            <div className="flex min-h-16 items-center justify-end max-md:w-full max-md:justify-start" aria-hidden="true">
-              {STREAM_CTA_APPS.map(({ label, Icon }, index) => (
+          <div className="relative z-[1] flex min-h-[118px] flex-col items-center justify-center text-center">
+            <p className="max-w-[510px] text-[0.9375rem] leading-relaxed text-sky-50">
+              Hold{" "}
+              <kbd className="inline-flex min-w-8 items-center justify-center rounded-md border border-white/25 bg-white/20 px-2 py-1 text-[0.75rem] font-semibold text-white shadow-[inset_0_-1px_0_rgba(255,255,255,0.12)]">
+                Ctrl
+              </kbd>{" "}
+              +{" "}
+              <kbd className="inline-flex min-w-8 items-center justify-center rounded-md border border-white/25 bg-white/20 px-2 py-1 text-[0.75rem] font-semibold text-white shadow-[inset_0_-1px_0_rgba(255,255,255,0.12)]">
+                Space
+              </kbd>{" "}
+              to dictate into any app
+            </p>
+            <div className="mt-5 flex min-h-10 items-center justify-center">
+              {STREAM_CTA_APPS.map((Icon, index) => (
                 <div
-                  key={label}
-                  className={`group relative flex h-14 w-14 items-center justify-center rounded-full border border-white/45 bg-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-150 hover:z-[2] hover:-translate-y-px hover:bg-white/[0.18] ${index === 0 ? "ml-0" : "-ml-2.5"}`}
+                  key={index}
+                  className={`${index === 0 ? "ml-0" : "-ml-2.5"} flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]`}
                   style={STREAM_CTA_GLASS_STYLE}
-                  title={label}
                 >
                   <Icon />
                 </div>
               ))}
-              <div
-                className="-ml-2.5 flex h-14 w-14 items-center justify-center rounded-full border border-white/45 bg-white/12 text-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-                style={STREAM_CTA_GLASS_STYLE}
-              >
-                <span className="text-[1.75rem] font-light leading-none">+</span>
-              </div>
             </div>
+            <p className="mt-3 text-[0.72rem] font-medium uppercase tracking-[0.12em] text-sky-50/75">
+                Works across your desktop
+            </p>
           </div>
         </div>
       </div>
 
       {/* Transcripts Section */}
-      <div className="w-full max-w-[600px] mx-auto px-5">
+      <div className="mx-auto w-full max-w-[720px] px-5">
         <TranscriptsSection
           transcripts={localTranscripts}
           onDeleteTranscript={onDeleteTranscript}

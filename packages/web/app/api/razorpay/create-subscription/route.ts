@@ -43,8 +43,15 @@ export async function POST(request: NextRequest) {
     if (rateLimitResult) return rateLimitResult;
 
     // Parse request body
-    const body: CreateSubscriptionRequest = await request.json();
-    const { planType } = body;
+    let body: CreateSubscriptionRequest;
+    try {
+      body = (await request.json()) as CreateSubscriptionRequest;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const planType =
+      typeof body.planType === "string" ? body.planType : undefined;
 
     // Validate plan type
     if (!planType || !["monthly", "yearly"].includes(planType)) {

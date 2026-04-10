@@ -3786,7 +3786,7 @@ kbd {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 32px 40px;
+  padding: 32px 48px 120px;
   overflow-y: auto;
   background: #fafafa;
 }

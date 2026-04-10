@@ -198,8 +198,14 @@ export const notesService = {
     if (error) return { data: null, error: error as Error };
     if (!data) return { data: [], error: null };
 
-    // Filter unique non-null folder names
-    const folders = Array.from(new Set(data.map((n: { folder: string | null }) => n.folder as string)));
+    const folders = Array.from(
+      new Set(
+        data
+          .map((n: { folder: string | null }) => n.folder?.trim())
+          .filter((folder): folder is string => Boolean(folder))
+      )
+    ).sort((left, right) => left.localeCompare(right));
+
     return { data: folders, error: null };
   },
 };

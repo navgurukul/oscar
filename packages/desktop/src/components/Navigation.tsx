@@ -72,9 +72,9 @@ export function Navigation({
   onInstallUpdate
 }: NavigationProps) {
   const navItems: { id: TabType; label: string; icon: React.ElementType; activeClass: string; activeIconClass: string }[] = [
-    { id: "home",     label: "Stream",  icon: Home,     activeClass: "bg-cyan-50 text-cyan-700",    activeIconClass: "text-cyan-600"    },
-    { id: "meetings", label: "Minutes", icon: Calendar,  activeClass: "bg-violet-50 text-violet-700", activeIconClass: "text-violet-600"  },
-    { id: "notes",    label: "Scribble", icon: FileText, activeClass: "bg-emerald-50 text-emerald-700", activeIconClass: "text-emerald-600" },
+    { id: "home",     label: "Stream",   icon: Home,     activeClass: "bg-cyan-50 text-cyan-700", activeIconClass: "text-cyan-600" },
+    { id: "meetings", label: "Minutes",  icon: Calendar, activeClass: "bg-cyan-50 text-cyan-700", activeIconClass: "text-cyan-600" },
+    { id: "notes",    label: "Scribble", icon: FileText, activeClass: "bg-cyan-50 text-cyan-700", activeIconClass: "text-cyan-600" },
   ];
 
   const handleUpgrade = () => {

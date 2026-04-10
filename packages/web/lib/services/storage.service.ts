@@ -25,6 +25,8 @@ export const storageService = {
       sessionStorage.setItem(STORAGE_KEYS.RAW_TEXT, raw);
       if (title) {
         sessionStorage.setItem(STORAGE_KEYS.TITLE, title);
+      } else {
+        sessionStorage.removeItem(STORAGE_KEYS.TITLE);
       }
     } catch (error) {
       console.error("Failed to save note to storage:", error);

@@ -597,7 +597,10 @@ export function MeetingsTab({
     return (
       <div className={MEETINGS_TAB_CLASS_NAME}>
         <div className={MEETINGS_CONTAINER_CLASS_NAME}>
-          <h1 className={MEETINGS_TITLE_CLASS_NAME} style={GARAMOND_FONT_STYLE}>Minutes</h1>
+          <h1 className={MEETINGS_TITLE_CLASS_NAME} style={GARAMOND_FONT_STYLE}>
+            <span className="text-slate-600 font-light text-lg" style={FIGTREE_FONT_STYLE}>OSCAR</span>{" "}
+            <span className="font-bold">Minutes</span>
+          </h1>
 
           {/* Info card */}
           <div

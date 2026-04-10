@@ -37,19 +37,13 @@ export function validateUserInput(input: string): {
   severity?: 'low' | 'medium' | 'high';
 } {
   if (!input) return { isValid: true };
-  
-  const lowercaseInput = input.toLowerCase();
-  
+
   // High severity: Attempts to manipulate AI behavior or access system info
   const highSeverityPatterns = [
     /ignore\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?|rules?|commands?)/i,
     /disregard\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?|rules?)/i,
     /forget\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?|context)/i,
-    /\bapi[_\s-]?key\b/i,
-    /\bsecret\b.*\bkey\b/i,
-    /\benvironment[_\s-]?variable/i,
-    /\baccess[_\s-]?token\b/i,
-    /\bpassword\b/i,
+    /\b(show|reveal|print|display|return|tell|give|extract|dump|expose|leak)\b[\s\S]{0,80}\b(api[_\s-]?key|secret|access[_\s-]?token|password|environment[_\s-]?variable)s?\b/i,
   ];
   
   // Medium severity: Role confusion attempts
@@ -61,7 +55,7 @@ export function validateUserInput(input: string): {
   
   // Check high severity
   for (const pattern of highSeverityPatterns) {
-    if (pattern.test(lowercaseInput)) {
+    if (pattern.test(input)) {
       return {
         isValid: false,
         warning: "Input contains suspicious patterns that may attempt to manipulate AI behavior or access sensitive information",
@@ -72,7 +66,7 @@ export function validateUserInput(input: string): {
   
   // Check medium severity
   for (const pattern of mediumSeverityPatterns) {
-    if (pattern.test(lowercaseInput)) {
+    if (pattern.test(input)) {
       return {
         isValid: false,
         warning: "Input contains patterns that may attempt to manipulate AI role or behavior",
