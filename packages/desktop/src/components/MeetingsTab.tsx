@@ -457,9 +457,9 @@ export function MeetingsTab({
           </div>
 
           {/* Info card */}
-          <div className="minutes-info-card">
-            <p className="minutes-info-card-title">Record your meeting — AI writes structured notes the moment you stop.</p>
-            <p className="minutes-info-card-sub">Key Decisions · Action Items · Follow-ups</p>
+          <div className="oscar-info-banner minutes-info-card">
+            <p className="oscar-info-banner-title minutes-info-card-title">Record your meeting — AI writes structured notes the moment you stop.</p>
+            <p className="oscar-info-banner-sub minutes-info-card-sub">Key Decisions · Action Items · Follow-ups</p>
           </div>
 
           {systemAudioNotice}

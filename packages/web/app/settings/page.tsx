@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { BookOpen, CreditCard, User, Shield, Loader2 } from "lucide-react";
+import { BookOpen, CreditCard, User, Shield, Loader2, Folder } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -46,6 +46,13 @@ const DataPrivacySection = dynamic(
   }
 );
 
+const FolderManagementSection = dynamic(
+  () => import("@/components/settings/FolderManagementSection"),
+  {
+    loading: () => <SectionSkeleton />,
+  }
+);
+
 // Loading skeleton for lazy-loaded sections
 function SectionSkeleton() {
   return (
@@ -57,8 +64,9 @@ function SectionSkeleton() {
   );
 }
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isLoading: authLoading } = useAuth();
   const {
     status,
@@ -73,7 +81,10 @@ export default function SettingsPage() {
     refetch,
   } = useSubscriptionContext();
 
-  const [activeTab, setActiveTab] = useState("billing");
+  const [activeTab, setActiveTab] = useState(() => {
+    const tabParam = searchParams.get("tab");
+    return (tabParam as "billing" | "vocabulary" | "folders" | "account" | "privacy") || "billing";
+  });
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -103,13 +114,14 @@ export default function SettingsPage() {
 
         {/* Mobile Dropdown */}
         <div className="md:hidden mb-4">
-          <Select value={activeTab} onValueChange={setActiveTab}>
+          <Select value={activeTab} onValueChange={(value) => setActiveTab(value as "billing" | "vocabulary" | "folders" | "account" | "privacy")}>
             <SelectTrigger className="w-full bg-slate-900 border-cyan-700/30 font-bold text-white">
               <SelectValue placeholder="Choose section" />
             </SelectTrigger>
             <SelectContent className="bg-slate-900 border-cyan-700/30 font-bold text-white">
               <SelectItem value="billing">Plans & Billing</SelectItem>
               <SelectItem value="vocabulary">Vocabulary</SelectItem>
+              <SelectItem value="folders">Folder Management</SelectItem>
               <SelectItem value="account">Account</SelectItem>
               <SelectItem value="privacy">Data & Privacy</SelectItem>
             </SelectContent>
@@ -119,7 +131,7 @@ export default function SettingsPage() {
         {/* Tabs Layout */}
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={(value) => setActiveTab(value as "billing" | "vocabulary" | "folders" | "account" | "privacy")}
           orientation="vertical"
           className="md:flex gap-6"
         >
@@ -138,6 +150,13 @@ export default function SettingsPage() {
             >
               <BookOpen className="w-4 h-4 mr-2" />
               Vocabulary
+            </TabsTrigger>
+            <TabsTrigger
+              value="folders"
+              className="w-full justify-start data-[state=active]:bg-cyan-500 data-[state=active]:text-white py-2 font-semibold"
+            >
+              <Folder className="w-4 h-4 mr-2" />
+              Folder Management
             </TabsTrigger>
             <TabsTrigger
               value="account"
@@ -180,10 +199,24 @@ export default function SettingsPage() {
 
             {activeTab === "account" && <AccountSection />}
 
+            {activeTab === "folders" && <FolderManagementSection />}
+
             {activeTab === "privacy" && <DataPrivacySection />}
           </div>
         </Tabs>
       </div>
     </main>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen flex items-center justify-center">
+        <Spinner className="text-cyan-500" />
+      </main>
+    }>
+      <SettingsContent />
+    </Suspense>
   );
 }

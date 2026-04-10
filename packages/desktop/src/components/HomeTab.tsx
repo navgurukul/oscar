@@ -131,7 +131,7 @@ function HomeTab({
         )}
 
         {/* Shortcut Section */}
-        <div className="w-full max-w-[520px] bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center self-center">
+        <div className="oscar-info-banner stream-info-banner w-full max-w-[520px] bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center self-center">
           <p className="text-[0.9375rem] text-slate-600 mb-5 leading-relaxed">
             Hold <kbd className="inline-block px-2 py-[3px] text-[0.8125rem] font-mono font-semibold bg-slate-200 border border-slate-300 border-b-[3px] rounded-md text-slate-700">Ctrl</kbd> + <kbd className="inline-block px-2 py-[3px] text-[0.8125rem] font-mono font-semibold bg-slate-200 border border-slate-300 border-b-[3px] rounded-md text-slate-700">Space</kbd> to dictate into any app
           </p>

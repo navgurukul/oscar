@@ -6,5 +6,8 @@
     "dev:web": "cd packages/web && pnpm dev",
     "dev:desktop": "cd packages/desktop && pnpm dev"
   },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@9.0.0",
+  "dependencies": {
+    "@radix-ui/react-dropdown-menu": "^2.1.16"
+  }
 }
