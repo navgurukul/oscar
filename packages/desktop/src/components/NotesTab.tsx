@@ -24,6 +24,15 @@ function formatTime(seconds: number): string {
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
+const SCRIBBLE_CTA_STYLE = {
+  background:
+    "radial-gradient(circle at top left, rgba(255, 255, 255, 0.22), transparent 36%), linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)",
+} as const;
+const SCRIBBLE_CTA_OVERLAY_STYLE = {
+  background: "linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 60%)",
+} as const;
+const SCRIBBLE_CTA_GLASS_STYLE = { WebkitBackdropFilter: "blur(10px)" } as const;
+
 export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime, refreshKey }: NotesTabProps) {
   const [allNotes, setAllNotes] = useState<DBNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -298,9 +307,47 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
         <h1 className="notes-title">Scribble</h1>
 
         {/* Info card */}
-        <div className="oscar-info-banner scribble-info-card">
-          <p className="oscar-info-banner-title scribble-info-card-title">Every voice note you record, searchable and synced across devices.</p>
-          <p className="oscar-info-banner-sub scribble-info-card-sub">Search · Star · Organize</p>
+        <div
+          className="relative mb-6 overflow-hidden rounded-[22px] px-6 py-5 shadow-[0_18px_40px_rgba(8,145,178,0.18)]"
+          style={SCRIBBLE_CTA_STYLE}
+        >
+          <div className="pointer-events-none absolute inset-0" style={SCRIBBLE_CTA_OVERLAY_STYLE} />
+          <div className="relative z-[1] flex items-center justify-between gap-5 max-md:flex-col max-md:items-start">
+            <div className="max-w-[430px] text-left">
+              <h2 className="m-0 text-[1.3rem] font-semibold leading-[1.08] text-slate-50">
+                Voice notes that stay searchable and synced.
+              </h2>
+              <p className="mt-3 text-[0.82rem] leading-[1.6] text-sky-50/90">
+                Record once, then search, star, and organize every idea across your devices.
+              </p>
+              <button
+                onClick={onToggleRecording}
+                type="button"
+                className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-white/90 bg-white px-[14px] py-2.5 text-[0.82rem] font-semibold text-cyan-700 shadow-[0_12px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-px hover:text-cyan-800 hover:shadow-[0_16px_28px_rgba(15,23,42,0.18)]"
+              >
+                {isRecording ? <Square size={14} /> : <Mic size={14} />}
+                {isRecording ? "Stop recording" : "Start recording"}
+              </button>
+            </div>
+
+            <div className="flex min-h-16 items-center justify-end max-md:w-full max-md:justify-start" aria-hidden="true">
+              {[
+                { label: "Search", icon: <Search size={20} /> },
+                { label: "Star", icon: <Star size={20} /> },
+                { label: "Notes", icon: <FileText size={20} /> },
+                { label: "Record", icon: <Mic size={20} /> },
+              ].map(({ label, icon }, index) => (
+                <div
+                  key={label}
+                  className={`relative flex h-14 w-14 items-center justify-center rounded-full border border-white/45 bg-white/15 text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${index === 0 ? "ml-0" : "-ml-2.5"}`}
+                  style={SCRIBBLE_CTA_GLASS_STYLE}
+                  title={label}
+                >
+                  {icon}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {error && (

@@ -1043,6 +1043,7 @@ function App() {
   // Google Calendar OAuth tokens
   const [googleCalendarToken, setGoogleCalendarToken] = useState("");
   const [googleCalendarRefreshToken, setGoogleCalendarRefreshToken] = useState("");
+  const [googleCalendarConnectedUserId, setGoogleCalendarConnectedUserId] = useState("");
   // Unix timestamp (ms) when the access token expires — 0 means unknown
   const [googleCalendarTokenExpiry, setGoogleCalendarTokenExpiry] = useState(0);
   // Legacy in-flight PKCE verifier. Kept so old browser callbacks fail cleanly
@@ -1112,6 +1113,51 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time startup check; updater ref is stable
   }, []);
 
+  const persistCalendarConnection = useCallback(async ({
+    accessToken,
+    expiry,
+    refreshToken,
+    userId,
+  }: {
+    accessToken: string;
+    expiry: number;
+    refreshToken?: string;
+    userId?: string | null;
+  }) => {
+    setGoogleCalendarToken(accessToken);
+    setGoogleCalendarTokenExpiry(expiry);
+
+    const writes: Promise<void>[] = [
+      saveSetting("googleCalendarToken", accessToken),
+      saveSetting("googleCalendarTokenExpiry", expiry),
+    ];
+
+    if (refreshToken) {
+      setGoogleCalendarRefreshToken(refreshToken);
+      writes.push(saveSetting("googleCalendarRefreshToken", refreshToken));
+    }
+
+    if (userId) {
+      setGoogleCalendarConnectedUserId(userId);
+      writes.push(saveSetting("googleCalendarConnectedUserId", userId));
+    }
+
+    await Promise.all(writes);
+  }, []);
+
+  const clearCalendarConnection = useCallback(async () => {
+    setGoogleCalendarToken("");
+    setGoogleCalendarRefreshToken("");
+    setGoogleCalendarConnectedUserId("");
+    setGoogleCalendarTokenExpiry(0);
+    await Promise.all([
+      saveSetting("googleCalendarToken", ""),
+      saveSetting("googleCalendarRefreshToken", ""),
+      saveSetting("googleCalendarConnectedUserId", ""),
+      saveSetting("googleCalendarTokenExpiry", 0),
+    ]);
+  }, []);
+
   // ── Supabase auth listener ─────────────────────────────────────────────────
 
   useEffect(() => {
@@ -1126,6 +1172,9 @@ function App() {
     authInitRef.current = true;
 
     supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (s?.user && googleCalendarConnectedUserId && googleCalendarConnectedUserId !== s.user.id) {
+        void clearCalendarConnection();
+      }
       setSession(s);
       sessionRef.current = s;
       setUser(s?.user ?? null);
@@ -1134,7 +1183,18 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
+    } = supabase.auth.onAuthStateChange((event, s) => {
+      const previousUserId = sessionRef.current?.user?.id ?? null;
+      const nextUserId = s?.user?.id ?? null;
+
+      if (event === "SIGNED_OUT") {
+        void clearCalendarConnection();
+      } else if (previousUserId && nextUserId && previousUserId !== nextUserId) {
+        void clearCalendarConnection();
+      } else if (nextUserId && googleCalendarConnectedUserId && googleCalendarConnectedUserId !== nextUserId) {
+        void clearCalendarConnection();
+      }
+
       setSession(s);
       sessionRef.current = s;
       setUser(s?.user ?? null);
@@ -1143,7 +1203,7 @@ function App() {
 
     return () => subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: auth listener + one-time session check
-  }, []);
+  }, [clearCalendarConnection, googleCalendarConnectedUserId]);
 
   // ── Deep link handler for OAuth callback ────────────────────────────────────
 
@@ -1178,14 +1238,12 @@ function App() {
               return;
             }
             const expiry = Date.now() + (data.expires_in ?? 3600) * 1000;
-            setGoogleCalendarToken(data.access_token);
-            setGoogleCalendarTokenExpiry(expiry);
-            await saveSetting("googleCalendarToken", data.access_token);
-            await saveSetting("googleCalendarTokenExpiry", expiry);
-            if (data.refresh_token) {
-              setGoogleCalendarRefreshToken(data.refresh_token);
-              await saveSetting("googleCalendarRefreshToken", data.refresh_token);
-            }
+            await persistCalendarConnection({
+              accessToken: data.access_token,
+              expiry,
+              refreshToken: data.refresh_token,
+              userId: s?.user?.id ?? sessionRef.current?.user?.id ?? null,
+            });
             console.log("[deep-link] Google Calendar tokens stored (PKCE)");
           } catch (err) {
             console.error("[deep-link] Calendar token exchange error:", err);
@@ -1196,10 +1254,12 @@ function App() {
         // Legacy: implicit-flow returned the access_token directly in the deep link
         const calendarToken = urlObj.searchParams.get("calendar_token");
         if (calendarToken) {
-          setGoogleCalendarToken(calendarToken);
-          setGoogleCalendarTokenExpiry(Date.now() + 3600 * 1000);
-          saveSetting("googleCalendarToken", calendarToken);
-          saveSetting("googleCalendarTokenExpiry", Date.now() + 3600 * 1000);
+          const expiry = Date.now() + 3600 * 1000;
+          void persistCalendarConnection({
+            accessToken: calendarToken,
+            expiry,
+            userId: sessionRef.current?.user?.id ?? null,
+          });
           console.log("[deep-link] Google Calendar token stored (legacy implicit)");
           return;
         }
@@ -1245,14 +1305,12 @@ function App() {
           const providerRefreshToken = urlObj.searchParams.get("provider_refresh_token");
           if (providerToken && calendarOAuthInProgressRef.current) {
             const providerTokenExpiry = Date.now() + Number(expiresIn || "3600") * 1000;
-            setGoogleCalendarToken(providerToken);
-            setGoogleCalendarTokenExpiry(providerTokenExpiry);
-            await saveSetting("googleCalendarToken", providerToken);
-            await saveSetting("googleCalendarTokenExpiry", providerTokenExpiry);
-            if (providerRefreshToken) {
-              setGoogleCalendarRefreshToken(providerRefreshToken);
-              await saveSetting("googleCalendarRefreshToken", providerRefreshToken);
-            }
+            await persistCalendarConnection({
+              accessToken: providerToken,
+              expiry: providerTokenExpiry,
+              refreshToken: providerRefreshToken || undefined,
+              userId: data.session?.user.id ?? sessionRef.current?.user?.id ?? null,
+            });
             calendarOAuthInProgressRef.current = false;
             console.log("[deep-link] Google Calendar token stored");
           }
@@ -1310,6 +1368,7 @@ function App() {
         savedAiImprovement,
         savedCalToken,
         savedCalRefreshToken,
+        savedCalConnectedUserId,
         savedCalTokenExpiry,
         savedSystemAudioEnabled,
         savedTemplates,
@@ -1327,6 +1386,7 @@ function App() {
         loadSetting<boolean>("aiImprovementEnabled", true),
         loadSetting<string>("googleCalendarToken", ""),
         loadSetting<string>("googleCalendarRefreshToken", ""),
+        loadSetting<string>("googleCalendarConnectedUserId", ""),
         loadSetting<number>("googleCalendarTokenExpiry", 0),
         loadSetting<boolean>("systemAudioEnabled", true),
         loadSetting<MeetingTemplateData[]>("meetingTemplates", []),
@@ -1378,15 +1438,22 @@ function App() {
       setAiImprovementEnabled(savedAiImprovement);
       aiImprovementEnabledRef.current = savedAiImprovement;
       setSystemAudioEnabled(savedSystemAudioEnabled);
-      if (savedCalToken) {
+      const hasLegacyCalendarConnection =
+        Boolean(savedCalToken || savedCalRefreshToken) && !savedCalConnectedUserId;
+      if (hasLegacyCalendarConnection) {
+        void clearCalendarConnection();
+      } else if (savedCalToken) {
         // Only restore the access token if it hasn't expired (or expiry is unknown).
         // If it IS expired but we have a refresh token, the first calendar API call
         // will trigger an auto-refresh; we still load it so the UI shows the
         // calendar section rather than the "connect calendar" button.
         setGoogleCalendarToken(savedCalToken);
       }
-      if (savedCalRefreshToken) setGoogleCalendarRefreshToken(savedCalRefreshToken);
-      if (savedCalTokenExpiry) setGoogleCalendarTokenExpiry(savedCalTokenExpiry);
+      if (!hasLegacyCalendarConnection && savedCalRefreshToken) setGoogleCalendarRefreshToken(savedCalRefreshToken);
+      if (!hasLegacyCalendarConnection && savedCalConnectedUserId) {
+        setGoogleCalendarConnectedUserId(savedCalConnectedUserId);
+      }
+      if (!hasLegacyCalendarConnection && savedCalTokenExpiry) setGoogleCalendarTokenExpiry(savedCalTokenExpiry);
       // Merge stored templates with defaults (so new built-ins are always present)
       if (savedTemplates && savedTemplates.length > 0) {
         const storedBuiltins = savedTemplates.filter((t: MeetingTemplateData) => t.builtin);
@@ -1948,17 +2015,6 @@ function App() {
     }
   };
 
-  const clearCalendarConnection = useCallback(async () => {
-    setGoogleCalendarToken("");
-    setGoogleCalendarRefreshToken("");
-    setGoogleCalendarTokenExpiry(0);
-    await Promise.all([
-      saveSetting("googleCalendarToken", ""),
-      saveSetting("googleCalendarRefreshToken", ""),
-      saveSetting("googleCalendarTokenExpiry", 0),
-    ]);
-  }, []);
-
   // ── Google Calendar token refresh ────────────────────────────────────────
   // Called automatically before the access token expires. Returns an explicit
   // state so temporary refresh hiccups do not immediately disconnect Calendar.
@@ -1983,17 +2039,18 @@ function App() {
         return "retry_later";
       }
       const expiry = Date.now() + (data.expires_in ?? 3600) * 1000;
-      setGoogleCalendarToken(data.access_token);
-      setGoogleCalendarTokenExpiry(expiry);
-      await saveSetting("googleCalendarToken", data.access_token);
-      await saveSetting("googleCalendarTokenExpiry", expiry);
+      await persistCalendarConnection({
+        accessToken: data.access_token,
+        expiry,
+        userId: sessionRef.current?.user?.id ?? null,
+      });
       console.log("[calendar] Access token refreshed successfully");
       return "refreshed";
     } catch (err) {
       console.warn("[calendar] Token refresh error:", err);
       return "retry_later";
     }
-  }, [googleCalendarRefreshToken]);
+  }, [googleCalendarRefreshToken, persistCalendarConnection]);
 
   useEffect(() => {
     if (!googleCalendarToken || !googleCalendarRefreshToken || !googleCalendarTokenExpiry) return;
@@ -2016,6 +2073,13 @@ function App() {
     googleCalendarTokenExpiry,
     refreshCalendarToken,
   ]);
+
+  useEffect(() => {
+    if (!user?.id || !googleCalendarConnectedUserId) return;
+    if (googleCalendarConnectedUserId !== user.id) {
+      void clearCalendarConnection();
+    }
+  }, [clearCalendarConnection, googleCalendarConnectedUserId, user?.id]);
 
   // ── Meeting recording (click to start/stop, no auto-paste) ──────────────
 
@@ -2182,6 +2246,7 @@ function App() {
   };
 
   const handleSignOut = async () => {
+    await clearCalendarConnection();
     await supabase.auth.signOut();
   };
 
