@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { BookOpen, CreditCard, User, Shield, Loader2, Folder } from "lucide-react";
@@ -64,7 +64,7 @@ function SectionSkeleton() {
   );
 }
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading: authLoading } = useAuth();
@@ -83,7 +83,7 @@ export default function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState(() => {
     const tabParam = searchParams.get("tab");
-    return (tabParam as any) || "billing";
+    return (tabParam as "billing" | "vocabulary" | "folders" | "account" | "privacy") || "billing";
   });
 
   // Redirect if not authenticated
@@ -114,7 +114,7 @@ export default function SettingsPage() {
 
         {/* Mobile Dropdown */}
         <div className="md:hidden mb-4">
-          <Select value={activeTab} onValueChange={setActiveTab}>
+          <Select value={activeTab} onValueChange={(value) => setActiveTab(value as "billing" | "vocabulary" | "folders" | "account" | "privacy")}>
             <SelectTrigger className="w-full bg-slate-900 border-cyan-700/30 font-bold text-white">
               <SelectValue placeholder="Choose section" />
             </SelectTrigger>
@@ -131,7 +131,7 @@ export default function SettingsPage() {
         {/* Tabs Layout */}
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={(value) => setActiveTab(value as "billing" | "vocabulary" | "folders" | "account" | "privacy")}
           orientation="vertical"
           className="md:flex gap-6"
         >
@@ -206,5 +206,17 @@ export default function SettingsPage() {
         </Tabs>
       </div>
     </main>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen flex items-center justify-center">
+        <Spinner className="text-cyan-500" />
+      </main>
+    }>
+      <SettingsContent />
+    </Suspense>
   );
 }

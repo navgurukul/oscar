@@ -13,7 +13,6 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   Copy,
   Download,
-  X,
   Share2,
   Mail,
   MessageCircle,

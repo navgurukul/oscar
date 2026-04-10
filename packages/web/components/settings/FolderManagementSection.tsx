@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FolderPlus, Trash2, Edit2, Check, X, BookOpen } from "lucide-react";
+import { FolderPlus, Trash2, Edit2, Check, X } from "lucide-react";
 import { notesService } from "@/lib/services/notes.service";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,7 @@ export default function FolderManagementSection() {
   useEffect(() => {
     loadFolders();
     loadNotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadFolders = async () => {
@@ -398,9 +399,9 @@ export default function FolderManagementSection() {
                                   Delete folder?
                                 </AlertDialogTitle>
                                 <AlertDialogDescription className="text-gray-400">
-                                  This will remove the "{folder}" folder from all{" "}
+                                  This will remove the &quot;{folder}&quot; folder from all{" "}
                                   {notesCount} note{notesCount !== 1 ? "s" : ""}.
-                                  Notes will still exist but won't be organized by
+                                  Notes will still exist but won&apos;t be organized by
                                   this folder.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
