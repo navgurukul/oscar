@@ -22,19 +22,15 @@ import {
   ListChecks,
   BookOpen,
   Star,
-  FolderPlus,
-  Plus,
-  Check,
   ThumbsUp,
   ThumbsDown,
   Mic,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
 
 export default function NoteDetailPage() {
@@ -142,55 +138,6 @@ export default function NoteDetailPage() {
 
   // Star state
   const [isStarring, setIsStarring] = useState(false);
-
-  // Folder state
-  const [availableFolders, setAvailableFolders] = useState<string[]>([]);
-  const [isAddingNewFolder, setIsAddingNewFolder] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
-
-  useEffect(() => {
-    loadAvailableFolders();
-  }, []);
-
-  const loadAvailableFolders = async () => {
-    const { data, error } = await notesService.getFolders();
-    if (!error && data) {
-      setAvailableFolders(data);
-    }
-  };
-
-  const handleUpdateFolder = async (folderName: string | null) => {
-    if (!id || !note) return;
-
-    const { error, data } = await notesService.updateNote(id, {
-      folder: folderName,
-    });
-
-    if (error || !data) {
-      toast({
-        title: "Error",
-        description: "Failed to update folder.",
-        variant: "destructive",
-      });
-    } else {
-      setNote(data);
-      if (folderName && !availableFolders.includes(folderName)) {
-        setAvailableFolders([...availableFolders, folderName]);
-      }
-      toast({
-        title: "Success",
-        description: folderName ? `Added to folder "${folderName}"` : "Removed from folder",
-      });
-    }
-  };
-
-  const handleAddNewFolder = () => {
-    if (newFolderName.trim()) {
-      handleUpdateFolder(newFolderName.trim());
-      setIsAddingNewFolder(false);
-      setNewFolderName("");
-    }
-  };
 
   useEffect(() => {
     const loadNote = async () => {
@@ -379,125 +326,76 @@ export default function NoteDetailPage() {
         <p className="text-gray-500 text-sm font-medium">
           {formatDate(note.created_at)}
         </p>
-
-        {/* Folders / Tags Section (Centered Pills) */}
-        <div className="flex flex-wrap justify-center items-center gap-2 pt-1">
-          {note.folder && (
-            <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 px-3 py-1 rounded-full text-xs flex items-center gap-2 group">
-              <FolderPlus className="w-3 h-3" />
-              {note.folder}
-              <button 
-                onClick={() => handleUpdateFolder(null)}
-                className="hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </Badge>
-          )}
-          
-          <div className="flex items-center gap-2">
-            {!isAddingNewFolder ? (
-              <div className="flex items-center gap-2">
-                {availableFolders.filter(f => f !== note.folder).slice(0, 2).map(folder => (
-                  <button
-                    key={folder}
-                    onClick={() => handleUpdateFolder(folder)}
-                    className="text-[11px] px-3 py-1 rounded-full bg-slate-900 border border-white/5 text-gray-500 hover:text-cyan-400 hover:border-cyan-500/30 transition-all whitespace-nowrap"
-                  >
-                    {folder}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setIsAddingNewFolder(true)}
-                  className="text-[11px] px-3 py-1 rounded-full bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-all flex items-center gap-1 font-medium"
-                  title="Create a new folder to organize this note"
-                >
-                  <Plus className="w-3 h-3" />
-                  New Folder
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1 bg-slate-900/80 border border-cyan-500/30 rounded-full px-2 py-0.5 animate-in fade-in zoom-in duration-200">
-                <Input
-                  autoFocus
-                  placeholder="Folder..."
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddNewFolder()}
-                  className="h-6 w-24 bg-transparent border-none text-[11px] focus-visible:ring-0 placeholder:text-gray-600 p-0"
-                />
-                <button onClick={handleAddNewFolder} className="p-1 hover:text-cyan-400 transition-colors">
-                  <Check className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={() => setIsAddingNewFolder(false)} className="p-1 hover:text-red-400 transition-colors">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
       </motion.div>
 
       {/* Mode Selection Bar (Floating) */}
-      <div className="flex flex-col items-center gap-4 w-full">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 mb-2 shadow-2xl z-10"
-        >
-          {[
-            { id: "normal", icon: FileText, label: "Normal" },
-            { id: "email", icon: Mail, label: "Email" },
-            { id: "bullets", icon: ListChecks, label: "Bullets" },
-            { id: "summary", icon: BookOpen, label: "Summary" },
-            { id: "translate", icon: Languages, label: "Translate" }
-          ].map((mode) => (
-            <button
-              key={mode.id}
-              onClick={async () => {
-                if (mode.id === "normal") {
-                  setActiveMode("normal");
-                  setEditedText(note.edited_text || note.original_formatted_text || "");
-                  return;
-                }
+      <div className="flex flex-col items-center gap-1.5 w-full mb-4">
+        <p className="text-sm text-gray-400 font-medium">Convert your note into <span className="text-base font-bold text-cyan-400">→</span></p>
+        <TooltipProvider>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 shadow-2xl z-10"
+          >
+            {[
+              { id: "normal", icon: FileText, label: "Note", desc: "Clean structured note" },
+              { id: "email", icon: Mail, label: "Email", desc: "Send-ready draft" },
+              { id: "bullets", icon: ListChecks, label: "Bullets", desc: "Quick key points" },
+              { id: "summary", icon: BookOpen, label: "Summary", desc: "Condensed overview" },
+              { id: "translate", icon: Languages, label: "Translate", desc: "Change language" }
+            ].map((mode) => (
+              <Tooltip key={mode.id} delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={async () => {
+                      if (mode.id === "normal") {
+                        setActiveMode("normal");
+                        setEditedText(note.edited_text || note.original_formatted_text || "");
+                        return;
+                      }
 
-                setActiveMode(mode.id as typeof activeMode);
-                const baseText = editedText || note.edited_text || note.original_formatted_text || note.raw_text || "";
+                      setActiveMode(mode.id as typeof activeMode);
+                      const baseText = editedText || note.edited_text || note.original_formatted_text || note.raw_text || "";
 
-                if (!modeContent[mode.id] && mode.id !== "translate") {
-                  setIsLoadingMode(true);
-                  let resultText = baseText;
-                  if (mode.id === "email") {
-                    const res = await gmailFormatText(baseText, note.title || "Untitled Note");
-                    resultText = res.success ? res.formattedText || baseText : baseText;
-                  } else if (mode.id === "bullets") {
-                    resultText = baseText.split('\n').filter(l => l.trim()).map(l => `• ${l.trim()}`).join('\n');
-                  } else if (mode.id === "summary") {
-                    const sentences = baseText.match(/[^.!?]+[.!?]+/g) || [baseText];
-                    resultText = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
-                  }
-                  setModeContent(prev => ({ ...prev, [mode.id]: resultText }));
-                  setEditedText(resultText);
-                  setIsLoadingMode(false);
-                } else if (mode.id !== "translate") {
-                  setEditedText(modeContent[mode.id] || baseText);
-                }
-              }}
-              className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
-                activeMode === mode.id 
-                  ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
-                  : "text-gray-400 hover:text-white hover:bg-white/5"
-              }`}
-              title={mode.label}
-            >
-              {isLoadingMode && activeMode === mode.id ? (
-                <Spinner className="w-5 h-5" />
-              ) : (
-                <mode.icon className="w-5 h-5" />
-              )}
-            </button>
-          ))}
-        </motion.div>
+                      if (!modeContent[mode.id] && mode.id !== "translate") {
+                        setIsLoadingMode(true);
+                        let resultText = baseText;
+                        if (mode.id === "email") {
+                          const res = await gmailFormatText(baseText, note.title || "Untitled Note");
+                          resultText = res.success ? res.formattedText || baseText : baseText;
+                        } else if (mode.id === "bullets") {
+                          resultText = baseText.split('\n').filter(l => l.trim()).map(l => `• ${l.trim()}`).join('\n');
+                        } else if (mode.id === "summary") {
+                          const sentences = baseText.match(/[^.!?]+[.!?]+/g) || [baseText];
+                          resultText = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
+                        }
+                        setModeContent(prev => ({ ...prev, [mode.id]: resultText }));
+                        setEditedText(resultText);
+                        setIsLoadingMode(false);
+                      } else if (mode.id !== "translate") {
+                        setEditedText(modeContent[mode.id] || baseText);
+                      }
+                    }}
+                    className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
+                      activeMode === mode.id 
+                        ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
+                        : "text-gray-400 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    {isLoadingMode && activeMode === mode.id ? (
+                      <Spinner className="w-5 h-5" />
+                    ) : (
+                      <mode.icon className="w-5 h-5" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="bg-slate-900 border border-cyan-500 text-cyan-400 rounded-md px-3 py-2">
+                  <p className="text-sm"><span className="font-semibold">{mode.label}</span> — {mode.desc}</p>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </motion.div>
+        </TooltipProvider>
 
         {/* Translation Dropdown - only when translate mode is active */}
         <AnimatePresence>
