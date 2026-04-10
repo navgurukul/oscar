@@ -21,7 +21,7 @@ import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
 import { MeetingsTab, DEFAULT_TEMPLATES } from "./components/MeetingsTab";
-import type { MeetingTemplateData, SavedMeeting } from "./components/MeetingsTab";
+import type { CalendarReconnectResult, MeetingTemplateData, SavedMeeting } from "./components/MeetingsTab";
 import type { LocalTranscript } from "./types/note.types";
 import "./App.css";
 
@@ -1044,7 +1044,7 @@ function App() {
   const [googleCalendarToken, setGoogleCalendarToken] = useState("");
   const [googleCalendarRefreshToken, setGoogleCalendarRefreshToken] = useState("");
   // Unix timestamp (ms) when the access token expires — 0 means unknown
-  const [_googleCalendarTokenExpiry, setGoogleCalendarTokenExpiry] = useState(0);
+  const [googleCalendarTokenExpiry, setGoogleCalendarTokenExpiry] = useState(0);
   // Legacy in-flight PKCE verifier. Kept so old browser callbacks fail cleanly
   // if a user returns from an already-open direct Google OAuth tab.
   const pkceCodeVerifierRef = useRef<string>("");
@@ -1948,13 +1948,23 @@ function App() {
     }
   };
 
-  // ── Google Calendar token refresh ────────────────────────────────────────
-  // Called automatically when the access token has expired.  Returns true if
-  // a fresh token was obtained (app state + store are updated), false if the
-  // user needs to reconnect manually.
+  const clearCalendarConnection = useCallback(async () => {
+    setGoogleCalendarToken("");
+    setGoogleCalendarRefreshToken("");
+    setGoogleCalendarTokenExpiry(0);
+    await Promise.all([
+      saveSetting("googleCalendarToken", ""),
+      saveSetting("googleCalendarRefreshToken", ""),
+      saveSetting("googleCalendarTokenExpiry", 0),
+    ]);
+  }, []);
 
-  const refreshCalendarToken = useCallback(async (): Promise<boolean> => {
-    if (!googleCalendarRefreshToken) return false;
+  // ── Google Calendar token refresh ────────────────────────────────────────
+  // Called automatically before the access token expires. Returns an explicit
+  // state so temporary refresh hiccups do not immediately disconnect Calendar.
+
+  const refreshCalendarToken = useCallback(async (): Promise<CalendarReconnectResult> => {
+    if (!googleCalendarRefreshToken) return "needs_reconnect";
     console.log("[calendar] Refreshing access token…");
     try {
       const { data: { session: s } } = await supabase.auth.getSession();
@@ -1965,8 +1975,12 @@ function App() {
         body: { refresh_token: googleCalendarRefreshToken },
       });
       if (fnErr || !data?.access_token) {
+        if (data?.needs_reconnect) {
+          console.warn("[calendar] Refresh token needs reconnect");
+          return "needs_reconnect";
+        }
         console.warn("[calendar] Token refresh failed:", fnErr);
-        return false;
+        return "retry_later";
       }
       const expiry = Date.now() + (data.expires_in ?? 3600) * 1000;
       setGoogleCalendarToken(data.access_token);
@@ -1974,12 +1988,34 @@ function App() {
       await saveSetting("googleCalendarToken", data.access_token);
       await saveSetting("googleCalendarTokenExpiry", expiry);
       console.log("[calendar] Access token refreshed successfully");
-      return true;
+      return "refreshed";
     } catch (err) {
       console.warn("[calendar] Token refresh error:", err);
-      return false;
+      return "retry_later";
     }
   }, [googleCalendarRefreshToken]);
+
+  useEffect(() => {
+    if (!googleCalendarToken || !googleCalendarRefreshToken || !googleCalendarTokenExpiry) return;
+
+    const refreshLeadMs = 5 * 60 * 1000;
+    const refreshDelay = Math.max(googleCalendarTokenExpiry - Date.now() - refreshLeadMs, 0);
+
+    const timeoutId = setTimeout(async () => {
+      const refreshState = await refreshCalendarToken();
+      if (refreshState === "needs_reconnect") {
+        await clearCalendarConnection();
+      }
+    }, refreshDelay);
+
+    return () => clearTimeout(timeoutId);
+  }, [
+    clearCalendarConnection,
+    googleCalendarRefreshToken,
+    googleCalendarToken,
+    googleCalendarTokenExpiry,
+    refreshCalendarToken,
+  ]);
 
   // ── Meeting recording (click to start/stop, no auto-paste) ──────────────
 
@@ -2300,12 +2336,11 @@ function App() {
                   googleCalendarToken={googleCalendarToken}
                   onConnectCalendar={connectGoogleCalendar}
                   onCalendarTokenInvalid={async () => {
-                    // Try a silent refresh before prompting the user to reconnect
-                    const refreshed = await refreshCalendarToken();
-                    if (!refreshed) {
-                      setGoogleCalendarToken("");
-                      saveSetting("googleCalendarToken", "");
+                    const refreshState = await refreshCalendarToken();
+                    if (refreshState === "needs_reconnect") {
+                      await clearCalendarConnection();
                     }
+                    return refreshState;
                   }}
                   templates={meetingTemplates}
                   onManageTemplates={() => {

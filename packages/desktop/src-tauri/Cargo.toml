@@ -1,6 +1,6 @@
 [package]
 name = "oscar"
-version = "0.3.16"
+version = "0.3.19"
 description = "Voice to Text Desktop App"
 authors = ["you"]
 edition = "2021"

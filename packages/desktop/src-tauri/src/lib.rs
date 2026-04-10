@@ -1165,6 +1165,8 @@ struct CalendarEvent {
     title: String,
     start_time: String,
     end_time: String,
+    start_at: String,
+    end_at: String,
     attendees: Vec<String>,
     calendar_name: String,
 }
@@ -1256,6 +1258,12 @@ async fn get_calendar_events(
                 })
                 .unwrap_or_default();
 
+            let start_at = item
+                .pointer("/start/dateTime")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_default();
+
             let end_time = item
                 .pointer("/end/dateTime")
                 .and_then(|v| v.as_str())
@@ -1265,6 +1273,12 @@ async fn get_calendar_events(
                         .and_then(|v| v.as_str())
                         .map(|d| d.to_string())
                 })
+                .unwrap_or_default();
+
+            let end_at = item
+                .pointer("/end/dateTime")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
                 .unwrap_or_default();
 
             // Attendees: prefer displayName, fall back to email
@@ -1291,13 +1305,15 @@ async fn get_calendar_events(
                 title,
                 start_time,
                 end_time,
+                start_at,
+                end_at,
                 attendees,
                 calendar_name: "Google Calendar".into(),
             })
         })
         .collect();
 
-    events.sort_by(|a, b| a.start_time.cmp(&b.start_time));
+    events.sort_by(|a, b| a.start_at.cmp(&b.start_at));
     Ok(events)
 }
 
