@@ -25,7 +25,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { SquaresSubtract, Trash2, Search, Star } from "lucide-react";
+import { SquaresSubtract, Trash2, Search, Star, Folder, FolderCog } from "lucide-react";
 import type { DBNote } from "@/lib/types/note.types";
 import { getTimeBasedPrompt } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -42,7 +42,11 @@ export default function NotesPage() {
   const [contextPrompt, setContextPrompt] = useState("");
   const [trashCount, setTrashCount] = useState(0);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
+  const [assigningFolderId, setAssigningFolderId] = useState<string | null>(null);
+  const [folderMenuNoteId, setFolderMenuNoteId] = useState<string | null>(null);
+  const [showOverflowFolders, setShowOverflowFolders] = useState(false);
   const ITEMS_PER_PAGE = 5;
+  const MAX_VISIBLE_FOLDERS = 2; // Show first 2 folders, rest in overflow
 
   // Filter and sort state
   const [searchQuery, setSearchQuery] = useState("");
@@ -51,14 +55,41 @@ export default function NotesPage() {
   const [showStarredOnly, setShowStarredOnly] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<string>("All Notes");
   const [folders, setFolders] = useState<string[]>([]);
-  const [showCreateFolder, setShowCreateFolder] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
-  const [targetNoteId, setTargetNoteId] = useState<string>("");
-  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
 
   useEffect(() => {
     setContextPrompt(getTimeBasedPrompt());
   }, []);
+
+  // Close folder menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setFolderMenuNoteId(null);
+    };
+
+    if (folderMenuNoteId) {
+      document.addEventListener("click", handleClickOutside);
+      return () => {
+        document.removeEventListener("click", handleClickOutside);
+      };
+    }
+  }, [folderMenuNoteId]);
+
+  // Close overflow folders menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-overflow-menu]")) {
+        setShowOverflowFolders(false);
+      }
+    };
+
+    if (showOverflowFolders) {
+      document.addEventListener("click", handleClickOutside);
+      return () => {
+        document.removeEventListener("click", handleClickOutside);
+      };
+    }
+  }, [showOverflowFolders]);
 
   // Load notes only once auth state is settled and we have a user.
   // This prevents fetching with a stale session immediately after OAuth redirects.
@@ -208,6 +239,25 @@ export default function NotesPage() {
     }
   };
 
+  const handleAssignFolder = async (note: DBNote, folderName: string | null, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAssigningFolderId(note.id);
+    
+    const { error, data } = await notesService.updateNote(note.id, {
+      folder: folderName,
+    });
+
+    if (error || !data) {
+      alert("Failed to assign folder. Please try again.");
+    } else {
+      setAllNotes((prev) =>
+        prev.map((n) => (n.id === note.id ? { ...n, folder: data.folder } : n))
+      );
+    }
+    
+    setAssigningFolderId(null);
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
@@ -349,91 +399,104 @@ export default function NotesPage() {
         {/* Folder Tabs */}
         {allNotes.length > 0 && (
           <>
-          <div className="flex items-center gap-2 mb-2 overflow-x-auto pb-2 folder-tabs-scrollable">
-            {["All Notes", ...folders, "Uncategorized"].map((folder) => {
+          <div className="flex items-center gap-2 mb-2 pb-2 overflow-x-auto">
+            {/* All Notes Tab */}
+            <button
+              onClick={() => setSelectedFolder("All Notes")}
+              className={`px-6 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
+                selectedFolder === "All Notes" ? "bg-cyan-500 text-slate-950" : "bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:bg-slate-800"
+              }`}
+            >
+              All Notes
+            </button>
+
+            {/* Uncategorized Tab */}
+            {allNotes.some(n => !n.folder) && (
+              <button
+                onClick={() => setSelectedFolder("Uncategorized")}
+                className={`px-6 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
+                  selectedFolder === "Uncategorized" ? "bg-cyan-500 text-slate-950" : "bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:bg-slate-800"
+                }`}
+              >
+                Uncategorized
+              </button>
+            )}
+
+            {/* Visible Folders */}
+            {folders.slice(0, MAX_VISIBLE_FOLDERS).map((folder) => {
               const isActive = selectedFolder === folder;
-              // Only show Uncategorized if there are actually uncategorized notes
-              if (folder === "Uncategorized" && !allNotes.some(n => !n.folder)) return null;
-              
               return (
                 <button
                   key={folder}
                   onClick={() => setSelectedFolder(folder)}
                   className={`px-6 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
                     isActive ? "bg-cyan-500 text-slate-950" : "bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:bg-slate-800"
-                  } ${folder === "Uncategorized" && isActive ? "border-b-2 border-cyan-500 shadow-[0_-4px_10px_rgba(6,182,212,0.2)]" : ""}`}
+                  }`}
                 >
                   {folder}
                 </button>
               );
             })}
-            <button
-              onClick={() => setShowCreateFolder((v) => !v)}
-              className="ml-2 px-3 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-300 hover:text-cyan-200 border border-cyan-500/30 text-xs font-semibold transition-colors"
-              title="Create a new folder and assign a note"
-            >
-              New Folder
-            </button>
-          </div>
-          {showCreateFolder && (
-            <div className="mb-6 flex flex-col sm:flex-row items-center gap-2 p-2 bg-slate-900/60 border border-cyan-700/30 rounded-xl">
-              <Input
-                placeholder="Folder name"
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                className="h-9 w-full sm:w-56 bg-slate-800 border-cyan-700/30 text-white"
-              />
-              <Select value={targetNoteId} onValueChange={setTargetNoteId}>
-                <SelectTrigger className="h-9 w-full sm:w-64 bg-slate-800 border-cyan-700/30 text-white">
-                  <SelectValue placeholder="Assign to note..." />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-cyan-700/30 text-white max-h-64 overflow-y-auto">
-                  {allNotes.map((n) => (
-                    <SelectItem key={n.id} value={n.id}>
-                      {(n.title || "Untitled").slice(0, 50)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            {/* Overflow Folders Dropdown */}
+            {folders.length > MAX_VISIBLE_FOLDERS && (
+              <div className="relative" data-overflow-menu>
+                <button
+                  onClick={() => setShowOverflowFolders(!showOverflowFolders)}
+                  className={`px-4 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap flex items-center gap-1 ${
+                    showOverflowFolders || folders.slice(MAX_VISIBLE_FOLDERS).some(f => selectedFolder === f)
+                      ? "bg-cyan-500 text-slate-950"
+                      : "bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:bg-slate-800"
+                  }`}
+                >
+                  +{folders.length - MAX_VISIBLE_FOLDERS} More
+                  <svg
+                    className={`w-4 h-4 transition-transform duration-200 ${showOverflowFolders ? "rotate-180" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                </button>
+
+                {/* Overflow Dropdown Menu */}
+                {showOverflowFolders && (
+                  <div className="absolute z-50 top-full left-0 mt-0 bg-slate-800 border border-cyan-700/30 rounded-b-lg shadow-lg py-1 min-w-[160px]">
+                    {folders.slice(MAX_VISIBLE_FOLDERS).map((folder) => (
+                      <button
+                        key={folder}
+                        onClick={() => {
+                          setSelectedFolder(folder);
+                          setShowOverflowFolders(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+                          selectedFolder === folder
+                            ? "bg-cyan-500 text-slate-950 font-semibold"
+                            : "text-gray-300 hover:text-white hover:bg-slate-700"
+                        }`}
+                      >
+                        {folder}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Manage Folders Icon - Always on the right */}
+            <div className="ml-auto">
               <button
-                onClick={async () => {
-                  if (!newFolderName.trim() || !targetNoteId) return;
-                  setIsCreatingFolder(true);
-                  const { data, error } = await notesService.updateNote(targetNoteId, { folder: newFolderName.trim() });
-                  setIsCreatingFolder(false);
-                  if (!error && data) {
-                    setAllNotes(prev => prev.map(n => n.id === data.id ? { ...n, folder: data.folder } : n));
-                    if (!folders.includes(newFolderName.trim())) {
-                      setFolders(prev => [...prev, newFolderName.trim()]);
-                    }
-                    setSelectedFolder(newFolderName.trim());
-                    setShowCreateFolder(false);
-                    setNewFolderName("");
-                    setTargetNoteId("");
-                  } else {
-                    alert("Failed to create folder. Please try again.");
-                  }
-                }}
-                disabled={!newFolderName.trim() || !targetNoteId || isCreatingFolder}
-                className="h-9 px-4 rounded-lg bg-cyan-500 text-slate-950 font-semibold disabled:opacity-40"
+                onClick={() => router.push("/settings?tab=folders&from=notes")}
+                className="p-2.5 text-cyan-400 bg-cyan-500/10 border border-cyan-500/40 rounded-lg hover:bg-cyan-500/20 transition-colors flex-shrink-0"
+                title="Manage folders"
               >
-                {isCreatingFolder ? "Creating..." : "Create"}
-              </button>
-              <button
-                onClick={() => {
-                  setShowCreateFolder(false);
-                  setNewFolderName("");
-                  setTargetNoteId("");
-                }}
-                className="h-9 px-3 text-sm text-gray-400 hover:text-white"
-              >
-                Cancel
+                <FolderCog className="w-5 h-5" />
               </button>
             </div>
-          )}
+          </div>
           </>
         )}
-
 
         {/* Filter Bar */}
         {allNotes.length > 0 && (
@@ -543,6 +606,58 @@ export default function NotesPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
+                        {/* Folder Button */}
+                        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFolderMenuNoteId(note.id);
+                            }}
+                            className={`p-2 transition-colors ${
+                              assigningFolderId === note.id
+                                ? "text-cyan-400"
+                                : "text-gray-500 hover:text-cyan-400"
+                            }`}
+                            title="Assign to folder"
+                            disabled={assigningFolderId === note.id}
+                          >
+                            {assigningFolderId === note.id ? (
+                              <Spinner className="w-4 h-4" />
+                            ) : (
+                              <Folder className="w-4 h-4" />
+                            )}
+                          </button>
+                          
+                          {/* Folder Menu Popup */}
+                          {folderMenuNoteId === note.id && (
+                            <div className="absolute z-50 top-full right-0 mt-1 bg-slate-800 border border-cyan-700/30 rounded-lg shadow-lg py-1 min-w-[150px]">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAssignFolder(note, null, e);
+                                  setFolderMenuNoteId(null);
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-slate-700 transition-colors"
+                              >
+                                No Folder
+                              </button>
+                              {folders.map((folder) => (
+                                <button
+                                  key={folder}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAssignFolder(note, folder, e);
+                                    setFolderMenuNoteId(null);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-slate-700 transition-colors"
+                                >
+                                  {folder}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        
                         {/* Star Button */}
                         <button
                           onClick={(e) => handleToggleStar(note, e)}
@@ -578,6 +693,14 @@ export default function NotesPage() {
                     <p className="text-md text-start text-gray-400 line-clamp-2">
                       {getPreview(note)}
                     </p>
+                    {note.folder && (
+                      <div className="mt-3">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-xs font-semibold text-cyan-400">
+                          <Folder className="w-3 h-3" />
+                          {note.folder}
+                        </span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}

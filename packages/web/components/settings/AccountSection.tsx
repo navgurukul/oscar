@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { User, Mail, Key, Trash2, AlertTriangle } from "lucide-react";
+import { User, Mail, Trash2, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -72,34 +72,6 @@ export default function AccountSection() {
               />
             </div>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="userId" className="text-gray-300">User ID</Label>
-            <Input
-              id="userId"
-              value={user?.id || ""}
-              disabled
-              className="bg-slate-800 border-slate-700 text-gray-500 text-sm"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Password */}
-      <Card className="bg-slate-900 border-cyan-700/30">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <Key className="w-5 h-5 text-cyan-500" />
-            Password
-          </CardTitle>
-          <CardDescription className="text-gray-400">
-            Manage your password and security
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-gray-400 text-sm mb-4">
-            You signed in with Google. Password management is handled through your Google account.
-          </p>
         </CardContent>
       </Card>
 

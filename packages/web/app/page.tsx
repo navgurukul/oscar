@@ -266,26 +266,6 @@ export default function Home() {
               )}
             </div>
           </div>
-
-          {/* Action Buttons */}
-          {/* <div className="flex flex-wrap justify-center gap-4">
-            <Button
-              onClick={handleStartRecording}
-              className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold px-6 py-6 rounded-full h-auto"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              New Note
-            </Button>
-            <Link href={ROUTES.NOTES}>
-              <Button
-                variant="outline"
-                className="bg-slate-900/50 border-white/10 text-gray-300 hover:text-white hover:bg-slate-800 px-6 py-6 rounded-full h-auto"
-              >
-                <Plus className="w-5 h-5 mr-2" />
-                My Notes
-              </Button>
-            </Link>
-          </div> */}
         </motion.div>
       </main>
     );
