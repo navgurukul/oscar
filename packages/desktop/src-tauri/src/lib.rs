@@ -492,6 +492,32 @@ fn load_whisper_model(
     Ok("Whisper model loaded successfully".to_string())
 }
 
+#[tauri::command]
+fn warm_whisper_runtime(
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Result<String, String> {
+    let locked = state.lock().map_err(|e| e.to_string())?;
+    let context = locked
+        .whisper_context
+        .as_ref()
+        .ok_or_else(|| "Whisper model not loaded".to_string())?;
+
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    params.set_language(Some("en"));
+    params.set_print_special(false);
+    params.set_print_progress(false);
+    params.set_print_realtime(false);
+    params.set_print_timestamps(false);
+
+    let mut whisper_state = context.create_state().map_err(|e| e.to_string())?;
+    let silence = vec![0.0f32; 16_000];
+    whisper_state
+        .full(params, &silence)
+        .map_err(|e| e.to_string())?;
+
+    Ok("Whisper runtime warmed".to_string())
+}
+
 // ── Whisper: Transcribe ───────────────────────────────────────────────────────
 
 /// Shared transcription logic used by both `transcribe_audio` and
@@ -1519,6 +1545,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             download_whisper_model,
             load_whisper_model,
+            warm_whisper_runtime,
             transcribe_audio,
             transcribe_meeting_audio,
             transcribe_meeting_audio_b64,

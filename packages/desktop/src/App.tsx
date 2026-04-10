@@ -1038,6 +1038,7 @@ function App() {
 
   // Selected microphone device id ("" = system default)
   const [selectedMicId, setSelectedMicId] = useState("");
+  const selectedMicIdRef = useRef("");
 
   // Google Calendar OAuth tokens
   const [googleCalendarToken, setGoogleCalendarToken] = useState("");
@@ -1082,6 +1083,7 @@ function App() {
   const targetAppRef = useRef<string>("");
   const pendingStopRef = useRef(false);
   const warmStreamRef = useRef<MediaStream | null>(null);
+  const voiceEngineWarmupRef = useRef(false);
   const aiEditingRef = useRef(false);
   const tonePresetRef = useRef<TonePreset>("none");
   const dictWordsRef = useRef<string[]>([]);
@@ -1372,6 +1374,7 @@ function App() {
       setLocalTranscripts(savedTranscripts);
       setTranscriptionLanguage(savedLanguage);
       setSelectedMicId(savedMicId);
+      selectedMicIdRef.current = savedMicId;
       setAiImprovementEnabled(savedAiImprovement);
       aiImprovementEnabledRef.current = savedAiImprovement;
       setSystemAudioEnabled(savedSystemAudioEnabled);
@@ -1496,20 +1499,83 @@ function App() {
     setWhisperLoaded(val);
   };
 
+  const getAudioConstraints = (
+    micId = selectedMicIdRef.current,
+  ): MediaTrackConstraints | boolean => (
+    micId ? { deviceId: { ideal: micId } } : true
+  );
+
   // Pre-warm the microphone so hotkey recording starts instantly (no getUserMedia delay).
   // This is critical for fullscreen apps where macOS Space-switching delays event delivery.
-  const warmMicrophone = async () => {
-    if (warmStreamRef.current) return; // already warm
+  const warmMicrophone = async (micId = selectedMicIdRef.current) => {
+    if (
+      warmStreamRef.current &&
+      warmStreamRef.current
+        .getAudioTracks()
+        .some((track) => track.readyState === "live")
+    ) {
+      return;
+    }
+
+    warmStreamRef.current = null;
     try {
-      const audioConstraints = selectedMicId
-        ? { deviceId: { ideal: selectedMicId } }
-        : true;
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
+        audio: getAudioConstraints(micId),
       });
       warmStreamRef.current = stream;
     } catch (e) {
       console.warn("[mic] failed to pre-warm microphone:", e);
+    }
+  };
+
+  const warmBrowserAudioPath = async () => {
+    try {
+      const AudioContextCtor = window.AudioContext;
+      if (AudioContextCtor) {
+        const audioContext = new AudioContextCtor({ sampleRate: 16000 });
+        await audioContext.close();
+      }
+    } catch (e) {
+      console.warn("[audio] browser audio warmup failed:", e);
+    }
+  };
+
+  const warmMediaRecorderPath = async () => {
+    const stream = warmStreamRef.current;
+    if (
+      !stream ||
+      !stream.getAudioTracks().some((track) => track.readyState === "live") ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      return;
+    }
+
+    try {
+      const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
+        ? "audio/mp4"
+        : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recorder.ondataavailable = () => {};
+      recorder.start(50);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      if (recorder.state === "recording") recorder.stop();
+    } catch (e) {
+      console.warn("[audio] MediaRecorder warmup failed:", e);
+    }
+  };
+
+  const warmVoiceEngine = async (micId = selectedMicIdRef.current) => {
+    if (voiceEngineWarmupRef.current) return;
+    voiceEngineWarmupRef.current = true;
+
+    await warmMicrophone(micId);
+    await warmBrowserAudioPath();
+    await warmMediaRecorderPath();
+
+    try {
+      await invoke("warm_whisper_runtime");
+    } catch (e) {
+      console.warn("[whisper] runtime warmup failed:", e);
     }
   };
 
@@ -1547,8 +1613,10 @@ function App() {
     if (loadedPath) {
       setWhisperLoadedAndRef(true);
       setWhisperModelPath(loadedPath);
-      setStatus("Ready! Hold Ctrl+Space anywhere to record.");
-      warmMicrophone();
+      setStatus("Preparing voice engine...");
+      void warmVoiceEngine().finally(() => {
+        setStatus("Ready! Hold Ctrl+Space anywhere to record.");
+      });
       return true;
     }
 
@@ -1602,11 +1670,8 @@ function App() {
       stream = warmStreamRef.current;
     } else {
       try {
-        const audioConstraints = selectedMicId
-          ? { deviceId: { ideal: selectedMicId } }
-          : true;
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: audioConstraints,
+          audio: getAudioConstraints(),
         });
         warmStreamRef.current = stream; // keep for next time
       } catch (e) {
@@ -1929,11 +1994,8 @@ function App() {
       stream = warmStreamRef.current;
     } else {
       try {
-        const audioConstraints = selectedMicId
-          ? { deviceId: { ideal: selectedMicId } }
-          : true;
         stream = await navigator.mediaDevices.getUserMedia({
-          audio: audioConstraints,
+          audio: getAudioConstraints(),
         });
         warmStreamRef.current = stream;
       } catch (e) {
@@ -2060,6 +2122,7 @@ function App() {
   const handlePermissionsContinue = async () => {
     await saveSetting("permissionsDone", true);
     setPermissionsShown(true);
+    if (whisperLoadedRef.current) void warmVoiceEngine();
   };
 
   const retryHotkeyRegistration = useCallback(async () => {
@@ -2291,6 +2354,7 @@ function App() {
                   selectedMicId={selectedMicId}
                   onMicChange={(id) => {
                     setSelectedMicId(id);
+                    selectedMicIdRef.current = id;
                     saveSetting("selectedMicId", id);
                     // Reset warm stream and re-warm with new mic
                     if (warmStreamRef.current) {
@@ -2299,7 +2363,8 @@ function App() {
                         .forEach((t) => t.stop());
                       warmStreamRef.current = null;
                     }
-                    warmMicrophone();
+                    voiceEngineWarmupRef.current = false;
+                    void warmVoiceEngine(id);
                   }}
                   onClearData={async () => {
                     try {

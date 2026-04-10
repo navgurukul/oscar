@@ -142,45 +142,6 @@ function DesktopCallbackContent() {
     handleCallback();
   }, [searchParams]);
 
-  // Once the deep link URL is ready, try opening it automatically.
-  // We use a hidden iframe first (works more reliably for custom URL schemes
-  // without navigating away from the page), then fall back to
-  // window.location.href.  The manual button is always shown because
-  // auto-open may be blocked (not a user gesture).
-  useEffect(() => {
-    if (!deepLinkUrl) return;
-
-    // Approach 1: hidden iframe — silently triggers the URL scheme handler
-    // without navigating the top frame away (so the "Open Oscar" button
-    // remains visible as a fallback).
-    try {
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = deepLinkUrl;
-      document.body.appendChild(iframe);
-      // Clean up after a short delay
-      setTimeout(() => {
-        try { document.body.removeChild(iframe); } catch { /* already removed */ }
-      }, 2000);
-    } catch {
-      // iframe blocked — fall back to location
-    }
-
-    // Approach 2: delayed location.href as a secondary attempt
-    const timer = setTimeout(() => {
-      window.location.href = deepLinkUrl;
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [deepLinkUrl]);
-
-  const openDesktopApp = () => {
-    if (!deepLinkUrl) return;
-
-    // Use both approaches on explicit click (user gesture — always allowed)
-    window.location.href = deepLinkUrl;
-  };
-
   if (state === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-black">
@@ -254,20 +215,8 @@ function DesktopCallbackContent() {
           Click the button below to open the Oscar desktop app.
         </p>
 
-        {/* Use an <a> tag with href for maximum browser compatibility with
-            custom URL schemes — clicks on anchors are more reliably dispatched
-            to the OS URL handler than programmatic window.location changes. */}
         <a
           href={deepLinkUrl || "#"}
-          onClick={(e) => {
-            // Prevent default so we can also try the programmatic approach
-            // in case the anchor doesn't trigger the scheme handler
-            if (deepLinkUrl) {
-              openDesktopApp();
-            } else {
-              e.preventDefault();
-            }
-          }}
           className="block w-full py-3 px-5 bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-gray-950 text-sm font-semibold rounded-lg transition-colors text-center"
         >
           Open Oscar

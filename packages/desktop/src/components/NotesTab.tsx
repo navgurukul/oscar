@@ -298,9 +298,9 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
         <h1 className="notes-title">Scribble</h1>
 
         {/* Info card */}
-        <div className="scribble-info-card">
-          <p className="scribble-info-card-title">Every voice note you record, searchable and synced across devices.</p>
-          <p className="scribble-info-card-sub">Search · Star · Organize</p>
+        <div className="oscar-info-banner scribble-info-card">
+          <p className="oscar-info-banner-title scribble-info-card-title">Every voice note you record, searchable and synced across devices.</p>
+          <p className="oscar-info-banner-sub scribble-info-card-sub">Search · Star · Organize</p>
         </div>
 
         {error && (
