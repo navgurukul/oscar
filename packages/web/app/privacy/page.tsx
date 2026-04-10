@@ -125,9 +125,6 @@ export default function PrivacyPolicyPage() {
                 All content you create on OSCAR is private and not visible to other users. However, data stored on our servers is accessible to OSCAR&apos;s operators for the purposes of support and service maintenance.
               </p>
               
-              <p className="text-base leading-relaxed">
-                If you would like to export your notes and data, you can do so from the settings page of your account.
-              </p>
               
               <p className="text-base leading-relaxed">
                 If you would like to delete your account and associated data, you can do so from your account settings.
