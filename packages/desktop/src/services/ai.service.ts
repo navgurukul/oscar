@@ -10,7 +10,9 @@ export type DesktopAIMode =
   | "meeting_standup"
   | "meeting_1on1"
   | "meeting_brainstorm"
-  | "meeting_custom";
+  | "meeting_custom"
+  | "meeting_reduce_chunk"
+  | "meeting_reduce_merge";
 
 interface AIProcessResponse {
   text?: string;

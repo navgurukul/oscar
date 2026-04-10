@@ -1,6 +1,7 @@
 use arboard::Clipboard;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -300,6 +301,9 @@ pub fn set_pending_deep_link(url: String) {
 
 struct AppState {
     whisper_context: Option<WhisperContext>,
+    loaded_model_role: Option<String>,
+    loaded_model_path: Option<String>,
+    meeting_system_audio_segments: HashMap<usize, Vec<f32>>,
 }
 
 struct HotkeyState {
@@ -477,24 +481,57 @@ async fn download_whisper_model(
 #[tauri::command]
 fn load_whisper_model(
     path: String,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
+    load_whisper_model_inner("dictation", &path, state.inner())
+}
+
+fn load_whisper_model_inner(
+    role: &str,
+    path: &str,
+    state: &Arc<Mutex<AppState>>,
+) -> Result<String, String> {
+    let should_reload = {
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        !(
+            app_state.whisper_context.is_some()
+                && app_state.loaded_model_role.as_deref() == Some(role)
+                && app_state.loaded_model_path.as_deref() == Some(path)
+        )
+    };
+
+    if !should_reload {
+        log::info!("[whisper] Model already loaded for role={} path={}", role, path);
+        return Ok("Whisper model already loaded".to_string());
+    }
+
     log::info!("[whisper] Loading model from: {}", path);
     let params = WhisperContextParameters::default();
     let context =
-        WhisperContext::new_with_params(&path, params).map_err(|e| {
+        WhisperContext::new_with_params(path, params).map_err(|e| {
             log::error!("[whisper] Failed to load model: {}", e);
             e.to_string()
         })?;
     let mut app_state = state.lock().map_err(|e| e.to_string())?;
     app_state.whisper_context = Some(context);
+    app_state.loaded_model_role = Some(role.to_string());
+    app_state.loaded_model_path = Some(path.to_string());
     log::info!("[whisper] Model loaded successfully");
     Ok("Whisper model loaded successfully".to_string())
 }
 
 #[tauri::command]
+fn ensure_whisper_model_loaded(
+    role: String,
+    path: String,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<String, String> {
+    load_whisper_model_inner(&role, &path, state.inner())
+}
+
+#[tauri::command]
 fn warm_whisper_runtime(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
     let locked = state.lock().map_err(|e| e.to_string())?;
     let context = locked
@@ -526,7 +563,7 @@ fn transcribe_audio_inner(
     audio_data: &[f32],
     initial_prompt: Option<&str>,
     language: Option<&str>,
-    app_state: &Mutex<AppState>,
+    app_state: &Arc<Mutex<AppState>>,
 ) -> Result<TranscriptionResult, String> {
     log::info!(
         "[whisper] transcribe_audio_inner — {} samples ({:.1}s), lang={:?}",
@@ -598,7 +635,7 @@ fn transcribe_audio(
     audio_data: Vec<f32>,
     initial_prompt: Option<String>,
     language: Option<String>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
     transcribe_audio_inner(
         &audio_data,
@@ -652,7 +689,7 @@ fn transcribe_meeting_audio(
     mic_audio_data: Vec<f32>,
     initial_prompt: Option<String>,
     language: Option<String>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
     // Stop system audio capture and retrieve buffered samples
     system_audio::stop_capture();
@@ -683,6 +720,69 @@ fn transcribe_meeting_audio(
         language.as_deref(),
         &state,
     )
+}
+
+fn merge_transcription_prompt(
+    initial_prompt: Option<String>,
+    previous_tail_text: Option<String>,
+) -> Option<String> {
+    let mut parts = Vec::new();
+
+    if let Some(prompt) = initial_prompt {
+        let trimmed = prompt.trim();
+        if !trimmed.is_empty() {
+            parts.push(trimmed.to_string());
+        }
+    }
+
+    if let Some(previous_tail) = previous_tail_text {
+        let trimmed = previous_tail.trim();
+        if !trimmed.is_empty() {
+            parts.push(format!("Previous transcript tail: {}", trimmed));
+        }
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n"))
+    }
+}
+
+#[tauri::command]
+fn clear_meeting_segment_buffers(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<String, String> {
+    let mut app_state = state.lock().map_err(|e| e.to_string())?;
+    app_state.meeting_system_audio_segments.clear();
+    Ok("Meeting segment buffers cleared".to_string())
+}
+
+#[tauri::command]
+fn rotate_meeting_system_audio_segment(
+    segment_index: usize,
+    restart_capture: bool,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<String, String> {
+    system_audio::stop_capture();
+    let segment = system_audio::get_audio_data();
+    let sample_count = segment.len();
+
+    {
+        let mut app_state = state.lock().map_err(|e| e.to_string())?;
+        app_state
+            .meeting_system_audio_segments
+            .insert(segment_index, segment);
+    }
+
+    if restart_capture {
+        system_audio::start_capture()?;
+    }
+
+    Ok(format!(
+        "Stored system audio segment {} ({} samples)",
+        segment_index, sample_count
+    ))
 }
 
 // ── Audio decoding helpers ───────────────────────────────────────────────────
@@ -933,6 +1033,68 @@ fn decode_audio_to_pcm(bytes: &[u8], ext: &str) -> Result<Vec<f32>, String> {
     }
 }
 
+#[tauri::command]
+async fn transcribe_meeting_segment_bytes(
+    bytes: Vec<u8>,
+    ext: String,
+    use_system_audio: bool,
+    initial_prompt: Option<String>,
+    language: Option<String>,
+    segment_index: usize,
+    previous_tail_text: Option<String>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<TranscriptionResult, String> {
+    let state = state.inner().clone();
+    let merged_prompt = merge_transcription_prompt(initial_prompt, previous_tail_text);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        log::info!(
+            "[meeting-segment] received segment {} ({} bytes, ext={})",
+            segment_index,
+            bytes.len(),
+            ext
+        );
+
+        let mic_pcm = decode_audio_to_pcm(&bytes, &ext)?;
+        log::info!(
+            "[meeting-segment] decoded {} mic samples for segment {}",
+            mic_pcm.len(),
+            segment_index
+        );
+
+        let system_audio_data = if use_system_audio {
+            let mut app_state = state.lock().map_err(|e| e.to_string())?;
+            app_state
+                .meeting_system_audio_segments
+                .remove(&segment_index)
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let audio_to_transcribe = if system_audio_data.is_empty() {
+            mic_pcm
+        } else {
+            log::info!(
+                "[meeting-segment] mixing mic ({:.1}s) + system ({:.1}s) for segment {}",
+                mic_pcm.len() as f64 / 16000.0,
+                system_audio_data.len() as f64 / 16000.0,
+                segment_index
+            );
+            mix_audio(&mic_pcm, &system_audio_data)
+        };
+
+        transcribe_audio_inner(
+            &audio_to_transcribe,
+            merged_prompt.as_deref(),
+            language.as_deref(),
+            &state,
+        )
+    })
+    .await
+    .map_err(|e| format!("[meeting-segment] worker join error: {e}"))?
+}
+
 /// New IPC command: receive base64-encoded raw audio blob from the frontend,
 /// decode entirely in Rust (no renderer AudioContext), resample to 16 kHz,
 /// mix with system audio if active, and run Whisper.
@@ -943,7 +1105,7 @@ fn transcribe_meeting_audio_b64(
     use_system_audio: bool,
     initial_prompt: Option<String>,
     language: Option<String>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
     // Decode base64 → raw compressed bytes
     let bytes = base64::engine::general_purpose::STANDARD
@@ -1551,9 +1713,12 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .manage(Mutex::new(AppState {
+        .manage(Arc::new(Mutex::new(AppState {
             whisper_context: None,
-        }))
+            loaded_model_role: None,
+            loaded_model_path: None,
+            meeting_system_audio_segments: HashMap::new(),
+        })))
         .manage(HotkeyState {
             is_recording: is_recording.clone(),
             last_error: Mutex::new(None),
@@ -1561,9 +1726,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             download_whisper_model,
             load_whisper_model,
+            ensure_whisper_model_loaded,
             warm_whisper_runtime,
             transcribe_audio,
             transcribe_meeting_audio,
+            clear_meeting_segment_buffers,
+            rotate_meeting_system_audio_segment,
+            transcribe_meeting_segment_bytes,
             transcribe_meeting_audio_b64,
             paste_transcription,
             show_recording_pill,

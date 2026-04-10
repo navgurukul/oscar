@@ -11,7 +11,9 @@ type Mode =
   | "meeting_standup"
   | "meeting_1on1"
   | "meeting_brainstorm"
-  | "meeting_custom";
+  | "meeting_custom"
+  | "meeting_reduce_chunk"
+  | "meeting_reduce_merge";
 
 interface AIProcessRequest {
   text: string;
@@ -35,6 +37,8 @@ const VALID_MODES = new Set<Mode>([
   "meeting_1on1",
   "meeting_brainstorm",
   "meeting_custom",
+  "meeting_reduce_chunk",
+  "meeting_reduce_merge",
 ]);
 
 function buildPrompt(mode: Mode, text: string): { system: string; user: string } {
@@ -132,6 +136,22 @@ function buildPrompt(mode: Mode, text: string): { system: string; user: string }
           "in Roman script mixed with English), understand both and produce notes in clear English.\n\n" +
           "Analyze the following meeting transcript and produce structured meeting notes following " +
           "the instructions included in the text. Output only the structured notes in markdown format:\n\n" +
+          text
+        );
+      case "meeting_reduce_chunk":
+        return (
+          "You are reducing one chunk of a long meeting transcript. The input contains template instructions, " +
+          "meeting context, and one transcript chunk. Extract only the concrete discussion points, decisions, " +
+          "action items, blockers, risks, follow-ups, and notable ideas present in this chunk. Preserve uncertainty " +
+          "when the speaker is ambiguous. Output concise markdown notes for this chunk only with no preamble:\n\n" +
+          text
+        );
+      case "meeting_reduce_merge":
+        return (
+          "You are merging reduced notes from multiple chunks of a long meeting transcript. The input contains " +
+          "template instructions, optional meeting context, optional personal notes, and chunk summaries. " +
+          "Deduplicate overlaps, reconcile repeated points, keep only supported facts, and produce the final " +
+          "markdown meeting notes following the template instructions in the input. Output only the final notes:\n\n" +
           text
         );
       default:

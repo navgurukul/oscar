@@ -19,6 +19,8 @@ import {
   Pencil,
   X,
   Check,
+  Loader2,
+  Mic,
 } from "lucide-react";
 import type { MeetingTemplateData } from "./MeetingsTab";
 import { BillingSection } from "./BillingSection";
@@ -96,6 +98,12 @@ interface SettingsTabProps {
   systemAudioSupported?: boolean;
   systemAudioEnabled?: boolean;
   onSystemAudioToggle?: (enabled: boolean) => void;
+  minutesModelEnabled?: boolean;
+  minutesModelDownloadState?: "idle" | "downloading" | "installed";
+  minutesModelDownloadProgress?: number;
+  minutesModelVariant?: string;
+  onDownloadMinutesModel?: () => void;
+  onRemoveMinutesModel?: () => void;
 }
 
 const NAV_ITEMS: {
@@ -129,6 +137,12 @@ export function SettingsTab({
   systemAudioSupported = false,
   systemAudioEnabled = true,
   onSystemAudioToggle,
+  minutesModelEnabled = false,
+  minutesModelDownloadState = "idle",
+  minutesModelDownloadProgress = 0,
+  minutesModelVariant = "large-v3-turbo-q5_0",
+  onDownloadMinutesModel,
+  onRemoveMinutesModel,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabType>(initialSection || "billing");
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -172,6 +186,8 @@ export function SettingsTab({
   const hasDraftTemplate = Boolean(
     editingTpl && !meetingTemplates.some((tpl) => tpl.id === editingTpl.id),
   );
+  const minutesPackInstalled =
+    minutesModelDownloadState === "installed" || minutesModelEnabled;
 
   const resetTemplateEditor = () => {
     setEditingTpl(null);
@@ -448,6 +464,109 @@ export function SettingsTab({
                 </div>
               </div>
             )}
+
+            <div className="st-card">
+              <div className="st-card-hd">
+                <span className="st-ico-pill">
+                  <Mic size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title">Minutes Accuracy Pack</h3>
+                  <p className="st-card-desc">
+                    Optional local model for better Hindi, Hinglish, and long-meeting transcription.
+                  </p>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 220 }}>
+                  <div
+                    style={{
+                      fontWeight: 500,
+                      color: "#334155",
+                      fontSize: "0.875rem",
+                    }}
+                  >
+                    <code>{minutesModelVariant}</code> local pack
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "#94a3b8",
+                      marginTop: 2,
+                    }}
+                  >
+                    One-time download: ~574 MB. Minutes will keep transcription local and use this pack only when available.
+                  </div>
+                  {minutesModelDownloadState === "downloading" && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: "0.75rem",
+                        color: "#0891b2",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Downloading… {Math.max(0, Math.min(100, Math.round(minutesModelDownloadProgress)))}%
+                    </div>
+                  )}
+                  {minutesPackInstalled && minutesModelDownloadState !== "downloading" && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: "0.75rem",
+                        color: "#0f766e",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Installed
+                    </div>
+                  )}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {minutesPackInstalled ? (
+                    <button
+                      className="st-btn-ghost"
+                      onClick={() => onRemoveMinutesModel?.()}
+                      disabled={minutesModelDownloadState === "downloading"}
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <button
+                      className="st-btn-primary"
+                      onClick={() => onDownloadMinutesModel?.()}
+                      disabled={minutesModelDownloadState === "downloading"}
+                    >
+                      {minutesModelDownloadState === "downloading" ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Downloading…
+                        </>
+                      ) : (
+                        <>
+                          <Download size={14} />
+                          Download Pack
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
 
             {/* ── AI Enhancement ── */}
             <div className="st-card">

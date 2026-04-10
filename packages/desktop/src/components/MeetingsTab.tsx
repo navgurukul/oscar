@@ -86,6 +86,12 @@ export interface SavedMeeting {
 }
 
 type Phase = "select" | "recording" | "processing" | "result" | "view_saved";
+export type MinutesTranscriptionStatus =
+  | "idle"
+  | "recording"
+  | "transcribing"
+  | "finalizing"
+  | "notes";
 
 interface CalendarEvent {
   title: string;
@@ -113,6 +119,10 @@ interface MeetingsTabProps {
   savedMeetings: SavedMeeting[];
   onSaveMeeting: (meeting: SavedMeeting) => void;
   onDeleteMeeting: (id: string) => void;
+  minutesTranscriptionStatus: MinutesTranscriptionStatus;
+  minutesSegmentQueue: number;
+  minutesSegmentsCompleted: number;
+  minutesSegmentsTotal: number;
 }
 
 function CalendarConnectCard({
@@ -166,6 +176,10 @@ export const DEFAULT_TEMPLATES: MeetingTemplateData[] = [
   { id: "meeting_1on1",       name: "1:1",        desc: "Discussion & follow-ups",            prompt: "", builtin: true },
   { id: "meeting_brainstorm", name: "Brainstorm", desc: "Ideas & next steps",                 prompt: "", builtin: true },
 ];
+
+const LONG_TRANSCRIPT_THRESHOLD = 12_000;
+const LONG_TRANSCRIPT_CHUNK_SIZE = 4_000;
+const LONG_TRANSCRIPT_OVERLAP = 300;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -228,6 +242,106 @@ function formatEventTimeRange(event: CalendarEvent): string {
   }
 
   return `${event.start_time} - ${event.end_time}`;
+}
+
+function getTemplateGuidance(
+  templateId: string,
+  templates: MeetingTemplateData[],
+): string {
+  const template = templates.find((tpl) => tpl.id === templateId);
+  if (template && !template.builtin && template.prompt.trim()) {
+    return template.prompt.trim();
+  }
+
+  switch (templateId) {
+    case "meeting_standup":
+      return [
+        "Create standup notes in markdown.",
+        "Use exactly these sections:",
+        "## What Was Done (Yesterday/Recently)",
+        "## What's Being Worked On (Today/Next)",
+        "## Blockers & Risks",
+        "If multiple people spoke, organize updates by person.",
+      ].join("\n");
+    case "meeting_1on1":
+      return [
+        "Create 1:1 notes in markdown.",
+        "Use exactly these sections:",
+        "## Discussion Points",
+        "## Feedback & Recognition",
+        "## Action Items",
+        "## Follow-ups for Next Meeting",
+        "Include owner and deadline whenever they are explicitly mentioned.",
+      ].join("\n");
+    case "meeting_brainstorm":
+      return [
+        "Create brainstorming notes in markdown.",
+        "Use exactly these sections:",
+        "## Ideas Generated",
+        "## Key Themes",
+        "## Top Ideas (Ranked by Discussion Energy)",
+        "## Next Steps",
+        "List each idea with a brief description.",
+      ].join("\n");
+    case "meeting_general":
+    default:
+      return [
+        "Create structured meeting notes in markdown.",
+        "Use exactly these sections:",
+        "## Key Discussion Points",
+        "## Decisions Made",
+        "## Action Items",
+        "## Follow-ups",
+        "Include owner and deadline whenever they are explicitly mentioned.",
+      ].join("\n");
+  }
+}
+
+function splitTextWithOverlap(text: string, size: number, overlap: number): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+
+  const parts: string[] = [];
+  let start = 0;
+
+  while (start < trimmed.length) {
+    const end = Math.min(start + size, trimmed.length);
+    parts.push(trimmed.slice(start, end));
+    if (end >= trimmed.length) break;
+    start = Math.max(end - overlap, start + 1);
+  }
+
+  return parts;
+}
+
+function getNotesLoadingLabel(
+  status: MinutesTranscriptionStatus,
+  transcript: string,
+  completed: number,
+  total: number,
+  queue: number,
+): string {
+  if (status === "finalizing") {
+    const normalizedTotal = Math.max(total, completed + queue);
+    if (normalizedTotal > 0) {
+      return `Finalizing transcript (${completed}/${normalizedTotal} segments complete)…`;
+    }
+    return "Finalizing transcript…";
+  }
+
+  if (status === "transcribing") {
+    const normalizedTotal = Math.max(total, completed + queue);
+    if (normalizedTotal > 0) {
+      return `Transcribing segment ${Math.min(completed + 1, normalizedTotal)} of ${normalizedTotal}…`;
+    }
+    return "Transcribing audio…";
+  }
+
+  if (!transcript.trim()) {
+    return "Transcribing audio…";
+  }
+
+  return "Generating meeting notes…";
 }
 
 // ── Grouped calendar rows ────────────────────────────────────────────────────
@@ -368,6 +482,10 @@ export function MeetingsTab({
   savedMeetings,
   onSaveMeeting,
   onDeleteMeeting,
+  minutesTranscriptionStatus,
+  minutesSegmentQueue,
+  minutesSegmentsCompleted,
+  minutesSegmentsTotal,
 }: MeetingsTabProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("meeting_general");
   const [meetingTitle, setMeetingTitle]   = useState("");
@@ -507,7 +625,45 @@ export function MeetingsTab({
     setStreaming(true); setResult(""); setError("");
 
     try {
-      const processed = await aiService.processText(enrichedText, mode);
+      const normalizedTranscript = transcript.trim();
+      let processed: string;
+
+      if (normalizedTranscript.length > LONG_TRANSCRIPT_THRESHOLD) {
+        const templateGuidance = getTemplateGuidance(selectedTemplateId, templates);
+        const transcriptChunks = splitTextWithOverlap(
+          normalizedTranscript,
+          LONG_TRANSCRIPT_CHUNK_SIZE,
+          LONG_TRANSCRIPT_OVERLAP,
+        );
+
+        const reducedChunks: string[] = [];
+
+        for (let index = 0; index < transcriptChunks.length; index += 1) {
+          const chunkPayload = [
+            `Template instructions:\n${templateGuidance}`,
+            context ? `Meeting context:\n${context}` : "",
+            `Transcript chunk ${index + 1}/${transcriptChunks.length}:\n${transcriptChunks[index]}`,
+          ].filter(Boolean).join("\n\n---\n\n");
+
+          reducedChunks.push(
+            await aiService.processText(chunkPayload, "meeting_reduce_chunk"),
+          );
+        }
+
+        const mergePayload = [
+          `Template instructions:\n${templateGuidance}`,
+          context ? `Meeting context:\n${context}` : "",
+          manualNotes.trim() ? `My notes:\n${manualNotes.trim()}` : "",
+          `Reduced chunk summaries:\n${reducedChunks
+            .map((chunk, index) => `Chunk ${index + 1}\n${chunk}`)
+            .join("\n\n---\n\n")}`,
+        ].filter(Boolean).join("\n\n---\n\n");
+
+        processed = await aiService.processText(mergePayload, "meeting_reduce_merge");
+      } else {
+        processed = await aiService.processText(enrichedText, mode);
+      }
+
       setResult(processed);
       setPhase("result");
     } catch (err) {
@@ -519,8 +675,14 @@ export function MeetingsTab({
   }, [selectedTemplateId, transcript, manualNotes, meetingTitle, participants, templates]);
 
   useEffect(() => {
-    if (phase === "processing" && (transcript.trim() || manualNotes.trim())) processTranscript();
-  }, [phase, transcript, manualNotes, processTranscript]);
+    if (
+      phase === "processing" &&
+      minutesTranscriptionStatus === "notes" &&
+      (transcript.trim() || manualNotes.trim())
+    ) {
+      processTranscript();
+    }
+  }, [phase, transcript, manualNotes, minutesTranscriptionStatus, processTranscript]);
 
   // Auto-save meeting when notes are generated
   const savedMeetingIdRef = useRef<string | null>(null);
@@ -551,7 +713,11 @@ export function MeetingsTab({
     setResult(""); setError(""); setManualNotes(""); setResultTab("notes");
   };
 
-  const handleStopRecording = () => { onStopRecording(); setPhase("processing"); };
+  const handleStopRecording = () => {
+    onStopRecording();
+    setResultTab("notes");
+    setPhase("processing");
+  };
 
   const handleCopy = async () => {
     if (!result) return;
@@ -1077,7 +1243,13 @@ export function MeetingsTab({
               <div className="flex flex-col items-center gap-4 py-16">
                 <Loader2 size={28} className="animate-spin" />
                 <span className="text-[0.9375rem] font-medium text-slate-500">
-                  {!transcript.trim() ? "Transcribing audio…" : "Generating meeting notes…"}
+                  {getNotesLoadingLabel(
+                    minutesTranscriptionStatus,
+                    transcript,
+                    minutesSegmentsCompleted,
+                    minutesSegmentsTotal,
+                    minutesSegmentQueue,
+                  )}
                 </span>
               </div>
             )}

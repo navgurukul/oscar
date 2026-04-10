@@ -21,7 +21,12 @@ import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
 import { MeetingsTab, DEFAULT_TEMPLATES } from "./components/MeetingsTab";
-import type { CalendarReconnectResult, MeetingTemplateData, SavedMeeting } from "./components/MeetingsTab";
+import type {
+  CalendarReconnectResult,
+  MeetingTemplateData,
+  MinutesTranscriptionStatus,
+  SavedMeeting,
+} from "./components/MeetingsTab";
 import type { LocalTranscript } from "./types/note.types";
 import "./App.css";
 
@@ -32,8 +37,18 @@ interface Transcription {
   error?: string;
 }
 
+interface MeetingSegmentJob {
+  blob: Blob;
+  ext: string;
+  segmentIndex: number;
+  useSystemAudio: boolean;
+}
+
 type TonePreset = "none" | "professional" | "casual" | "friendly";
 type MicrophonePermissionState = "granted" | "denied" | "prompt" | "unknown";
+type WhisperModelRole = "dictation" | "minutes";
+type MinutesModelVariant = "large-v3-turbo-q5_0";
+type MinutesModelDownloadState = "idle" | "downloading" | "installed";
 const WINDOW_DRAG_BLOCKERS =
   "button, a, input, textarea, select, [role='button'], [contenteditable='true']";
 
@@ -843,6 +858,11 @@ const MODEL_URL =
   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
 const MODEL_PATH = ".oscar/models/ggml-small.bin";
 const OLD_MODEL_PATH = ".oscar/models/ggml-base.bin";
+const MINUTES_MODEL_URL =
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin";
+const MINUTES_MODEL_PATH = ".oscar/models/ggml-large-v3-turbo-q5_0.bin";
+const MINUTES_MODEL_VARIANT: MinutesModelVariant = "large-v3-turbo-q5_0";
+const MEETING_SEGMENT_DURATION_MS = 120_000;
 const SYSTEM_AUDIO_SETTINGS_URL =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
 
@@ -1024,6 +1044,14 @@ function App() {
   // Settings panel
   const [_whisperModelPath, setWhisperModelPath] = useState("");
   const [_autoPaste, setAutoPaste] = useState(true);
+  const [minutesModelEnabled, setMinutesModelEnabled] = useState(false);
+  const [minutesModelPath, setMinutesModelPath] = useState("");
+  const [minutesModelVariant, setMinutesModelVariant] =
+    useState<MinutesModelVariant>(MINUTES_MODEL_VARIANT);
+  const [minutesModelDownloadState, setMinutesModelDownloadState] =
+    useState<MinutesModelDownloadState>("idle");
+  const [minutesModelDownloadProgress, setMinutesModelDownloadProgress] =
+    useState(0);
 
   // AI editing (legacy — kept for settings migration)
   const [_aiEditing, setAiEditing] = useState(false);
@@ -1055,14 +1083,30 @@ function App() {
   const [meetingTemplates, setMeetingTemplates] = useState<MeetingTemplateData[]>(DEFAULT_TEMPLATES);
   const [savedMeetings, setSavedMeetings] = useState<SavedMeeting[]>([]);
   const [settingsInitialSection, setSettingsInitialSection] = useState<string | undefined>(undefined);
+  const [activeTab, setActiveTab] = useState<TabType>("home");
 
   // Meeting recording state (separate from hold-to-talk dictation)
   const [isMeetingRecording, setIsMeetingRecording] = useState(false);
   const [meetingRecordingTime, setMeetingRecordingTime] = useState(0);
   const [meetingTranscript, setMeetingTranscript] = useState("");
+  const [minutesTranscriptionStatus, setMinutesTranscriptionStatus] =
+    useState<MinutesTranscriptionStatus>("idle");
+  const [minutesSegmentQueue, setMinutesSegmentQueue] = useState(0);
+  const [minutesSegmentsCompleted, setMinutesSegmentsCompleted] = useState(0);
+  const [minutesSegmentsTotal, setMinutesSegmentsTotal] = useState(0);
   const meetingMediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const meetingAudioChunksRef = useRef<Blob[]>([]);
   const meetingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const meetingSegmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const meetingSegmentStopRef =
+    useRef<((mode?: "rotate" | "final") => void) | null>(null);
+  const meetingSessionIdRef = useRef(0);
+  const meetingStopRequestedRef = useRef(false);
+  const meetingNextSegmentIndexRef = useRef(0);
+  const meetingSegmentQueueRef = useRef<MeetingSegmentJob[]>([]);
+  const meetingSegmentWorkerRunningRef = useRef(false);
+  const meetingTranscriptRef = useRef("");
+  const meetingFinalizationResolveRef = useRef<(() => void) | null>(null);
+  const meetingSessionUsesSystemAudioRef = useRef(false);
 
   // System audio capture (other participants' audio via ScreenCaptureKit)
   const [systemAudioSupported, setSystemAudioSupported] = useState(false);
@@ -1090,6 +1134,8 @@ function App() {
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
   const authInitRef = useRef(false);
+  const currentWhisperRoleRef = useRef<WhisperModelRole | null>(null);
+  const currentWhisperKeyRef = useRef("");
 
   // Auto-updater
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -1389,6 +1435,9 @@ function App() {
         savedLanguage,
         savedMicId,
         savedAiImprovement,
+        savedMinutesModelEnabled,
+        savedMinutesModelPath,
+        savedMinutesModelVariant,
         savedCalToken,
         savedCalRefreshToken,
         savedCalConnectedUserId,
@@ -1407,6 +1456,9 @@ function App() {
         loadSetting<string>("transcriptionLanguage", "hi-en"),
         loadSetting<string>("selectedMicId", ""),
         loadSetting<boolean>("aiImprovementEnabled", true),
+        loadSetting<boolean>("minutesModelEnabled", false),
+        loadSetting<string>("minutesModelPath", ""),
+        loadSetting<MinutesModelVariant>("minutesModelVariant", MINUTES_MODEL_VARIANT),
         loadSetting<string>("googleCalendarToken", ""),
         loadSetting<string>("googleCalendarRefreshToken", ""),
         loadSetting<string>("googleCalendarConnectedUserId", ""),
@@ -1460,6 +1512,24 @@ function App() {
       selectedMicIdRef.current = savedMicId;
       setAiImprovementEnabled(savedAiImprovement);
       aiImprovementEnabledRef.current = savedAiImprovement;
+      const normalizedMinutesModelPath = savedMinutesModelPath || "";
+      let hasMinutesModel = false;
+      if (normalizedMinutesModelPath) {
+        hasMinutesModel = await invoke<boolean>("check_file_exists", {
+          path: normalizedMinutesModelPath,
+        }).catch(() => false);
+      }
+      setMinutesModelEnabled(savedMinutesModelEnabled && hasMinutesModel);
+      setMinutesModelPath(savedMinutesModelEnabled && hasMinutesModel ? normalizedMinutesModelPath : "");
+      setMinutesModelVariant(savedMinutesModelVariant || MINUTES_MODEL_VARIANT);
+      setMinutesModelDownloadState(
+        savedMinutesModelEnabled && hasMinutesModel ? "installed" : "idle",
+      );
+      setMinutesModelDownloadProgress(0);
+      if (savedMinutesModelEnabled && !hasMinutesModel) {
+        void saveSetting("minutesModelEnabled", false);
+        void saveSetting("minutesModelPath", "");
+      }
       setSystemAudioEnabled(savedSystemAudioEnabled);
       const hasLegacyCalendarConnection =
         Boolean(savedCalToken || savedCalRefreshToken) && !savedCalConnectedUserId;
@@ -1669,8 +1739,7 @@ function App() {
     }
   };
 
-  const tryLoadWhisperModel = async (): Promise<string | null> => {
-    // Get home directory first so it's available in fallback section
+  const resolveDictationModelPath = useCallback(async (): Promise<string | null> => {
     let home: string;
     try {
       home = await homeDir();
@@ -1688,31 +1757,88 @@ function App() {
 
     for (const path of paths) {
       try {
-        await invoke("load_whisper_model", { path });
-        return path;
+        const exists = await invoke<boolean>("check_file_exists", { path });
+        if (exists) return path;
       } catch {
         continue;
       }
     }
 
     return null;
-  };
+  }, []);
+
+  const resolveMinutesModelPath = useCallback(async (): Promise<string | null> => {
+    if (!minutesModelEnabled) {
+      return null;
+    }
+
+    let home: string;
+    try {
+      home = await homeDir();
+    } catch {
+      return null;
+    }
+
+    const candidates = [
+      minutesModelPath,
+      `${home}/${MINUTES_MODEL_PATH}`,
+    ].filter(Boolean);
+
+    for (const path of candidates) {
+      try {
+        const exists = await invoke<boolean>("check_file_exists", { path });
+        if (exists) return path;
+      } catch {
+        continue;
+      }
+    }
+
+    return null;
+  }, [minutesModelEnabled, minutesModelPath]);
+
+  const ensureWhisperModelLoaded = useCallback(async (preferredRole: WhisperModelRole) => {
+    let role: WhisperModelRole = preferredRole;
+    let path =
+      preferredRole === "minutes"
+        ? await resolveMinutesModelPath()
+        : await resolveDictationModelPath();
+
+    if (!path && preferredRole === "minutes") {
+      role = "dictation";
+      path = await resolveDictationModelPath();
+    }
+
+    if (!path) {
+      throw new Error("Whisper model not found.");
+    }
+
+    await invoke("ensure_whisper_model_loaded", { role, path });
+    const nextKey = `${role}:${path}`;
+    if (currentWhisperKeyRef.current !== nextKey) {
+      currentWhisperKeyRef.current = nextKey;
+      currentWhisperRoleRef.current = role;
+      voiceEngineWarmupRef.current = false;
+    }
+
+    setWhisperLoadedAndRef(true);
+    setWhisperModelPath(path);
+    return { role, path };
+  }, [resolveDictationModelPath, resolveMinutesModelPath]);
 
   const initWhisper = async () => {
-    const loadedPath = await tryLoadWhisperModel();
-    if (loadedPath) {
-      setWhisperLoadedAndRef(true);
-      setWhisperModelPath(loadedPath);
+    try {
+      const { path } = await ensureWhisperModelLoaded("dictation");
       setStatus("Preparing voice engine...");
       void warmVoiceEngine().finally(() => {
         setStatus("Ready! Hold Ctrl+Space anywhere to record.");
       });
+      setWhisperModelPath(path);
       return true;
+    } catch {
+      setWhisperLoadedAndRef(false);
+      setStatus("Whisper model not found. Set the path in Settings.");
+      return false;
     }
-
-    setWhisperLoadedAndRef(false);
-    setStatus("Whisper model not found. Set the path in Settings.");
-    return false;
   };
 
   // ── Dictionary helpers ─────────────────────────────────────────────────────
@@ -1736,11 +1862,51 @@ function App() {
     return parts.length > 0 ? parts.join(", ") : undefined;
   };
 
-  // Resolve transcription language for Whisper: "hi-en" → "en", "auto" → undefined
-  const getWhisperLanguage = () => {
+  // Resolve transcription language for Whisper. Minutes keeps Hinglish on auto-detect.
+  const getWhisperLanguage = (role: WhisperModelRole) => {
     if (transcriptionLanguage === "auto") return undefined;
-    if (transcriptionLanguage === "hi-en") return "en";
+    if (transcriptionLanguage === "hi-en") {
+      return role === "minutes" ? undefined : "en";
+    }
     return transcriptionLanguage;
+  };
+
+  const getTranscriptTailWords = (text: string, wordCount: number) => {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return undefined;
+    return words.slice(-wordCount).join(" ");
+  };
+
+  const normalizeTranscriptBoundary = (text: string) =>
+    text
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const appendTranscriptSegment = (existing: string, nextSegment: string) => {
+    const trimmedExisting = existing.trim();
+    const trimmedNext = nextSegment.trim();
+    if (!trimmedExisting) return trimmedNext;
+    if (!trimmedNext) return trimmedExisting;
+
+    const existingWords = trimmedExisting.split(/\s+/);
+    const nextWords = trimmedNext.split(/\s+/);
+    const maxOverlap = Math.min(20, existingWords.length, nextWords.length);
+
+    for (let overlap = maxOverlap; overlap >= 1; overlap -= 1) {
+      const existingSlice = normalizeTranscriptBoundary(
+        existingWords.slice(-overlap).join(" "),
+      );
+      const nextSlice = normalizeTranscriptBoundary(
+        nextWords.slice(0, overlap).join(" "),
+      );
+      if (existingSlice && existingSlice === nextSlice) {
+        return `${trimmedExisting} ${nextWords.slice(overlap).join(" ")}`.trim();
+      }
+    }
+
+    return `${trimmedExisting} ${trimmedNext}`.trim();
   };
 
   // ── Hotkey recording ───────────────────────────────────────────────────────
@@ -1880,10 +2046,11 @@ function App() {
     setStatus(`Transcribing ${durationSec}s...`);
 
     try {
+      await ensureWhisperModelLoaded("dictation");
       const result = await invoke<Transcription>("transcribe_audio", {
         audioData: Array.from(audioData),
         initialPrompt: buildInitialPrompt(),
-        language: getWhisperLanguage(),
+        language: getWhisperLanguage("dictation"),
       });
 
       if (!result.text) {
@@ -2106,8 +2273,226 @@ function App() {
 
   // ── Meeting recording (click to start/stop, no auto-paste) ──────────────
 
+  const resetMeetingPipelineState = () => {
+    if (meetingTimerRef.current) {
+      clearInterval(meetingTimerRef.current);
+      meetingTimerRef.current = null;
+    }
+    if (meetingSegmentTimerRef.current) {
+      clearTimeout(meetingSegmentTimerRef.current);
+      meetingSegmentTimerRef.current = null;
+    }
+    meetingSegmentQueueRef.current = [];
+    meetingSegmentWorkerRunningRef.current = false;
+    meetingTranscriptRef.current = "";
+    meetingNextSegmentIndexRef.current = 0;
+    meetingStopRequestedRef.current = false;
+    meetingFinalizationResolveRef.current = null;
+    meetingSegmentStopRef.current = null;
+    meetingSessionUsesSystemAudioRef.current = false;
+    systemAudioActiveRef.current = false;
+    meetingMediaRecorderRef.current = null;
+    setMeetingTranscript("");
+    setMeetingRecordingTime(0);
+    setMinutesSegmentQueue(0);
+    setMinutesSegmentsCompleted(0);
+    setMinutesSegmentsTotal(0);
+    setMinutesTranscriptionStatus("idle");
+  };
+
+  const maybeCompleteMeetingFinalization = () => {
+    if (!meetingStopRequestedRef.current) return;
+    if (
+      meetingMediaRecorderRef.current &&
+      meetingMediaRecorderRef.current.state === "recording"
+    ) {
+      return;
+    }
+    if (meetingSegmentQueueRef.current.length > 0) return;
+    if (meetingSegmentWorkerRunningRef.current) return;
+
+    systemAudioActiveRef.current = false;
+    setMinutesSegmentQueue(0);
+    setMinutesTranscriptionStatus("notes");
+    meetingFinalizationResolveRef.current?.();
+    meetingFinalizationResolveRef.current = null;
+  };
+
+  const processMeetingSegmentQueue = async () => {
+    if (meetingSegmentWorkerRunningRef.current) return;
+    meetingSegmentWorkerRunningRef.current = true;
+
+    while (meetingSegmentQueueRef.current.length > 0) {
+      const job = meetingSegmentQueueRef.current.shift();
+      if (!job) break;
+
+      setMinutesSegmentQueue(meetingSegmentQueueRef.current.length);
+      if (!meetingStopRequestedRef.current) {
+        setMinutesTranscriptionStatus("transcribing");
+      }
+
+      try {
+        const bytes = Array.from(new Uint8Array(await job.blob.arrayBuffer()));
+        const result = await invoke<Transcription>(
+          "transcribe_meeting_segment_bytes",
+          {
+            bytes,
+            ext: job.ext,
+            useSystemAudio: job.useSystemAudio,
+            initialPrompt: buildInitialPrompt(),
+            language: getWhisperLanguage("minutes"),
+            segmentIndex: job.segmentIndex,
+            previousTailText: getTranscriptTailWords(
+              meetingTranscriptRef.current,
+              30,
+            ),
+          },
+        );
+
+        if (result.text) {
+          const nextTranscript = appendTranscriptSegment(
+            meetingTranscriptRef.current,
+            result.text,
+          );
+          meetingTranscriptRef.current = nextTranscript;
+          setMeetingTranscript(nextTranscript);
+        }
+      } catch (e) {
+        console.error("[meeting] segment transcription failed:", e);
+      } finally {
+        setMinutesSegmentsCompleted((prev) => prev + 1);
+      }
+    }
+
+    meetingSegmentWorkerRunningRef.current = false;
+
+    if (meetingStopRequestedRef.current) {
+      maybeCompleteMeetingFinalization();
+      return;
+    }
+
+    if (
+      meetingMediaRecorderRef.current &&
+      meetingMediaRecorderRef.current.state === "recording"
+    ) {
+      setMinutesTranscriptionStatus("recording");
+    } else {
+      setMinutesTranscriptionStatus("idle");
+    }
+  };
+
+  const queueMeetingSegment = (job: MeetingSegmentJob) => {
+    meetingSegmentQueueRef.current.push(job);
+    setMinutesSegmentQueue(meetingSegmentQueueRef.current.length);
+    setMinutesSegmentsTotal((prev) => Math.max(prev, job.segmentIndex + 1));
+    if (!meetingStopRequestedRef.current) {
+      setMinutesTranscriptionStatus("transcribing");
+    }
+    void processMeetingSegmentQueue();
+  };
+
+  const startMeetingSegmentRecorder = (sessionId: number) => {
+    const stream = warmStreamRef.current;
+    if (!stream) return;
+
+    const useMp4 = MediaRecorder.isTypeSupported("audio/mp4");
+    const mimeType = useMp4 ? "audio/mp4" : "audio/webm";
+    const ext = useMp4 ? "mp4" : "webm";
+    const segmentIndex = meetingNextSegmentIndexRef.current;
+    const segmentUsesSystemAudio = meetingSessionUsesSystemAudioRef.current;
+    meetingNextSegmentIndexRef.current += 1;
+
+    const chunks: Blob[] = [];
+    let stopMode: "rotate" | "final" | null = null;
+    let rotationPromise: Promise<void> = Promise.resolve();
+
+    const mediaRecorder = new MediaRecorder(stream, { mimeType });
+    meetingMediaRecorderRef.current = mediaRecorder;
+    meetingSegmentStopRef.current = (mode = "final") => {
+      if (mediaRecorder.state !== "recording") return;
+      if (meetingSegmentTimerRef.current) {
+        clearTimeout(meetingSegmentTimerRef.current);
+        meetingSegmentTimerRef.current = null;
+      }
+
+      stopMode = mode;
+      rotationPromise = segmentUsesSystemAudio
+        ? invoke("rotate_meeting_system_audio_segment", {
+            segmentIndex,
+            restartCapture: mode === "rotate",
+          })
+            .then(() => undefined)
+            .catch((err) => {
+              console.warn("[meeting] system audio segment rotation failed:", err);
+              meetingSessionUsesSystemAudioRef.current = false;
+              systemAudioActiveRef.current = false;
+            })
+        : Promise.resolve();
+
+      mediaRecorder.stop();
+    };
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      window.setTimeout(async () => {
+        await rotationPromise;
+
+        const shouldContinue =
+          stopMode === "rotate" &&
+          !meetingStopRequestedRef.current &&
+          meetingSessionIdRef.current === sessionId;
+
+        if (shouldContinue) {
+          startMeetingSegmentRecorder(sessionId);
+        }
+
+        if (meetingMediaRecorderRef.current === mediaRecorder) {
+          meetingMediaRecorderRef.current = null;
+        }
+        if (meetingSegmentStopRef.current && stopMode === "final") {
+          meetingSegmentStopRef.current = null;
+        }
+
+        const audioBlob = new Blob(chunks, { type: mimeType });
+        if (audioBlob.size >= 500) {
+          queueMeetingSegment({
+            blob: audioBlob,
+            ext,
+            segmentIndex,
+            useSystemAudio: segmentUsesSystemAudio,
+          });
+        }
+
+        maybeCompleteMeetingFinalization();
+      }, 0);
+    };
+
+    mediaRecorder.start();
+    setMinutesTranscriptionStatus("recording");
+    meetingSegmentTimerRef.current = setTimeout(() => {
+      if (meetingSessionIdRef.current !== sessionId || meetingStopRequestedRef.current) {
+        return;
+      }
+      meetingSegmentStopRef.current?.("rotate");
+    }, MEETING_SEGMENT_DURATION_MS);
+  };
+
   const startMeetingRecording = async () => {
     setSystemAudioWarning("");
+    resetMeetingPipelineState();
+
+    try {
+      await ensureWhisperModelLoaded("minutes");
+      await warmVoiceEngine();
+    } catch (e) {
+      console.error("[meeting-record] failed to prepare Whisper model:", e);
+      return;
+    }
 
     let stream: MediaStream;
     if (
@@ -2126,33 +2511,26 @@ function App() {
         return;
       }
     }
-
-    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
-      ? "audio/mp4"
-      : "audio/webm";
-    const mediaRecorder = new MediaRecorder(stream, { mimeType });
-    meetingMediaRecorderRef.current = mediaRecorder;
-    meetingAudioChunksRef.current = [];
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) meetingAudioChunksRef.current.push(e.data);
-    };
-    mediaRecorder.onstop = () => {
-      window.setTimeout(() => {
-        void processMeetingAudio();
-      }, 0);
-    };
+    meetingSessionIdRef.current += 1;
+    const sessionId = meetingSessionIdRef.current;
+    meetingStopRequestedRef.current = false;
+    meetingTranscriptRef.current = "";
+    await invoke("clear_meeting_segment_buffers").catch((err) => {
+      console.warn("[meeting-record] failed to clear segment buffers:", err);
+    });
 
     // Start system audio capture (ScreenCaptureKit on macOS) in parallel with mic
     if (systemAudioEnabled && systemAudioSupported) {
       try {
         await invoke("start_system_audio_capture");
         systemAudioActiveRef.current = true;
+        meetingSessionUsesSystemAudioRef.current = true;
         setSystemAudioWarning("");
         console.log("[meeting-record] System audio capture started");
       } catch (e) {
         console.warn("[meeting-record] System audio capture failed, mic only:", e);
         systemAudioActiveRef.current = false;
+        meetingSessionUsesSystemAudioRef.current = false;
         const reason = String(e).replace(/^Error:\s*/i, "");
         setSystemAudioWarning(
           `${reason} Meeting recording will continue with your microphone only.`,
@@ -2160,86 +2538,46 @@ function App() {
       }
     } else {
       systemAudioActiveRef.current = false;
+      meetingSessionUsesSystemAudioRef.current = false;
       setSystemAudioWarning("");
     }
 
-    mediaRecorder.start(100);
     setIsMeetingRecording(true);
     setMeetingRecordingTime(0);
     setMeetingTranscript("");
+    setMinutesTranscriptionStatus("recording");
     meetingTimerRef.current = setInterval(() => {
       setMeetingRecordingTime((prev) => prev + 1);
     }, 1000);
+    startMeetingSegmentRecorder(sessionId);
   };
 
   const stopMeetingRecording = () => {
     setIsMeetingRecording(false);
+    meetingStopRequestedRef.current = true;
+    setMinutesTranscriptionStatus("finalizing");
+
     if (meetingTimerRef.current) {
       clearInterval(meetingTimerRef.current);
       meetingTimerRef.current = null;
     }
-    if (
-      meetingMediaRecorderRef.current &&
-      meetingMediaRecorderRef.current.state === "recording"
-    ) {
-      meetingMediaRecorderRef.current.stop();
+    if (meetingSegmentTimerRef.current) {
+      clearTimeout(meetingSegmentTimerRef.current);
+      meetingSegmentTimerRef.current = null;
     }
-  };
 
-  /**
-   * Encode a Uint8Array to base64 in 32 KB chunks to avoid stack overflow
-   * from passing millions of bytes to String.fromCharCode at once.
-   */
-  const uint8ToBase64 = (bytes: Uint8Array): string => {
-    const CHUNK = 32768;
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += CHUNK) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-    }
-    return btoa(binary);
-  };
-
-  const processMeetingAudio = async () => {
-    // Yield to allow the UI to update (e.g. spinner) before we do any work
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => resolve());
-    });
-
-    const useMp4 = MediaRecorder.isTypeSupported("audio/mp4");
-    const mimeType = useMp4 ? "audio/mp4" : "audio/webm";
-    const ext = useMp4 ? "mp4" : "webm";
-
-    const audioBlob = new Blob(meetingAudioChunksRef.current, { type: mimeType });
-    if (audioBlob.size < 500) {
-      setMeetingTranscript("");
+    if (meetingSegmentStopRef.current) {
+      meetingSegmentStopRef.current("final");
       return;
     }
 
-    const useSystemAudio = systemAudioActiveRef.current;
-    systemAudioActiveRef.current = false;
-
-    try {
-      // Read raw compressed bytes — no AudioContext, no decoding on the renderer
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const audioB64 = uint8ToBase64(new Uint8Array(arrayBuffer));
-
-      const promptStr = buildInitialPrompt();
-      const langStr = getWhisperLanguage();
-
-      const result = await invoke<Transcription>("transcribe_meeting_audio_b64", {
-        audioB64,
-        ext,
-        useSystemAudio,
-        initialPrompt: promptStr,
-        language: langStr,
+    if (systemAudioActiveRef.current) {
+      void invoke("stop_system_audio_capture").catch((err) => {
+        console.warn("[meeting] failed to stop system audio capture:", err);
       });
-
-      if (result.text) {
-        setMeetingTranscript(result.text);
-      }
-    } catch (e) {
-      console.error("[meeting] audio processing failed:", e);
+      systemAudioActiveRef.current = false;
     }
+    maybeCompleteMeetingFinalization();
   };
 
   const handlePermissionsContinue = async () => {
@@ -2287,8 +2625,106 @@ function App() {
     }
   }, []);
 
-  // ── Tab state ──────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<TabType>("home");
+  const handleDownloadMinutesModel = useCallback(async () => {
+    if (minutesModelDownloadState === "downloading") return;
+
+    setMinutesModelDownloadState("downloading");
+    setMinutesModelDownloadProgress(0);
+
+    const unlisten = await listen<DownloadProgress>(
+      "download-progress",
+      (event) => {
+        setMinutesModelDownloadProgress(event.payload.percentage);
+      },
+    );
+
+    try {
+      const home = await homeDir();
+      const fullPath = `${home}/${MINUTES_MODEL_PATH}`;
+
+      await invoke("download_whisper_model", {
+        url: MINUTES_MODEL_URL,
+        path: fullPath,
+      });
+
+      setMinutesModelEnabled(true);
+      setMinutesModelPath(fullPath);
+      setMinutesModelVariant(MINUTES_MODEL_VARIANT);
+      setMinutesModelDownloadState("installed");
+      setMinutesModelDownloadProgress(100);
+      await Promise.all([
+        saveSetting("minutesModelEnabled", true),
+        saveSetting("minutesModelPath", fullPath),
+        saveSetting("minutesModelVariant", MINUTES_MODEL_VARIANT),
+      ]);
+
+      if (activeTab === "meetings") {
+        await ensureWhisperModelLoaded("minutes");
+        await warmVoiceEngine();
+      }
+    } catch (err) {
+      console.error("[minutes-model] download failed:", err);
+      setMinutesModelDownloadState(minutesModelEnabled ? "installed" : "idle");
+      setMinutesModelDownloadProgress(0);
+    } finally {
+      unlisten();
+    }
+  }, [
+    activeTab,
+    ensureWhisperModelLoaded,
+    minutesModelDownloadState,
+    minutesModelEnabled,
+  ]);
+
+  const handleRemoveMinutesModel = useCallback(async () => {
+    if (!minutesModelPath) return;
+
+    try {
+      const exists = await invoke<boolean>("check_file_exists", {
+        path: minutesModelPath,
+      });
+      if (exists) {
+        await invoke("delete_file", { path: minutesModelPath });
+      }
+    } catch (err) {
+      console.warn("[minutes-model] remove failed:", err);
+    }
+
+    setMinutesModelEnabled(false);
+    setMinutesModelPath("");
+    setMinutesModelDownloadProgress(0);
+    setMinutesModelDownloadState("idle");
+    await Promise.all([
+      saveSetting("minutesModelEnabled", false),
+      saveSetting("minutesModelPath", ""),
+    ]);
+
+    if (currentWhisperRoleRef.current === "minutes") {
+      try {
+        await ensureWhisperModelLoaded("dictation");
+        await warmVoiceEngine();
+      } catch (err) {
+        console.warn("[minutes-model] failed to fall back to dictation model:", err);
+      }
+    }
+  }, [ensureWhisperModelLoaded, minutesModelPath]);
+
+  useEffect(() => {
+    if (!setupComplete) return;
+
+    if (activeTab === "meetings") {
+      void ensureWhisperModelLoaded("minutes")
+        .then(() => warmVoiceEngine())
+        .catch((err) => console.warn("[whisper] failed to prepare Minutes model:", err));
+      return;
+    }
+
+    if (currentWhisperRoleRef.current === "minutes") {
+      void ensureWhisperModelLoaded("dictation")
+        .then(() => warmVoiceEngine())
+        .catch((err) => console.warn("[whisper] failed to restore dictation model:", err));
+    }
+  }, [activeTab, ensureWhisperModelLoaded, setupComplete]);
 
   // ── Subscription state ─────────────────────────────────────────────────────
   const [isProUser, setIsProUser] = useState(false);
@@ -2418,7 +2854,14 @@ function App() {
                   onStopRecording={stopMeetingRecording}
                   recordingTime={meetingRecordingTime}
                   transcript={meetingTranscript}
-                  onClearTranscript={() => setMeetingTranscript("")}
+                  onClearTranscript={() => {
+                    meetingTranscriptRef.current = "";
+                    setMeetingTranscript("");
+                    setMinutesSegmentQueue(0);
+                    setMinutesSegmentsCompleted(0);
+                    setMinutesSegmentsTotal(0);
+                    setMinutesTranscriptionStatus("idle");
+                  }}
                   systemAudioWarning={systemAudioWarning}
                   googleCalendarToken={googleCalendarToken}
                   onConnectCalendar={connectGoogleCalendar}
@@ -2447,6 +2890,10 @@ function App() {
                     saveSetting("savedMeetings", updated);
                     meetingsService.deleteMeeting(id).catch((e) => console.warn("[minutes] delete failed:", e));
                   }}
+                  minutesTranscriptionStatus={minutesTranscriptionStatus}
+                  minutesSegmentQueue={minutesSegmentQueue}
+                  minutesSegmentsCompleted={minutesSegmentsCompleted}
+                  minutesSegmentsTotal={minutesSegmentsTotal}
                 />
               )}
 
@@ -2495,6 +2942,7 @@ function App() {
                       const filesToDelete = [
                         `${home}/${MODEL_PATH}`,
                         `${home}/${OLD_MODEL_PATH}`,
+                        `${home}/${MINUTES_MODEL_PATH}`,
                         // Legacy local AI model files (removed in favour of Groq)
                         `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
                         `${home}/.oscar/models/phi-3.5-tokenizer.json`,
@@ -2561,6 +3009,12 @@ function App() {
                   systemAudioSupported={systemAudioSupported}
                   systemAudioEnabled={systemAudioEnabled}
                   onSystemAudioToggle={handleSystemAudioToggle}
+                  minutesModelEnabled={minutesModelEnabled}
+                  minutesModelDownloadState={minutesModelDownloadState}
+                  minutesModelDownloadProgress={minutesModelDownloadProgress}
+                  minutesModelVariant={minutesModelVariant}
+                  onDownloadMinutesModel={handleDownloadMinutesModel}
+                  onRemoveMinutesModel={handleRemoveMinutesModel}
                 />
               )}
             </div>
