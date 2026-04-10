@@ -1,4 +1,5 @@
 use arboard::Clipboard;
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -658,171 +659,306 @@ fn transcribe_meeting_audio(
     )
 }
 
-// ── Groq AI: Text Processing ─────────────────────────────────────────────
+// ── Audio decoding helpers ───────────────────────────────────────────────────
 
-// API key embedded at build time via GROQ_API_KEY env var; falls back to
-// empty string - you must set GROQ_API_KEY at build time for release builds.
-const GROQ_API_KEY: &str = match option_env!("GROQ_API_KEY") {
-    Some(k) => k,
-    None => "",
-};
-const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL: &str = "llama-3.1-8b-instant";
+/// Decode MP4/AAC or any symphonia-supported format to 16 kHz mono f32 PCM.
+fn decode_with_symphonia(bytes: &[u8], ext: &str) -> Result<Vec<f32>, String> {
+    use symphonia::core::audio::SampleBuffer;
+    use symphonia::core::codecs::DecoderOptions;
+    use symphonia::core::formats::FormatOptions;
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::meta::MetadataOptions;
+    use symphonia::core::probe::Hint;
+    use symphonia::default::get_probe;
 
-fn build_ai_prompt(mode: &str, text: &str) -> (String, String) {
-    let system = "You are a precise transcript assistant. Follow instructions exactly. \
-                  Output only the requested content with no preamble, no explanations, \
-                  no meta-commentary. The transcript may contain Hinglish (Hindi words \
-                  written in Roman script mixed with English). Understand both languages \
-                  and always produce the output in clear English."
-        .to_string();
-    let user = match mode {
-        "transcribe_cleanup" => format!(
-            "Fix any transcription errors, grammar, punctuation, and remove filler words \
-             (um, uh, like, you know) in the text below. Preserve the original meaning \
-             and wording as much as possible. Output only the corrected text:\n\n{text}"
-        ),
-        "cleanup" => format!(
-            "Clean up the following text — fix grammar, remove filler words, improve \
-             readability. Keep the meaning intact. Output only the cleaned text:\n\n{text}"
-        ),
-        "summary" => format!(
-            "Write a 3–5 sentence summary of the following text. \
-             Output only the summary:\n\n{text}"
-        ),
-        "bullets" => format!(
-            "Extract the key points from the following text as a concise bullet list. \
-             Output only the bullets:\n\n{text}"
-        ),
-        "email" => format!(
-            "Rewrite the following text as a clear, professional, ready-to-send email. \
-             Output only the email body:\n\n{text}"
-        ),
-        // ── Meeting templates ──────────────────────────────────────────────
-        "meeting_general" => format!(
-            "You are a meeting notes assistant. The transcript may be in Hinglish (Hindi words \
-             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
-             Analyze the following meeting transcript and produce structured meeting notes with these sections:\n\
-             ## Key Discussion Points\n\
-             ## Decisions Made\n\
-             ## Action Items\n(include owner if mentioned and deadline if mentioned)\n\
-             ## Follow-ups\n\n\
-             Output only the structured notes in markdown format:\n\n{text}"
-        ),
-        "meeting_standup" => format!(
-            "You are a standup meeting notes assistant. The transcript may be in Hinglish (Hindi words \
-             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
-             Analyze the following standup transcript and produce structured notes with these sections:\n\
-             ## What Was Done (Yesterday/Recently)\n\
-             ## What's Being Worked On (Today/Next)\n\
-             ## Blockers & Risks\n\n\
-             If multiple people spoke, organize by person. Output only the structured notes in markdown:\n\n{text}"
-        ),
-        "meeting_1on1" => format!(
-            "You are a 1:1 meeting notes assistant. The transcript may be in Hinglish (Hindi words \
-             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
-             Analyze the following 1:1 meeting transcript and produce structured notes with these sections:\n\
-             ## Discussion Points\n\
-             ## Feedback & Recognition\n\
-             ## Action Items\n(include owner and deadline if mentioned)\n\
-             ## Follow-ups for Next Meeting\n\n\
-             Output only the structured notes in markdown format:\n\n{text}"
-        ),
-        "meeting_brainstorm" => format!(
-            "You are a brainstorming session notes assistant. The transcript may be in Hinglish (Hindi words \
-             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
-             Analyze the following brainstorm transcript and produce structured notes with these sections:\n\
-             ## Ideas Generated\n(list each idea with a brief description)\n\
-             ## Key Themes\n\
-             ## Top Ideas (Ranked by Discussion Energy)\n\
-             ## Next Steps\n\n\
-             Output only the structured notes in markdown format:\n\n{text}"
-        ),
-        "meeting_custom" => format!(
-            "You are a meeting notes assistant. The transcript may be in Hinglish (Hindi words \
-             in Roman script mixed with English) — understand both and produce notes in clear English.\n\n\
-             Analyze the following meeting transcript and produce structured meeting notes following \
-             the instructions included in the text. \
-             Output only the structured notes in markdown format:\n\n{text}"
-        ),
-        _ => format!("Process the following text:\n\n{text}"),
-    };
-    (system, user)
-}
+    let cursor = std::io::Cursor::new(bytes.to_vec());
+    let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
 
-/// Process text with Groq AI. Streams tokens via "ai-token" events.
-#[tauri::command]
-async fn ai_process_text(
-    text: String,
-    mode: String,
-    app: tauri::AppHandle,
-) -> Result<String, String> {
-    use futures_util::StreamExt;
+    let mut hint = Hint::new();
+    hint.with_extension(ext);
 
-    let (system_prompt, user_prompt) = build_ai_prompt(&mode, &text);
+    let probe = get_probe()
+        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+        .map_err(|e| format!("[audio] probe failed: {e}"))?;
 
-    let body = serde_json::json!({
-        "model": GROQ_MODEL,
-        "messages": [
-            { "role": "system", "content": system_prompt },
-            { "role": "user",   "content": user_prompt   }
-        ],
-        "stream": true,
-        "max_tokens": 2048,
-        "temperature": 0.3
-    });
+    let mut format = probe.format;
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
+    let track = format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL)
+        .ok_or("[audio] no supported audio track found")?;
 
-    let response = client
-        .post(GROQ_API_URL)
-        .header("Authorization", format!("Bearer {GROQ_API_KEY}"))
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Groq request failed: {e}"))?;
+    let track_id = track.id;
+    let sample_rate = track.codec_params.sample_rate.unwrap_or(44100) as usize;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("Groq API error {status}: {body}"));
-    }
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+        .map_err(|e| format!("[audio] decoder init failed: {e}"))?;
 
-    let mut full_text = String::new();
-    let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut raw_samples: Vec<f32> = Vec::new();
 
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("Stream read error: {e}"))?;
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-        // Process complete SSE lines
-        while let Some(newline_pos) = buffer.find('\n') {
-            let line = buffer[..newline_pos].trim().to_string();
-            buffer = buffer[newline_pos + 1..].to_string();
-
-            if line.is_empty() || line == "data: [DONE]" {
-                continue;
+    loop {
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break
             }
-            if let Some(json_str) = line.strip_prefix("data: ") {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
-                    if let Some(content) = json
-                        .pointer("/choices/0/delta/content")
-                        .and_then(|v| v.as_str())
-                    {
-                        full_text.push_str(content);
-                        let _ = app.emit("ai-token", content);
-                    }
+            Err(symphonia::core::errors::Error::ResetRequired) => continue,
+            Err(e) => return Err(format!("[audio] packet error: {e}")),
+        };
+
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        let decoded = match decoder.decode(&packet) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        let spec = *decoded.spec();
+        let mut sample_buf = SampleBuffer::<f32>::new(decoded.capacity() as u64, spec);
+        sample_buf.copy_interleaved_ref(decoded);
+        let samples = sample_buf.samples();
+        let channels = spec.channels.count();
+
+        // Downmix to mono
+        if channels == 1 {
+            raw_samples.extend_from_slice(samples);
+        } else {
+            let frames = samples.len() / channels;
+            for f in 0..frames {
+                let mut sum = 0f32;
+                for c in 0..channels {
+                    sum += samples[f * channels + c];
                 }
+                raw_samples.push(sum / channels as f32);
             }
         }
     }
 
-    Ok(full_text)
+    log::info!(
+        "[audio] symphonia decoded {} mono samples @ {}Hz",
+        raw_samples.len(),
+        sample_rate
+    );
+
+    if sample_rate == 16000 {
+        return Ok(raw_samples);
+    }
+
+    resample_to_16k(raw_samples, sample_rate)
+}
+
+/// Decode WebM/Opus by demuxing with symphonia (MKV container) and decoding
+/// Opus frames with the `opus` crate.
+fn decode_webm_opus(bytes: &[u8]) -> Result<Vec<f32>, String> {
+    use symphonia::core::formats::FormatOptions;
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::meta::MetadataOptions;
+    use symphonia::core::probe::Hint;
+    use symphonia::default::get_probe;
+
+    let cursor = std::io::Cursor::new(bytes.to_vec());
+    let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
+
+    let mut hint = Hint::new();
+    hint.with_extension("webm");
+
+    let probe = get_probe()
+        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+        .map_err(|e| format!("[audio] webm probe failed: {e}"))?;
+
+    let mut format = probe.format;
+
+    // Find the first track (we'll treat it as Opus)
+    let track = format
+        .tracks()
+        .first()
+        .ok_or("[audio] no tracks in webm")?;
+
+    let track_id = track.id;
+    let sample_rate = track.codec_params.sample_rate.unwrap_or(48000) as usize;
+    let channels = track.codec_params.channels.map(|c| c.count()).unwrap_or(1);
+
+    log::info!(
+        "[audio] webm track: rate={}, channels={}",
+        sample_rate,
+        channels
+    );
+
+    let mut decoder = opus::Decoder::new(
+        sample_rate as u32,
+        if channels == 1 {
+            opus::Channels::Mono
+        } else {
+            opus::Channels::Stereo
+        },
+    )
+    .map_err(|e| format!("[audio] opus decoder init: {e}"))?;
+
+    let mut raw_samples: Vec<f32> = Vec::new();
+    // Max frame size: 120ms @ 48kHz stereo
+    let max_frame = (sample_rate / 1000 * 120) * channels;
+    let mut frame_buf = vec![0f32; max_frame];
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break
+            }
+            Err(symphonia::core::errors::Error::ResetRequired) => continue,
+            Err(e) => return Err(format!("[audio] webm packet error: {e}")),
+        };
+
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        match decoder.decode_float(&packet.data, &mut frame_buf, false) {
+            Ok(n) => {
+                let decoded = &frame_buf[..n * channels];
+                if channels == 1 {
+                    raw_samples.extend_from_slice(decoded);
+                } else {
+                    let frames = decoded.len() / channels;
+                    for f in 0..frames {
+                        let mut sum = 0f32;
+                        for c in 0..channels {
+                            sum += decoded[f * channels + c];
+                        }
+                        raw_samples.push(sum / channels as f32);
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("[audio] opus decode error (skipping frame): {e}");
+            }
+        }
+    }
+
+    log::info!(
+        "[audio] opus decoded {} mono samples @ {}Hz",
+        raw_samples.len(),
+        sample_rate
+    );
+
+    if sample_rate == 16000 {
+        return Ok(raw_samples);
+    }
+    resample_to_16k(raw_samples, sample_rate)
+}
+
+/// Resample arbitrary-rate mono f32 PCM to 16 000 Hz using rubato FastFixedIn.
+fn resample_to_16k(samples: Vec<f32>, source_rate: usize) -> Result<Vec<f32>, String> {
+    use rubato::{FftFixedIn, Resampler};
+
+    if source_rate == 16000 {
+        return Ok(samples);
+    }
+
+    let chunk_size = 4096usize;
+    let ratio = 16000.0 / source_rate as f64;
+    let mut resampler = FftFixedIn::<f32>::new(source_rate, 16000, chunk_size, 2, 1)
+        .map_err(|e| format!("[audio] resampler init: {e}"))?;
+
+    let mut output: Vec<f32> = Vec::with_capacity((samples.len() as f64 * ratio) as usize + 1024);
+    let mut pos = 0usize;
+
+    while pos < samples.len() {
+        let end = (pos + chunk_size).min(samples.len());
+        let mut chunk: Vec<f32> = samples[pos..end].to_vec();
+        // Pad last chunk if needed
+        if chunk.len() < chunk_size {
+            chunk.resize(chunk_size, 0.0);
+        }
+        let resampled = resampler
+            .process(&[chunk], None)
+            .map_err(|e| format!("[audio] resample chunk: {e}"))?;
+        output.extend_from_slice(&resampled[0]);
+        pos += chunk_size;
+    }
+
+    log::info!(
+        "[audio] resampled {} → {} samples ({}Hz → 16kHz)",
+        samples.len(),
+        output.len(),
+        source_rate
+    );
+
+    Ok(output)
+}
+
+/// Dispatch to the correct decoder based on file extension.
+fn decode_audio_to_pcm(bytes: &[u8], ext: &str) -> Result<Vec<f32>, String> {
+    match ext {
+        "webm" => {
+            // Try symphonia first (it may handle vorbis/opus in some builds),
+            // fall back to our manual opus path on failure.
+            decode_webm_opus(bytes).or_else(|_| decode_with_symphonia(bytes, ext))
+        }
+        _ => decode_with_symphonia(bytes, ext),
+    }
+}
+
+/// New IPC command: receive base64-encoded raw audio blob from the frontend,
+/// decode entirely in Rust (no renderer AudioContext), resample to 16 kHz,
+/// mix with system audio if active, and run Whisper.
+#[tauri::command]
+fn transcribe_meeting_audio_b64(
+    audio_b64: String,
+    ext: String,
+    use_system_audio: bool,
+    initial_prompt: Option<String>,
+    language: Option<String>,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Result<TranscriptionResult, String> {
+    // Decode base64 → raw compressed bytes
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&audio_b64)
+        .map_err(|e| format!("[meeting_b64] base64 decode failed: {e}"))?;
+
+    log::info!(
+        "[meeting_b64] received {} bytes (ext={})",
+        bytes.len(),
+        ext
+    );
+
+    // Decode audio to 16 kHz mono f32 PCM — all in Rust, off the renderer thread
+    let mic_pcm = decode_audio_to_pcm(&bytes, &ext)?;
+
+    log::info!("[meeting_b64] decoded {} mic samples", mic_pcm.len());
+
+    // Stop system audio capture and retrieve buffered samples
+    if use_system_audio {
+        system_audio::stop_capture();
+    }
+    let system_audio_data = system_audio::get_audio_data();
+
+    let audio_to_transcribe = if system_audio_data.is_empty() {
+        log::info!("[meeting_b64] No system audio — transcribing mic only");
+        mic_pcm
+    } else {
+        log::info!(
+            "[meeting_b64] Mixing mic ({:.1}s) + system audio ({:.1}s)",
+            mic_pcm.len() as f64 / 16000.0,
+            system_audio_data.len() as f64 / 16000.0
+        );
+        mix_audio(&mic_pcm, &system_audio_data)
+    };
+
+    transcribe_audio_inner(
+        &audio_to_transcribe,
+        initial_prompt.as_deref(),
+        language.as_deref(),
+        &state,
+    )
 }
 
 // ── Recording Pill Overlay ───────────────────────────────────────────────────
@@ -1385,6 +1521,7 @@ pub fn run() {
             load_whisper_model,
             transcribe_audio,
             transcribe_meeting_audio,
+            transcribe_meeting_audio_b64,
             paste_transcription,
             show_recording_pill,
             hide_recording_pill,
@@ -1403,7 +1540,6 @@ pub fn run() {
             stop_system_audio_capture,
             check_file_exists,
             delete_file,
-            ai_process_text,
             get_calendar_events,
         ])
         .setup(move |app| {

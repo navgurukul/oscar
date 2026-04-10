@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { notesService } from "./services/notes.service";
 import { meetingsService } from "./services/meetings.service";
+import { aiService } from "./services/ai.service";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
@@ -60,6 +61,22 @@ async function saveSetting<T>(key: string, value: T): Promise<void> {
   } catch (e) {
     console.warn("[store] save failed:", e);
   }
+}
+
+// ── PKCE helpers (for Google Calendar OAuth) ─────────────────────────────────
+
+function generateCodeVerifier(): string {
+  const arr = new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...arr))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const data = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
 function isMacOS() {
@@ -1038,8 +1055,13 @@ function App() {
   // Selected microphone device id ("" = system default)
   const [selectedMicId, setSelectedMicId] = useState("");
 
-  // Google Calendar OAuth provider token
+  // Google Calendar OAuth tokens
   const [googleCalendarToken, setGoogleCalendarToken] = useState("");
+  const [googleCalendarRefreshToken, setGoogleCalendarRefreshToken] = useState("");
+  // Unix timestamp (ms) when the access token expires — 0 means unknown
+  const [_googleCalendarTokenExpiry, setGoogleCalendarTokenExpiry] = useState(0);
+  // In-flight PKCE code verifier (lives only while the OAuth window is open)
+  const pkceCodeVerifierRef = useRef<string>("");
 
   // Meeting templates (built-in + custom)
   const [meetingTemplates, setMeetingTemplates] = useState<MeetingTemplateData[]>(DEFAULT_TEMPLATES);
@@ -1144,12 +1166,53 @@ function App() {
       if (url.startsWith("oscar://auth/callback")) {
         const urlObj = new URL(url);
 
-        // Calendar-only OAuth callback (direct Google OAuth, not Supabase)
+        // Calendar PKCE flow: web callback forwarded the authorization code.
+        // Exchange it for access + refresh tokens via the edge function.
+        const calendarCode = urlObj.searchParams.get("calendar_code");
+        if (calendarCode) {
+          const verifier = pkceCodeVerifierRef.current;
+          pkceCodeVerifierRef.current = ""; // consume immediately
+          if (!verifier) {
+            console.error("[deep-link] calendar_code received but no PKCE verifier in memory");
+            return;
+          }
+          const redirectUri = `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`;
+          try {
+            const { data: { session: s } } = await supabase.auth.getSession();
+            const { data, error: fnErr } = await supabase.functions.invoke<{
+              access_token: string; refresh_token?: string; expires_in: number;
+            }>("exchange-calendar-token", {
+              headers: s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {},
+              body: { code: calendarCode, code_verifier: verifier, redirect_uri: redirectUri },
+            });
+            if (fnErr || !data?.access_token) {
+              console.error("[deep-link] Calendar token exchange failed:", fnErr);
+              return;
+            }
+            const expiry = Date.now() + (data.expires_in ?? 3600) * 1000;
+            setGoogleCalendarToken(data.access_token);
+            setGoogleCalendarTokenExpiry(expiry);
+            await saveSetting("googleCalendarToken", data.access_token);
+            await saveSetting("googleCalendarTokenExpiry", expiry);
+            if (data.refresh_token) {
+              setGoogleCalendarRefreshToken(data.refresh_token);
+              await saveSetting("googleCalendarRefreshToken", data.refresh_token);
+            }
+            console.log("[deep-link] Google Calendar tokens stored (PKCE)");
+          } catch (err) {
+            console.error("[deep-link] Calendar token exchange error:", err);
+          }
+          return;
+        }
+
+        // Legacy: implicit-flow returned the access_token directly in the deep link
         const calendarToken = urlObj.searchParams.get("calendar_token");
         if (calendarToken) {
           setGoogleCalendarToken(calendarToken);
+          setGoogleCalendarTokenExpiry(Date.now() + 3600 * 1000);
           saveSetting("googleCalendarToken", calendarToken);
-          console.log("[deep-link] Google Calendar token stored");
+          saveSetting("googleCalendarTokenExpiry", Date.now() + 3600 * 1000);
+          console.log("[deep-link] Google Calendar token stored (legacy implicit)");
           return;
         }
 
@@ -1244,6 +1307,8 @@ function App() {
         savedMicId,
         savedAiImprovement,
         savedCalToken,
+        savedCalRefreshToken,
+        savedCalTokenExpiry,
         savedSystemAudioEnabled,
         savedTemplates,
         savedMeetingsData,
@@ -1259,6 +1324,8 @@ function App() {
         loadSetting<string>("selectedMicId", ""),
         loadSetting<boolean>("aiImprovementEnabled", true),
         loadSetting<string>("googleCalendarToken", ""),
+        loadSetting<string>("googleCalendarRefreshToken", ""),
+        loadSetting<number>("googleCalendarTokenExpiry", 0),
         loadSetting<boolean>("systemAudioEnabled", true),
         loadSetting<MeetingTemplateData[]>("meetingTemplates", []),
         loadSetting<SavedMeeting[]>("savedMeetings", []),
@@ -1308,7 +1375,15 @@ function App() {
       setAiImprovementEnabled(savedAiImprovement);
       aiImprovementEnabledRef.current = savedAiImprovement;
       setSystemAudioEnabled(savedSystemAudioEnabled);
-      if (savedCalToken) setGoogleCalendarToken(savedCalToken);
+      if (savedCalToken) {
+        // Only restore the access token if it hasn't expired (or expiry is unknown).
+        // If it IS expired but we have a refresh token, the first calendar API call
+        // will trigger an auto-refresh; we still load it so the UI shows the
+        // calendar section rather than the "connect calendar" button.
+        setGoogleCalendarToken(savedCalToken);
+      }
+      if (savedCalRefreshToken) setGoogleCalendarRefreshToken(savedCalRefreshToken);
+      if (savedCalTokenExpiry) setGoogleCalendarTokenExpiry(savedCalTokenExpiry);
       // Merge stored templates with defaults (so new built-ins are always present)
       if (savedTemplates && savedTemplates.length > 0) {
         const storedBuiltins = savedTemplates.filter((t: MeetingTemplateData) => t.builtin);
@@ -1664,15 +1739,15 @@ function App() {
 
       let finalText = result.text;
 
-      // Silent AI cleanup via Groq — fix transcription artifacts.
+      // Silent AI cleanup via the backend AI function.
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
       if (aiImprovementEnabledRef.current) {
         setStatus("Improving with AI...");
         try {
-          const cleaned = await invoke<string>("ai_process_text", {
-            text: finalText,
-            mode: "transcribe_cleanup",
-          });
+          const cleaned = await aiService.processText(
+            finalText,
+            "transcribe_cleanup",
+          );
           if (cleaned && cleaned.trim().length > 0) {
             finalText = cleaned;
           }
@@ -1778,22 +1853,63 @@ function App() {
   // ── Google Calendar OAuth ────────────────────────────────────────────────
 
   const connectGoogleCalendar = async () => {
-    // Bypass Supabase OAuth (which doesn't support additional scopes via UI).
-    // Build a direct Google OAuth implicit-flow URL so we control the scope.
     const GOOGLE_CLIENT_ID = "332965035815-v8fnucr2ho5tm0c1jvsd84lch5n8m654.apps.googleusercontent.com";
     const redirectUri = `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`;
+
+    // Use PKCE authorization-code flow so Google returns a refresh_token,
+    // meaning the user only needs to connect once and the app auto-refreshes.
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
+    pkceCodeVerifierRef.current = codeVerifier;
+
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: redirectUri,
-      response_type: "token",
+      response_type: "code",
       scope: "https://www.googleapis.com/auth/calendar.readonly",
       state: "calendar_connect",
-      prompt: "consent",
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+      access_type: "offline",   // request a refresh token
+      prompt: "consent",        // always show consent so refresh_token is issued
     });
     const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-    console.log("[calendar] Opening OAuth URL:", oauthUrl);
+    console.log("[calendar] Opening PKCE OAuth URL");
     await openUrl(oauthUrl);
   };
+
+  // ── Google Calendar token refresh ────────────────────────────────────────
+  // Called automatically when the access token has expired.  Returns true if
+  // a fresh token was obtained (app state + store are updated), false if the
+  // user needs to reconnect manually.
+
+  const refreshCalendarToken = useCallback(async (): Promise<boolean> => {
+    if (!googleCalendarRefreshToken) return false;
+    console.log("[calendar] Refreshing access token…");
+    try {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      const { data, error: fnErr } = await supabase.functions.invoke<{
+        access_token: string; expires_in: number; needs_reconnect?: boolean;
+      }>("refresh-calendar-token", {
+        headers: s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {},
+        body: { refresh_token: googleCalendarRefreshToken },
+      });
+      if (fnErr || !data?.access_token) {
+        console.warn("[calendar] Token refresh failed:", fnErr);
+        return false;
+      }
+      const expiry = Date.now() + (data.expires_in ?? 3600) * 1000;
+      setGoogleCalendarToken(data.access_token);
+      setGoogleCalendarTokenExpiry(expiry);
+      await saveSetting("googleCalendarToken", data.access_token);
+      await saveSetting("googleCalendarTokenExpiry", expiry);
+      console.log("[calendar] Access token refreshed successfully");
+      return true;
+    } catch (err) {
+      console.warn("[calendar] Token refresh error:", err);
+      return false;
+    }
+  }, [googleCalendarRefreshToken]);
 
   // ── Meeting recording (click to start/stop, no auto-paste) ──────────────
 
@@ -1832,7 +1948,9 @@ function App() {
       if (e.data.size > 0) meetingAudioChunksRef.current.push(e.data);
     };
     mediaRecorder.onstop = () => {
-      processMeetingAudio();
+      window.setTimeout(() => {
+        void processMeetingAudio();
+      }, 0);
     };
 
     // Start system audio capture (ScreenCaptureKit on macOS) in parallel with mic
@@ -1878,50 +1996,59 @@ function App() {
     }
   };
 
+  /**
+   * Encode a Uint8Array to base64 in 32 KB chunks to avoid stack overflow
+   * from passing millions of bytes to String.fromCharCode at once.
+   */
+  const uint8ToBase64 = (bytes: Uint8Array): string => {
+    const CHUNK = 32768;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(binary);
+  };
+
   const processMeetingAudio = async () => {
-    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
-      ? "audio/mp4"
-      : "audio/webm";
-    const audioBlob = new Blob(meetingAudioChunksRef.current, {
-      type: mimeType,
+    // Yield to allow the UI to update (e.g. spinner) before we do any work
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
     });
+
+    const useMp4 = MediaRecorder.isTypeSupported("audio/mp4");
+    const mimeType = useMp4 ? "audio/mp4" : "audio/webm";
+    const ext = useMp4 ? "mp4" : "webm";
+
+    const audioBlob = new Blob(meetingAudioChunksRef.current, { type: mimeType });
     if (audioBlob.size < 500) {
       setMeetingTranscript("");
       return;
     }
 
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const audioContext = new AudioContext({ sampleRate: 16000 });
-    try {
-      const decoded = await audioContext.decodeAudioData(arrayBuffer);
-      const numChannels = decoded.numberOfChannels;
-      const length = decoded.length;
-      const mono = new Float32Array(length);
-      for (let ch = 0; ch < numChannels; ch++) {
-        const channel = decoded.getChannelData(ch);
-        for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
-      }
+    const useSystemAudio = systemAudioActiveRef.current;
+    systemAudioActiveRef.current = false;
 
-      const useSystemAudio = systemAudioActiveRef.current;
-      systemAudioActiveRef.current = false;
+    try {
+      // Read raw compressed bytes — no AudioContext, no decoding on the renderer
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioB64 = uint8ToBase64(new Uint8Array(arrayBuffer));
 
       const promptStr = buildInitialPrompt();
       const langStr = getWhisperLanguage();
 
-      const result = await invoke<Transcription>(
-        useSystemAudio ? "transcribe_meeting_audio" : "transcribe_audio",
-        useSystemAudio
-          ? { micAudioData: Array.from(mono), initialPrompt: promptStr, language: langStr }
-          : { audioData: Array.from(mono), initialPrompt: promptStr, language: langStr }
-      );
+      const result = await invoke<Transcription>("transcribe_meeting_audio_b64", {
+        audioB64,
+        ext,
+        useSystemAudio,
+        initialPrompt: promptStr,
+        language: langStr,
+      });
 
       if (result.text) {
         setMeetingTranscript(result.text);
       }
     } catch (e) {
-      console.error("[meeting] audio decode failed:", e);
-    } finally {
-      audioContext.close();
+      console.error("[meeting] audio processing failed:", e);
     }
   };
 
@@ -2104,9 +2231,13 @@ function App() {
                   systemAudioWarning={systemAudioWarning}
                   googleCalendarToken={googleCalendarToken}
                   onConnectCalendar={connectGoogleCalendar}
-                  onCalendarTokenInvalid={() => {
-                    setGoogleCalendarToken("");
-                    saveSetting("googleCalendarToken", "");
+                  onCalendarTokenInvalid={async () => {
+                    // Try a silent refresh before prompting the user to reconnect
+                    const refreshed = await refreshCalendarToken();
+                    if (!refreshed) {
+                      setGoogleCalendarToken("");
+                      saveSetting("googleCalendarToken", "");
+                    }
                   }}
                   templates={meetingTemplates}
                   onManageTemplates={() => {

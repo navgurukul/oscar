@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { Sparkles, FileText, List, Mail, Check, X, Copy, RotateCcw } from "lucide-react";
+import { aiService } from "../services/ai.service";
 
 interface AIPanelProps {
   transcript: string;
@@ -24,7 +23,6 @@ export function AIPanel({ transcript, onApply }: AIPanelProps) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const outputRef = useRef<HTMLDivElement>(null);
-  const unlistenRef = useRef<(() => void) | null>(null);
 
   // Auto-scroll streaming output
   useEffect(() => {
@@ -33,9 +31,6 @@ export function AIPanel({ transcript, onApply }: AIPanelProps) {
     }
   }, [result]);
 
-  // Cleanup listener on unmount
-  useEffect(() => () => { unlistenRef.current?.(); }, []);
-
   const runMode = async (mode: AIMode) => {
     if (!transcript.trim() || streaming) return;
     setActiveMode(mode);
@@ -43,20 +38,12 @@ export function AIPanel({ transcript, onApply }: AIPanelProps) {
     setResult("");
     setError("");
 
-    // Set up streaming listener for Groq AI token events
-    unlistenRef.current?.();
-    const unlisten = await listen<string>("ai-token", (evt) => {
-      setResult(prev => prev + evt.payload);
-    });
-    unlistenRef.current = unlisten;
-
     try {
-      await invoke("ai_process_text", { text: transcript, mode });
+      const processed = await aiService.processText(transcript, mode);
+      setResult(processed);
     } catch (err) {
-      setError(`${err}`);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
-      unlisten();
-      unlistenRef.current = null;
       setStreaming(false);
     }
   };
@@ -73,8 +60,6 @@ export function AIPanel({ transcript, onApply }: AIPanelProps) {
   };
 
   const handleReset = () => {
-    unlistenRef.current?.();
-    unlistenRef.current = null;
     setActiveMode(null);
     setResult("");
     setError("");
