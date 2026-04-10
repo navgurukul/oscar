@@ -63,22 +63,6 @@ async function saveSetting<T>(key: string, value: T): Promise<void> {
   }
 }
 
-// ── PKCE helpers (for Google Calendar OAuth) ─────────────────────────────────
-
-function generateCodeVerifier(): string {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return btoa(String.fromCharCode(...arr))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-
-async function generateCodeChallenge(verifier: string): Promise<string> {
-  const data = new TextEncoder().encode(verifier);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-
 function isMacOS() {
   return navigator.platform.toLowerCase().includes("mac");
 }
@@ -1060,8 +1044,10 @@ function App() {
   const [googleCalendarRefreshToken, setGoogleCalendarRefreshToken] = useState("");
   // Unix timestamp (ms) when the access token expires — 0 means unknown
   const [_googleCalendarTokenExpiry, setGoogleCalendarTokenExpiry] = useState(0);
-  // In-flight PKCE code verifier (lives only while the OAuth window is open)
+  // Legacy in-flight PKCE verifier. Kept so old browser callbacks fail cleanly
+  // if a user returns from an already-open direct Google OAuth tab.
   const pkceCodeVerifierRef = useRef<string>("");
+  const calendarOAuthInProgressRef = useRef(false);
 
   // Meeting templates (built-in + custom)
   const [meetingTemplates, setMeetingTemplates] = useState<MeetingTemplateData[]>(DEFAULT_TEMPLATES);
@@ -1220,16 +1206,19 @@ function App() {
         const success = urlObj.searchParams.get("success");
         let accessToken = urlObj.searchParams.get("access_token");
         let refreshToken = urlObj.searchParams.get("refresh_token");
+        let expiresIn = urlObj.searchParams.get("expires_in");
 
         // Also check fragment (after #) for tokens
         if (urlObj.hash) {
           const fragmentParams = new URLSearchParams(urlObj.hash.substring(1));
           accessToken = accessToken || fragmentParams.get("access_token");
           refreshToken = refreshToken || fragmentParams.get("refresh_token");
+          expiresIn = expiresIn || fragmentParams.get("expires_in");
         }
 
         if (error) {
           console.error("[deep-link] Auth error:", error);
+          calendarOAuthInProgressRef.current = false;
         }
 
         if (accessToken && refreshToken) {
@@ -1247,11 +1236,22 @@ function App() {
             sessionRef.current = data.session;
           }
 
-          // Store Google Calendar provider_token if present
+          // Only a calendar consent flow grants Calendar scope. Normal sign-in
+          // also returns a Google provider_token, but that token cannot read
+          // Calendar events and should not be treated as connected calendar state.
           const providerToken = urlObj.searchParams.get("provider_token");
-          if (providerToken) {
+          const providerRefreshToken = urlObj.searchParams.get("provider_refresh_token");
+          if (providerToken && calendarOAuthInProgressRef.current) {
+            const providerTokenExpiry = Date.now() + Number(expiresIn || "3600") * 1000;
             setGoogleCalendarToken(providerToken);
-            saveSetting("googleCalendarToken", providerToken);
+            setGoogleCalendarTokenExpiry(providerTokenExpiry);
+            await saveSetting("googleCalendarToken", providerToken);
+            await saveSetting("googleCalendarTokenExpiry", providerTokenExpiry);
+            if (providerRefreshToken) {
+              setGoogleCalendarRefreshToken(providerRefreshToken);
+              await saveSetting("googleCalendarRefreshToken", providerRefreshToken);
+            }
+            calendarOAuthInProgressRef.current = false;
             console.log("[deep-link] Google Calendar token stored");
           }
         } else if (success === "true") {
@@ -1853,29 +1853,34 @@ function App() {
   // ── Google Calendar OAuth ────────────────────────────────────────────────
 
   const connectGoogleCalendar = async () => {
-    const GOOGLE_CLIENT_ID = "332965035815-v8fnucr2ho5tm0c1jvsd84lch5n8m654.apps.googleusercontent.com";
     const redirectUri = `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`;
 
-    // Use PKCE authorization-code flow so Google returns a refresh_token,
-    // meaning the user only needs to connect once and the app auto-refreshes.
-    const codeVerifier = generateCodeVerifier();
-    const codeChallenge = await generateCodeChallenge(codeVerifier);
-    pkceCodeVerifierRef.current = codeVerifier;
+    try {
+      calendarOAuthInProgressRef.current = true;
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: redirectUri,
+          scopes: "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+            include_granted_scopes: "true",
+          },
+          skipBrowserRedirect: true,
+        },
+      });
 
-    const params = new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: "https://www.googleapis.com/auth/calendar.readonly",
-      state: "calendar_connect",
-      code_challenge: codeChallenge,
-      code_challenge_method: "S256",
-      access_type: "offline",   // request a refresh token
-      prompt: "consent",        // always show consent so refresh_token is issued
-    });
-    const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-    console.log("[calendar] Opening PKCE OAuth URL");
-    await openUrl(oauthUrl);
+      if (oauthError) throw oauthError;
+      if (!data?.url) throw new Error("No OAuth URL returned");
+
+      console.log("[calendar] Opening Supabase OAuth URL with Calendar scope");
+      await openUrl(data.url);
+    } catch (err) {
+      calendarOAuthInProgressRef.current = false;
+      console.error("[calendar] Failed to start Google Calendar OAuth:", err);
+      alert(`Calendar connect failed: ${(err as Error).message}`);
+    }
   };
 
   // ── Google Calendar token refresh ────────────────────────────────────────

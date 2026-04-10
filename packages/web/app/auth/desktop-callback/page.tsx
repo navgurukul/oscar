@@ -89,6 +89,8 @@ function DesktopCallbackContent() {
       if (accessToken && refreshToken) {
         // provider_token (Google access token with calendar scope) may be in the hash
         const providerToken = hashParams.get("provider_token") || "";
+        const providerRefreshToken =
+          hashParams.get("provider_refresh_token") || "";
 
         // Establish the web session so the web app is also logged in
         try {
@@ -111,6 +113,9 @@ function DesktopCallbackContent() {
           `&refresh_token=${encodeURIComponent(refreshToken)}`,
           `&expires_in=${expiresIn || "3600"}`,
           providerToken ? `&provider_token=${encodeURIComponent(providerToken)}` : "",
+          providerRefreshToken
+            ? `&provider_refresh_token=${encodeURIComponent(providerRefreshToken)}`
+            : "",
           desktopState ? `&state=${encodeURIComponent(desktopState)}` : "",
         ].join("");
 

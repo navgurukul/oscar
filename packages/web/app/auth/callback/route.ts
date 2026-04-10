@@ -45,11 +45,16 @@ export async function GET(request: Request) {
       if (isDesktopFlow) {
         const { access_token, refresh_token, expires_in } = data.session;
         const provider_token = data.session.provider_token || "";
+        const provider_refresh_token =
+          data.session.provider_refresh_token || "";
         const fragment = [
           `access_token=${encodeURIComponent(access_token)}`,
           `refresh_token=${encodeURIComponent(refresh_token)}`,
           `expires_in=${expires_in}`,
           provider_token ? `provider_token=${encodeURIComponent(provider_token)}` : "",
+          provider_refresh_token
+            ? `provider_refresh_token=${encodeURIComponent(provider_refresh_token)}`
+            : "",
         ].filter(Boolean).join("&");
         const desktopCallbackUrl = `${origin}/auth/desktop-callback${desktopState ? `?desktop_state=${encodeURIComponent(desktopState)}` : ""}#${fragment}`;
         return NextResponse.redirect(desktopCallbackUrl);
