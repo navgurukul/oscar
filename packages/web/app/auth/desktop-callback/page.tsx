@@ -22,27 +22,33 @@ function DesktopCallbackContent() {
     didRun.current = true;
 
     async function handleCallback() {
-      // Tokens come in the URL fragment (#) — that's where Supabase puts them
+      // Tokens come in the URL fragment (#) — that's where Supabase puts them.
+      // Google code-flow returns params as query strings (?), not fragments.
       const hash = window.location.hash.substring(1);
       const hashParams = new URLSearchParams(hash);
 
       const queryParams = new URLSearchParams(window.location.search);
       const desktopState = queryParams.get("desktop_state");
 
-      const accessToken = hashParams.get("access_token");
+      // Read from both hash (Supabase implicit) and query (Google code flow)
+      const accessToken  = hashParams.get("access_token");
       const refreshToken = hashParams.get("refresh_token");
-      const expiresIn = hashParams.get("expires_in");
-      const authError = hashParams.get("error");
-      const errorDescription = hashParams.get("error_description");
-      // state is returned in the fragment for implicit-flow responses
-      const oauthState = hashParams.get("state") || queryParams.get("state") || "";
+      const expiresIn    = hashParams.get("expires_in");
+      const authError    = hashParams.get("error") || queryParams.get("error");
+      const errorDescription =
+        hashParams.get("error_description") || queryParams.get("error_description");
+      const oauthState =
+        hashParams.get("state") || queryParams.get("state") || "";
 
       // ── Calendar-only OAuth (PKCE authorization-code flow) ───────────────
       if (oauthState.startsWith("calendar_connect")) {
         if (authError) {
+          const desc = errorDescription
+            ? decodeURIComponent(errorDescription)
+            : authError;
           const url = `oscar://auth/callback?error=${encodeURIComponent(authError)}`;
           setDeepLinkUrl(url);
-          setErrorMessage(decodeURIComponent(errorDescription || authError));
+          setErrorMessage(desc);
           setState("error");
           return;
         }
