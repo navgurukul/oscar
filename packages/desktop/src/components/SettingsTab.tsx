@@ -167,6 +167,46 @@ export function SettingsTab({
       l.name.toLowerCase().includes(langSearch.toLowerCase()) ||
       l.native.toLowerCase().includes(langSearch.toLowerCase()),
   );
+  const builtInTemplateCount = meetingTemplates.filter((tpl) => tpl.builtin).length;
+  const customTemplateCount = meetingTemplates.length - builtInTemplateCount;
+  const hasDraftTemplate = Boolean(
+    editingTpl && !meetingTemplates.some((tpl) => tpl.id === editingTpl.id),
+  );
+
+  const resetTemplateEditor = () => {
+    setEditingTpl(null);
+    setTplName("");
+    setTplDesc("");
+    setTplPrompt("");
+  };
+
+  const openTemplateEditor = (tpl: MeetingTemplateData) => {
+    setEditingTpl(tpl);
+    setTplName(tpl.name);
+    setTplDesc(tpl.desc);
+    setTplPrompt(tpl.prompt);
+  };
+
+  const startNewTemplate = () => {
+    openTemplateEditor({
+      id: `custom_${Date.now()}`,
+      name: "",
+      desc: "",
+      prompt: "",
+      builtin: false,
+    });
+  };
+
+  const handleSaveTemplate = () => {
+    if (!editingTpl || !tplName.trim()) return;
+    onSaveTemplate({
+      ...editingTpl,
+      name: tplName.trim(),
+      desc: tplDesc.trim(),
+      prompt: tplPrompt.trim(),
+    });
+    resetTemplateEditor();
+  };
 
   return (
     <div className="st-layout">
@@ -479,118 +519,185 @@ export function SettingsTab({
 
         {/* ── Meeting Templates ── */}
         {activeTab === "meetingTemplates" && (
-          <div className="st-content">
-            <h2 className="st-content-title">Meeting Templates</h2>
-            <p className="st-desc">
-              Templates control how Oscar structures your meeting notes.
-              Edit built-in templates or create your own.
-            </p>
-
-            {/* Template list */}
-            <div className="st-tpl-list">
-              {meetingTemplates.map((tpl) => (
-                <div key={tpl.id} className={`st-tpl-card${editingTpl?.id === tpl.id ? " editing" : ""}`}>
-                  {editingTpl?.id === tpl.id ? (
-                    <div className="st-tpl-edit-form">
-                      <input
-                        className="st-tpl-input"
-                        placeholder="Template name"
-                        value={tplName}
-                        onChange={(e) => setTplName(e.target.value)}
-                      />
-                      <input
-                        className="st-tpl-input"
-                        placeholder="Short description"
-                        value={tplDesc}
-                        onChange={(e) => setTplDesc(e.target.value)}
-                      />
-                      <textarea
-                        className="st-tpl-textarea"
-                        placeholder="Custom instructions for the AI (e.g. &quot;Organize notes by speaker, include timestamps&quot;)"
-                        value={tplPrompt}
-                        onChange={(e) => setTplPrompt(e.target.value)}
-                        rows={3}
-                      />
-                      <div className="st-tpl-edit-actions">
-                        <button
-                          className="st-tpl-save-btn"
-                          disabled={!tplName.trim()}
-                          onClick={() => {
-                            onSaveTemplate({
-                              ...editingTpl,
-                              name: tplName.trim(),
-                              desc: tplDesc.trim(),
-                              prompt: tplPrompt.trim(),
-                            });
-                            setEditingTpl(null);
-                          }}
-                        >
-                          <Check size={13} /> Save
-                        </button>
-                        <button className="st-tpl-cancel-btn" onClick={() => setEditingTpl(null)}>
-                          <X size={13} /> Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="st-tpl-display">
-                      <div className="st-tpl-info">
-                        <div className="st-tpl-name">
-                          {tpl.name}
-                          {tpl.builtin && <span className="st-tpl-builtin-badge">built-in</span>}
-                        </div>
-                        <div className="st-tpl-desc">{tpl.desc}</div>
-                        {tpl.prompt && <div className="st-tpl-prompt-preview">{tpl.prompt}</div>}
-                      </div>
-                      <div className="st-tpl-actions">
-                        <button
-                          className="st-tpl-action-btn"
-                          title="Edit"
-                          onClick={() => {
-                            setEditingTpl(tpl);
-                            setTplName(tpl.name);
-                            setTplDesc(tpl.desc);
-                            setTplPrompt(tpl.prompt);
-                          }}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        {!tpl.builtin && (
-                          <button
-                            className="st-tpl-action-btn st-tpl-delete-btn"
-                            title="Delete"
-                            onClick={() => onDeleteTemplate(tpl.id)}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+          <div className="st-content st-tpl-page">
+            <div className="st-tpl-header">
+              <div>
+                <p className="st-section-kicker">Minutes</p>
+                <h2 className="st-content-title st-tpl-title">Meeting Templates</h2>
+                <p className="st-desc st-tpl-desc-copy">
+                  Choose how OSCAR formats summaries, decisions, and action items for each meeting.
+                </p>
+              </div>
+              <button className="st-btn-primary st-tpl-create-btn" onClick={startNewTemplate}>
+                <Plus size={14} />
+                New template
+              </button>
             </div>
 
-            {/* Add new template */}
-            <button
-              className="st-tpl-add-btn"
-              onClick={() => {
-                const newTpl: MeetingTemplateData = {
-                  id: `custom_${Date.now()}`,
-                  name: "",
-                  desc: "",
-                  prompt: "",
-                  builtin: false,
-                };
-                setEditingTpl(newTpl);
-                setTplName("");
-                setTplDesc("");
-                setTplPrompt("");
-              }}
-            >
-              <Plus size={14} />
-              Add Template
-            </button>
+            <div className="st-tpl-workspace">
+              <div className="st-tpl-rail">
+                <div className="st-tpl-summary">
+                  <div className="st-tpl-summary-item">
+                    <span>Built-in</span>
+                    <strong>{builtInTemplateCount}</strong>
+                  </div>
+                  <div className="st-tpl-summary-item">
+                    <span>Custom</span>
+                    <strong>{customTemplateCount}</strong>
+                  </div>
+                </div>
+
+                <div className="st-tpl-list">
+                  {hasDraftTemplate && editingTpl && (
+                    <div className="st-tpl-row-wrap active">
+                      <button
+                        className="st-tpl-row"
+                        onClick={() => openTemplateEditor(editingTpl)}
+                        type="button"
+                      >
+                        <div className="st-tpl-row-main">
+                          <div className="st-tpl-name">
+                            {tplName.trim() || "New template"}
+                            <span className="st-tpl-builtin-badge st-tpl-draft-badge">draft</span>
+                          </div>
+                          <div className="st-tpl-desc">
+                            {tplDesc.trim() || "Create a custom formatting flow for Minutes."}
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  )}
+
+                  {meetingTemplates.map((tpl) => {
+                    const isActive = editingTpl?.id === tpl.id;
+                    return (
+                      <div key={tpl.id} className={`st-tpl-row-wrap${isActive ? " active" : ""}`}>
+                        <button
+                          className="st-tpl-row"
+                          onClick={() => openTemplateEditor(tpl)}
+                          type="button"
+                        >
+                          <div className="st-tpl-row-main">
+                            <div className="st-tpl-name">
+                              {tpl.name}
+                              {tpl.builtin && <span className="st-tpl-builtin-badge">built-in</span>}
+                            </div>
+                            <div className="st-tpl-desc">{tpl.desc}</div>
+                            {tpl.prompt && <div className="st-tpl-prompt-preview">{tpl.prompt}</div>}
+                          </div>
+                        </button>
+                        <div className="st-tpl-actions">
+                          <button
+                            className="st-tpl-action-btn"
+                            title="Edit"
+                            onClick={() => openTemplateEditor(tpl)}
+                            type="button"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          {!tpl.builtin && (
+                            <button
+                              className="st-tpl-action-btn st-tpl-delete-btn"
+                              title="Delete"
+                              onClick={() => {
+                                if (editingTpl?.id === tpl.id) resetTemplateEditor();
+                                onDeleteTemplate(tpl.id);
+                              }}
+                              type="button"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="st-tpl-editor-pane">
+                {editingTpl ? (
+                  <div className="st-tpl-editor">
+                    <div className="st-tpl-editor-head">
+                      <div>
+                        <p className="st-section-kicker">
+                          {editingTpl.builtin ? "Built-in template" : hasDraftTemplate ? "New template" : "Custom template"}
+                        </p>
+                        <h3 className="st-tpl-editor-title">
+                          {tplName.trim() || (hasDraftTemplate ? "New template" : editingTpl.name)}
+                        </h3>
+                        <p className="st-desc st-tpl-editor-copy">
+                          Instructions here are applied when Minutes turns raw transcripts into structured notes.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="st-tpl-edit-form">
+                      <label className="st-tpl-field">
+                        <span className="st-tpl-field-label">Template name</span>
+                        <input
+                          className="st-tpl-input"
+                          placeholder="Ex: Client follow-up"
+                          value={tplName}
+                          onChange={(e) => setTplName(e.target.value)}
+                        />
+                      </label>
+
+                      <label className="st-tpl-field">
+                        <span className="st-tpl-field-label">Short description</span>
+                        <input
+                          className="st-tpl-input"
+                          placeholder="What this template should optimize for"
+                          value={tplDesc}
+                          onChange={(e) => setTplDesc(e.target.value)}
+                        />
+                      </label>
+
+                      <label className="st-tpl-field st-tpl-field-full">
+                        <span className="st-tpl-field-label">Formatting instructions</span>
+                        <textarea
+                          className="st-tpl-textarea"
+                          placeholder="Ex: Group notes into summary, decisions, blockers, and action items. Highlight owners and deadlines."
+                          value={tplPrompt}
+                          onChange={(e) => setTplPrompt(e.target.value)}
+                          rows={10}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="st-tpl-edit-actions">
+                      <button
+                        className="st-btn-primary"
+                        disabled={!tplName.trim()}
+                        onClick={handleSaveTemplate}
+                        type="button"
+                      >
+                        <Check size={13} />
+                        Save template
+                      </button>
+                      <button className="st-btn-muted" onClick={resetTemplateEditor} type="button">
+                        <X size={13} />
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="st-tpl-empty-state">
+                    <div className="st-tpl-empty-icon">
+                      <LayoutTemplate size={18} />
+                    </div>
+                    <h3>Select a template</h3>
+                    <p>
+                      Edit an existing template or create a new one for a different meeting style.
+                    </p>
+                    <button className="st-btn-primary" onClick={startNewTemplate} type="button">
+                      <Plus size={14} />
+                      New template
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

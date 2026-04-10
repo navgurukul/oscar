@@ -1158,6 +1158,29 @@ function App() {
     ]);
   }, []);
 
+  const signOutLocally = useCallback(async () => {
+    const [signOutResult, clearCalendarResult] = await Promise.allSettled([
+      supabase.auth.signOut({ scope: "local" }),
+      clearCalendarConnection(),
+    ]);
+
+    if (clearCalendarResult.status === "rejected") {
+      console.warn(
+        "[auth] Failed to clear calendar connection during sign-out:",
+        clearCalendarResult.reason,
+      );
+    }
+
+    if (signOutResult.status === "rejected") {
+      console.error("[auth] Failed to clear local auth session:", signOutResult.reason);
+      throw signOutResult.reason;
+    }
+
+    setSession(null);
+    sessionRef.current = null;
+    setUser(null);
+  }, [clearCalendarConnection]);
+
   // ── Supabase auth listener ─────────────────────────────────────────────────
 
   useEffect(() => {
@@ -2246,8 +2269,7 @@ function App() {
   };
 
   const handleSignOut = async () => {
-    await clearCalendarConnection();
-    await supabase.auth.signOut();
+    await signOutLocally();
   };
 
   // AI Improvement toggle handler
@@ -2492,9 +2514,10 @@ function App() {
                       // homeDir or invoke failed — continue with clearing
                     }
 
-                    // Sign out of Supabase
+                    // Sign out of Supabase locally so the desktop session is
+                    // always cleared even if the network is unavailable.
                     try {
-                      await supabase.auth.signOut();
+                      await signOutLocally();
                     } catch {
                       // may already be signed out
                     }

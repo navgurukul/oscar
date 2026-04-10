@@ -487,8 +487,8 @@ export function MeetingsTab({
       participants.trim() ? `Participants: ${participants.trim()}` : "",
     ].filter(Boolean).join("\n");
 
-    // For custom templates, prepend the custom instructions
-    const customInstructions = isCustom && tpl?.prompt
+    // Any template can layer extra instructions on top of its default formatting behavior.
+    const customInstructions = tpl?.prompt
       ? `Template instructions: ${tpl.prompt}`
       : "";
 
