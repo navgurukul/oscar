@@ -1,0 +1,37 @@
+{
+  "name": "OSCAR — Voice Notes",
+  "short_name": "OSCAR",
+  "description": "AI-powered voice notes. Speak naturally, get polished text.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#06B6D4",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/OSCARLOGO.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/OSCARLOGO.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Record",
+      "url": "/recording",
+      "description": "Start a new voice recording"
+    },
+    {
+      "name": "My Scribbles",
+      "url": "/notes",
+      "description": "Browse saved notes"
+    }
+  ]
+}

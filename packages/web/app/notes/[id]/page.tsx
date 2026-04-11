@@ -17,6 +17,7 @@ import {
   Mail,
   MessageCircle,
   FileText,
+  FileCode,
   Languages,
   ListChecks,
   BookOpen,
@@ -24,6 +25,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   Mic,
+  Printer,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
@@ -286,6 +288,30 @@ export default function NoteDetailPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadMarkdown = () => {
+    if (!note) return;
+    const body = activeMode === "normal"
+      ? (editedText || note.edited_text || note.original_formatted_text)
+      : (modeContent[activeMode] || editedText || note.edited_text || note.original_formatted_text);
+    const date = new Date(note.created_at).toLocaleDateString("en-US", {
+      month: "long", day: "numeric", year: "numeric",
+    });
+    const md   = `# ${note.title || "Untitled Note"}\n\n_${date}_\n\n---\n\n${body}`;
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `${note.title.replace(/[^a-z0-9]/gi, "_")}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintPDF = () => {
+    window.print();
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "long",
@@ -504,9 +530,23 @@ export default function NoteDetailPage() {
               <button
                 onClick={handleDownload}
                 className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
-                title="Download txt"
+                title="Download as .txt"
               >
                 <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleDownloadMarkdown}
+                className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                title="Download as Markdown (.md)"
+              >
+                <FileCode className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handlePrintPDF}
+                className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                title="Print / Save as PDF"
+              >
+                <Printer className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setIsShareModalOpen(true)}

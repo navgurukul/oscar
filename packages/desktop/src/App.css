@@ -4458,7 +4458,38 @@ kbd {
 }
 
 .notes-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 24px;
+}
+
+.notes-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notes-detail-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.notes-detail-action-btn:hover {
+  border-color: #06b6d4;
+  color: #0891b2;
 }
 
 .notes-detail-back {

@@ -19,13 +19,13 @@ export function ProcessingScreen({
 
   return (
     <main className="flex flex-col items-center px-4 pt-8">
-      <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
+      <div className="w-full max-w-xl flex flex-col items-center gap-6 sm:gap-8 mt-8 sm:mt-16">
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold">
+          <h1 className="text-3xl sm:text-4xl font-bold">
             Processing Your <span className="text-cyan-500">Speech</span>
           </h1>
         </div>
-        <div className="bg-slate-900 w-full max-w-[500px] aspect-square rounded-3xl shadow-xl border border-cyan-700/30 p-6 sm:p-8 md:p-12 space-y-8 sm:space-y-12 relative overflow-hidden">
+        <div className="bg-slate-900 w-full max-w-[500px] min-h-[min(70vw,400px)] rounded-3xl shadow-xl border border-cyan-700/30 p-6 sm:p-8 md:p-12 relative overflow-hidden flex flex-col justify-between">
           <DottedGlowBackground
             gap={20}
             radius={1.3}
@@ -37,19 +37,19 @@ export function ProcessingScreen({
             speedScale={1.2}
           />
 
-          {/* Top section placeholder to match Timer height */}
-          <div className="h-8" />
+          {/* Top spacer — mirrors RecordingTimer reserved height */}
+          <div className="h-8 relative z-10" />
 
-          <div className="relative z-10 space-y-8 pt-4">
-            {/* Step Title - Clean and Prominent */}
+          <div className="relative z-10 space-y-8">
+            {/* Step Title */}
             <div className="text-center">
-              <h2 className="text-2xl font-medium text-white transition-all duration-300">
+              <h2 className="text-xl sm:text-2xl font-medium text-white transition-all duration-300">
                 {PROCESSING_STEPS[currentStep]?.title}
               </h2>
             </div>
 
-            {/* Minimalist Progress Bar */}
-            <div className="space-y-3">
+            {/* Progress Bar */}
+            <div>
               <div className="h-1 bg-gray-800/50 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-cyan-500 transition-all duration-300 ease-out"
@@ -59,8 +59,8 @@ export function ProcessingScreen({
             </div>
           </div>
 
-          {/* Simplified Step Dots - Bottom section matching instruction text area */}
-          <div className="text-center pt-4 h-16 flex items-center justify-center">
+          {/* Step Dots — bottom area mirrors swipe-hint row */}
+          <div className="relative z-10 flex items-center justify-center min-h-[56px]">
             <div className="flex justify-center gap-1.5">
               {PROCESSING_STEPS.map((_, i) => (
                 <div

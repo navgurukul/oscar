@@ -91,21 +91,6 @@ function useMicAudioLevel(isRecording: boolean) {
   return audioLevel;
 }
 
-// Inject keyframes once into the document
-const KEYFRAMES_ID = "meet-ripple-keyframes";
-function injectKeyframes() {
-  if (typeof document === "undefined" || document.getElementById(KEYFRAMES_ID)) return;
-  const style = document.createElement("style");
-  style.id = KEYFRAMES_ID;
-  style.textContent = `
-    @keyframes meet-ripple {
-      0%   { transform: translate(-50%, -50%) scale(1);   opacity: var(--ring-opacity); }
-      100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
-    }
-  `;
-  document.head.appendChild(style);
-}
-
 export function RecordingControls({
   isRecording,
   isProcessing,
@@ -114,8 +99,6 @@ export function RecordingControls({
   onStart,
   onStop,
 }: RecordingControlsProps) {
-  useEffect(() => { injectKeyframes(); }, []);
-
   const disabled = isProcessing || isInitializing || isRequestingPermission;
   const audioLevel = useMicAudioLevel(isRecording);
 
@@ -129,8 +112,10 @@ export function RecordingControls({
 
   // Meet uses 2–3 concentric halos that pulse outward.
   // The halos are filled (rgba background), not just borders.
-  const BUTTON_SIZE = 120;          // px — base avatar size
-  const CONTAINER_SIZE = BUTTON_SIZE * 3; // room for rings to expand
+  // On mobile the card may be narrower than 360px; cap the button at 144px on
+  // touch devices for easier tapping but keep the same 120px on desktop.
+  const BUTTON_SIZE = 120;               // px — button diameter
+  const CONTAINER_SIZE = BUTTON_SIZE * 3; // ripple room (360px); card clips overflow
 
   // Ring colour: green when idle/recording, red tint when stopping
   const ringColor = "8, 145, 178"; // RGB
@@ -149,9 +134,9 @@ export function RecordingControls({
   const baseOpacity = normalised * 0.85;
 
   return (
-    <div className="flex justify-center">
+    <div className="flex justify-center w-full overflow-hidden">
       <div
-        className="relative"
+        className="relative flex-shrink-0"
         style={{ width: CONTAINER_SIZE, height: CONTAINER_SIZE }}
       >
         {/* Ripple rings — only rendered while recording */}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Search, Star, Trash2, Loader2, SquaresSubtract, FileText, ChevronLeft, ChevronRight, Mic, Square } from "lucide-react";
+import { Search, Star, Trash2, Loader2, SquaresSubtract, FileText, ChevronLeft, ChevronRight, Mic, Square, Download } from "lucide-react";
 import { motion } from "framer-motion";
 import { notesService } from "../services/notes.service";
 import { NoteCard } from "./NoteCard";
@@ -194,6 +194,35 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
     loadNotes(); // Refresh in case of changes
   };
 
+  const triggerDownload = (content: string, filename: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportTxt = (note: DBNote) => {
+    const body = note.edited_text || note.original_formatted_text;
+    const slug = (note.title || "note").replace(/[^a-z0-9]/gi, "_");
+    triggerDownload(body, `${slug}.txt`, "text/plain");
+  };
+
+  const handleExportMarkdown = (note: DBNote) => {
+    const title = note.title || "Untitled Note";
+    const date  = new Date(note.created_at).toLocaleDateString("en-US", {
+      month: "long", day: "numeric", year: "numeric",
+    });
+    const body  = note.edited_text || note.original_formatted_text;
+    const md    = `# ${title}\n\n_${date}_\n\n---\n\n${body}`;
+    const slug  = title.replace(/[^a-z0-9]/gi, "_");
+    triggerDownload(md, `${slug}.md`, "text/markdown");
+  };
+
   const hasActiveFilters = searchQuery.trim() || showStarredOnly;
 
   const getEmptyMessage = () => {
@@ -276,6 +305,24 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
               <ChevronLeft size={20} />
               Back to Scribble
             </button>
+            <div className="notes-detail-actions">
+              <button
+                onClick={() => handleExportTxt(selectedNote)}
+                className="notes-detail-action-btn"
+                title="Download as plain text (.txt)"
+              >
+                <Download size={15} />
+                <span>.txt</span>
+              </button>
+              <button
+                onClick={() => handleExportMarkdown(selectedNote)}
+                className="notes-detail-action-btn"
+                title="Download as Markdown (.md)"
+              >
+                <Download size={15} />
+                <span>.md</span>
+              </button>
+            </div>
           </div>
           <div className="notes-detail-content">
             <h1 className="notes-detail-title">

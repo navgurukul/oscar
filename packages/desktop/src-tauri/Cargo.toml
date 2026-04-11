@@ -35,14 +35,24 @@ base64 = "0.22"
 opus = "0.3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+# Win32 paste-target fix (GetForegroundWindow / SetForegroundWindow)
 windows-sys = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+# WASAPI loopback capture for system audio
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+] }
+# Whisper with CUDA GPU acceleration (requires CUDA toolkit; drop "cuda" for CPU-only)
+whisper-rs = { version = "0.15", features = ["cuda"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# CPU-only whisper; add features = ["vulkan"] with the Vulkan SDK for GPU accel
+whisper-rs = "0.15"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 whisper-rs = { version = "0.15", features = ["metal"] }
 core-graphics = "0.24"
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-whisper-rs = "0.15"
 
 [profile.release]
 strip = true

@@ -198,6 +198,7 @@ export const ROUTES = {
   RECORDING: "/recording",
   RESULTS: "/results",
   NOTES: "/notes",
+  MEETINGS: "/meetings",
   AUTH: "/auth",
   SETTINGS: "/settings",
   BILLING: "/billing",
