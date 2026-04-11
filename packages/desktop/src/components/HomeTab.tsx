@@ -167,7 +167,7 @@ function HomeTab({
         {/* Minimal Stats */}
         {hasStats && (
           <p className="mb-5 text-center text-sm text-slate-400">
-            {totalNotes} {totalNotes === 1 ? "note" : "notes"} recorded
+            {totalNotes} {totalNotes === 1 ? "Scribble" : "Scribbles"} captured
           </p>
         )}
 

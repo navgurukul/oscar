@@ -79,6 +79,7 @@ export const API_CONFIG = {
   // Internal API routes
   FORMAT_ENDPOINT: "/api/groq/format",
   FORMAT_EMAIL_ENDPOINT: "/api/groq/format-email",
+  TRANSFORM_ENDPOINT: "/api/groq/transform",
   TITLE_ENDPOINT: "/api/groq/title",
   TRANSLATE_ENDPOINT: "/api/groq/translate",
 
@@ -91,6 +92,7 @@ export const API_CONFIG = {
   FORMAT_TOP_P: 1.0,
   FORMAT_MAX_TOKENS: 8192,
   FORMAT_EMAIL_MAX_TOKENS: 2048,
+  FORMAT_TRANSFORM_MAX_TOKENS: 1536,
   FORMAT_STREAM: true,
 
   // Title settings
@@ -114,8 +116,8 @@ export const UI_STRINGS = {
 
   // Page titles
   PROCESSING_TITLE: "Processing Your Speech",
-  RECORDING_TITLE: "Record Your Voice",
-  RESULTS_TITLE: "Here's your note",
+  RECORDING_TITLE: "Start a Stream",
+  RESULTS_TITLE: "Fresh Scribble",
 
   // Loading states
   INITIALIZING: "Initializing...",
@@ -142,7 +144,7 @@ export const UI_STRINGS = {
   DOWNLOADED_TOAST_DESCRIPTION: "Raw transcript saved to your device.",
 
   // Home page
-  HOME_TAGLINE: "Speak your thoughts.",
+  HOME_TAGLINE: "Start a Stream.",
   HOME_WORDS: [
     "Let AI write.",
     "Let AI refine.",
@@ -152,7 +154,7 @@ export const UI_STRINGS = {
 
   // Recording page
   RECORDING_INSTRUCTION:
-    "Press the microphone button and start speaking. Oscar will do the rest.",
+    "Press the microphone button and start speaking. Oscar will turn your Stream into a Scribble.",
 
   // Download filenames
   NOTE_FILENAME: "oscar-note.txt",
@@ -299,6 +301,11 @@ export const RATE_LIMITS = {
     maxRequests: 15, // 15 requests per user
     windowMs: 60 * 1000, // Per 1 minute
     message: "Too many email formatting requests. Please wait a moment.",
+  },
+  AI_TRANSFORM: {
+    maxRequests: 15,
+    windowMs: 60 * 1000,
+    message: "Too many transform requests. Please wait a moment.",
   },
   AI_TRANSLATE: {
     maxRequests: 15, // 15 requests per user

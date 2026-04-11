@@ -51,6 +51,7 @@ export default function NoteDetailPage() {
     useAIEmailFormatting();
   const [activeMode, setActiveMode] = useState<"normal" | "email" | "translate" | "summary" | "bullets">("normal");
   const [modeContent, setModeContent] = useState<Record<string, string>>({});
+  const [modeSource, setModeSource] = useState<Record<string, string>>({});
   const [isLoadingMode, setIsLoadingMode] = useState(false);
 
   // Translation states
@@ -58,6 +59,58 @@ export default function NoteDetailPage() {
   const [isTranslating, setIsTranslating] = useState(false);
   const translationCacheNoteRef = useRef<Map<string, string>>(new Map());
   const translateControllerRef = useRef<AbortController | null>(null);
+
+  const getScribbleBaseText = () => {
+    if (!note) return "";
+
+    if (activeMode === "normal") {
+      return editedText || note.edited_text || note.original_formatted_text || note.raw_text || "";
+    }
+
+    return note.edited_text || note.original_formatted_text || note.raw_text || "";
+  };
+
+  const handleSelectMode = async (
+    nextMode: "normal" | "email" | "translate" | "summary" | "bullets"
+  ) => {
+    if (!note) return;
+
+    if (nextMode === "normal") {
+      setActiveMode("normal");
+      setEditedText(note.edited_text || note.original_formatted_text || "");
+      return;
+    }
+
+    setActiveMode(nextMode);
+    if (nextMode === "translate") {
+      return;
+    }
+
+    const baseText = getScribbleBaseText();
+    const hasFreshContent =
+      modeContent[nextMode] && modeSource[nextMode] === baseText;
+
+    if (hasFreshContent) {
+      setEditedText(modeContent[nextMode] || baseText);
+      return;
+    }
+
+    setIsLoadingMode(true);
+
+    let resultText = baseText;
+    if (nextMode === "email") {
+      const res = await gmailFormatText(baseText, note.title || "Untitled Note");
+      resultText = res.success ? res.formattedText || baseText : baseText;
+    } else {
+      const res = await aiService.transformText(baseText, nextMode, note.title || "Untitled Note");
+      resultText = res.success ? res.formattedText || baseText : baseText;
+    }
+
+    setModeContent((previous) => ({ ...previous, [nextMode]: resultText }));
+    setModeSource((previous) => ({ ...previous, [nextMode]: baseText }));
+    setEditedText(resultText);
+    setIsLoadingMode(false);
+  };
 
   const applyLanguage = async (lang: "original" | "en" | "hi") => {
     if (!note) return;
@@ -71,7 +124,7 @@ export default function NoteDetailPage() {
       return;
     }
 
-    const baseNote = editedText || note.edited_text || note.original_formatted_text || "";
+    const baseNote = getScribbleBaseText();
     if (!baseNote) return;
 
     if (isTranslating && translateControllerRef.current) {
@@ -175,6 +228,13 @@ export default function NoteDetailPage() {
 
     loadNote();
   }, [id, router, user, authLoading]);
+
+  useEffect(() => {
+    setModeContent({});
+    setModeSource({});
+    setActiveMode("normal");
+    setSelectedLanguage("original");
+  }, [note?.id, note?.updated_at]);
 
   const handleSaveEdit = async () => {
     if (!note || !editedText) return;
@@ -329,7 +389,7 @@ export default function NoteDetailPage() {
 
       {/* Mode Selection Bar (Floating) */}
       <div className="flex flex-col items-center gap-1.5 w-full mb-4">
-        <p className="text-sm text-gray-400 font-medium">Convert your note into <span className="text-base font-bold text-cyan-400">→</span></p>
+        <p className="text-sm text-gray-400 font-medium">Transform this Scribble into <span className="text-base font-bold text-cyan-400">→</span></p>
         <TooltipProvider>
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
@@ -337,7 +397,7 @@ export default function NoteDetailPage() {
             className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 shadow-2xl z-10"
           >
             {[
-              { id: "normal", icon: FileText, label: "Note", desc: "Clean structured note" },
+              { id: "normal", icon: FileText, label: "Scribble", desc: "Your clean working draft" },
               { id: "email", icon: Mail, label: "Email", desc: "Send-ready draft" },
               { id: "bullets", icon: ListChecks, label: "Bullets", desc: "Quick key points" },
               { id: "summary", icon: BookOpen, label: "Summary", desc: "Condensed overview" },
@@ -346,35 +406,7 @@ export default function NoteDetailPage() {
               <Tooltip key={mode.id} delayDuration={200}>
                 <TooltipTrigger asChild>
                   <button
-                    onClick={async () => {
-                      if (mode.id === "normal") {
-                        setActiveMode("normal");
-                        setEditedText(note.edited_text || note.original_formatted_text || "");
-                        return;
-                      }
-
-                      setActiveMode(mode.id as typeof activeMode);
-                      const baseText = editedText || note.edited_text || note.original_formatted_text || note.raw_text || "";
-
-                      if (!modeContent[mode.id] && mode.id !== "translate") {
-                        setIsLoadingMode(true);
-                        let resultText = baseText;
-                        if (mode.id === "email") {
-                          const res = await gmailFormatText(baseText, note.title || "Untitled Note");
-                          resultText = res.success ? res.formattedText || baseText : baseText;
-                        } else if (mode.id === "bullets") {
-                          resultText = baseText.split('\n').filter(l => l.trim()).map(l => `• ${l.trim()}`).join('\n');
-                        } else if (mode.id === "summary") {
-                          const sentences = baseText.match(/[^.!?]+[.!?]+/g) || [baseText];
-                          resultText = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
-                        }
-                        setModeContent(prev => ({ ...prev, [mode.id]: resultText }));
-                        setEditedText(resultText);
-                        setIsLoadingMode(false);
-                      } else if (mode.id !== "translate") {
-                        setEditedText(modeContent[mode.id] || baseText);
-                      }
-                    }}
+                    onClick={() => void handleSelectMode(mode.id as typeof activeMode)}
                     className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
                       activeMode === mode.id 
                         ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
@@ -457,7 +489,7 @@ export default function NoteDetailPage() {
               <button 
                 onClick={handleToggleStar}
                 className={`p-2 rounded-lg transition-all duration-300 ${note.is_starred ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
-                title="Star note"
+                title="Star Scribble"
               >
                 <Star className={`w-4 h-4 ${note.is_starred ? 'fill-cyan-400' : ''}`} />
               </button>
@@ -499,7 +531,7 @@ export default function NoteDetailPage() {
                   : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              Transcript
+              Stream Transcript
             </button>
             <button
               onClick={() => setActiveTab("ai-notes")}
@@ -509,7 +541,7 @@ export default function NoteDetailPage() {
                   : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              AI Notes
+              Scribble
             </button>
           </div>
 
@@ -524,7 +556,7 @@ export default function NoteDetailPage() {
                 value={editedText}
                 onChange={(e) => setEditedText(e.target.value)}
                 onBlur={handleSaveEdit}
-                placeholder="AI-formatted notes will appear here..."
+                placeholder="Your Scribble will appear here..."
                 className="w-full bg-transparent text-base text-gray-300 leading-relaxed focus:outline-none resize-none border-none p-0 min-h-[120px] max-h-[500px] overflow-y-auto placeholder:text-gray-600"
               />
             )}
@@ -548,10 +580,10 @@ export default function NoteDetailPage() {
                 router.push("/recording");
               }}
               className="bg-cyan-500/5 hover:bg-cyan-500/15 gap-2 text-cyan-400 px-4 py-2 rounded-lg font-medium text-xs transition-all duration-300 flex items-center border border-cyan-500/10 group"
-              title="Continue recording and append to this note"
+              title="Continue in Stream and append to this Scribble"
             >
               <Mic className="w-3 h-3" />
-              <span>Append to notes</span>
+              <span>Continue in Stream</span>
             </button>
           </div>
         </div>
@@ -590,7 +622,7 @@ export default function NoteDetailPage() {
               <div className="flex items-center gap-3">
                 <Share2 className="w-5 h-5 text-cyan-400" />
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Share note</h3>
+                  <h3 className="text-lg font-semibold text-white">Share Scribble</h3>
                   <p className="text-sm text-gray-400">Choose a destination</p>
                 </div>
               </div>

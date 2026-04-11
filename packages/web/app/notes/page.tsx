@@ -1,21 +1,24 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { notesService } from "@/lib/services/notes.service";
-import { Spinner } from "@/components/ui/spinner";
-import { NotesListSkeleton } from "@/components/shared/NotesListSkeleton";
-import { TrashSheet } from "@/components/notes/TrashSheet";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { useAuth } from "@/lib/contexts/AuthContext";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  FolderPlus,
+  Inbox,
+  Search,
+  Sparkles,
+  Star,
+  Trash2,
+  Clock3,
+  Folder,
+  CheckSquare,
+  Square,
+  ArrowUpDown,
+} from "lucide-react";
+import { TrashSheet } from "@/components/notes/TrashSheet";
+import { NotesListSkeleton } from "@/components/shared/NotesListSkeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Input } from "@/components/ui/input";
 import {
   Pagination,
   PaginationContent,
@@ -25,270 +28,467 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { SquaresSubtract, Trash2, Search, Star, Folder, FolderCog } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/lib/contexts/AuthContext";
+import { notesService } from "@/lib/services/notes.service";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import type { DBNote } from "@/lib/types/note.types";
-import { getTimeBasedPrompt } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
 
-type SortOption = "created" | "updated" | "length";
+type SortOption = "updated" | "created" | "length" | "title";
+type SavedViewKey = "all" | "recent" | "starred" | "unfoldered" | `folder:${string}`;
+
+const ITEMS_PER_PAGE = 8;
+const RECENT_WINDOW_DAYS = 14;
+const VIEW_STORAGE_KEY = "oscar-scribble-view";
+const SYSTEM_VIEWS: Array<{
+  id: Exclude<SavedViewKey, `folder:${string}`>;
+  label: string;
+  icon: typeof Inbox;
+  description: string;
+}> = [
+  {
+    id: "all",
+    label: "All Scribbles",
+    icon: Sparkles,
+    description: "Everything captured from Stream in one place.",
+  },
+  {
+    id: "recent",
+    label: "Recent",
+    icon: Clock3,
+    description: `Updated in the last ${RECENT_WINDOW_DAYS} days.`,
+  },
+  {
+    id: "starred",
+    label: "Starred",
+    icon: Star,
+    description: "Your keepers, pinned for quick return trips.",
+  },
+  {
+    id: "unfoldered",
+    label: "Unsorted",
+    icon: Inbox,
+    description: "Scribbles that still need a home.",
+  },
+];
+
+function formatDate(dateString: string) {
+  return new Date(dateString).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function getPreview(note: DBNote) {
+  const text = note.edited_text || note.original_formatted_text;
+  return text.length > 180 ? `${text.slice(0, 180).trim()}...` : text;
+}
+
+function isFolderView(view: SavedViewKey): view is `folder:${string}` {
+  return view.startsWith("folder:");
+}
+
+function getFolderName(view: `folder:${string}`) {
+  return view.slice("folder:".length);
+}
+
+function getRecentCutoff() {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - RECENT_WINDOW_DAYS);
+  return cutoff.getTime();
+}
+
+function mergeNotes(previous: DBNote[], incoming: DBNote[]) {
+  const map = new Map(previous.map((note) => [note.id, note]));
+  incoming.forEach((note) => {
+    map.set(note.id, note);
+  });
+  return Array.from(map.values());
+}
 
 export default function NotesPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
   const [allNotes, setAllNotes] = useState<DBNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [contextPrompt, setContextPrompt] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearch = useDeferredValue(searchQuery);
+  const [sortBy, setSortBy] = useState<SortOption>("updated");
+  const [currentView, setCurrentView] = useState<SavedViewKey>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [trashCount, setTrashCount] = useState(0);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
-  const [assigningFolderId, setAssigningFolderId] = useState<string | null>(null);
-  const [folderMenuNoteId, setFolderMenuNoteId] = useState<string | null>(null);
-  const [showOverflowFolders, setShowOverflowFolders] = useState(false);
-  const ITEMS_PER_PAGE = 5;
-  const MAX_VISIBLE_FOLDERS = 2; // Show first 2 folders, rest in overflow
+  const [isApplyingBulkAction, setIsApplyingBulkAction] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
 
-  // Filter and sort state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortOption>("created");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [showStarredOnly, setShowStarredOnly] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState<string>("All Notes");
-  const [folders, setFolders] = useState<string[]>([]);
+  const folderCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    allNotes.forEach((note) => {
+      if (!note.folder) return;
+      counts.set(note.folder, (counts.get(note.folder) ?? 0) + 1);
+    });
+    return counts;
+  }, [allNotes]);
 
-  useEffect(() => {
-    setContextPrompt(getTimeBasedPrompt());
-  }, []);
+  const folders = useMemo(() => {
+    return Array.from(folderCounts.keys()).sort((left, right) => left.localeCompare(right));
+  }, [folderCounts]);
 
-  // Close folder menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = () => {
-      setFolderMenuNoteId(null);
-    };
-
-    if (folderMenuNoteId) {
-      document.addEventListener("click", handleClickOutside);
-      return () => {
-        document.removeEventListener("click", handleClickOutside);
-      };
-    }
-  }, [folderMenuNoteId]);
-
-  // Close overflow folders menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest("[data-overflow-menu]")) {
-        setShowOverflowFolders(false);
-      }
-    };
-
-    if (showOverflowFolders) {
-      document.addEventListener("click", handleClickOutside);
-      return () => {
-        document.removeEventListener("click", handleClickOutside);
-      };
-    }
-  }, [showOverflowFolders]);
-
-  // Load notes only once auth state is settled and we have a user.
-  // This prevents fetching with a stale session immediately after OAuth redirects.
   useEffect(() => {
     if (authLoading) return;
-    if (!user) return;
-    loadNotes();
-    loadTrashCount();
-    loadFolders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-fetch when auth settles or user changes; load functions are stable
+    if (!user) {
+      router.push(`/auth?redirectTo=${encodeURIComponent("/notes")}`);
+      return;
+    }
+
+    void loadWorkspace();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id]);
 
-  const loadFolders = async () => {
-    const { data, error } = await notesService.getFolders();
-    if (!error && data) {
-      setFolders(data);
-    }
-  };
-
-  const loadTrashCount = async () => {
-    const { data, error } = await notesService.getTrashedNotes();
-    if (!error && data) {
-      setTrashCount(data.length);
-    }
-  };
-
-  // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortBy, showStarredOnly, selectedFolder]);
+    setSelectedIds(new Set());
+  }, [currentView, deferredSearch, sortBy]);
 
-  // Filter and sort notes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedView = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    if (!storedView) return;
+
+    if (
+      storedView === "all" ||
+      storedView === "recent" ||
+      storedView === "starred" ||
+      storedView === "unfoldered"
+    ) {
+      setCurrentView(storedView);
+      return;
+    }
+
+    if (storedView.startsWith("folder:")) {
+      const folderName = storedView.slice("folder:".length);
+      if (folders.includes(folderName)) {
+        setCurrentView(storedView as SavedViewKey);
+      }
+    }
+  }, [folders]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(VIEW_STORAGE_KEY, currentView);
+  }, [currentView]);
+
+  useEffect(() => {
+    if (isFolderView(currentView) && !folders.includes(getFolderName(currentView))) {
+      setCurrentView("all");
+    }
+  }, [currentView, folders]);
+
+  const viewCounts = useMemo(() => {
+    const recentCutoff = getRecentCutoff();
+    return {
+      all: allNotes.length,
+      recent: allNotes.filter(
+        (note) => new Date(note.updated_at).getTime() >= recentCutoff
+      ).length,
+      starred: allNotes.filter((note) => note.is_starred).length,
+      unfoldered: allNotes.filter((note) => !note.folder).length,
+    };
+  }, [allNotes]);
+
   const filteredNotes = useMemo(() => {
-    let result = [...allNotes];
+    const recentCutoff = getRecentCutoff();
+    const query = deferredSearch.trim().toLowerCase();
 
-    // Filter by folder
-    if (selectedFolder === "Uncategorized") {
-      result = result.filter((note) => !note.folder);
-    } else if (selectedFolder !== "All Notes") {
-      result = result.filter((note) => note.folder === selectedFolder);
-    }
+    let notes = allNotes.filter((note) => {
+      if (currentView === "recent") {
+        return new Date(note.updated_at).getTime() >= recentCutoff;
+      }
 
-    // Filter starred only
-    if (showStarredOnly) {
-      result = result.filter((note) => note.is_starred);
-    }
+      if (currentView === "starred") {
+        return note.is_starred;
+      }
 
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      result = result.filter((note) => {
-        const title = (note.title || "").toLowerCase();
-        const content = (
-          note.edited_text || note.original_formatted_text
-        ).toLowerCase();
-        return title.includes(query) || content.includes(query);
+      if (currentView === "unfoldered") {
+        return !note.folder;
+      }
+
+      if (isFolderView(currentView)) {
+        return note.folder === getFolderName(currentView);
+      }
+
+      return true;
+    });
+
+    if (query) {
+      notes = notes.filter((note) => {
+        const content = (note.edited_text || note.original_formatted_text).toLowerCase();
+        return (
+          note.title.toLowerCase().includes(query) ||
+          content.includes(query) ||
+          (note.folder ?? "").toLowerCase().includes(query)
+        );
       });
     }
 
-    // Sort
-    result.sort((a, b) => {
-      let comparison = 0;
+    notes.sort((left, right) => {
       switch (sortBy) {
         case "created":
-          comparison =
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          break;
-        case "updated":
-          comparison =
-            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-          break;
+          return (
+            new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+          );
         case "length":
-          const aLength = (a.edited_text || a.original_formatted_text).length;
-          const bLength = (b.edited_text || b.original_formatted_text).length;
-          comparison = bLength - aLength;
-          break;
+          return (
+            (right.edited_text || right.original_formatted_text).length -
+            (left.edited_text || left.original_formatted_text).length
+          );
+        case "title":
+          return left.title.localeCompare(right.title);
+        case "updated":
+        default:
+          return (
+            new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
+          );
       }
-      // Secondary sort by ID for stability
-      if (comparison === 0) {
-        comparison = a.id.localeCompare(b.id);
-      }
-      return comparison;
     });
 
-    return result;
-  }, [allNotes, searchQuery, sortBy, showStarredOnly, selectedFolder]);
+    return notes;
+  }, [allNotes, currentView, deferredSearch, sortBy]);
 
-  const totalPages = Math.ceil(filteredNotes.length / ITEMS_PER_PAGE);
-
+  const totalPages = Math.max(1, Math.ceil(filteredNotes.length / ITEMS_PER_PAGE));
   const paginatedNotes = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     return filteredNotes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [filteredNotes, currentPage]);
 
-  const loadNotes = async () => {
-    setIsLoading(true);
-    const { data, error } = await notesService.getNotes();
-    if (error) {
-      setError("Failed to load notes. Please try again.");
-    } else {
-      setAllNotes(data || []);
+  const selectedCount = selectedIds.size;
+  const pageSelectionState = useMemo(() => {
+    if (paginatedNotes.length === 0) return "none";
+    const selectedOnPage = paginatedNotes.filter((note) => selectedIds.has(note.id)).length;
+    if (selectedOnPage === 0) return "none";
+    if (selectedOnPage === paginatedNotes.length) return "all";
+    return "some";
+  }, [paginatedNotes, selectedIds]);
+
+  const activeViewLabel = useMemo(() => {
+    if (isFolderView(currentView)) return getFolderName(currentView);
+    return SYSTEM_VIEWS.find((view) => view.id === currentView)?.label ?? "Scribble";
+  }, [currentView]);
+
+  const activeViewDescription = useMemo(() => {
+    if (isFolderView(currentView)) {
+      return `${folderCounts.get(getFolderName(currentView)) ?? 0} Scribbles in this folder.`;
     }
-    setIsLoading(false);
-  };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this note?")) return;
-
-    setDeletingId(id);
-    const { error } = await notesService.deleteNote(id);
-    if (error) {
-      alert("Failed to delete note. Please try again.");
-    } else {
-      setAllNotes(allNotes.filter((note) => note.id !== id));
-      // Increment trash count
-      setTrashCount((prev) => prev + 1);
-    }
-    setDeletingId(null);
-  };
-
-  const handleRestore = () => {
-    loadNotes();
-    loadTrashCount();
-  };
-
-  const handleToggleStar = async (note: DBNote, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newStarred = !note.is_starred;
-    // Optimistic update
-    setAllNotes((prev) =>
-      prev.map((n) => (n.id === note.id ? { ...n, is_starred: newStarred } : n))
+    return (
+      SYSTEM_VIEWS.find((view) => view.id === currentView)?.description ??
+      "Everything captured from Stream in one place."
     );
+  }, [currentView, folderCounts]);
+
+  async function loadWorkspace() {
+    setIsLoading(true);
+    setError(null);
+
+    const [notesResult, trashedResult] = await Promise.all([
+      notesService.getNotes(),
+      notesService.getTrashedNotes(),
+    ]);
+
+    if (notesResult.error) {
+      setError("Could not load Scribble right now. Please try again.");
+    } else {
+      setAllNotes(notesResult.data ?? []);
+    }
+    if (!trashedResult.error) {
+      setTrashCount(trashedResult.data?.length ?? 0);
+    }
+
+    setIsLoading(false);
+  }
+
+  function updateNotesInState(updatedNotes: DBNote[]) {
+    setAllNotes((previous) => mergeNotes(previous, updatedNotes));
+  }
+
+  function handleToggleSelection(id: string) {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function handleToggleSelectPage() {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+
+      if (pageSelectionState === "all") {
+        paginatedNotes.forEach((note) => next.delete(note.id));
+      } else {
+        paginatedNotes.forEach((note) => next.add(note.id));
+      }
+
+      return next;
+    });
+  }
+
+  async function handleToggleStar(note: DBNote, event: React.MouseEvent) {
+    event.stopPropagation();
+    const newStarred = !note.is_starred;
+
+    setAllNotes((previous) =>
+      previous.map((item) =>
+        item.id === note.id ? { ...item, is_starred: newStarred } : item
+      )
+    );
+
     const { data, error } = await notesService.toggleStar(note.id, newStarred);
     if (error || !data) {
-      // Revert on failure
-      setAllNotes((prev) =>
-        prev.map((n) =>
-          n.id === note.id ? { ...n, is_starred: note.is_starred } : n
+      setAllNotes((previous) =>
+        previous.map((item) =>
+          item.id === note.id ? { ...item, is_starred: note.is_starred } : item
         )
       );
-    } else {
-      // Sync with actual DB value
-      setAllNotes((prev) =>
-        prev.map((n) => (n.id === data.id ? { ...n, is_starred: data.is_starred } : n))
-      );
+      toast({
+        title: "Couldn’t update star",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+      return;
     }
-  };
 
-  const handleAssignFolder = async (note: DBNote, folderName: string | null, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setAssigningFolderId(note.id);
-    
-    const { error, data } = await notesService.updateNote(note.id, {
-      folder: folderName,
+    updateNotesInState([data]);
+  }
+
+  async function handleDeleteOne(noteId: string, event: React.MouseEvent) {
+    event.stopPropagation();
+    if (!window.confirm("Move this Scribble to trash?")) return;
+
+    const { error: deleteError } = await notesService.deleteNote(noteId);
+    if (deleteError) {
+      toast({
+        title: "Couldn’t move Scribble to trash",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAllNotes((previous) => previous.filter((note) => note.id !== noteId));
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      next.delete(noteId);
+      return next;
     });
+    setTrashCount((previous) => previous + 1);
+  }
 
-    if (error || !data) {
-      alert("Failed to assign folder. Please try again.");
-    } else {
-      setAllNotes((prev) =>
-        prev.map((n) => (n.id === note.id ? { ...n, folder: data.folder } : n))
-      );
+  async function applyBulkUpdate(
+    updates: Parameters<typeof notesService.updateNotes>[1],
+    successMessage: string
+  ) {
+    if (selectedCount === 0) return;
+
+    setIsApplyingBulkAction(true);
+    const ids = Array.from(selectedIds);
+    const { data, error: updateError } = await notesService.updateNotes(ids, updates);
+
+    if (updateError || !data) {
+      toast({
+        title: "Bulk action failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+      setIsApplyingBulkAction(false);
+      return;
     }
-    
-    setAssigningFolderId(null);
-  };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
+    updateNotesInState(data);
+    setSelectedIds(new Set());
+    toast({
+      title: successMessage,
+      description: `${data.length} Scribble${data.length === 1 ? "" : "s"} updated.`,
     });
-  };
+    setIsApplyingBulkAction(false);
+  }
 
-  const getPreview = (note: DBNote) => {
-    const text = note.edited_text || note.original_formatted_text;
-    return text.length > 150 ? text.substring(0, 150) + "..." : text;
-  };
+  async function handleDeleteSelected() {
+    if (selectedCount === 0) return;
+    if (!window.confirm(`Move ${selectedCount} selected Scribbles to trash?`)) return;
 
-  const hasActiveFilters = searchQuery.trim() || showStarredOnly;
+    setIsApplyingBulkAction(true);
+    const ids = Array.from(selectedIds);
+    const { data, error: deleteError } = await notesService.deleteNotes(ids);
 
-  const getEmptyMessage = () => {
-    if (allNotes.length === 0) {
-      return contextPrompt;
+    if (deleteError || !data) {
+      toast({
+        title: "Couldn’t move Scribbles to trash",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+      setIsApplyingBulkAction(false);
+      return;
     }
-    if (showStarredOnly && !searchQuery.trim()) {
-      return "No starred notes yet. Star a note to find it here quickly.";
-    }
-    if (searchQuery.trim()) {
-      return `No notes found for "${searchQuery}"`;
-    }
-    return contextPrompt;
-  };
 
-  const renderPaginationItems = () => {
+    setAllNotes((previous) => previous.filter((note) => !selectedIds.has(note.id)));
+    setSelectedIds(new Set());
+    setTrashCount((previous) => previous + data.length);
+    toast({
+      title: "Moved to trash",
+      description: `${data.length} Scribble${data.length === 1 ? "" : "s"} moved to trash.`,
+    });
+    setIsApplyingBulkAction(false);
+  }
+
+  async function handleCreateFolderFromSelection() {
+    const trimmedName = newFolderName.trim();
+
+    if (!trimmedName) {
+      toast({
+        title: "Folder name required",
+        description: "Give the folder a name first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedCount === 0) {
+      toast({
+        title: "Select Scribbles first",
+        description: "Folders are created the first time you move one or more Scribbles into them.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await applyBulkUpdate({ folder: trimmedName }, "Folder created");
+    setCurrentView(`folder:${trimmedName}`);
+    setNewFolderName("");
+  }
+
+  function handleTrashRestore() {
+    void loadWorkspace();
+  }
+
+  function renderPaginationItems() {
     const items = [];
     const maxVisiblePages = 5;
 
@@ -303,40 +503,34 @@ export default function NotesPage() {
       items.push(
         <PaginationItem key="1">
           <PaginationLink
-            onClick={(e) => {
-              e.preventDefault();
+            href="#"
+            onClick={(event) => {
+              event.preventDefault();
               setCurrentPage(1);
             }}
-            href="#"
-            className="h-8 w-8 sm:h-10 sm:w-10 text-sm"
           >
             1
           </PaginationLink>
         </PaginationItem>
       );
+
       if (startPage > 2) {
-        items.push(
-          <PaginationEllipsis
-            key="ellipsis-start"
-            className="h-8 w-8 sm:h-9 sm:w-9"
-          />
-        );
+        items.push(<PaginationEllipsis key="ellipsis-start" />);
       }
     }
 
-    for (let i = startPage; i <= endPage; i++) {
+    for (let page = startPage; page <= endPage; page += 1) {
       items.push(
-        <PaginationItem key={i}>
+        <PaginationItem key={page}>
           <PaginationLink
-            isActive={currentPage === i}
-            onClick={(e) => {
-              e.preventDefault();
-              setCurrentPage(i);
-            }}
             href="#"
-            className="h-8 w-8 sm:h-10 sm:w-10 text-sm"
+            isActive={currentPage === page}
+            onClick={(event) => {
+              event.preventDefault();
+              setCurrentPage(page);
+            }}
           >
-            {i}
+            {page}
           </PaginationLink>
         </PaginationItem>
       );
@@ -344,22 +538,17 @@ export default function NotesPage() {
 
     if (endPage < totalPages) {
       if (endPage < totalPages - 1) {
-        items.push(
-          <PaginationEllipsis
-            key="ellipsis-end"
-            className="h-8 w-8 sm:h-9 sm:w-9"
-          />
-        );
+        items.push(<PaginationEllipsis key="ellipsis-end" />);
       }
+
       items.push(
         <PaginationItem key={totalPages}>
           <PaginationLink
-            onClick={(e) => {
-              e.preventDefault();
+            href="#"
+            onClick={(event) => {
+              event.preventDefault();
               setCurrentPage(totalPages);
             }}
-            href="#"
-            className="h-8 w-8 sm:h-10 sm:w-10 text-sm"
           >
             {totalPages}
           </PaginationLink>
@@ -368,14 +557,15 @@ export default function NotesPage() {
     }
 
     return items;
-  };
+  }
 
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
-      <main className="flex flex-col items-center px-4 pt-8 pb-24">
-        <div className="w-full max-w-2xl mt-16">
-          <div className="flex items-center justify-center mb-8">
-            <h1 className="text-3xl font-bold text-white">Your Notes</h1>
+      <main className="flex min-h-screen flex-col items-center px-4 pt-24 pb-24">
+        <div className="w-full max-w-5xl">
+          <div className="mb-8 space-y-3">
+            <div className="h-4 w-24 rounded-full bg-white/10" />
+            <div className="h-10 w-64 rounded-full bg-white/10" />
           </div>
           <NotesListSkeleton />
         </div>
@@ -383,359 +573,459 @@ export default function NotesPage() {
     );
   }
 
+  const isEmptyWorkspace = allNotes.length === 0;
+
   return (
-    <main className="flex flex-col items-center px-4 pt-8 pb-24">
-      <div className="w-full max-w-2xl mt-16">
-        <div className="flex items-center justify-center mt-8 mb-8">
-          <h1 className="text-3xl font-bold text-white">Your Notes</h1>
-        </div>
+    <main className="min-h-screen bg-[#020617] px-4 pt-24 pb-24 text-white">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
+              <Sparkles className="h-3.5 w-3.5" />
+              Scribble
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-4xl font-semibold tracking-tight text-white">
+                Organize every Stream in one calm workspace.
+              </h1>
+              <p className="max-w-2xl text-sm leading-6 text-slate-400">
+                Jump between recent, starred, and folder views, then tidy multiple
+                Scribbles at once without leaving the page.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsTrashOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-500/30 hover:text-cyan-200"
+            >
+              <Trash2 className="h-4 w-4" />
+              Trash
+              {trashCount > 0 && (
+                <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-200">
+                  {trashCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => router.push("/recording")}
+              className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+            >
+              <Sparkles className="h-4 w-4" />
+              Start a Stream
+            </button>
+          </div>
+        </header>
 
         {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg mb-6">
-            <p className="text-red-400">{error}</p>
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {error}
           </div>
         )}
 
-        {/* Folder Tabs */}
-        {allNotes.length > 0 && (
-          <>
-          <div className="flex items-center gap-2 mb-2 pb-2 overflow-x-auto">
-            {/* All Notes Tab */}
-            <button
-              onClick={() => setSelectedFolder("All Notes")}
-              className={`px-6 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
-                selectedFolder === "All Notes" ? "bg-cyan-500 text-slate-950" : "bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:bg-slate-800"
-              }`}
-            >
-              All Notes
-            </button>
+        <div className="grid gap-6 lg:grid-cols-[280px,minmax(0,1fr)]">
+          <aside className="space-y-4">
+            <section className="rounded-[28px] border border-white/8 bg-white/[0.03] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-white">Saved Views</h2>
+                <span className="text-xs text-slate-500">{allNotes.length} total</span>
+              </div>
 
-            {/* Uncategorized Tab */}
-            {allNotes.some(n => !n.folder) && (
-              <button
-                onClick={() => setSelectedFolder("Uncategorized")}
-                className={`px-6 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
-                  selectedFolder === "Uncategorized" ? "bg-cyan-500 text-slate-950" : "bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:bg-slate-800"
-                }`}
-              >
-                Uncategorized
-              </button>
-            )}
+              <div className="space-y-1.5">
+                {SYSTEM_VIEWS.map((view) => {
+                  const Icon = view.icon;
+                  const isActive = currentView === view.id;
+                  const count = viewCounts[view.id];
 
-            {/* Visible Folders */}
-            {folders.slice(0, MAX_VISIBLE_FOLDERS).map((folder) => {
-              const isActive = selectedFolder === folder;
-              return (
+                  return (
+                    <button
+                      key={view.id}
+                      onClick={() => setCurrentView(view.id)}
+                      className={cn(
+                        "flex w-full items-start justify-between rounded-2xl px-3 py-3 text-left transition",
+                        isActive
+                          ? "bg-cyan-500/10 text-cyan-100 ring-1 ring-cyan-500/30"
+                          : "bg-transparent text-slate-300 hover:bg-white/5 hover:text-white"
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            "mt-0.5 rounded-full p-1.5",
+                            isActive ? "bg-cyan-500/20" : "bg-white/5"
+                          )}
+                        >
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium">{view.label}</div>
+                          <div className="mt-1 text-xs leading-5 text-slate-500">
+                            {view.description}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs font-semibold text-slate-400">
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-white/8 bg-white/[0.03] p-4">
+              <div className="mb-3 space-y-1">
+                <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                  <Folder className="h-4 w-4 text-cyan-300" />
+                  Folders
+                </div>
+                <p className="text-xs leading-5 text-slate-500">
+                  Create a folder by moving selected Scribbles into it.
+                </p>
+              </div>
+
+              <div className="mb-4 flex gap-2">
+                <Input
+                  value={newFolderName}
+                  onChange={(event) => setNewFolderName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !isApplyingBulkAction) {
+                      void handleCreateFolderFromSelection();
+                    }
+                  }}
+                  placeholder="New folder"
+                  className="border-white/10 bg-white/5 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/30"
+                />
                 <button
-                  key={folder}
-                  onClick={() => setSelectedFolder(folder)}
-                  className={`px-6 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
-                    isActive ? "bg-cyan-500 text-slate-950" : "bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:bg-slate-800"
-                  }`}
+                  onClick={() => void handleCreateFolderFromSelection()}
+                  disabled={isApplyingBulkAction}
+                  className="inline-flex h-10 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 text-cyan-100 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                  title="Create folder from selection"
                 >
-                  {folder}
+                  {isApplyingBulkAction ? (
+                    <Spinner className="h-4 w-4" />
+                  ) : (
+                    <FolderPlus className="h-4 w-4" />
+                  )}
                 </button>
-              );
-            })}
+              </div>
 
-            {/* Overflow Folders Dropdown */}
-            {folders.length > MAX_VISIBLE_FOLDERS && (
-              <div className="relative" data-overflow-menu>
-                <button
-                  onClick={() => setShowOverflowFolders(!showOverflowFolders)}
-                  className={`px-4 py-2 rounded-t-xl text-sm font-semibold transition-all duration-300 whitespace-nowrap flex items-center gap-1 ${
-                    showOverflowFolders || folders.slice(MAX_VISIBLE_FOLDERS).some(f => selectedFolder === f)
-                      ? "bg-cyan-500 text-slate-950"
-                      : "bg-slate-900/50 text-gray-400 hover:text-gray-200 hover:bg-slate-800"
-                  }`}
-                >
-                  +{folders.length - MAX_VISIBLE_FOLDERS} More
-                  <svg
-                    className={`w-4 h-4 transition-transform duration-200 ${showOverflowFolders ? "rotate-180" : ""}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                  </svg>
-                </button>
-
-                {/* Overflow Dropdown Menu */}
-                {showOverflowFolders && (
-                  <div className="absolute z-50 top-full left-0 mt-0 bg-slate-800 border border-cyan-700/30 rounded-b-lg shadow-lg py-1 min-w-[160px]">
-                    {folders.slice(MAX_VISIBLE_FOLDERS).map((folder) => (
+              {folders.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 px-3 py-4 text-sm text-slate-500">
+                  No folders yet.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {folders.map((folderName) => {
+                    const isActive = currentView === `folder:${folderName}`;
+                    return (
                       <button
-                        key={folder}
-                        onClick={() => {
-                          setSelectedFolder(folder);
-                          setShowOverflowFolders(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                          selectedFolder === folder
-                            ? "bg-cyan-500 text-slate-950 font-semibold"
-                            : "text-gray-300 hover:text-white hover:bg-slate-700"
-                        }`}
+                        key={folderName}
+                        onClick={() => setCurrentView(`folder:${folderName}`)}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left transition",
+                          isActive
+                            ? "bg-emerald-500/10 text-emerald-100 ring-1 ring-emerald-500/30"
+                            : "bg-transparent text-slate-300 hover:bg-white/5 hover:text-white"
+                        )}
                       >
-                        {folder}
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div
+                            className={cn(
+                              "rounded-full p-1.5",
+                              isActive ? "bg-emerald-500/15" : "bg-white/5"
+                            )}
+                          >
+                            <Folder className="h-4 w-4" />
+                          </div>
+                          <span className="truncate text-sm font-medium">{folderName}</span>
+                        </div>
+                        <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs font-semibold text-slate-400">
+                          {folderCounts.get(folderName) ?? 0}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </aside>
+
+          <section className="rounded-[32px] border border-white/8 bg-white/[0.03] p-4 md:p-6">
+            <div className="flex flex-col gap-4 border-b border-white/8 pb-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-semibold tracking-tight text-white">
+                    {activeViewLabel}
+                  </h2>
+                  <p className="text-sm text-slate-400">{activeViewDescription}</p>
+                </div>
+                <div className="text-sm text-slate-500">
+                  {filteredNotes.length} result{filteredNotes.length === 1 ? "" : "s"}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search Scribble by title, text, or folder..."
+                    className="border-white/10 bg-white/5 pl-10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/30"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Select
+                    value={sortBy}
+                    onValueChange={(value) => setSortBy(value as SortOption)}
+                  >
+                    <SelectTrigger className="h-10 w-[180px] border-white/10 bg-white/5 text-white">
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <ArrowUpDown className="h-4 w-4 text-slate-500" />
+                        <SelectValue placeholder="Sort" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent className="border-white/10 bg-slate-950 text-white">
+                      <SelectItem value="updated">Recently Updated</SelectItem>
+                      <SelectItem value="created">Recently Created</SelectItem>
+                      <SelectItem value="length">Longest First</SelectItem>
+                      <SelectItem value="title">Title A-Z</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <button
+                    onClick={handleToggleSelectPage}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-sm font-medium text-slate-200 transition hover:border-cyan-500/20 hover:text-white"
+                  >
+                    {pageSelectionState === "all" ? (
+                      <CheckSquare className="h-4 w-4 text-cyan-300" />
+                    ) : (
+                      <Square className="h-4 w-4 text-slate-500" />
+                    )}
+                    {pageSelectionState === "all" ? "Clear page" : "Select page"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {selectedCount > 0 && (
+              <div className="mt-4 flex flex-col gap-3 rounded-[24px] border border-cyan-500/20 bg-cyan-500/8 p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="text-sm text-cyan-50">
+                    <span className="font-semibold">{selectedCount}</span> Scribble
+                    {selectedCount === 1 ? "" : "s"} selected
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => void applyBulkUpdate({ is_starred: true }, "Starred selection")}
+                      disabled={isApplyingBulkAction}
+                      className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/15 disabled:opacity-50"
+                    >
+                      Star
+                    </button>
+                    <button
+                      onClick={() => void applyBulkUpdate({ is_starred: false }, "Unstarred selection")}
+                      disabled={isApplyingBulkAction}
+                      className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/15 disabled:opacity-50"
+                    >
+                      Unstar
+                    </button>
+                    <button
+                      onClick={() => void applyBulkUpdate({ folder: null }, "Removed from folder")}
+                      disabled={isApplyingBulkAction}
+                      className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/15 disabled:opacity-50"
+                    >
+                      Clear folder
+                    </button>
+                    <button
+                      onClick={() => void handleDeleteSelected()}
+                      disabled={isApplyingBulkAction}
+                      className="rounded-full border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-100 transition hover:bg-red-500/15 disabled:opacity-50"
+                    >
+                      Move to trash
+                    </button>
+                  </div>
+                </div>
+
+                {folders.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {folders.map((folderName) => (
+                      <button
+                        key={folderName}
+                        onClick={() => void applyBulkUpdate({ folder: folderName }, `Moved to ${folderName}`)}
+                        disabled={isApplyingBulkAction}
+                        className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/15 disabled:opacity-50"
+                      >
+                        Move to {folderName}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
             )}
-            
-            {/* Manage Folders Icon - Always on the right */}
-            <div className="ml-auto">
-              <button
-                onClick={() => router.push("/settings?tab=folders&from=notes")}
-                className="p-2.5 text-cyan-400 bg-cyan-500/10 border border-cyan-500/40 rounded-lg hover:bg-cyan-500/20 transition-colors flex-shrink-0"
-                title="Manage folders"
-              >
-                <FolderCog className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-          </>
-        )}
 
-        {/* Filter Bar */}
-        {allNotes.length > 0 && (
-          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
-            {/* Search Input */}
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 z-10" />
-              <Input
-                type="text"
-                placeholder="Search notes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 w-full pl-10 pr-4 bg-slate-800 border border-cyan-700/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-600 transition-colors"
-              />
-            </div>
-              <Select
-              value={sortBy}
-              onValueChange={(value) => setSortBy(value as SortOption)}
-            >
-              <SelectTrigger className="h-10 w-full md:w-[180px] bg-slate-800 border-cyan-700/30 rounded-lg text-white focus:ring-1 focus:ring-cyan-600 transition-colors">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
-                <SelectItem value="created">Date Created</SelectItem>
-                <SelectItem value="updated">Date Updated</SelectItem>
-                <SelectItem value="length">Length</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="mt-5 min-h-[420px]">
+              {isEmptyWorkspace ? (
+                <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[28px] border border-dashed border-white/10 px-6 text-center">
+                  <Sparkles className="mb-4 h-12 w-12 text-cyan-400/70" />
+                  <h3 className="text-2xl font-semibold text-white">No Scribbles yet</h3>
+                  <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
+                    Start a Stream and OSCAR will clean it up, title it, and file it
+                    here for you.
+                  </p>
+                  <button
+                    onClick={() => router.push("/recording")}
+                    className="mt-6 rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                  >
+                    Start a Stream
+                  </button>
+                </div>
+              ) : filteredNotes.length === 0 ? (
+                <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[28px] border border-dashed border-white/10 px-6 text-center">
+                  <Search className="mb-4 h-12 w-12 text-slate-600" />
+                  <h3 className="text-2xl font-semibold text-white">Nothing matches this view</h3>
+                  <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
+                    Try a different saved view or clear the search to bring more
+                    Scribbles back into view.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setSearchQuery("");
+                      setCurrentView("all");
+                    }}
+                    className="mt-6 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-500/20 hover:text-white"
+                  >
+                    Reset filters
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {paginatedNotes.map((note) => {
+                    const isSelected = selectedIds.has(note.id);
 
-            {/* Starred filter toggle */}
-            <button
-              onClick={() => setShowStarredOnly((v) => !v)}
-              title={showStarredOnly ? "Show all notes" : "Show starred only"}
-              className={`h-10 px-3 flex items-center gap-1.5 rounded-lg border transition-colors text-sm font-medium ${
-                showStarredOnly
-                  ? "bg-cyan-500/20 border-cyan-500/60 text-cyan-400"
-                  : "bg-slate-800 border-cyan-700/30 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/40"
-              }`}
-            >
-              <Star
-                className={`w-4 h-4 ${showStarredOnly ? "fill-cyan-400 text-cyan-400" : ""}`}
-              />
-              <span>Starred</span>
-            </button>
-
-            {/* Sort Dropdown */}
-          
-          </div>
-        )}
-
-        {/* Trash Button - Bottom Right */}
-        <button
-          onClick={() => setIsTrashOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center justify-center w-10 h-10 group"
-          title="View trash"
-        >
-          <Trash2 className="w-6 h-6 text-gray-400 group-hover:text-cyan-400 transition-all duration-300 group-hover:-translate-y-1" />
-          {trashCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-medium rounded-full shadow-md transition-all duration-300 group-hover:-translate-y-1">
-              {trashCount > 99 ? "99+" : trashCount}
-            </span>
-          )}
-        </button>
-
-        {/* Trash Sheet */}
-        <TrashSheet
-          open={isTrashOpen}
-          onOpenChange={setIsTrashOpen}
-          onRestore={handleRestore}
-        />
-
-        {filteredNotes.length === 0 ? (
-          <div className="text-center py-16 mt-16">
-            <SquaresSubtract className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-500 mb-6">{getEmptyMessage()}</p>
-            {hasActiveFilters && (
-              <button
-                onClick={() => {
-                  setSearchQuery("");
-                  setShowStarredOnly(false);
-                }}
-                className="text-cyan-500 hover:text-cyan-400 transition-colors"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="space-y-4 min-h-[400px]">
-              {paginatedNotes.map((note) => (
-                <Card
-                  key={note.id}
-                  onClick={() => router.push(`/notes/${note.id}`)}
-                  className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl cursor-pointer hover:border-cyan-700/60 transition-all hover:shadow-2xl group overflow-hidden"
-                >
-                  <CardHeader>
-                    <div className="flex gap-6 justify-between items-start">
-                      <div className="flex-1 min-w-0">
-                        <div className="mb-2">
-                          <h2 className="text-xl font-semibold text-white truncate">
-                            {note.title || "Untitled Note"}
-                          </h2>
-                          <p className="text-gray-300 text-sm">
-                            {formatDate(note.created_at)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {/* Folder Button */}
-                        <div className="relative">
+                    return (
+                      <article
+                        key={note.id}
+                        className={cn(
+                          "group rounded-[28px] border px-4 py-4 transition md:px-5",
+                          isSelected
+                            ? "border-cyan-500/30 bg-cyan-500/[0.08]"
+                            : "border-white/8 bg-white/[0.02] hover:border-cyan-500/20 hover:bg-white/[0.04]"
+                        )}
+                      >
+                        <div className="flex gap-4">
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setFolderMenuNoteId(note.id);
-                            }}
-                            className={`p-2 transition-colors ${
-                              assigningFolderId === note.id
-                                ? "text-cyan-400"
-                                : "text-gray-500 hover:text-cyan-400"
-                            }`}
-                            title="Assign to folder"
-                            disabled={assigningFolderId === note.id}
+                            onClick={() => handleToggleSelection(note.id)}
+                            className="mt-1 h-5 w-5 shrink-0 rounded-md text-slate-400 transition hover:text-cyan-200"
+                            aria-label={isSelected ? "Deselect Scribble" : "Select Scribble"}
                           >
-                            {assigningFolderId === note.id ? (
-                              <Spinner className="w-4 h-4" />
+                            {isSelected ? (
+                              <CheckSquare className="h-5 w-5 text-cyan-300" />
                             ) : (
-                              <Folder className="w-4 h-4" />
+                              <Square className="h-5 w-5" />
                             )}
                           </button>
-                          
-                          {/* Folder Menu Popup */}
-                          {folderMenuNoteId === note.id && (
-                            <div className="absolute z-50 top-full right-0 mt-1 bg-slate-800 border border-cyan-700/30 rounded-lg shadow-lg py-1 min-w-[150px]">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAssignFolder(note, null, e);
-                                  setFolderMenuNoteId(null);
-                                }}
-                                className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-slate-700 transition-colors"
-                              >
-                                No Folder
-                              </button>
-                              {folders.map((folder) => (
-                                <button
-                                  key={folder}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleAssignFolder(note, folder, e);
-                                    setFolderMenuNoteId(null);
-                                  }}
-                                  className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-slate-700 transition-colors"
-                                >
-                                  {folder}
-                                </button>
-                              ))}
+
+                          <div
+                            className="min-w-0 flex-1 cursor-pointer"
+                            onClick={() => router.push(`/notes/${note.id}`)}
+                          >
+                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                              <div className="min-w-0 space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h3 className="truncate text-lg font-semibold text-white">
+                                    {note.title || "Untitled Note"}
+                                  </h3>
+                                  {note.is_starred && (
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200">
+                                      <Star className="h-3 w-3 fill-current" />
+                                      Starred
+                                    </span>
+                                  )}
+                                  {note.folder && (
+                                    <button
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setCurrentView(`folder:${note.folder}`);
+                                      }}
+                                      className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200"
+                                    >
+                                      <Folder className="h-3 w-3" />
+                                      {note.folder}
+                                    </button>
+                                  )}
+                                </div>
+
+                                <p className="max-w-3xl text-sm leading-6 text-slate-400">
+                                  {getPreview(note)}
+                                </p>
+                              </div>
+
+                              <div className="shrink-0 text-xs text-slate-500">
+                                {formatDate(note.updated_at)}
+                              </div>
                             </div>
-                          )}
+                          </div>
+
+                          <div className="flex shrink-0 items-start gap-1">
+                            <button
+                              onClick={(event) => void handleToggleStar(note, event)}
+                              className={cn(
+                                "rounded-xl p-2 transition",
+                                note.is_starred
+                                  ? "text-cyan-300 hover:bg-cyan-500/10"
+                                  : "text-slate-500 hover:bg-white/5 hover:text-cyan-200"
+                              )}
+                              title={note.is_starred ? "Unstar Scribble" : "Star Scribble"}
+                            >
+                              <Star
+                                className={cn(
+                                  "h-4 w-4",
+                                  note.is_starred && "fill-current"
+                                )}
+                              />
+                            </button>
+                            <button
+                              onClick={(event) => void handleDeleteOne(note.id, event)}
+                              className="rounded-xl p-2 text-slate-500 transition hover:bg-white/5 hover:text-red-200"
+                              title="Move Scribble to trash"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
-                        
-                        {/* Star Button */}
-                        <button
-                          onClick={(e) => handleToggleStar(note, e)}
-                          className={`p-2 transition-colors ${
-                            note.is_starred
-                              ? "text-cyan-400 hover:text-cyan-300"
-                              : "text-gray-500 hover:text-cyan-400"
-                          }`}
-                          title={note.is_starred ? "Unstar note" : "Star note"}
-                        >
-                          <Star
-                            className={`w-4 h-4 ${note.is_starred ? "fill-cyan-400" : ""}`}
-                          />
-                        </button>
-                        {/* Delete Button */}
-                        <button
-                          onClick={(e) => handleDelete(note.id, e)}
-                          disabled={deletingId === note.id}
-                          className="p-2 text-gray-500 hover:text-white transition-colors"
-                          title="Delete note"
-                        >
-                          {deletingId === note.id ? (
-                            <Spinner className="w-4 h-4" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                    <Separator className="w-24 h-0.5 bg-cyan-500" />
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-md text-start text-gray-400 line-clamp-2">
-                      {getPreview(note)}
-                    </p>
-                    {note.folder && (
-                      <div className="mt-3">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-xs font-semibold text-cyan-400">
-                          <Folder className="w-3 h-3" />
-                          {note.folder}
-                        </span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="mt-8 -mx-4 sm:mx-0 overflow-x-auto pb-2">
+            {filteredNotes.length > 0 && totalPages > 1 && (
+              <div className="mt-6 overflow-x-auto pb-2">
                 <Pagination>
-                  <PaginationContent className="flex-nowrap gap-1 min-w-max">
+                  <PaginationContent className="flex-nowrap gap-1">
                     <PaginationItem>
                       <PaginationPrevious
-                        onClick={(e) => {
-                          e.preventDefault();
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
                           if (currentPage > 1) setCurrentPage(currentPage - 1);
                         }}
-                        href="#"
-                        className={
-                          currentPage === 1
-                            ? "pointer-events-none opacity-50"
-                            : "cursor-pointer"
-                        }
+                        className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                       />
                     </PaginationItem>
-
                     {renderPaginationItems()}
-
                     <PaginationItem>
                       <PaginationNext
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (currentPage < totalPages)
-                            setCurrentPage(currentPage + 1);
-                        }}
                         href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                        }}
                         className={
                           currentPage === totalPages
                             ? "pointer-events-none opacity-50"
@@ -747,9 +1037,15 @@ export default function NotesPage() {
                 </Pagination>
               </div>
             )}
-          </div>
-        )}
+          </section>
+        </div>
       </div>
+
+      <TrashSheet
+        open={isTrashOpen}
+        onOpenChange={setIsTrashOpen}
+        onRestore={handleTrashRestore}
+      />
     </main>
   );
 }

@@ -188,10 +188,10 @@ export default function Home() {
 
             <div className="space-y-3">
               <h3 className="text-2xl md:text-3xl font-semibold text-white/90 tracking-tight">
-                Looks like there&apos;s nothing here (yet).
+                Scribble is empty for now.
               </h3>
               <p className="text-gray-500 text-lg md:text-xl max-w-md mx-auto leading-relaxed">
-                Click record to get started and turn your speech into clean, formatted text!
+                Start a Stream and your first Scribble will land here automatically.
               </p>
             </div>
           </motion.div>
@@ -221,7 +221,7 @@ export default function Home() {
           <div className="text-center mb-12">
             <p className="text-cyan-400 font-medium mb-2">Welcome back, {firstName}</p>
             <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight">
-              Start recording your ideas
+              Start a Stream
             </h1>
           </div>
 
@@ -229,7 +229,7 @@ export default function Home() {
 
           {/* Recent Transcriptions Section */}
           <div className="w-full mb-12">
-            <h2 className="text-gray-400 font-medium mb-6 text-center">Recent Transcriptions</h2>
+            <h2 className="text-gray-400 font-medium mb-6 text-center">Recent Scribbles</h2>
             
             <div className="space-y-3">
               {isLoadingNotes ? (
@@ -261,7 +261,7 @@ export default function Home() {
                 ))
               ) : (
                 <div className="text-center py-10 bg-slate-900/20 rounded-2xl border border-dashed border-white/10">
-                  <p className="text-gray-500 italic">No recordings yet. Speak your first idea!</p>
+                  <p className="text-gray-500 italic">No Scribbles yet. Start a Stream and capture your first idea.</p>
                 </div>
               )}
             </div>

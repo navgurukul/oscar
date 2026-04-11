@@ -96,7 +96,7 @@ function RecordingPageInner() {
           // Start recording with existing transcript as seed
           toast({
             title: "Resuming Recording",
-            description: "Preparing to add more to your note...",
+            description: "Preparing to add more to your Scribble...",
           });
           
           // Clear continue mode flag ONLY after we've read the raw text and are about to start
@@ -425,7 +425,7 @@ function RecordingPageInner() {
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold">
-            Record Your <span className="text-cyan-500">Voice</span>
+            Start a <span className="text-cyan-500">Stream</span>
           </h1>
         </div>
 
@@ -461,8 +461,8 @@ function RecordingPageInner() {
           <div className="text-center pb-16 h-16 flex items-center justify-center">
             {!isRecording && (
               <p className="text-gray-400 text-lg">
-                Press the microphone button and start speaking. Oscar will do
-                the rest.
+                Speak naturally. OSCAR will turn this Stream into a clean
+                Scribble.
               </p>
             )}
           </div>

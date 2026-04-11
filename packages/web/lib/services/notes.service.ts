@@ -80,6 +80,27 @@ export const notesService = {
   },
 
   /**
+   * Update multiple notes in one request
+   */
+  async updateNotes(
+    ids: string[],
+    updates: DBNoteUpdate
+  ): Promise<{ data: DBNote[] | null; error: Error | null }> {
+    if (ids.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("notes")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .in("id", ids)
+      .select("*");
+
+    return { data, error: error as Error | null };
+  },
+
+  /**
    * Soft delete a note by setting deleted_at
    */
   async deleteNote(id: string): Promise<{ error: Error | null }> {
@@ -90,6 +111,29 @@ export const notesService = {
       .eq("id", id);
 
     return { error: error as Error | null };
+  },
+
+  /**
+   * Soft delete multiple notes
+   */
+  async deleteNotes(
+    ids: string[]
+  ): Promise<{ data: DBNote[] | null; error: Error | null }> {
+    if (ids.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("notes")
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", ids)
+      .select("*");
+
+    return { data, error: error as Error | null };
   },
 
   /**

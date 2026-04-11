@@ -198,15 +198,15 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
 
   const getEmptyMessage = () => {
     if (allNotes.length === 0) {
-      return "No notes yet. Start recording to create your first note!";
+      return "No Scribbles yet. Start a Stream to create your first one.";
     }
     if (showStarredOnly && !searchQuery.trim()) {
-      return "No starred notes yet. Star a note to find it here quickly.";
+      return "No starred Scribbles yet. Star one to find it here quickly.";
     }
     if (searchQuery.trim()) {
-      return `No notes found for "${searchQuery}"`;
+      return `No Scribbles found for "${searchQuery}"`;
     }
-    return "No notes match your filters.";
+    return "No Scribbles match your filters.";
   };
 
   // Render pagination items
@@ -274,7 +274,7 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
           <div className="notes-detail-header">
             <button onClick={handleBackToList} className="notes-detail-back">
               <ChevronLeft size={20} />
-              Back to Notes
+              Back to Scribble
             </button>
           </div>
           <div className="notes-detail-content">
@@ -318,10 +318,10 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
           <div className="relative z-[1] flex min-h-[118px] items-center justify-between gap-5 max-md:flex-col max-md:items-start">
             <div className="max-w-[430px] text-left">
               <h2 className="m-0 text-[1.3rem] font-semibold leading-[1.08] text-slate-50">
-                Voice notes that stay searchable and synced.
+                Scribbles that stay searchable and synced.
               </h2>
               <p className="mt-3 text-[0.82rem] leading-[1.6] text-sky-50/90">
-                Record once, then search, star, and organize every idea across your devices.
+                Stream once, then search, star, and organize every idea across your devices.
               </p>
               <button
                 onClick={onToggleRecording}
@@ -329,7 +329,7 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
                 className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-white/90 bg-white px-[14px] py-2.5 text-[0.82rem] font-semibold text-cyan-700 shadow-[0_12px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-px hover:text-cyan-800 hover:shadow-[0_16px_28px_rgba(15,23,42,0.18)]"
               >
                 {isRecording ? <Square size={14} /> : <Mic size={14} />}
-                {isRecording ? "Stop recording" : "Start recording"}
+                {isRecording ? "Stop Stream" : "Start Stream"}
               </button>
             </div>
 
@@ -337,8 +337,8 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
               {[
                 { label: "Search", icon: <Search size={20} /> },
                 { label: "Star", icon: <Star size={20} /> },
-                { label: "Notes", icon: <FileText size={20} /> },
-                { label: "Record", icon: <Mic size={20} /> },
+                { label: "Scribble", icon: <FileText size={20} /> },
+                { label: "Stream", icon: <Mic size={20} /> },
               ].map(({ label, icon }, index) => (
                 <div
                   key={label}
@@ -367,7 +367,7 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
               <Search size={16} className="notes-search-icon" />
               <input
                 type="text"
-                placeholder="Search notes..."
+                placeholder="Search Scribble..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="notes-search-input"

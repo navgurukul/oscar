@@ -3,8 +3,8 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
+    Arc, Mutex, OnceLock,
 };
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -290,6 +290,21 @@ mod macos_paste {
 
 static PENDING_DEEP_LINK: Mutex<Option<String>> = Mutex::new(None);
 
+/// HWND (as usize) of the focused window captured at hotkey press on Windows.
+/// Used by paste_transcription to re-focus the correct window before Ctrl+V.
+#[cfg(target_os = "windows")]
+static FOCUSED_WIN_HWND: AtomicUsize = AtomicUsize::new(0);
+
+/// xdotool window ID captured at hotkey press on Linux.
+/// Used by paste_transcription to re-focus the correct window before Ctrl+V.
+#[cfg(target_os = "linux")]
+static FOCUSED_WIN_XID: AtomicU64 = AtomicU64::new(0);
+
+/// System tray indicator used on Linux in place of the pill webview window.
+/// Initialised once in setup(); pill functions update its tooltip to show state.
+#[cfg(target_os = "linux")]
+static LINUX_TRAY: OnceLock<tauri::tray::TrayIcon> = OnceLock::new();
+
 /// Set a pending deep link URL (called from deep link plugin)
 pub fn set_pending_deep_link(url: String) {
     if let Ok(mut pending) = PENDING_DEEP_LINK.lock() {
@@ -392,7 +407,36 @@ fn register_recording_hotkey<R: tauri::Runtime>(
                             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
                             .unwrap_or_default()
                     };
-                    #[cfg(not(target_os = "macos"))]
+                    #[cfg(target_os = "windows")]
+                    let frontmost_app = {
+                        use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+                        let hwnd = unsafe { GetForegroundWindow() };
+                        FOCUSED_WIN_HWND.store(hwnd as usize, Ordering::SeqCst);
+                        log::info!("[hotkey] captured HWND=0x{:x}", hwnd as usize);
+                        String::new()
+                    };
+
+                    #[cfg(target_os = "linux")]
+                    let frontmost_app = {
+                        match std::process::Command::new("xdotool")
+                            .arg("getactivewindow")
+                            .output()
+                        {
+                            Ok(o) => {
+                                let xid_str = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                                if let Ok(xid) = xid_str.parse::<u64>() {
+                                    FOCUSED_WIN_XID.store(xid, Ordering::SeqCst);
+                                    log::info!("[hotkey] captured xdotool XID={}", xid);
+                                } else {
+                                    log::warn!("[hotkey] xdotool returned non-numeric: {:?}", xid_str);
+                                }
+                            }
+                            Err(e) => log::warn!("[hotkey] xdotool not available: {}", e),
+                        }
+                        String::new()
+                    };
+
+                    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
                     let frontmost_app = String::new();
 
                     log::info!("[hotkey] frontmost app = '{}'", frontmost_app);
@@ -1335,7 +1379,10 @@ fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     // Skip the pill entirely — recording state is shown in the main window.
     #[cfg(target_os = "linux")]
     {
-        log::debug!("[pill] show_recording_pill skipped on Linux");
+        if let Some(tray) = LINUX_TRAY.get() {
+            let _ = tray.set_tooltip(Some("● Recording — Oscar"));
+        }
+        log::debug!("[pill] show_recording_pill → tray tooltip updated (Linux)");
         let _ = app;
         return Ok(());
     }
@@ -1372,7 +1419,10 @@ fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
 fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        log::debug!("[pill] hide_recording_pill skipped on Linux");
+        if let Some(tray) = LINUX_TRAY.get() {
+            let _ = tray.set_tooltip(Some("Oscar"));
+        }
+        log::debug!("[pill] hide_recording_pill → tray tooltip reset (Linux)");
         let _ = app;
         return Ok(());
     }
@@ -1391,7 +1441,10 @@ fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
 fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        log::debug!("[pill] set_pill_processing skipped on Linux");
+        if let Some(tray) = LINUX_TRAY.get() {
+            let _ = tray.set_tooltip(Some("⟳ Processing — Oscar"));
+        }
+        log::debug!("[pill] set_pill_processing → tray tooltip updated (Linux)");
         let _ = app;
         return Ok(());
     }
@@ -1408,7 +1461,10 @@ fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
 fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        log::debug!("[pill] set_pill_listening skipped on Linux");
+        if let Some(tray) = LINUX_TRAY.get() {
+            let _ = tray.set_tooltip(Some("● Recording — Oscar"));
+        }
+        log::debug!("[pill] set_pill_listening → tray tooltip updated (Linux)");
         let _ = app;
         return Ok(());
     }
@@ -1703,6 +1759,28 @@ fn paste_transcription(text: String, target_app: Option<String>) -> Result<Strin
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
+        // Re-focus the window that was active when the hotkey was pressed so
+        // that Ctrl+V lands in the right place instead of an Oscar window.
+        #[cfg(target_os = "windows")]
+        {
+            use windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+            let hwnd = FOCUSED_WIN_HWND.load(Ordering::SeqCst) as isize;
+            if hwnd != 0 {
+                unsafe { SetForegroundWindow(hwnd); }
+                log::info!("[paste] SetForegroundWindow(0x{:x})", hwnd as usize);
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let xid = FOCUSED_WIN_XID.load(Ordering::SeqCst);
+            if xid != 0 {
+                let _ = std::process::Command::new("xdotool")
+                    .args(["windowfocus", "--sync", &xid.to_string()])
+                    .status();
+                log::info!("[paste] xdotool windowfocus {}", xid);
+            }
+        }
+
         use enigo::{Direction, Enigo, Key, Keyboard, Settings};
         std::thread::sleep(std::time::Duration::from_millis(150));
         let mut enigo = Enigo::new(&Settings::default())
@@ -1933,7 +2011,24 @@ pub fn run() {
                 create_pill_window(app.handle());
             }
             #[cfg(target_os = "linux")]
-            log::info!("[setup] Skipping pill window on Linux (tao secondary window bug)");
+            {
+                log::info!("[setup] Skipping pill window on Linux (tao secondary window bug) — using tray instead");
+                let mut tray_builder = tauri::tray::TrayIconBuilder::new()
+                    .tooltip("Oscar");
+                if let Some(icon) = app.default_window_icon() {
+                    tray_builder = tray_builder.icon(icon.clone());
+                }
+                match tray_builder.build(app.handle()) {
+                    Ok(tray) => {
+                        if LINUX_TRAY.set(tray).is_err() {
+                            log::warn!("[setup] LINUX_TRAY was already initialised");
+                        } else {
+                            log::info!("[setup] Linux tray icon created OK");
+                        }
+                    }
+                    Err(e) => log::warn!("[setup] Could not create tray icon on Linux: {}", e),
+                }
+            }
 
             log::info!("[setup] ✓ Setup complete — app ready");
             Ok(())

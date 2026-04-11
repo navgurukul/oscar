@@ -41,7 +41,7 @@ const fallbackStore = new Map<string, RateLimitEntry>();
 // Cleanup fallback store every 5 minutes
 setInterval(() => {
   const now = Date.now();
-  for (const [key, entry] of fallbackStore) {
+  for (const [key, entry] of Array.from(fallbackStore.entries())) {
     if (entry.resetAt < now) fallbackStore.delete(key);
   }
 }, 5 * 60 * 1000);
@@ -227,7 +227,7 @@ export async function clearRateLimit(identifier: string, endpoint?: string): Pro
       await getSupabaseAdmin().from("rate_limits").delete().eq("key", key);
     } catch { /* ignore */ }
   } else {
-    for (const key of fallbackStore.keys()) {
+    for (const key of Array.from(fallbackStore.keys())) {
       if (key.endsWith(`:${identifier}`)) fallbackStore.delete(key);
     }
     try {
