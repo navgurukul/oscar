@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     // Apply rate limiting based on IP to prevent DoS attacks
     // Note: Legitimate Razorpay webhooks should never hit this limit
     const clientId = getClientIdentifier(undefined, request);
-    const rateLimitResult = applyRateLimit(
+    const rateLimitResult = await applyRateLimit(
       clientId,
       "payment-webhook",
       RATE_LIMITS.PAYMENT_WEBHOOK

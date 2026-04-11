@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const clientId = getClientIdentifier(user.id, req);
-  const rateLimitResult = applyRateLimit(clientId, "ai-format-email", RATE_LIMITS.AI_FORMAT_EMAIL);
+  const rateLimitResult = await applyRateLimit(clientId, "ai-format-email", RATE_LIMITS.AI_FORMAT_EMAIL);
   if (rateLimitResult) return rateLimitResult;
 
   let apiKey: string;

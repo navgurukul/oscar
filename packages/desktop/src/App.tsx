@@ -473,41 +473,43 @@ function AuthScreen({ onAuth }: { onAuth: (session: Session) => void }) {
               .
             </p>
 
-            <button
-              type="button"
-              className="bypass-auth-btn"
-              onClick={() => {
-                // Bypass auth for development - create mock session
-                onAuth({
-                  user: {
-                    id: "dev-user-id",
-                    email: "dev@example.com",
-                    user_metadata: { full_name: "Dev User" },
-                    app_metadata: {},
-                    aud: "dev",
-                    created_at: new Date().toISOString(),
-                  } as User,
-                  access_token: "dev-token",
-                  refresh_token: "dev-refresh",
-                  expires_in: 3600,
-                  expires_at: Math.floor(Date.now() / 1000) + 3600,
-                  token_type: "bearer",
-                } as Session);
-              }}
-              style={{
-                marginTop: "16px",
-                padding: "10px 16px",
-                fontSize: "0.85rem",
-                color: "#6b7280",
-                background: "transparent",
-                border: "1px dashed #d1d5db",
-                borderRadius: "8px",
-                cursor: "pointer",
-                width: "100%",
-              }}
-            >
-              Skip Authentication (Dev Only)
-            </button>
+            {import.meta.env.DEV && (
+              <button
+                type="button"
+                className="bypass-auth-btn"
+                onClick={() => {
+                  // Bypass auth for development - create mock session
+                  onAuth({
+                    user: {
+                      id: "dev-user-id",
+                      email: "dev@example.com",
+                      user_metadata: { full_name: "Dev User" },
+                      app_metadata: {},
+                      aud: "dev",
+                      created_at: new Date().toISOString(),
+                    } as User,
+                    access_token: "dev-token",
+                    refresh_token: "dev-refresh",
+                    expires_in: 3600,
+                    expires_at: Math.floor(Date.now() / 1000) + 3600,
+                    token_type: "bearer",
+                  } as Session);
+                }}
+                style={{
+                  marginTop: "16px",
+                  padding: "10px 16px",
+                  fontSize: "0.85rem",
+                  color: "#6b7280",
+                  background: "transparent",
+                  border: "1px dashed #d1d5db",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  width: "100%",
+                }}
+              >
+                Skip Authentication (Dev Only)
+              </button>
+            )}
           </div>
         </div>
         <div className="split-right">

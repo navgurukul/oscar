@@ -420,6 +420,19 @@ export default function ResultsPage() {
           edited_text: editedText || undefined,
         });
       } else {
+        // Enforce note quota before creating a new note
+        const quotaRes = await fetch("/api/usage/check?type=note");
+        if (quotaRes.status === 402) {
+          const quotaData = await quotaRes.json();
+          toast({
+            title: "Note limit reached",
+            description: quotaData.message || "Upgrade to Pro for unlimited notes.",
+            variant: "destructive",
+          });
+          setIsSaving(false);
+          return;
+        }
+
         // Create new note
         saveResult = await notesService.createNote({
           user_id: user.id,

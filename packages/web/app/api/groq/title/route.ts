@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   // Apply rate limiting
   const clientId = getClientIdentifier(user.id, req);
-  const rateLimitResult = applyRateLimit(
+  const rateLimitResult = await applyRateLimit(
     clientId,
     "ai-title",
     RATE_LIMITS.AI_TITLE

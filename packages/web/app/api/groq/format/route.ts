@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   }
 
   const clientId = getClientIdentifier(user.id, req);
-  const rateLimitResult = applyRateLimit(clientId, "ai-format", RATE_LIMITS.AI_FORMAT);
+  const rateLimitResult = await applyRateLimit(clientId, "ai-format", RATE_LIMITS.AI_FORMAT);
   if (rateLimitResult) return rateLimitResult;
 
   const bodyResult = await parseJsonBody<{ rawText?: unknown }>(req);

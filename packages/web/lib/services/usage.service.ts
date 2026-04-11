@@ -155,7 +155,8 @@ export const usageService = {
     const { count, error } = await supabase
       .from("notes")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .is("deleted_at", null);
 
     if (error) {
       console.error("Error fetching note count:", error);

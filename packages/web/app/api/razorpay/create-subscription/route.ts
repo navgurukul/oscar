@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     // Apply rate limiting - prevent subscription spam
     const clientId = getClientIdentifier(user.id, request);
-    const rateLimitResult = applyRateLimit(
+    const rateLimitResult = await applyRateLimit(
       clientId,
       "payment-create-subscription",
       RATE_LIMITS.PAYMENT_CREATE_SUBSCRIPTION
