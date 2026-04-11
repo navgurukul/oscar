@@ -128,6 +128,8 @@ export default function Home() {
 
   const pricingConfig = currency === "USD" ? PRICING_USD : PRICING;
   const price = billingCycle === "monthly" ? pricingConfig.MONTHLY : pricingConfig.YEARLY;
+  const monthlyEquivalent =
+    billingCycle === "yearly" ? (pricingConfig.YEARLY / 12).toFixed(2) : null;
   const currencySymbol = currency === "USD" ? "$" : "₹";
 
   if (session) {
@@ -784,13 +786,23 @@ export default function Home() {
                   <div className="text-center mb-6">
                     <h3 className="text-xl font-bold text-white mb-2">Pro</h3>
                     <div className="flex items-baseline justify-center gap-1">
-                      <span className="text-4xl font-bold text-white">{currencySymbol}{price}</span>
-                      <span className="text-gray-400">
-                        /{billingCycle === "monthly" ? "month" : "year"}
+                      <span className="text-4xl font-bold text-white">
+                        {billingCycle === "yearly" && monthlyEquivalent
+                          ? `${currencySymbol}${monthlyEquivalent}`
+                          : `${currencySymbol}${price}`}
                       </span>
+                      <span className="text-gray-400">/month</span>
                     </div>
                     {billingCycle === "yearly" && (
-                      <p className="text-sm text-cyan-400 mt-1">Save {pricingConfig.YEARLY_SAVINGS_PERCENT}% vs monthly</p>
+                      <>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {currencySymbol}
+                          {price} billed annually
+                        </p>
+                        <p className="text-sm text-cyan-400 mt-1">
+                          Save {pricingConfig.YEARLY_SAVINGS_PERCENT}% vs monthly
+                        </p>
+                      </>
                     )}
                     {currency === "USD" && (
                       <p className="text-xs text-gray-500 mt-2">

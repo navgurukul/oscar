@@ -1,6 +1,11 @@
 import React from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Home, Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle, Calendar } from "lucide-react";
+
+const WEB_APP_URL =
+  import.meta.env.VITE_WEB_APP_URL ?? "https://oscar.samyarth.org";
+const PRICING_URL = `${WEB_APP_URL}/pricing`;
 
 type TabType = "home" | "meetings" | "notes" | "vocabulary" | "billing" | "settings";
 
@@ -81,8 +86,10 @@ export function Navigation({
     if (onUpgradeClick) {
       onUpgradeClick();
     } else {
-      // Default behavior: navigate to settings tab (billing is inside settings)
-      onTabChange("settings");
+      openUrl(PRICING_URL).catch((error) => {
+        console.error("Failed to open pricing:", error);
+        onTabChange("settings");
+      });
     }
   };
 
@@ -124,14 +131,14 @@ export function Navigation({
               <span className="text-[0.9375rem] font-semibold text-white">OSCAR Pro</span>
             </div>
             <p className="text-[0.8125rem] text-white/85 leading-relaxed mb-3">
-              Upgrade to Pro for unlimited recordings, vocabulary entries, and priority AI processing.
+              Unlock unlimited recordings, notes, vocabulary entries, and priority AI processing.
             </p>
             <button
               className="flex items-center justify-center gap-1.5 w-full py-2.5 px-3.5 bg-white border-none rounded-lg text-cyan-600 text-sm font-semibold cursor-pointer transition-all duration-200 hover:bg-white/95 hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(6,182,212,0.3)]"
               onClick={handleUpgrade}
             >
               <Crown size={14} />
-              Upgrade to Pro
+              View Pro Plans
             </button>
           </div>
         )}

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { BookOpen, Plus, Trash2, Edit2, Check, X, Loader2 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { supabase } from "../supabase";
+import { SUBSCRIPTION_CONFIG } from "@oscar/shared/constants";
 
 interface VocabularyEntry {
   id: string;
@@ -14,7 +16,9 @@ interface VocabularySectionProps {
   userId: string;
 }
 
-const MAX_FREE_ENTRIES = 5;
+const WEB_APP_URL =
+  import.meta.env.VITE_WEB_APP_URL ?? "https://oscar.samyarth.org";
+const PRICING_URL = `${WEB_APP_URL}/pricing`;
 
 export function VocabularySection({ userId }: VocabularySectionProps) {
   const [vocabulary, setVocabulary] = useState<VocabularyEntry[]>([]);
@@ -74,8 +78,13 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
     if (!term.trim()) return;
     
     // Check free tier limit
-    if (!isProUser && vocabulary.length >= MAX_FREE_ENTRIES) {
-      alert(`Free users can only add up to ${MAX_FREE_ENTRIES} vocabulary entries. Upgrade to Pro for unlimited entries.`);
+    if (
+      !isProUser &&
+      vocabulary.length >= SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY
+    ) {
+      alert(
+        `Free users can only add up to ${SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} vocabulary entries. Upgrade to Pro for unlimited entries.`,
+      );
       return;
     }
 
@@ -165,7 +174,7 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
     }
   }, [editTerm, editPronunciation, editContext, cancelEditing]);
 
-  const maxEntries = isProUser ? 50 : MAX_FREE_ENTRIES;
+  const maxEntries = isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY;
 
   return (
     <div className="vocabulary-section">
@@ -175,7 +184,7 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
           <h3>Custom Vocabulary</h3>
         </div>
         <span className="vocabulary-count">
-          {vocabulary.length}/{maxEntries} entries
+          {vocabulary.length}/{maxEntries ?? "Unlimited"} entries
         </span>
       </div>
 
@@ -312,10 +321,20 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
         </div>
       )}
 
-      {!isProUser && vocabulary.length >= MAX_FREE_ENTRIES && (
+      {!isProUser &&
+        vocabulary.length >= SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY && (
         <div className="vocabulary-upgrade-prompt">
           <p>You've reached the free tier limit.</p>
-          <button className="upgrade-btn">Upgrade to Pro</button>
+          <button
+            className="upgrade-btn"
+            onClick={() => {
+              openUrl(PRICING_URL).catch((error) => {
+                console.error("Failed to open pricing:", error);
+              });
+            }}
+          >
+            View Pro Plans
+          </button>
         </div>
       )}
     </div>
