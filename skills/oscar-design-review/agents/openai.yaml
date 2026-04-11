@@ -1,0 +1,4 @@
+interface:
+  display_name: "OSCAR Design Review"
+  short_description: "Review OSCAR UI, UX, architecture, and repo consistency."
+  default_prompt: "Use $oscar-design-review to review this OSCAR change for product design quality, UX, consistency, architecture, and maintainability."

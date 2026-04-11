@@ -392,7 +392,24 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 
 ---
 
-## 13. Credits & Inspiration
+## 13. AI Workflow
+
+Use this design system together with the AI workflow below:
+
+1. Build new UI or redesigns with `$frontend-skill` so the visual direction stays intentional and avoids generic SaaS patterns.
+2. Review the result with [`skills/oscar-design-review/SKILL.md`](/Users/souvikdeb/Desktop/oscar/skills/oscar-design-review/SKILL.md) before merging major UI work.
+
+The review should check:
+
+- brand alignment with OSCAR's cyan-and-cream editorial system
+- consistency across web and desktop patterns
+- hierarchy, spacing, motion, and responsiveness
+- empty, loading, error, and success states
+- maintainability and shared-component reuse
+
+---
+
+## 14. Credits & Inspiration
 
 - **Wispr Flow** — Primary design inspiration
   - Editorial aesthetic

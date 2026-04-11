@@ -300,6 +300,20 @@ cases.forEach((note) => {
 7. **Cache results** when appropriate
 8. **Collect feedback** to continuously improve prompt quality
 
+## AI Design Workflow
+
+For any meaningful UI, UX, styling, layout, navigation, or motion work in OSCAR:
+
+1. Use `$frontend-skill` while designing or building the interface.
+2. Run [`skills/oscar-design-review/SKILL.md`](/Users/souvikdeb/Desktop/oscar/skills/oscar-design-review/SKILL.md) after the implementation, or before merging a PR, to review hierarchy, design-system alignment, repo consistency, and maintainability.
+
+Use the review workflow for:
+
+- landing page or pricing updates
+- recording, notes, results, settings, or billing UI changes
+- shared component or design-token changes
+- cross-cutting refactors that can create visual or architectural drift
+
 ### Prompt Engineering Guidelines:
 
 1. Be explicit about what the agent should NOT do
