@@ -13,6 +13,17 @@ import type {
 } from "@/lib/types/subscription.types";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
 
+/**
+ * Razorpay statuses that map to an active ("pro") subscription tier.
+ * "created" is included because a subscription in the created state has been
+ * successfully authorised but not yet charged for the first cycle.
+ */
+const ACTIVE_RAZORPAY_STATUSES: readonly RazorpaySubscriptionStatus[] = [
+  "active",
+  "authenticated",
+  "created",
+];
+
 export const subscriptionService = {
   /**
    * Get user's subscription record
@@ -132,9 +143,7 @@ export const subscriptionService = {
     const supabase = getSupabaseAdmin();
 
     // Determine tier based on status
-    const isActiveTier = ["active", "authenticated", "created"].includes(
-      razorpaySubscription.status
-    );
+    const isActiveTier = ACTIVE_RAZORPAY_STATUSES.includes(razorpaySubscription.status);
     const tier = isActiveTier ? "pro" : "free";
 
     // Determine billing cycle from plan notes or subscription
@@ -195,7 +204,7 @@ export const subscriptionService = {
     const supabase = getSupabaseAdmin();
 
     // Determine tier based on new status
-    const isActiveTier = ["active", "authenticated"].includes(newStatus);
+    const isActiveTier = ACTIVE_RAZORPAY_STATUSES.includes(newStatus);
     const tier = isActiveTier ? "pro" : "free";
 
     const { data, error } = await supabase

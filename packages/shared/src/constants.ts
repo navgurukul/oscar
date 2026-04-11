@@ -82,8 +82,8 @@ export const API_CONFIG = {
   // External APIs
   GROQ_API_URL: "https://api.groq.com/openai/v1/chat/completions",
 
-  // Groq model configuration
-  GROQ_MODEL: process.env.GROQ_MODEL || "llama-3.1-8b-instant",
+  // Groq model — the web package overrides this via its own constants.ts
+  GROQ_MODEL: "llama-3.1-8b-instant",
 
   // Format API settings
   FORMAT_TEMPERATURE: 0.0,
@@ -117,7 +117,6 @@ export const UI_STRINGS = {
   // Note defaults
   UNTITLED_NOTE: "Untitled Note",
   NO_RAW_TRANSCRIPT: "No raw transcript available.",
-
 
   CONTINUE_RECORDING: "Continue Recording",
   RECORD_AGAIN: "Record Again",

@@ -8,6 +8,12 @@ import { ERROR_MESSAGES, RECORDING_CONFIG } from "../constants";
 type TranscriptCallback = (transcript: string) => void;
 type LogCallback = (message: string, level?: string) => void;
 
+// Minimal shape of word objects returned by the speech-to-speech library.
+// The library doesn't export this type, so we define the subset we use.
+interface STTWord {
+  text?: string;
+}
+
 export class STTService {
   private sttInstance: STTLogic | null = null;
   private accumulatedTranscript: string = "";
@@ -60,10 +66,11 @@ export class STTService {
 
       // Set up words update callback for real-time tracking
       this.sttInstance.setWordsUpdateCallback((words) => {
-        // words is an array of word objects with text and other metadata
         if (words && words.length > 0) {
-          // Extract text from words and join
-          const interimText = words.map((w: unknown) => (w as { text?: string })?.text ?? String(w)).join(" ");
+          const interimText = (words as STTWord[])
+            .map((w) => w.text ?? "")
+            .filter(Boolean)
+            .join(" ");
           this.currentInterimText = interimText;
           
           // Immediately update callback for real-time display

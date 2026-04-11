@@ -231,7 +231,6 @@ export const notesService = {
    */
   async getFolders(): Promise<{ data: string[] | null; error: Error | null }> {
     const supabase = getSupabase();
-    if (!supabase) return { data: null, error: new Error("Supabase client not initialized") };
 
     const { data, error } = await supabase
       .from("notes")

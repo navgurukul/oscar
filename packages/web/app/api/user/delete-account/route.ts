@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
+import { deleteAllUserData } from "@/lib/server/delete-user-data";
 
 export async function DELETE() {
   try {
@@ -21,26 +22,13 @@ export async function DELETE() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Delete all user data first
-    const [notesDeleteResult, vocabularyDeleteResult] = await Promise.all([
-      supabase.from("notes").delete().eq("user_id", user.id),
-      supabase.from("user_vocabulary").delete().eq("user_id", user.id),
-    ]);
-
-    if (notesDeleteResult.error) {
-      console.error("Error deleting notes during account removal:", notesDeleteResult.error);
+    // Delete all user-owned data before removing the auth account
+    const { error: dataError } = await deleteAllUserData(supabase, user.id);
+    if (dataError) {
       return NextResponse.json({ error: "Failed to delete account data" }, { status: 500 });
     }
 
-    if (vocabularyDeleteResult.error) {
-      console.error(
-        "Error deleting vocabulary during account removal:",
-        vocabularyDeleteResult.error
-      );
-      return NextResponse.json({ error: "Failed to delete account data" }, { status: 500 });
-    }
-
-    // Delete the account using admin client (bypasses RLS)
+    // Remove the auth account using the admin client (bypasses RLS)
     const adminClient = getSupabaseAdmin();
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(user.id);
 

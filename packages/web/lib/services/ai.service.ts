@@ -18,7 +18,7 @@ const RETRY_CONFIG = {
 
 export type TransformMode = "summary" | "bullets";
 
-// ✅ Reusable stream reader — live chunks, UI updates as text arrives
+// Reusable stream reader — emits cumulative text on every chunk for live UI updates
 async function readStream(
   response: Response,
   onChunk: (text: string) => void
@@ -33,7 +33,7 @@ async function readStream(
       if (done) break;
       const chunk = decoder.decode(value, { stream: true });
       fullText += chunk;
-      onChunk(fullText); // ✅ UI update har chunk pe
+      onChunk(fullText);
     }
   } finally {
     reader.releaseLock();
@@ -236,7 +236,7 @@ export const aiService = {
     }
   },
 
-  // ✅ Both format + email parallel — onChunk dono ke liye
+  // Run format and email in parallel; each streams chunks independently
   async formatTextAndEmail(
     rawText: string,
     title?: string,
@@ -290,7 +290,7 @@ export const aiService = {
       return { success: true, formattedText };
     } catch (error: unknown) {
       console.error("Transform text error:", error);
-      return { success: false, error: (error as Error)?.message || "Failed to transform text" };
+      return handleFormatError(error, text);
     }
   },
 
@@ -311,7 +311,7 @@ export const aiService = {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, targetLanguage }),
         },
-        RETRY_CONFIG.TIMEOUT_MS, // ✅ was 60s
+        RETRY_CONFIG.TIMEOUT_MS,
         signal
       );
 
@@ -381,7 +381,7 @@ export const aiService = {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ text: source }),
             },
-            RETRY_CONFIG.TITLE_TIMEOUT_MS, // ✅ 8s — titles are tiny
+            RETRY_CONFIG.TITLE_TIMEOUT_MS,
             signal
           );
 

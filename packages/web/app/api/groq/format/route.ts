@@ -21,6 +21,13 @@ import {
 
 const REQUEST_TIMEOUT_MS = 12000;
 
+// Chunking thresholds for long transcripts.
+// Transcripts above LONG_TEXT_THRESHOLD characters are split so each Groq
+// request stays within token limits and latency stays predictable.
+const LONG_TEXT_THRESHOLD = 2500; // chars — below this, send as one request
+const CHUNK_SIZE = 1600;          // chars per chunk when splitting by length
+const MAX_TOKENS_BUFFER = 200;    // extra token headroom added per chunk
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -56,28 +63,36 @@ export async function POST(req: NextRequest) {
 
   try {
     // Split long transcripts into smaller requests without changing the output order.
-    const isLong = rawText.length > 2500;
+    // Prefer splitting on paragraph boundaries; fall back to fixed-size chunks.
+    const isLong = rawText.length > LONG_TEXT_THRESHOLD;
     const paraChunks = rawText.split(/\n{2,}/).filter(Boolean);
     const safeChunks = isLong
       ? paraChunks.length > 1
         ? paraChunks
-        : rawText.match(/.{1,1600}(\s|$)/g)?.map((s) => s.trim()).filter(Boolean) ?? [rawText]
+        : rawText.match(new RegExp(`.{1,${CHUNK_SIZE}}(\\s|$)`, "g"))
+            ?.map((s) => s.trim())
+            .filter(Boolean) ?? [rawText]
       : [rawText];
 
     const { data: vocabRaw } = await supabase
       .from("user_vocabulary")
       .select("term, pronunciation, context")
       .order("created_at", { ascending: false });
-    const vocabList =
-      Array.isArray(vocabRaw) ? vocabRaw.map((v) => ({
-        term: v.term,
-        pronunciation: v.pronunciation ?? null,
-        context: v.context ?? null,
-      })) : [];
+    const vocabList = Array.isArray(vocabRaw)
+      ? vocabRaw.map((v) => ({
+          term: v.term,
+          pronunciation: v.pronunciation ?? null,
+          context: v.context ?? null,
+        }))
+      : [];
     const basePrompt = SYSTEM_PROMPTS.FORMAT;
 
     const chunkRequests = safeChunks.map((piece) => {
-      const maxToks = Math.min(2048, Math.ceil(piece.length / 4) + 200);
+      // Estimate token count (1 token ≈ 4 chars) and add a safety buffer.
+      const maxToks = Math.min(
+        API_CONFIG.FORMAT_MAX_TOKENS,
+        Math.ceil(piece.length / 4) + MAX_TOKENS_BUFFER
+      );
       return {
         wrapped: wrapUserInput(piece, "transcript"),
         maxToks,
