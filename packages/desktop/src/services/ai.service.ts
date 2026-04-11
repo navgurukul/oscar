@@ -1,18 +1,15 @@
 import { supabase } from "../supabase";
+import type {
+  EnhancedMeetingNoteRequest,
+  EnhancedMeetingNoteResponse,
+} from "../types/meeting.types";
 
 export type DesktopAIMode =
   | "transcribe_cleanup"
   | "cleanup"
   | "summary"
   | "bullets"
-  | "email"
-  | "meeting_general"
-  | "meeting_standup"
-  | "meeting_1on1"
-  | "meeting_brainstorm"
-  | "meeting_custom"
-  | "meeting_reduce_chunk"
-  | "meeting_reduce_merge";
+  | "email";
 
 interface AIProcessResponse {
   text?: string;
@@ -80,5 +77,39 @@ export const aiService = {
     }
 
     return processedText;
+  },
+
+  async generateEnhancedMeetingNote(
+    request: EnhancedMeetingNoteRequest,
+  ): Promise<string> {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("AI features require a valid OSCAR sign-in.");
+    }
+
+    const { data, error } =
+      await supabase.functions.invoke<EnhancedMeetingNoteResponse>(
+        "meeting-enhance",
+        {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: request,
+        },
+      );
+
+    if (error) {
+      throw new Error(await extractInvokeError(error));
+    }
+
+    const markdown = data?.markdown?.trim();
+    if (!markdown) {
+      throw new Error("Enhanced note generation returned an empty response.");
+    }
+
+    return markdown;
   },
 };

@@ -20,13 +20,15 @@ import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
-import { MeetingsTab, DEFAULT_TEMPLATES } from "./components/MeetingsTab";
+import { MeetingsTab } from "./components/MeetingsTab";
 import type {
   CalendarReconnectResult,
-  MeetingTemplateData,
   MinutesTranscriptionStatus,
-  SavedMeeting,
 } from "./components/MeetingsTab";
+import type {
+  MeetingTranscriptSegment,
+  SavedMeetingRecord,
+} from "./types/meeting.types";
 import type { LocalTranscript } from "./types/note.types";
 import "./App.css";
 
@@ -35,6 +37,15 @@ type TabType = "home" | "meetings" | "notes" | "vocabulary" | "billing" | "setti
 interface Transcription {
   text: string;
   error?: string;
+  segments?: Array<{
+    text: string;
+    start_ms: number;
+    end_ms: number;
+    speaker: {
+      source: "microphone" | "speaker";
+      diarization_label?: string;
+    };
+  }>;
 }
 
 interface MeetingSegmentJob {
@@ -42,6 +53,8 @@ interface MeetingSegmentJob {
   ext: string;
   segmentIndex: number;
   useSystemAudio: boolean;
+  startedAtMs: number;
+  endedAtMs: number;
 }
 
 type TonePreset = "none" | "professional" | "casual" | "friendly";
@@ -858,6 +871,7 @@ const MODEL_URL =
   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
 const MODEL_PATH = ".oscar/models/ggml-small.bin";
 const OLD_MODEL_PATH = ".oscar/models/ggml-base.bin";
+const MINUTES_DATA_RESET_VERSION = "enhanced-notes-v1";
 const MINUTES_MODEL_URL =
   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin";
 const MINUTES_MODEL_PATH = ".oscar/models/ggml-large-v3-turbo-q5_0.bin";
@@ -1079,16 +1093,17 @@ function App() {
   const pkceCodeVerifierRef = useRef<string>("");
   const calendarOAuthInProgressRef = useRef(false);
 
-  // Meeting templates (built-in + custom)
-  const [meetingTemplates, setMeetingTemplates] = useState<MeetingTemplateData[]>(DEFAULT_TEMPLATES);
-  const [savedMeetings, setSavedMeetings] = useState<SavedMeeting[]>([]);
-  const [settingsInitialSection, setSettingsInitialSection] = useState<string | undefined>(undefined);
+  const [savedMeetings, setSavedMeetings] = useState<SavedMeetingRecord[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>("home");
 
   // Meeting recording state (separate from hold-to-talk dictation)
   const [isMeetingRecording, setIsMeetingRecording] = useState(false);
   const [meetingRecordingTime, setMeetingRecordingTime] = useState(0);
   const [meetingTranscript, setMeetingTranscript] = useState("");
+  const [meetingTranscriptSegments, setMeetingTranscriptSegments] = useState<
+    MeetingTranscriptSegment[]
+  >([]);
+  const [meetingStartedAt, setMeetingStartedAt] = useState("");
   const [minutesTranscriptionStatus, setMinutesTranscriptionStatus] =
     useState<MinutesTranscriptionStatus>("idle");
   const [minutesSegmentQueue, setMinutesSegmentQueue] = useState(0);
@@ -1105,6 +1120,8 @@ function App() {
   const meetingSegmentQueueRef = useRef<MeetingSegmentJob[]>([]);
   const meetingSegmentWorkerRunningRef = useRef(false);
   const meetingTranscriptRef = useRef("");
+  const meetingTranscriptSegmentsRef = useRef<MeetingTranscriptSegment[]>([]);
+  const meetingStartedAtRef = useRef("");
   const meetingFinalizationResolveRef = useRef<(() => void) | null>(null);
   const meetingSessionUsesSystemAudioRef = useRef(false);
 
@@ -1443,8 +1460,8 @@ function App() {
         savedCalConnectedUserId,
         savedCalTokenExpiry,
         savedSystemAudioEnabled,
-        savedTemplates,
         savedMeetingsData,
+        savedMinutesDataResetVersion,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
         loadSetting<TonePreset>("tonePreset", "none"),
@@ -1464,8 +1481,8 @@ function App() {
         loadSetting<string>("googleCalendarConnectedUserId", ""),
         loadSetting<number>("googleCalendarTokenExpiry", 0),
         loadSetting<boolean>("systemAudioEnabled", true),
-        loadSetting<MeetingTemplateData[]>("meetingTemplates", []),
-        loadSetting<SavedMeeting[]>("savedMeetings", []),
+        loadSetting<SavedMeetingRecord[]>("savedMeetings", []),
+        loadSetting<string>("minutesDataResetVersion", ""),
       ]);
 
       const micPermission = await getMicrophonePermissionState().catch(
@@ -1547,19 +1564,15 @@ function App() {
         setGoogleCalendarConnectedUserId(savedCalConnectedUserId);
       }
       if (!hasLegacyCalendarConnection && savedCalTokenExpiry) setGoogleCalendarTokenExpiry(savedCalTokenExpiry);
-      // Merge stored templates with defaults (so new built-ins are always present)
-      if (savedTemplates && savedTemplates.length > 0) {
-        const storedBuiltins = savedTemplates.filter((t: MeetingTemplateData) => t.builtin);
-        const customs = savedTemplates.filter((t: MeetingTemplateData) => !t.builtin);
-        // Use stored version for built-ins if present, else default
-        const merged = DEFAULT_TEMPLATES.map((def) => {
-          const stored = storedBuiltins.find((s: MeetingTemplateData) => s.id === def.id);
-          return stored ? { ...def, ...stored, builtin: true } : def;
-        });
-        // Append any custom templates
-        setMeetingTemplates([...merged, ...customs]);
-      }
-      if (savedMeetingsData && savedMeetingsData.length > 0) {
+
+      if (savedMinutesDataResetVersion !== MINUTES_DATA_RESET_VERSION) {
+        setSavedMeetings([]);
+        await Promise.all([
+          saveSetting("savedMeetings", []),
+          saveSetting("meetingTemplates", []),
+          saveSetting("minutesDataResetVersion", MINUTES_DATA_RESET_VERSION),
+        ]);
+      } else if (savedMeetingsData && savedMeetingsData.length > 0) {
         setSavedMeetings(savedMeetingsData);
       }
 
@@ -1907,6 +1920,108 @@ function App() {
     }
 
     return `${trimmedExisting} ${trimmedNext}`.trim();
+  };
+
+  const segmentsAreLikelyDuplicates = (
+    left: MeetingTranscriptSegment,
+    right: MeetingTranscriptSegment,
+  ) => {
+    const leftStart = Date.parse(left.start_time);
+    const rightStart = Date.parse(right.start_time);
+    const leftEnd = Date.parse(left.end_time);
+    const rightEnd = Date.parse(right.end_time);
+    const sameText =
+      normalizeTranscriptBoundary(left.text) ===
+      normalizeTranscriptBoundary(right.text);
+    const containedText =
+      normalizeTranscriptBoundary(left.text).includes(
+        normalizeTranscriptBoundary(right.text),
+      ) ||
+      normalizeTranscriptBoundary(right.text).includes(
+        normalizeTranscriptBoundary(left.text),
+      );
+    const timesOverlap =
+      Number.isFinite(leftStart) &&
+      Number.isFinite(rightStart) &&
+      Number.isFinite(leftEnd) &&
+      Number.isFinite(rightEnd) &&
+      leftStart <= rightEnd + 5_000 &&
+      rightStart <= leftEnd + 5_000;
+    const differentSources = left.speaker.source !== right.speaker.source;
+
+    return differentSources && timesOverlap && (sameText || containedText);
+  };
+
+  const mergeMeetingTranscriptSegments = (
+    existing: MeetingTranscriptSegment[],
+    nextSegments: MeetingTranscriptSegment[],
+  ) => {
+    const sorted = [...existing, ...nextSegments].sort((left, right) => {
+      const byStart =
+        Date.parse(left.start_time) - Date.parse(right.start_time);
+      if (byStart !== 0) return byStart;
+      return Date.parse(left.end_time) - Date.parse(right.end_time);
+    });
+
+    const merged: MeetingTranscriptSegment[] = [];
+    for (const segment of sorted) {
+      const trimmedText = segment.text.trim();
+      if (!trimmedText) continue;
+
+      const normalizedSegment = { ...segment, text: trimmedText };
+      const previous = merged[merged.length - 1];
+      if (!previous || !segmentsAreLikelyDuplicates(previous, normalizedSegment)) {
+        merged.push(normalizedSegment);
+        continue;
+      }
+
+      if (normalizedSegment.text.length > previous.text.length) {
+        merged[merged.length - 1] = normalizedSegment;
+      }
+    }
+
+    return merged;
+  };
+
+  const buildTranscriptFromStructuredSegments = (
+    segments: MeetingTranscriptSegment[],
+  ) => {
+    let nextTranscript = "";
+    for (const segment of segments) {
+      nextTranscript = appendTranscriptSegment(nextTranscript, segment.text);
+    }
+    return nextTranscript.trim();
+  };
+
+  const toAbsoluteMeetingTranscriptSegments = (
+    job: MeetingSegmentJob,
+    segments: NonNullable<Transcription["segments"]>,
+  ): MeetingTranscriptSegment[] => {
+    const durationMs = Math.max(job.endedAtMs - job.startedAtMs, 1);
+
+    return segments
+      .map((segment, index) => {
+        const relativeStartMs = Math.max(0, segment.start_ms);
+        const relativeEndMs = Math.max(relativeStartMs + 10, segment.end_ms);
+        const absoluteStartMs = job.startedAtMs + relativeStartMs;
+        const absoluteEndMs = Math.min(
+          job.endedAtMs,
+          job.startedAtMs + relativeEndMs,
+        );
+        const clampedEndMs = Math.max(
+          absoluteStartMs + 10,
+          durationMs > 0 ? absoluteEndMs : absoluteStartMs + 10,
+        );
+
+        return {
+          id: `seg-${job.segmentIndex}-${index}-${segment.speaker.source}`,
+          speaker: segment.speaker,
+          text: segment.text.trim(),
+          start_time: new Date(absoluteStartMs).toISOString(),
+          end_time: new Date(clampedEndMs).toISOString(),
+        };
+      })
+      .filter((segment) => Boolean(segment.text));
   };
 
   // ── Hotkey recording ───────────────────────────────────────────────────────
@@ -2285,6 +2400,8 @@ function App() {
     meetingSegmentQueueRef.current = [];
     meetingSegmentWorkerRunningRef.current = false;
     meetingTranscriptRef.current = "";
+    meetingTranscriptSegmentsRef.current = [];
+    meetingStartedAtRef.current = "";
     meetingNextSegmentIndexRef.current = 0;
     meetingStopRequestedRef.current = false;
     meetingFinalizationResolveRef.current = null;
@@ -2293,6 +2410,8 @@ function App() {
     systemAudioActiveRef.current = false;
     meetingMediaRecorderRef.current = null;
     setMeetingTranscript("");
+    setMeetingTranscriptSegments([]);
+    setMeetingStartedAt("");
     setMeetingRecordingTime(0);
     setMinutesSegmentQueue(0);
     setMinutesSegmentsCompleted(0);
@@ -2349,7 +2468,23 @@ function App() {
           },
         );
 
-        if (result.text) {
+        if (result.segments && result.segments.length > 0) {
+          const absoluteSegments = toAbsoluteMeetingTranscriptSegments(
+            job,
+            result.segments,
+          );
+          const mergedSegments = mergeMeetingTranscriptSegments(
+            meetingTranscriptSegmentsRef.current,
+            absoluteSegments,
+          );
+          meetingTranscriptSegmentsRef.current = mergedSegments;
+          setMeetingTranscriptSegments(mergedSegments);
+
+          const nextTranscript =
+            buildTranscriptFromStructuredSegments(mergedSegments);
+          meetingTranscriptRef.current = nextTranscript;
+          setMeetingTranscript(nextTranscript);
+        } else if (result.text) {
           const nextTranscript = appendTranscriptSegment(
             meetingTranscriptRef.current,
             result.text,
@@ -2401,10 +2536,17 @@ function App() {
     const segmentIndex = meetingNextSegmentIndexRef.current;
     const segmentUsesSystemAudio = meetingSessionUsesSystemAudioRef.current;
     meetingNextSegmentIndexRef.current += 1;
+    const segmentStartedAtMs = Date.now();
+    if (segmentIndex === 0) {
+      const startedAt = new Date(segmentStartedAtMs).toISOString();
+      meetingStartedAtRef.current = startedAt;
+      setMeetingStartedAt(startedAt);
+    }
 
     const chunks: Blob[] = [];
     let stopMode: "rotate" | "final" | null = null;
     let rotationPromise: Promise<void> = Promise.resolve();
+    let segmentEndedAtMs = segmentStartedAtMs;
 
     const mediaRecorder = new MediaRecorder(stream, { mimeType });
     meetingMediaRecorderRef.current = mediaRecorder;
@@ -2416,6 +2558,7 @@ function App() {
       }
 
       stopMode = mode;
+      segmentEndedAtMs = Date.now();
       rotationPromise = segmentUsesSystemAudio
         ? invoke("rotate_meeting_system_audio_segment", {
             segmentIndex,
@@ -2465,6 +2608,8 @@ function App() {
             ext,
             segmentIndex,
             useSystemAudio: segmentUsesSystemAudio,
+            startedAtMs: segmentStartedAtMs,
+            endedAtMs: Math.max(segmentEndedAtMs, segmentStartedAtMs + 1),
           });
         }
 
@@ -2854,9 +2999,15 @@ function App() {
                   onStopRecording={stopMeetingRecording}
                   recordingTime={meetingRecordingTime}
                   transcript={meetingTranscript}
+                  transcriptSegments={meetingTranscriptSegments}
+                  meetingStartedAt={meetingStartedAt}
                   onClearTranscript={() => {
                     meetingTranscriptRef.current = "";
+                    meetingTranscriptSegmentsRef.current = [];
+                    meetingStartedAtRef.current = "";
                     setMeetingTranscript("");
+                    setMeetingTranscriptSegments([]);
+                    setMeetingStartedAt("");
                     setMinutesSegmentQueue(0);
                     setMinutesSegmentsCompleted(0);
                     setMinutesSegmentsTotal(0);
@@ -2871,11 +3022,6 @@ function App() {
                       await clearCalendarConnection();
                     }
                     return refreshState;
-                  }}
-                  templates={meetingTemplates}
-                  onManageTemplates={() => {
-                    setSettingsInitialSection("meetingTemplates");
-                    setActiveTab("settings");
                   }}
                   savedMeetings={savedMeetings}
                   onSaveMeeting={(meeting) => {
@@ -2987,25 +3133,6 @@ function App() {
                   onSignOut={handleSignOut}
                   aiImprovementEnabled={aiImprovementEnabled}
                   onAiImprovementChange={handleAiImprovementChange}
-                  meetingTemplates={meetingTemplates}
-                  onSaveTemplate={(tpl) => {
-                    setMeetingTemplates((prev) => {
-                      const exists = prev.findIndex((t) => t.id === tpl.id);
-                      const updated = exists >= 0
-                        ? prev.map((t) => (t.id === tpl.id ? tpl : t))
-                        : [...prev, tpl];
-                      saveSetting("meetingTemplates", updated);
-                      return updated;
-                    });
-                  }}
-                  onDeleteTemplate={(id) => {
-                    setMeetingTemplates((prev) => {
-                      const updated = prev.filter((t) => t.id !== id);
-                      saveSetting("meetingTemplates", updated);
-                      return updated;
-                    });
-                  }}
-                  initialSection={settingsInitialSection as any}
                   systemAudioSupported={systemAudioSupported}
                   systemAudioEnabled={systemAudioEnabled}
                   onSystemAudioToggle={handleSystemAudioToggle}

@@ -312,9 +312,30 @@ struct HotkeyState {
 }
 
 #[derive(Serialize, Deserialize)]
+struct TranscriptSpeaker {
+    source: String,
+    diarization_label: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TranscriptSegmentResult {
+    text: String,
+    start_ms: i64,
+    end_ms: i64,
+    speaker: TranscriptSpeaker,
+}
+
+#[derive(Serialize, Deserialize)]
 struct TranscriptionResult {
     text: String,
     error: Option<String>,
+    segments: Option<Vec<TranscriptSegmentResult>>,
+}
+
+#[derive(Serialize, Clone)]
+struct CalendarAttendee {
+    name: String,
+    email: String,
 }
 
 fn recording_shortcut() -> Shortcut {
@@ -564,7 +585,16 @@ fn transcribe_audio_inner(
     initial_prompt: Option<&str>,
     language: Option<&str>,
     app_state: &Arc<Mutex<AppState>>,
+    source: Option<&str>,
 ) -> Result<TranscriptionResult, String> {
+    if audio_data.is_empty() {
+        return Ok(TranscriptionResult {
+            text: String::new(),
+            error: None,
+            segments: None,
+        });
+    }
+
     log::info!(
         "[whisper] transcribe_audio_inner — {} samples ({:.1}s), lang={:?}",
         audio_data.len(),
@@ -611,12 +641,30 @@ fn transcribe_audio_inner(
     let num_segments = state.full_n_segments();
     log::info!("[whisper] Inference complete — {} segments", num_segments);
     let mut full_text = String::new();
+    let mut structured_segments = Vec::new();
 
     for i in 0..num_segments {
         if let Some(segment) = state.get_segment(i) {
             if let Ok(text) = segment.to_str() {
-                full_text.push_str(text.trim());
+                let trimmed = text.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+
+                full_text.push_str(trimmed);
                 full_text.push(' ');
+
+                if let Some(segment_source) = source {
+                    structured_segments.push(TranscriptSegmentResult {
+                        text: trimmed.to_string(),
+                        start_ms: segment.start_timestamp() * 10,
+                        end_ms: segment.end_timestamp() * 10,
+                        speaker: TranscriptSpeaker {
+                            source: segment_source.to_string(),
+                            diarization_label: None,
+                        },
+                    });
+                }
             }
         }
     }
@@ -627,7 +675,58 @@ fn transcribe_audio_inner(
     Ok(TranscriptionResult {
         text: full_text.trim().to_string(),
         error: None,
+        segments: if structured_segments.is_empty() {
+            None
+        } else {
+            Some(structured_segments)
+        },
     })
+}
+
+fn merge_transcription_results(results: Vec<TranscriptionResult>) -> TranscriptionResult {
+    let mut segments = Vec::new();
+    let mut text_parts = Vec::new();
+
+    for result in results {
+        let trimmed_text = result.text.trim();
+        if !trimmed_text.is_empty() {
+            text_parts.push(trimmed_text.to_string());
+        }
+
+        if let Some(mut result_segments) = result.segments {
+            segments.append(&mut result_segments);
+        }
+    }
+
+    segments.sort_by(|left, right| {
+        left.start_ms
+            .cmp(&right.start_ms)
+            .then(left.end_ms.cmp(&right.end_ms))
+            .then(left.speaker.source.cmp(&right.speaker.source))
+    });
+
+    let text = if segments.is_empty() {
+        text_parts.join(" ").trim().to_string()
+    } else {
+        segments
+            .iter()
+            .map(|segment| segment.text.trim())
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string()
+    };
+
+    TranscriptionResult {
+        text,
+        error: None,
+        segments: if segments.is_empty() {
+            None
+        } else {
+            Some(segments)
+        },
+    }
 }
 
 #[tauri::command]
@@ -642,6 +741,7 @@ fn transcribe_audio(
         initial_prompt.as_deref(),
         language.as_deref(),
         &state,
+        None,
     )
 }
 
@@ -666,22 +766,9 @@ fn stop_system_audio_capture() -> Result<String, String> {
     Ok("System audio capture stopped".to_string())
 }
 
-/// Mix two audio buffers (same sample rate) by adding them sample-by-sample
-/// and clamping to [-1.0, 1.0].
-fn mix_audio(a: &[f32], b: &[f32]) -> Vec<f32> {
-    let max_len = a.len().max(b.len());
-    let mut mixed = Vec::with_capacity(max_len);
-    for i in 0..max_len {
-        let sa = if i < a.len() { a[i] } else { 0.0 };
-        let sb = if i < b.len() { b[i] } else { 0.0 };
-        mixed.push((sa + sb).clamp(-1.0, 1.0));
-    }
-    mixed
-}
-
 /// Transcribe meeting audio: receives microphone audio from the frontend,
-/// retrieves system audio captured in the background, mixes them together,
-/// and runs Whisper inference on the combined audio.
+/// retrieves system audio captured in the background, transcribes each source
+/// separately, and merges the segment timelines.
 ///
 /// This avoids transferring large system audio buffers across the IPC boundary.
 #[tauri::command]
@@ -701,25 +788,29 @@ fn transcribe_meeting_audio(
         system_audio_data.len()
     );
 
-    // Mix microphone + system audio (both are 16 kHz mono)
-    let audio_to_transcribe = if system_audio_data.is_empty() {
-        log::info!("[meeting] No system audio — transcribing mic only");
-        mic_audio_data
-    } else {
-        log::info!(
-            "[meeting] Mixing mic ({:.1}s) + system audio ({:.1}s)",
-            mic_audio_data.len() as f64 / 16000.0,
-            system_audio_data.len() as f64 / 16000.0
-        );
-        mix_audio(&mic_audio_data, &system_audio_data)
-    };
+    let mut results = Vec::new();
 
-    transcribe_audio_inner(
-        &audio_to_transcribe,
-        initial_prompt.as_deref(),
-        language.as_deref(),
-        &state,
-    )
+    if !mic_audio_data.is_empty() {
+        results.push(transcribe_audio_inner(
+            &mic_audio_data,
+            initial_prompt.as_deref(),
+            language.as_deref(),
+            &state,
+            Some("microphone"),
+        )?);
+    }
+
+    if !system_audio_data.is_empty() {
+        results.push(transcribe_audio_inner(
+            &system_audio_data,
+            initial_prompt.as_deref(),
+            language.as_deref(),
+            &state,
+            Some("speaker"),
+        )?);
+    }
+
+    Ok(merge_transcription_results(results))
 }
 
 fn merge_transcription_prompt(
@@ -1072,24 +1163,29 @@ async fn transcribe_meeting_segment_bytes(
             Vec::new()
         };
 
-        let audio_to_transcribe = if system_audio_data.is_empty() {
-            mic_pcm
-        } else {
-            log::info!(
-                "[meeting-segment] mixing mic ({:.1}s) + system ({:.1}s) for segment {}",
-                mic_pcm.len() as f64 / 16000.0,
-                system_audio_data.len() as f64 / 16000.0,
-                segment_index
-            );
-            mix_audio(&mic_pcm, &system_audio_data)
-        };
+        let mut results = Vec::new();
 
-        transcribe_audio_inner(
-            &audio_to_transcribe,
-            merged_prompt.as_deref(),
-            language.as_deref(),
-            &state,
-        )
+        if !mic_pcm.is_empty() {
+            results.push(transcribe_audio_inner(
+                &mic_pcm,
+                merged_prompt.as_deref(),
+                language.as_deref(),
+                &state,
+                Some("microphone"),
+            )?);
+        }
+
+        if !system_audio_data.is_empty() {
+            results.push(transcribe_audio_inner(
+                &system_audio_data,
+                merged_prompt.as_deref(),
+                language.as_deref(),
+                &state,
+                Some("speaker"),
+            )?);
+        }
+
+        Ok(merge_transcription_results(results))
     })
     .await
     .map_err(|e| format!("[meeting-segment] worker join error: {e}"))?
@@ -1097,7 +1193,7 @@ async fn transcribe_meeting_segment_bytes(
 
 /// New IPC command: receive base64-encoded raw audio blob from the frontend,
 /// decode entirely in Rust (no renderer AudioContext), resample to 16 kHz,
-/// mix with system audio if active, and run Whisper.
+/// and merge microphone/system transcription timelines if system audio is active.
 #[tauri::command]
 fn transcribe_meeting_audio_b64(
     audio_b64: String,
@@ -1129,24 +1225,29 @@ fn transcribe_meeting_audio_b64(
     }
     let system_audio_data = system_audio::get_audio_data();
 
-    let audio_to_transcribe = if system_audio_data.is_empty() {
-        log::info!("[meeting_b64] No system audio — transcribing mic only");
-        mic_pcm
-    } else {
-        log::info!(
-            "[meeting_b64] Mixing mic ({:.1}s) + system audio ({:.1}s)",
-            mic_pcm.len() as f64 / 16000.0,
-            system_audio_data.len() as f64 / 16000.0
-        );
-        mix_audio(&mic_pcm, &system_audio_data)
-    };
+    let mut results = Vec::new();
 
-    transcribe_audio_inner(
-        &audio_to_transcribe,
-        initial_prompt.as_deref(),
-        language.as_deref(),
-        &state,
-    )
+    if !mic_pcm.is_empty() {
+        results.push(transcribe_audio_inner(
+            &mic_pcm,
+            initial_prompt.as_deref(),
+            language.as_deref(),
+            &state,
+            Some("microphone"),
+        )?);
+    }
+
+    if !system_audio_data.is_empty() {
+        results.push(transcribe_audio_inner(
+            &system_audio_data,
+            initial_prompt.as_deref(),
+            language.as_deref(),
+            &state,
+            Some("speaker"),
+        )?);
+    }
+
+    Ok(merge_transcription_results(results))
 }
 
 // ── Recording Pill Overlay ───────────────────────────────────────────────────
@@ -1329,7 +1430,8 @@ struct CalendarEvent {
     end_time: String,
     start_at: String,
     end_at: String,
-    attendees: Vec<String>,
+    attendees: Vec<CalendarAttendee>,
+    organizer_email: String,
     calendar_name: String,
 }
 
@@ -1444,24 +1546,40 @@ async fn get_calendar_events(
                 .unwrap_or_default();
 
             // Attendees: prefer displayName, fall back to email
-            let attendees: Vec<String> = item
+            let attendees: Vec<CalendarAttendee> = item
                 .get("attendees")
                 .and_then(|a| a.as_array())
                 .map(|arr| {
                     arr.iter()
                         .filter_map(|att| {
-                            att.get("displayName")
+                            let email = att
+                                .get("email")
                                 .and_then(|v| v.as_str())
-                                .map(str::to_string)
-                                .or_else(|| {
-                                    att.get("email")
-                                        .and_then(|v| v.as_str())
-                                        .map(str::to_string)
-                                })
+                                .unwrap_or_default()
+                                .trim()
+                                .to_string();
+                            let name = att
+                                .get("displayName")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_else(|| email.as_str())
+                                .trim()
+                                .to_string();
+
+                            if name.is_empty() && email.is_empty() {
+                                None
+                            } else {
+                                Some(CalendarAttendee { name, email })
+                            }
                         })
                         .collect()
                 })
                 .unwrap_or_default();
+
+            let organizer_email = item
+                .pointer("/organizer/email")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
 
             Some(CalendarEvent {
                 title,
@@ -1470,6 +1588,7 @@ async fn get_calendar_events(
                 start_at,
                 end_at,
                 attendees,
+                organizer_email,
                 calendar_name: "Google Calendar".into(),
             })
         })

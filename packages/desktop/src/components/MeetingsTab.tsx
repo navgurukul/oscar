@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { aiService, type DesktopAIMode } from "../services/ai.service";
+import { aiService } from "../services/ai.service";
 import {
   FileText,
   Users,
@@ -11,7 +11,6 @@ import {
   Check,
   RotateCcw,
   ChevronLeft,
-  ChevronDown,
   Loader2,
   Clock,
   Mail,
@@ -19,7 +18,6 @@ import {
   Play,
   Plus,
   PenLine,
-  Settings,
   X,
   Trash2,
   History,
@@ -29,6 +27,19 @@ import googleMeetLogo from "../assets/meeting-logos/google-meet.png";
 import zoomLogo from "../assets/meeting-logos/zoom.png";
 import teamsLogo from "../assets/meeting-logos/teams.png";
 import { cn } from "../lib/utils";
+import {
+  MarkdownNotesView,
+  markdownPreview,
+  stripEvidenceComments,
+} from "./MarkdownNotesView";
+import type {
+  EnhancedMeetingNoteRequest,
+  MeetingAttendee,
+  MeetingCalendarContext,
+  MeetingTranscriptSegment,
+  MeetingTypeHint,
+  SavedMeetingRecord,
+} from "../types/meeting.types";
 
 const GOOGLE_CALENDAR_LOGO_URL =
   "https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253";
@@ -36,7 +47,6 @@ const CTA_APP_LOGOS = [
   { src: googleMeetLogo, label: "Google Meet", logoClassName: "h-auto max-h-[25px] w-[25px] max-w-[25px] object-contain" },
   { src: zoomLogo, label: "Zoom", logoClassName: "h-auto max-h-6 w-6 max-w-6 object-contain" },
   { src: teamsLogo, label: "Teams", logoClassName: "h-auto max-h-6 w-6 max-w-6 object-contain" },
-  // { src: slackLogo, label: "Slack", logoClassName: "h-auto max-h-[34px] w-[34px] max-w-[34px] object-contain" },
 ];
 
 const FIGTREE_FONT_STYLE = { fontFamily: '"Figtree", -apple-system, sans-serif' } as const;
@@ -64,28 +74,6 @@ const RESULT_TAB_CLASS_NAME = "mb-[-1px] inline-flex items-center gap-1.5 border
 const FOOTER_BUTTON_CLASS_NAME = "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-[7px] text-[0.8125rem] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-100";
 
 export type CalendarReconnectResult = "refreshed" | "needs_reconnect" | "retry_later";
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface MeetingTemplateData {
-  id: string;
-  name: string;
-  desc: string;
-  prompt: string;    // for built-in: "" (uses id as mode). for custom: the full instruction text.
-  builtin: boolean;
-}
-
-export interface SavedMeeting {
-  id: string;
-  title: string;
-  date: string;        // ISO string
-  participants: string[];
-  transcript: string;
-  notes: string;
-  templateId: string;
-}
-
-type Phase = "select" | "recording" | "processing" | "result" | "view_saved";
 export type MinutesTranscriptionStatus =
   | "idle"
   | "recording"
@@ -93,13 +81,16 @@ export type MinutesTranscriptionStatus =
   | "finalizing"
   | "notes";
 
+type Phase = "select" | "recording" | "processing" | "result" | "view_saved";
+
 interface CalendarEvent {
   title: string;
   start_time: string;
   end_time: string;
   start_at: string;
   end_at: string;
-  attendees: string[];
+  attendees: MeetingAttendee[];
+  organizer_email: string;
   calendar_name: string;
 }
 
@@ -109,20 +100,198 @@ interface MeetingsTabProps {
   onStopRecording: () => void;
   recordingTime: number;
   transcript: string;
+  transcriptSegments: MeetingTranscriptSegment[];
+  meetingStartedAt: string;
   onClearTranscript: () => void;
   systemAudioWarning?: string;
   googleCalendarToken: string;
   onConnectCalendar: () => void;
   onCalendarTokenInvalid: () => Promise<CalendarReconnectResult>;
-  templates: MeetingTemplateData[];
-  onManageTemplates: () => void;
-  savedMeetings: SavedMeeting[];
-  onSaveMeeting: (meeting: SavedMeeting) => void;
+  savedMeetings: SavedMeetingRecord[];
+  onSaveMeeting: (meeting: SavedMeetingRecord) => void;
   onDeleteMeeting: (id: string) => void;
   minutesTranscriptionStatus: MinutesTranscriptionStatus;
   minutesSegmentQueue: number;
   minutesSegmentsCompleted: number;
   minutesSegmentsTotal: number;
+}
+
+const MEETING_TYPE_OPTIONS: Array<{
+  value: MeetingTypeHint;
+  label: string;
+}> = [
+  { value: "auto", label: "Auto" },
+  { value: "discovery", label: "Discovery" },
+  { value: "1on1", label: "1:1" },
+  { value: "standup", label: "Standup" },
+  { value: "general", label: "General" },
+];
+
+function attendeeLabel(attendee: MeetingAttendee): string {
+  return attendee.name || attendee.email || "Unknown attendee";
+}
+
+function parseAttendeeInput(value: string): MeetingAttendee {
+  const trimmed = value.trim();
+  const bracketEmailMatch = trimmed.match(/^(.*?)\s*<([^>]+)>$/);
+  if (bracketEmailMatch) {
+    const name = bracketEmailMatch[1].trim() || bracketEmailMatch[2].trim();
+    return { name, email: bracketEmailMatch[2].trim() };
+  }
+
+  const plainEmail = trimmed.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/);
+  if (plainEmail) {
+    return { name: trimmed, email: trimmed };
+  }
+
+  return { name: trimmed, email: "" };
+}
+
+function buildAttendeesCompact(attendees: MeetingAttendee[]): string {
+  const labels = attendees.map(attendeeLabel).filter(Boolean);
+  if (labels.length === 0) return "";
+  if (labels.length <= 2) return labels.join(", ");
+  return `${labels[0]}, ${labels[1]} +${labels.length - 2}`;
+}
+
+function getEventTimestamp(value: string): number {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function isSameCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function isEventOngoing(event: CalendarEvent, currentTime: number): boolean {
+  const start = getEventTimestamp(event.start_at);
+  const end = getEventTimestamp(event.end_at);
+  return start <= currentTime && end >= currentTime;
+}
+
+function getEventDayLabel(event: CalendarEvent, currentTime: number): string {
+  const start = new Date(event.start_at);
+  if (Number.isNaN(start.getTime())) return "Upcoming";
+
+  const now = new Date(currentTime);
+  if (isSameCalendarDay(start, now)) return "Today";
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (isSameCalendarDay(start, tomorrow)) return "Tomorrow";
+
+  return start.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatEventTimeRange(event: CalendarEvent): string {
+  const start = new Date(event.start_at);
+  const end = new Date(event.end_at);
+
+  if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+    return `${start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} - ${end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  }
+
+  return `${event.start_time} - ${event.end_time}`;
+}
+
+function buildMeetingLocalDatetime(dateValue: string): string {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+}
+
+function buildCalendarContext(
+  event: CalendarEvent | null,
+): MeetingCalendarContext | null {
+  if (!event) return null;
+  return {
+    scheduled_start_time: event.start_at,
+    scheduled_end_time: event.end_at,
+    organizer_email: event.organizer_email,
+    event_title: event.title,
+  };
+}
+
+function getNotesLoadingLabel(
+  status: MinutesTranscriptionStatus,
+  transcript: string,
+  completed: number,
+  total: number,
+  queue: number,
+): string {
+  if (status === "finalizing") {
+    const normalizedTotal = Math.max(total, completed + queue);
+    if (normalizedTotal > 0) {
+      return `Finalizing transcript (${completed}/${normalizedTotal} segments complete)…`;
+    }
+    return "Finalizing transcript…";
+  }
+
+  if (status === "transcribing") {
+    const normalizedTotal = Math.max(total, completed + queue);
+    if (normalizedTotal > 0) {
+      return `Transcribing segment ${Math.min(completed + 1, normalizedTotal)} of ${normalizedTotal}…`;
+    }
+    return "Transcribing audio…";
+  }
+
+  if (!transcript.trim()) {
+    return "Transcribing audio…";
+  }
+
+  return "Generating enhanced notes…";
+}
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+function MeetingTypePicker({
+  value,
+  onChange,
+}: {
+  value: MeetingTypeHint;
+  onChange: (value: MeetingTypeHint) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {MEETING_TYPE_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          className={cn(
+            "rounded-full border px-3 py-1.5 text-[0.75rem] font-medium transition-colors",
+            value === option.value
+              ? "border-cyan-500 bg-cyan-50 text-cyan-700"
+              : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700",
+          )}
+          onClick={() => onChange(option.value)}
+          type="button"
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function CalendarConnectCard({
@@ -168,184 +337,6 @@ function CalendarConnectCard({
   );
 }
 
-// ── Default templates ───────────────────────────────────────────────────────
-
-export const DEFAULT_TEMPLATES: MeetingTemplateData[] = [
-  { id: "meeting_general",    name: "General",    desc: "Key points, decisions, action items", prompt: "", builtin: true },
-  { id: "meeting_standup",    name: "Standup",    desc: "Done, doing, blockers",              prompt: "", builtin: true },
-  { id: "meeting_1on1",       name: "1:1",        desc: "Discussion & follow-ups",            prompt: "", builtin: true },
-  { id: "meeting_brainstorm", name: "Brainstorm", desc: "Ideas & next steps",                 prompt: "", builtin: true },
-];
-
-const LONG_TRANSCRIPT_THRESHOLD = 12_000;
-const LONG_TRANSCRIPT_CHUNK_SIZE = 4_000;
-const LONG_TRANSCRIPT_OVERLAP = 300;
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-}
-
-function guessTemplateId(title: string): string {
-  const t = title.toLowerCase();
-  if (t.includes("standup") || t.includes("stand-up") || t.includes("scrum") || t.includes("daily"))
-    return "meeting_standup";
-  if (t.includes("1:1") || t.includes("1-1") || t.includes("one on one") || t.includes("one-on-one"))
-    return "meeting_1on1";
-  if (t.includes("brainstorm") || t.includes("ideation") || t.includes("design sprint"))
-    return "meeting_brainstorm";
-  return "meeting_general";
-}
-
-function getEventTimestamp(value: string): number {
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? 0 : timestamp;
-}
-
-function isSameCalendarDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function isEventOngoing(event: CalendarEvent, currentTime: number): boolean {
-  const start = getEventTimestamp(event.start_at);
-  const end = getEventTimestamp(event.end_at);
-  return start <= currentTime && end >= currentTime;
-}
-
-function getEventDayLabel(event: CalendarEvent, currentTime: number): string {
-  const start = new Date(event.start_at);
-  if (Number.isNaN(start.getTime())) return "Upcoming";
-
-  const now = new Date(currentTime);
-  if (isSameCalendarDay(start, now)) return "Today";
-
-  const tomorrow = new Date(now);
-  tomorrow.setDate(now.getDate() + 1);
-  if (isSameCalendarDay(start, tomorrow)) return "Tomorrow";
-
-  return start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-}
-
-function formatEventTimeRange(event: CalendarEvent): string {
-  const start = new Date(event.start_at);
-  const end = new Date(event.end_at);
-
-  if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
-    return `${start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} - ${end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-  }
-
-  return `${event.start_time} - ${event.end_time}`;
-}
-
-function getTemplateGuidance(
-  templateId: string,
-  templates: MeetingTemplateData[],
-): string {
-  const template = templates.find((tpl) => tpl.id === templateId);
-  if (template && !template.builtin && template.prompt.trim()) {
-    return template.prompt.trim();
-  }
-
-  switch (templateId) {
-    case "meeting_standup":
-      return [
-        "Create standup notes in markdown.",
-        "Use exactly these sections:",
-        "## What Was Done (Yesterday/Recently)",
-        "## What's Being Worked On (Today/Next)",
-        "## Blockers & Risks",
-        "If multiple people spoke, organize updates by person.",
-      ].join("\n");
-    case "meeting_1on1":
-      return [
-        "Create 1:1 notes in markdown.",
-        "Use exactly these sections:",
-        "## Discussion Points",
-        "## Feedback & Recognition",
-        "## Action Items",
-        "## Follow-ups for Next Meeting",
-        "Include owner and deadline whenever they are explicitly mentioned.",
-      ].join("\n");
-    case "meeting_brainstorm":
-      return [
-        "Create brainstorming notes in markdown.",
-        "Use exactly these sections:",
-        "## Ideas Generated",
-        "## Key Themes",
-        "## Top Ideas (Ranked by Discussion Energy)",
-        "## Next Steps",
-        "List each idea with a brief description.",
-      ].join("\n");
-    case "meeting_general":
-    default:
-      return [
-        "Create structured meeting notes in markdown.",
-        "Use exactly these sections:",
-        "## Key Discussion Points",
-        "## Decisions Made",
-        "## Action Items",
-        "## Follow-ups",
-        "Include owner and deadline whenever they are explicitly mentioned.",
-      ].join("\n");
-  }
-}
-
-function splitTextWithOverlap(text: string, size: number, overlap: number): string[] {
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-
-  const parts: string[] = [];
-  let start = 0;
-
-  while (start < trimmed.length) {
-    const end = Math.min(start + size, trimmed.length);
-    parts.push(trimmed.slice(start, end));
-    if (end >= trimmed.length) break;
-    start = Math.max(end - overlap, start + 1);
-  }
-
-  return parts;
-}
-
-function getNotesLoadingLabel(
-  status: MinutesTranscriptionStatus,
-  transcript: string,
-  completed: number,
-  total: number,
-  queue: number,
-): string {
-  if (status === "finalizing") {
-    const normalizedTotal = Math.max(total, completed + queue);
-    if (normalizedTotal > 0) {
-      return `Finalizing transcript (${completed}/${normalizedTotal} segments complete)…`;
-    }
-    return "Finalizing transcript…";
-  }
-
-  if (status === "transcribing") {
-    const normalizedTotal = Math.max(total, completed + queue);
-    if (normalizedTotal > 0) {
-      return `Transcribing segment ${Math.min(completed + 1, normalizedTotal)} of ${normalizedTotal}…`;
-    }
-    return "Transcribing audio…";
-  }
-
-  if (!transcript.trim()) {
-    return "Transcribing audio…";
-  }
-
-  return "Generating meeting notes…";
-}
-
-// ── Grouped calendar rows ────────────────────────────────────────────────────
-
 function CalendarEventRow({
   event,
   onUse,
@@ -357,7 +348,10 @@ function CalendarEventRow({
   isLive?: boolean;
   currentTime: number;
 }) {
-  const attendeeLabel = event.attendees.length === 1 ? "1 attendee" : `${event.attendees.length} attendees`;
+  const label =
+    event.attendees.length === 1
+      ? "1 attendee"
+      : `${event.attendees.length} attendees`;
 
   return (
     <button
@@ -389,7 +383,7 @@ function CalendarEventRow({
         {event.attendees.length > 0 && (
           <div className="flex items-center gap-1 text-[0.76rem] text-slate-400">
             <Users size={10} />
-            {attendeeLabel}
+            {label}
           </div>
         )}
       </div>
@@ -408,77 +402,19 @@ function CalendarEventRow({
   );
 }
 
-// ── Template picker dropdown ────────────────────────────────────────────────
-
-function TemplatePicker({
-  templates,
-  selectedId,
-  onChange,
-}: {
-  templates: MeetingTemplateData[];
-  selectedId: string;
-  onChange: (id: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const selected = templates.find((t) => t.id === selectedId);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  return (
-    <div className="relative shrink-0" ref={ref}>
-      <button
-        className="flex items-center gap-[5px] rounded-md border border-slate-200 bg-slate-50 px-2.5 py-[5px] text-xs font-medium text-slate-600 transition-colors hover:border-slate-300"
-        onClick={() => setOpen(!open)}
-        type="button"
-      >
-        <FileText size={12} />
-        <span>{selected?.name || "Template"}</span>
-        <ChevronDown size={12} className={cn("transition-transform", open && "rotate-180")} />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-[calc(100%+4px)] z-50 max-h-[260px] min-w-[200px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.1)]">
-          {templates.map((t) => (
-            <button
-              key={t.id}
-              className={cn(
-                "flex w-full flex-col rounded-md bg-transparent px-2.5 py-[7px] text-left transition-colors hover:bg-slate-100",
-                t.id === selectedId && "bg-cyan-50",
-              )}
-              onClick={() => { onChange(t.id); setOpen(false); }}
-              type="button"
-            >
-              <span className="text-[0.8125rem] font-semibold text-slate-800">{t.name}</span>
-              <span className="text-[0.7rem] text-slate-400">{t.desc}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Main Component ───────────────────────────────────────────────────────────
-
 export function MeetingsTab({
   isRecording,
   onStartRecording,
   onStopRecording,
   recordingTime,
   transcript,
+  transcriptSegments,
+  meetingStartedAt,
   onClearTranscript,
   systemAudioWarning,
   googleCalendarToken,
   onConnectCalendar,
   onCalendarTokenInvalid,
-  templates,
-  onManageTemplates,
   savedMeetings,
   onSaveMeeting,
   onDeleteMeeting,
@@ -487,230 +423,261 @@ export function MeetingsTab({
   minutesSegmentsCompleted,
   minutesSegmentsTotal,
 }: MeetingsTabProps) {
-  const [selectedTemplateId, setSelectedTemplateId] = useState("meeting_general");
-  const [meetingTitle, setMeetingTitle]   = useState("");
-  const [participantsList, setParticipantsList] = useState<string[]>([]);
+  const [meetingTypeHint, setMeetingTypeHint] = useState<MeetingTypeHint>("auto");
+  const [meetingTitle, setMeetingTitle] = useState("");
+  const [attendees, setAttendees] = useState<MeetingAttendee[]>([]);
   const [participantInput, setParticipantInput] = useState("");
-  const [manualNotes, setManualNotes]     = useState("");
-  const [phase, setPhase]                 = useState<Phase>("select");
-  const [result, setResult]               = useState("");
-  const [streaming, setStreaming]         = useState(false);
-  const [error, setError]                 = useState("");
-  const [copied, setCopied]               = useState(false);
-  const [resultTab, setResultTab]         = useState<"notes" | "transcript">("notes");
-  const [viewingSaved, setViewingSaved]   = useState<SavedMeeting | null>(null);
-
-  // Calendar state
-  const [calendarEvents, setCalendarEvents]     = useState<CalendarEvent[]>([]);
-  const [calendarLoading, setCalendarLoading]   = useState(false);
-  const [calendarError, setCalendarError]       = useState<"needs_reconnect" | "fetch_error" | null>(null);
+  const [manualNotes, setManualNotes] = useState("");
+  const [selectedCalendarEvent, setSelectedCalendarEvent] =
+    useState<CalendarEvent | null>(null);
+  const [phase, setPhase] = useState<Phase>("select");
+  const [result, setResult] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [resultTab, setResultTab] = useState<"notes" | "transcript">("notes");
+  const [viewingSaved, setViewingSaved] = useState<SavedMeetingRecord | null>(null);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] =
+    useState<"needs_reconnect" | "fetch_error" | null>(null);
   const [calendarErrorMsg, setCalendarErrorMsg] = useState("");
-  const [currentTime, setCurrentTime]           = useState(() => Date.now());
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const lastCalendarFetchRef = useRef<string>("");
 
-  const outputRef   = useRef<HTMLDivElement>(null);
-
-  // Participant pill helpers
-  const addParticipant = (value: string) => {
-    const trimmed = value.trim().replace(/,+$/, "").trim();
-    if (trimmed && !participantsList.includes(trimmed)) {
-      setParticipantsList((prev) => [...prev, trimmed]);
+  const addAttendee = (value: string) => {
+    const parsed = parseAttendeeInput(value);
+    const normalized = attendeeLabel(parsed).toLowerCase();
+    if (
+      normalized &&
+      !attendees.some(
+        (attendee) => attendeeLabel(attendee).toLowerCase() === normalized,
+      )
+    ) {
+      setAttendees((prev) => [...prev, parsed]);
     }
     setParticipantInput("");
   };
 
-  const removeParticipant = (index: number) => {
-    setParticipantsList((prev) => prev.filter((_, i) => i !== index));
+  const removeAttendee = (index: number) => {
+    setAttendees((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const handleParticipantKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === "Enter" || e.key === "," || e.key === "Tab") && participantInput.trim()) {
-      e.preventDefault();
-      addParticipant(participantInput);
-    } else if (e.key === "Backspace" && !participantInput && participantsList.length > 0) {
-      setParticipantsList((prev) => prev.slice(0, -1));
+  const handleParticipantKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (
+      (event.key === "Enter" || event.key === "," || event.key === "Tab") &&
+      participantInput.trim()
+    ) {
+      event.preventDefault();
+      addAttendee(participantInput);
+      return;
+    }
+
+    if (
+      event.key === "Backspace" &&
+      !participantInput &&
+      attendees.length > 0
+    ) {
+      setAttendees((prev) => prev.slice(0, -1));
     }
   };
 
   const handleParticipantBlur = () => {
-    if (participantInput.trim()) addParticipant(participantInput);
+    if (participantInput.trim()) {
+      addAttendee(participantInput);
+    }
   };
 
-  // Derived participants string for AI/email
-  const participants = participantsList.join(", ");
-
-  // Fetch Google Calendar events (cached — skip if same token + date)
   useEffect(() => {
     if (!googleCalendarToken) {
-      setCalendarEvents([]); setCalendarError(null);
+      setCalendarEvents([]);
+      setCalendarError(null);
       lastCalendarFetchRef.current = "";
       return;
     }
+
     const now = new Date();
-    const dateKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const dateKey = now.toISOString().slice(0, 10);
     const cacheKey = `${googleCalendarToken.slice(0, 16)}:${dateKey}`;
     if (cacheKey === lastCalendarFetchRef.current && calendarEvents.length > 0) {
       return;
     }
-    setCalendarLoading(true); setCalendarError(null);
-    const timeMin = new Date(now); timeMin.setHours(0, 0, 0, 0);
-    const timeMax = new Date(now); timeMax.setDate(timeMax.getDate() + 14); timeMax.setHours(23, 59, 59, 999);
+
+    setCalendarLoading(true);
+    setCalendarError(null);
+    const timeMin = new Date(now);
+    timeMin.setHours(0, 0, 0, 0);
+    const timeMax = new Date(now);
+    timeMax.setDate(timeMax.getDate() + 14);
+    timeMax.setHours(23, 59, 59, 999);
 
     invoke<CalendarEvent[]>("get_calendar_events", {
-      token: googleCalendarToken, timeMin: timeMin.toISOString(), timeMax: timeMax.toISOString(),
+      token: googleCalendarToken,
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
     })
       .then((events) => {
-        setCalendarEvents(events); setCalendarError(null);
+        setCalendarEvents(events);
+        setCalendarError(null);
         lastCalendarFetchRef.current = cacheKey;
       })
-      .catch(async (e: unknown) => {
-        const msg = String(e);
-        if (msg.includes("NEEDS_RECONNECT")) {
+      .catch(async (invokeError: unknown) => {
+        const message = String(invokeError);
+        if (message.includes("NEEDS_RECONNECT")) {
           setCalendarErrorMsg("");
           const recoveryState = await onCalendarTokenInvalid();
           if (recoveryState === "refreshed") {
             setCalendarError(null);
           } else if (recoveryState === "retry_later") {
             setCalendarError("fetch_error");
-            setCalendarErrorMsg("Calendar access is being refreshed in the background. Please try again in a moment.");
+            setCalendarErrorMsg(
+              "Calendar access is being refreshed in the background. Please try again in a moment.",
+            );
           } else {
             setCalendarError("needs_reconnect");
           }
         } else {
-          console.warn("[meetings] calendar fetch failed:", e);
+          console.warn("[meetings] calendar fetch failed:", invokeError);
           setCalendarError("fetch_error");
-          setCalendarErrorMsg(msg.replace(/^Error:\s*/i, "").slice(0, 200));
+          setCalendarErrorMsg(message.replace(/^Error:\s*/i, "").slice(0, 200));
         }
       })
       .finally(() => setCalendarLoading(false));
-  }, [googleCalendarToken, onCalendarTokenInvalid]);
+  }, [calendarEvents.length, googleCalendarToken, onCalendarTokenInvalid]);
 
-  // Re-check the clock so ongoing meetings and ordering stay fresh
   useEffect(() => {
     const id = setInterval(() => setCurrentTime(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => { if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight; }, [result]);
+  const buildNoteRequest = useCallback((): EnhancedMeetingNoteRequest => {
+    const title =
+      meetingTitle.trim() ||
+      selectedCalendarEvent?.title ||
+      "Untitled Meeting";
+    const attendeesCompact = buildAttendeesCompact(attendees);
+    const startedAt =
+      selectedCalendarEvent?.start_at ||
+      meetingStartedAt ||
+      new Date().toISOString();
 
-  // AI processing — resolve template to mode
+    return {
+      meeting_title: title,
+      meeting_local_datetime: buildMeetingLocalDatetime(startedAt),
+      attendees_compact: attendeesCompact,
+      attendees_full: attendees,
+      calendar_context: buildCalendarContext(selectedCalendarEvent),
+      my_notes_markdown: manualNotes.trim(),
+      transcript_segments: transcriptSegments,
+      meeting_type_hint: meetingTypeHint,
+    };
+  }, [
+    attendees,
+    manualNotes,
+    meetingStartedAt,
+    meetingTitle,
+    meetingTypeHint,
+    selectedCalendarEvent,
+    transcriptSegments,
+  ]);
+
   const processTranscript = useCallback(async () => {
-    if (!selectedTemplateId || (!transcript.trim() && !manualNotes.trim())) return;
+    if (!transcriptSegments.length && !manualNotes.trim()) return;
 
-    const tpl = templates.find((t) => t.id === selectedTemplateId);
-    const isCustom = tpl && !tpl.builtin;
-
-    const context = [
-      meetingTitle ? `Meeting: ${meetingTitle}` : "",
-      participants.trim() ? `Participants: ${participants.trim()}` : "",
-    ].filter(Boolean).join("\n");
-
-    // Any template can layer extra instructions on top of its default formatting behavior.
-    const customInstructions = tpl?.prompt
-      ? `Template instructions: ${tpl.prompt}`
-      : "";
-
-    const parts = [
-      customInstructions,
-      context,
-      manualNotes.trim() ? `My notes:\n${manualNotes.trim()}` : "",
-      transcript.trim() ? `Transcript:\n${transcript.trim()}` : "",
-    ].filter(Boolean);
-
-    const enrichedText = parts.join("\n\n---\n\n");
-    const mode: DesktopAIMode = isCustom
-      ? "meeting_custom"
-      : (selectedTemplateId as DesktopAIMode);
-
-    setStreaming(true); setResult(""); setError("");
+    setStreaming(true);
+    setResult("");
+    setError("");
 
     try {
-      const normalizedTranscript = transcript.trim();
-      let processed: string;
-
-      if (normalizedTranscript.length > LONG_TRANSCRIPT_THRESHOLD) {
-        const templateGuidance = getTemplateGuidance(selectedTemplateId, templates);
-        const transcriptChunks = splitTextWithOverlap(
-          normalizedTranscript,
-          LONG_TRANSCRIPT_CHUNK_SIZE,
-          LONG_TRANSCRIPT_OVERLAP,
-        );
-
-        const reducedChunks: string[] = [];
-
-        for (let index = 0; index < transcriptChunks.length; index += 1) {
-          const chunkPayload = [
-            `Template instructions:\n${templateGuidance}`,
-            context ? `Meeting context:\n${context}` : "",
-            `Transcript chunk ${index + 1}/${transcriptChunks.length}:\n${transcriptChunks[index]}`,
-          ].filter(Boolean).join("\n\n---\n\n");
-
-          reducedChunks.push(
-            await aiService.processText(chunkPayload, "meeting_reduce_chunk"),
-          );
-        }
-
-        const mergePayload = [
-          `Template instructions:\n${templateGuidance}`,
-          context ? `Meeting context:\n${context}` : "",
-          manualNotes.trim() ? `My notes:\n${manualNotes.trim()}` : "",
-          `Reduced chunk summaries:\n${reducedChunks
-            .map((chunk, index) => `Chunk ${index + 1}\n${chunk}`)
-            .join("\n\n---\n\n")}`,
-        ].filter(Boolean).join("\n\n---\n\n");
-
-        processed = await aiService.processText(mergePayload, "meeting_reduce_merge");
-      } else {
-        processed = await aiService.processText(enrichedText, mode);
-      }
-
+      const processed = await aiService.generateEnhancedMeetingNote(
+        buildNoteRequest(),
+      );
       setResult(processed);
       setPhase("result");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (processingError) {
+      setError(
+        processingError instanceof Error
+          ? processingError.message
+          : String(processingError),
+      );
       setPhase("result");
     } finally {
       setStreaming(false);
     }
-  }, [selectedTemplateId, transcript, manualNotes, meetingTitle, participants, templates]);
+  }, [buildNoteRequest, manualNotes, transcriptSegments.length]);
 
   useEffect(() => {
     if (
       phase === "processing" &&
       minutesTranscriptionStatus === "notes" &&
-      (transcript.trim() || manualNotes.trim())
+      (transcriptSegments.length > 0 || manualNotes.trim())
     ) {
-      processTranscript();
+      void processTranscript();
     }
-  }, [phase, transcript, manualNotes, minutesTranscriptionStatus, processTranscript]);
+  }, [
+    manualNotes,
+    minutesTranscriptionStatus,
+    phase,
+    processTranscript,
+    transcriptSegments.length,
+  ]);
 
-  // Auto-save meeting when notes are generated
   const savedMeetingIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (phase === "result" && !streaming && result && !error && !savedMeetingIdRef.current) {
-      const id = `meeting_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      savedMeetingIdRef.current = id;
-      onSaveMeeting({
-        id,
-        title: meetingTitle || "Untitled Meeting",
-        date: new Date().toISOString(),
-        participants: participantsList,
-        transcript: transcript,
-        notes: result,
-        templateId: selectedTemplateId,
-      });
+    if (phase !== "result" || streaming || !result || error || savedMeetingIdRef.current) {
+      return;
     }
-  }, [phase, streaming, result, error, meetingTitle, participantsList, transcript, selectedTemplateId, onSaveMeeting]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
+    const request = buildNoteRequest();
+    const now = new Date().toISOString();
+    const meetingId = `meeting_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    savedMeetingIdRef.current = meetingId;
+
+    onSaveMeeting({
+      id: meetingId,
+      startedAt:
+        selectedCalendarEvent?.start_at ||
+        meetingStartedAt ||
+        now,
+      meetingTitle: request.meeting_title,
+      meetingLocalDatetime: request.meeting_local_datetime,
+      attendeesCompact: request.attendees_compact,
+      attendeesFull: request.attendees_full,
+      calendarContext: request.calendar_context,
+      meetingTypeHint: request.meeting_type_hint,
+      transcript,
+      transcriptSegments,
+      myNotesMarkdown: request.my_notes_markdown,
+      notesMarkdown: result,
+      createdAt: now,
+    });
+  }, [
+    buildNoteRequest,
+    error,
+    meetingStartedAt,
+    onSaveMeeting,
+    phase,
+    result,
+    selectedCalendarEvent,
+    streaming,
+    transcript,
+    transcriptSegments,
+  ]);
 
   const startFromEvent = (event: CalendarEvent) => {
     setMeetingTitle(event.title);
-    setParticipantsList(event.attendees.filter(Boolean));
+    setAttendees(event.attendees.filter((attendee) => attendeeLabel(attendee)));
     setParticipantInput("");
-    setSelectedTemplateId(guessTemplateId(event.title));
+    setSelectedCalendarEvent(event);
+    setMeetingTypeHint("auto");
     setPhase("recording");
-    setResult(""); setError(""); setManualNotes(""); setResultTab("notes");
+    setResult("");
+    setError("");
+    setManualNotes("");
+    setResultTab("notes");
+    savedMeetingIdRef.current = null;
   };
 
   const handleStopRecording = () => {
@@ -719,33 +686,65 @@ export function MeetingsTab({
     setPhase("processing");
   };
 
-  const handleCopy = async () => {
-    if (!result) return;
-    await navigator.clipboard.writeText(result);
-    setCopied(true); setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async (markdown: string) => {
+    await navigator.clipboard.writeText(markdown);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2_000);
   };
 
-  const handleShareByEmail = async () => {
-    const emails = participants.split(/[,;]+/).map((e) => e.trim()).filter((e) => e.includes("@")).join(",");
-    const subject = encodeURIComponent(`Meeting Notes: ${meetingTitle || "Meeting"}`);
-    const body    = encodeURIComponent(`Hi,\n\nPlease find the meeting notes below.\n\n---\n\n${result}\n\n---\n\nGenerated by OSCAR`);
-    await openUrl(emails ? `mailto:${emails}?subject=${subject}&body=${body}` : `mailto:?subject=${subject}&body=${body}`);
+  const handleShareByEmail = async ({
+    subjectTitle,
+    attendeesFull,
+    markdown,
+  }: {
+    subjectTitle: string;
+    attendeesFull: MeetingAttendee[];
+    markdown: string;
+  }) => {
+    const emails = attendeesFull
+      .map((attendee) => attendee.email.trim())
+      .filter(Boolean)
+      .join(",");
+    const subject = encodeURIComponent(`Meeting Notes: ${subjectTitle || "Meeting"}`);
+    const body = encodeURIComponent(
+      `Hi,\n\nPlease find the meeting notes below.\n\n---\n\n${stripEvidenceComments(markdown)}\n\n---\n\nGenerated by OSCAR`,
+    );
+    await openUrl(
+      emails ? `mailto:${emails}?subject=${subject}&body=${body}` : `mailto:?subject=${subject}&body=${body}`,
+    );
+  };
+
+  const resetDraftState = () => {
+    setMeetingTypeHint("auto");
+    setMeetingTitle("");
+    setAttendees([]);
+    setParticipantInput("");
+    setManualNotes("");
+    setSelectedCalendarEvent(null);
+    setResult("");
+    setError("");
+    setStreaming(false);
+    setResultTab("notes");
+    onClearTranscript();
+    savedMeetingIdRef.current = null;
   };
 
   const handleNewMeeting = () => {
-    setSelectedTemplateId("meeting_general"); setMeetingTitle(""); setParticipantsList([]); setParticipantInput(""); setManualNotes("");
-    setPhase("select"); setResult(""); setError(""); setStreaming(false); setResultTab("notes"); onClearTranscript();
-    savedMeetingIdRef.current = null; setViewingSaved(null);
+    resetDraftState();
+    setViewingSaved(null);
+    setPhase("select");
   };
 
   const handleBack = () => {
-    if (isRecording) onStopRecording();
-    setPhase("select"); setSelectedTemplateId("meeting_general");
-    setResult(""); setError(""); setManualNotes(""); setResultTab("notes"); onClearTranscript();
+    if (isRecording) {
+      onStopRecording();
+    }
+    resetDraftState();
+    setPhase("select");
   };
 
-  const selectedTpl = templates.find((t) => t.id === selectedTemplateId);
-  const hasEmailableParticipants = participants.split(/[,;]+/).some((e) => e.trim().includes("@"));
+  const currentRequest = buildNoteRequest();
+  const hasEmailableParticipants = attendees.some((attendee) => Boolean(attendee.email.trim()));
   const nextCalendarEvents = calendarEvents
     .filter((event) => getEventTimestamp(event.end_at) >= currentTime)
     .sort((a, b) => getEventTimestamp(a.start_at) - getEventTimestamp(b.start_at))
@@ -757,8 +756,6 @@ export function MeetingsTab({
     </div>
   ) : null;
 
-  // ── Phase: Select ────────────────────────────────────────────────────────
-
   if (phase === "select") {
     return (
       <div className={MEETINGS_TAB_CLASS_NAME}>
@@ -768,7 +765,6 @@ export function MeetingsTab({
             <span className="font-bold">Minutes</span>
           </h1>
 
-          {/* Info card */}
           <div
             className="relative mb-6 flex items-stretch justify-between gap-[18px] overflow-hidden rounded-[22px] px-6 py-5 shadow-[0_18px_40px_rgba(8,145,178,0.2)] max-md:flex-col max-md:gap-[18px] max-md:p-[22px]"
             style={MINUTES_INFO_CARD_STYLE}
@@ -779,20 +775,11 @@ export function MeetingsTab({
                 className="m-0 text-[1.26rem] font-medium leading-[1.08] text-slate-50 max-md:text-[1.48rem]"
                 style={FIGTREE_FONT_STYLE}
               >
-                Raw meeting transcripts to awesome notes.
+                Enhanced meeting notes with cited evidence.
               </h2>
               <p className="mt-3 max-w-[348px] text-[0.8rem] leading-[1.55] text-sky-50/90 max-md:max-w-none">
-                Choose from predefined templates or create your own.
+                Record once, keep your rough notes, and let Minutes turn the meeting into a clean structured summary.
               </p>
-              <button
-                className="mt-[22px] inline-flex items-center gap-1.5 rounded-full border border-white/90 bg-white px-[14px] py-2.5 text-[0.82rem] font-semibold text-cyan-700 shadow-[0_12px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-px hover:text-cyan-800 hover:shadow-[0_16px_28px_rgba(15,23,42,0.18)]"
-                onClick={onManageTemplates}
-                title="Configure templates"
-                type="button"
-              >
-                <Settings size={14} />
-                Configure templates
-              </button>
             </div>
             <div className="relative flex basis-[208px] items-center justify-end max-md:basis-auto max-md:justify-start" aria-hidden="true">
               <div className="relative flex min-h-16 w-full items-center justify-end max-md:justify-start">
@@ -825,7 +812,6 @@ export function MeetingsTab({
 
           {systemAudioNotice}
 
-          {/* ── Upcoming meetings ── */}
           <div className="mb-2">
             <div className={SECTION_HEADER_CLASS_NAME}>
               <CalendarDays size={14} />
@@ -888,12 +874,12 @@ export function MeetingsTab({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.22 }}
                 >
-                  {nextCalendarEvents.map((evt, i) => (
+                  {nextCalendarEvents.map((event, index) => (
                     <CalendarEventRow
-                      key={`${evt.title}-${evt.start_at}-${i}`}
-                      event={evt}
+                      key={`${event.title}-${event.start_at}-${index}`}
+                      event={event}
                       onUse={startFromEvent}
-                      isLive={isEventOngoing(evt, currentTime)}
+                      isLive={isEventOngoing(event, currentTime)}
                       currentTime={currentTime}
                     />
                   ))}
@@ -902,8 +888,6 @@ export function MeetingsTab({
             )}
           </div>
 
-
-          {/* ── Previous meetings ── */}
           {savedMeetings.length > 0 && (
             <div className="mt-5">
               <div className={SECTION_HEADER_CLASS_NAME}>
@@ -913,29 +897,42 @@ export function MeetingsTab({
               <div className="flex flex-col gap-1.5">
                 {savedMeetings
                   .slice()
-                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                  .map((m) => (
+                  .sort(
+                    (left, right) =>
+                      new Date(right.startedAt).getTime() -
+                      new Date(left.startedAt).getTime(),
+                  )
+                  .map((meeting) => (
                     <button
-                      key={m.id}
+                      key={meeting.id}
                       className="flex w-full flex-col gap-1 rounded-lg border border-slate-200 bg-white px-[13px] py-2.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
-                      onClick={() => { setViewingSaved(m); setResultTab("notes"); setPhase("view_saved"); }}
+                      onClick={() => {
+                        setViewingSaved(meeting);
+                        setResultTab("notes");
+                        setPhase("view_saved");
+                      }}
                       style={FIGTREE_FONT_STYLE}
                       type="button"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="flex-1 truncate text-[0.8125rem] font-semibold text-slate-800">{m.title}</span>
+                        <span className="flex-1 truncate text-[0.8125rem] font-semibold text-slate-800">
+                          {meeting.meetingTitle}
+                        </span>
                         <span className="shrink-0 text-[0.7rem] text-slate-400">
-                          {new Date(m.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          {new Date(meeting.startedAt).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}
                         </span>
                       </div>
-                      {m.participants.length > 0 && (
+                      {meeting.attendeesCompact && (
                         <div className="flex items-center gap-1 text-[0.7rem] text-slate-400">
                           <Users size={10} />
-                          <span>{m.participants.length} participant{m.participants.length !== 1 ? "s" : ""}</span>
+                          <span>{meeting.attendeesCompact}</span>
                         </div>
                       )}
                       <div className="truncate whitespace-nowrap text-[0.75rem] leading-[1.4] text-slate-500">
-                        {m.notes.slice(0, 100)}{m.notes.length > 100 ? "…" : ""}
+                        {markdownPreview(meeting.notesMarkdown)}
                       </div>
                     </button>
                   ))}
@@ -947,15 +944,16 @@ export function MeetingsTab({
     );
   }
 
-  // ── Phase: View Saved Meeting ───────────────────────────────────────────
-
   if (phase === "view_saved" && viewingSaved) {
     return (
       <div className={MEETINGS_TAB_CLASS_NAME}>
         <div className={MEETINGS_CONTAINER_CLASS_NAME}>
           <button
             className="mb-4 inline-flex items-center gap-1 rounded-md bg-transparent px-2 py-1 pl-1 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-            onClick={() => { setPhase("select"); setViewingSaved(null); }}
+            onClick={() => {
+              setPhase("select");
+              setViewingSaved(null);
+            }}
             type="button"
           >
             <ChevronLeft size={16} /> Back
@@ -965,16 +963,19 @@ export function MeetingsTab({
 
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
-              <h1 className={cn(MEETINGS_TITLE_CLASS_NAME, "mb-0")} style={GARAMOND_FONT_STYLE}>{viewingSaved.title}</h1>
+              <h1 className={cn(MEETINGS_TITLE_CLASS_NAME, "mb-0")} style={GARAMOND_FONT_STYLE}>
+                {viewingSaved.meetingTitle}
+              </h1>
               <p className={cn(MEETINGS_SUBTITLE_CLASS_NAME, "mb-0")}>
-                {new Date(viewingSaved.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                {viewingSaved.meetingLocalDatetime}
               </p>
             </div>
             <button
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-transparent text-slate-400 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600"
               onClick={() => {
                 onDeleteMeeting(viewingSaved.id);
-                setPhase("select"); setViewingSaved(null);
+                setPhase("select");
+                setViewingSaved(null);
               }}
               title="Delete meeting"
               type="button"
@@ -983,17 +984,16 @@ export function MeetingsTab({
             </button>
           </div>
 
-          {viewingSaved.participants.length > 0 && (
+          {viewingSaved.attendeesFull.length > 0 && (
             <div className={cn(PARTICIPANT_PILLS_CLASS_NAME, "mb-3")}>
-              {viewingSaved.participants.map((p, i) => (
-                <span key={i} className={PARTICIPANT_PILL_CLASS_NAME}>
-                  <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{p}</span>
+              {viewingSaved.attendeesFull.map((attendee, index) => (
+                <span key={`${attendeeLabel(attendee)}-${index}`} className={PARTICIPANT_PILL_CLASS_NAME}>
+                  <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{attendeeLabel(attendee)}</span>
                 </span>
               ))}
             </div>
           )}
 
-          {/* Tabs: Notes / Transcript */}
           <div className={RESULT_TABS_CLASS_NAME}>
             <button
               className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-cyan-600 text-cyan-600")}
@@ -1015,16 +1015,13 @@ export function MeetingsTab({
 
           {resultTab === "notes" && (
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <div className="max-h-[460px] overflow-y-auto whitespace-pre-wrap px-6 py-5 text-sm leading-[1.75] text-slate-700">
-                {viewingSaved.notes}
+              <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-slate-700">
+                <MarkdownNotesView markdown={viewingSaved.notesMarkdown} />
               </div>
               <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
                 <button
                   className={cn(FOOTER_BUTTON_CLASS_NAME, "border-cyan-600 bg-cyan-600 text-white hover:border-cyan-700 hover:bg-cyan-700")}
-                  onClick={async () => {
-                  await navigator.clipboard.writeText(viewingSaved.notes);
-                  setCopied(true); setTimeout(() => setCopied(false), 2000);
-                  }}
+                  onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
                   type="button"
                 >
                   {copied ? <Check size={12} /> : <Copy size={12} />}
@@ -1032,12 +1029,13 @@ export function MeetingsTab({
                 </button>
                 <button
                   className={FOOTER_BUTTON_CLASS_NAME}
-                  onClick={async () => {
-                    const emails = viewingSaved.participants.filter((e) => e.includes("@")).join(",");
-                    const subject = encodeURIComponent(`Meeting Notes: ${viewingSaved.title}`);
-                    const body = encodeURIComponent(`Hi,\n\nPlease find the meeting notes below.\n\n---\n\n${viewingSaved.notes}\n\n---\n\nGenerated by OSCAR`);
-                    await openUrl(emails ? `mailto:${emails}?subject=${subject}&body=${body}` : `mailto:?subject=${subject}&body=${body}`);
-                  }}
+                  onClick={() =>
+                    void handleShareByEmail({
+                      subjectTitle: viewingSaved.meetingTitle,
+                      attendeesFull: viewingSaved.attendeesFull,
+                      markdown: viewingSaved.notesMarkdown,
+                    })
+                  }
                   type="button"
                 >
                   <Mail size={12} /> Email
@@ -1065,8 +1063,6 @@ export function MeetingsTab({
     );
   }
 
-  // ── Phase: Recording ─────────────────────────────────────────────────────
-
   if (phase === "recording") {
     return (
       <div className={cn(MEETINGS_TAB_CLASS_NAME, "relative pb-[140px]")}>
@@ -1081,21 +1077,20 @@ export function MeetingsTab({
 
           {systemAudioNotice}
 
-          {/* Title + participants (borderless, inline editing) */}
           <div className="mb-1 flex flex-col gap-2">
             <input
               className="w-full border-0 border-b border-b-transparent bg-transparent px-0.5 py-1 text-[1.1rem] font-semibold text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-b-slate-200"
               type="text"
               placeholder="Meeting title"
               value={meetingTitle}
-              onChange={(e) => setMeetingTitle(e.target.value)}
+              onChange={(event) => setMeetingTitle(event.target.value)}
               style={FIGTREE_FONT_STYLE}
             />
             <div className={PARTICIPANT_PILLS_CLASS_NAME}>
-              {participantsList.map((p, i) => (
-                <span key={i} className={PARTICIPANT_PILL_CLASS_NAME}>
-                  <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{p}</span>
-                  <button className={PARTICIPANT_PILL_REMOVE_CLASS_NAME} onClick={() => removeParticipant(i)} type="button">
+              {attendees.map((attendee, index) => (
+                <span key={`${attendeeLabel(attendee)}-${index}`} className={PARTICIPANT_PILL_CLASS_NAME}>
+                  <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{attendeeLabel(attendee)}</span>
+                  <button className={PARTICIPANT_PILL_REMOVE_CLASS_NAME} onClick={() => removeAttendee(index)} type="button">
                     <X size={10} />
                   </button>
                 </span>
@@ -1103,9 +1098,9 @@ export function MeetingsTab({
               <input
                 className="min-w-[120px] flex-1 border-0 bg-transparent px-0.5 py-1 text-[0.8125rem] text-slate-800 outline-none placeholder:text-slate-400"
                 type="text"
-                placeholder={participantsList.length === 0 ? "Add participants (email or name, press Enter)" : "Add more..."}
+                placeholder={attendees.length === 0 ? "Add participants (name or email, press Enter)" : "Add more..."}
                 value={participantInput}
-                onChange={(e) => setParticipantInput(e.target.value)}
+                onChange={(event) => setParticipantInput(event.target.value)}
                 onKeyDown={handleParticipantKeyDown}
                 onBlur={handleParticipantBlur}
                 style={FIGTREE_FONT_STYLE}
@@ -1113,16 +1108,15 @@ export function MeetingsTab({
             </div>
           </div>
 
-          {/* Template picker */}
           <div className="flex items-center gap-3 pb-2 pt-1">
-            <TemplatePicker
-              templates={templates}
-              selectedId={selectedTemplateId}
-              onChange={setSelectedTemplateId}
-            />
+            <div className="flex flex-col gap-2">
+              <span className="text-[0.75rem] font-semibold uppercase tracking-[0.04em] text-slate-500">
+                Meeting Type
+              </span>
+              <MeetingTypePicker value={meetingTypeHint} onChange={setMeetingTypeHint} />
+            </div>
           </div>
 
-          {/* ── Simultaneous notes area ── */}
           <div className="mt-1 flex flex-col gap-2">
             <div className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-slate-600">
               <PenLine size={13} />
@@ -1131,15 +1125,14 @@ export function MeetingsTab({
             </div>
             <textarea
               className="min-h-[140px] w-full resize-y border-0 bg-transparent px-0.5 py-3 text-sm leading-[1.6] text-slate-800 outline-none placeholder:text-[#b0b8c4] focus:bg-transparent"
-              placeholder="Jot down key points, action items, or anything worth remembering…"
+              placeholder="Jot down key points, action items, or anything worth remembering..."
               value={manualNotes}
-              onChange={(e) => setManualNotes(e.target.value)}
+              onChange={(event) => setManualNotes(event.target.value)}
               rows={6}
             />
           </div>
         </div>
 
-        {/* ── Fixed bottom-center record button ── */}
         <div className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 flex-col items-center gap-2">
           <motion.button
             className={cn(
@@ -1157,27 +1150,24 @@ export function MeetingsTab({
             {isRecording ? <Square size={28} fill="currentColor" /> : <Mic size={28} />}
           </motion.button>
           <div className="flex items-center gap-2">
-            {isRecording
-              ? (
-                  <>
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-red-600 animate-pulse" />
-                    <span
-                      className="text-[1.5rem] font-semibold tracking-[0.04em] text-slate-800 [font-variant-numeric:tabular-nums]"
-                      style={FIGTREE_FONT_STYLE}
-                    >
-                      {formatTime(recordingTime)}
-                    </span>
-                  </>
-                )
-              : <span className="text-[0.8125rem] font-medium text-slate-400">Tap to start recording</span>
-            }
+            {isRecording ? (
+              <>
+                <span className="h-2 w-2 shrink-0 rounded-full bg-red-600 animate-pulse" />
+                <span
+                  className="text-[1.5rem] font-semibold tracking-[0.04em] text-slate-800 [font-variant-numeric:tabular-nums]"
+                  style={FIGTREE_FONT_STYLE}
+                >
+                  {formatTime(recordingTime)}
+                </span>
+              </>
+            ) : (
+              <span className="text-[0.8125rem] font-medium text-slate-400">Tap to start recording</span>
+            )}
           </div>
         </div>
       </div>
     );
   }
-
-  // ── Phase: Processing & Result ───────────────────────────────────────────
 
   return (
     <div className={MEETINGS_TAB_CLASS_NAME}>
@@ -1187,28 +1177,24 @@ export function MeetingsTab({
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
             <h1 className={cn(MEETINGS_TITLE_CLASS_NAME, "mb-0")} style={GARAMOND_FONT_STYLE}>
-              {meetingTitle || "Meeting Notes"}
+              {currentRequest.meeting_title || "Meeting Notes"}
             </h1>
-            {meetingTitle && (
-              <p className={cn(MEETINGS_SUBTITLE_CLASS_NAME, "mb-0")}>
-                {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-              </p>
-            )}
+            <p className={cn(MEETINGS_SUBTITLE_CLASS_NAME, "mb-0")}>
+              {currentRequest.meeting_local_datetime}
+            </p>
           </div>
-          {selectedTpl && (
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-cyan-50 px-3.5 py-1.5 text-[0.8125rem] font-medium text-cyan-600">
-              <FileText size={12} />
-              {selectedTpl.name}
-            </div>
-          )}
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-cyan-50 px-3.5 py-1.5 text-[0.8125rem] font-medium text-cyan-600">
+            <FileText size={12} />
+            {MEETING_TYPE_OPTIONS.find((option) => option.value === meetingTypeHint)?.label ?? "Auto"}
+          </div>
         </div>
 
-        {participantsList.length > 0 && (
+        {attendees.length > 0 && (
           <div className={cn(PARTICIPANT_PILLS_CLASS_NAME, "mb-3")}>
-            {participantsList.map((p, i) => (
-              <span key={i} className={PARTICIPANT_PILL_CLASS_NAME}>
-                <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{p}</span>
-                <button className={PARTICIPANT_PILL_REMOVE_CLASS_NAME} onClick={() => removeParticipant(i)} type="button">
+            {attendees.map((attendee, index) => (
+              <span key={`${attendeeLabel(attendee)}-${index}`} className={PARTICIPANT_PILL_CLASS_NAME}>
+                <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{attendeeLabel(attendee)}</span>
+                <button className={PARTICIPANT_PILL_REMOVE_CLASS_NAME} onClick={() => removeAttendee(index)} type="button">
                   <X size={10} />
                 </button>
               </span>
@@ -1216,7 +1202,6 @@ export function MeetingsTab({
           </div>
         )}
 
-        {/* Tabs: Notes / Transcript */}
         <div className={RESULT_TABS_CLASS_NAME}>
           <button
             className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-cyan-600 text-cyan-600")}
@@ -1259,8 +1244,8 @@ export function MeetingsTab({
                 {error ? (
                   <div className="px-6 py-5 text-sm text-red-600">{error}</div>
                 ) : (
-                  <div className="max-h-[460px] overflow-y-auto whitespace-pre-wrap px-6 py-5 text-sm leading-[1.75] text-slate-700" ref={outputRef}>
-                    {result || (streaming && <span className="text-indigo-500 animate-pulse">&#9613;</span>)}
+                  <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-slate-700">
+                    <MarkdownNotesView markdown={result} />
                   </div>
                 )}
 
@@ -1268,7 +1253,7 @@ export function MeetingsTab({
                   <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
                     <button
                       className={cn(FOOTER_BUTTON_CLASS_NAME, "border-cyan-600 bg-cyan-600 text-white hover:border-cyan-700 hover:bg-cyan-700")}
-                      onClick={handleCopy}
+                      onClick={() => void handleCopy(result)}
                       type="button"
                     >
                       {copied ? <Check size={12} /> : <Copy size={12} />}
@@ -1279,7 +1264,13 @@ export function MeetingsTab({
                         FOOTER_BUTTON_CLASS_NAME,
                         !hasEmailableParticipants && "opacity-[0.45] hover:border-slate-200 hover:bg-white",
                       )}
-                      onClick={handleShareByEmail}
+                      onClick={() =>
+                        void handleShareByEmail({
+                          subjectTitle: currentRequest.meeting_title,
+                          attendeesFull: currentRequest.attendees_full,
+                          markdown: result,
+                        })
+                      }
                       title={hasEmailableParticipants ? "Open mail draft" : "Add emails to share"}
                       type="button"
                     >
@@ -1287,7 +1278,12 @@ export function MeetingsTab({
                     </button>
                     <button
                       className={FOOTER_BUTTON_CLASS_NAME}
-                      onClick={() => { setResult(""); setError(""); setPhase("processing"); processTranscript(); }}
+                      onClick={() => {
+                        setResult("");
+                        setError("");
+                        setPhase("processing");
+                        void processTranscript();
+                      }}
                       type="button"
                     >
                       <RotateCcw size={12} /> Retry

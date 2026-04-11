@@ -20,6 +20,8 @@ fn compile_swift_system_audio() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let obj_path = format!("{}/SystemAudioCapture.o", out_dir);
     let lib_path = format!("{}/libSystemAudioCapture.a", out_dir);
+    let module_cache_path = format!("{}/swift-module-cache", out_dir);
+    let _ = std::fs::create_dir_all(&module_cache_path);
 
     // Detect target architecture from Cargo's TARGET env var
     let target = std::env::var("TARGET").unwrap_or_else(|_| "aarch64-apple-darwin".to_string());
@@ -30,20 +32,35 @@ fn compile_swift_system_audio() {
     };
     let swift_target = format!("{}-apple-macosx12.0", arch);
 
+    let mut swift_args = vec![
+        "swift/SystemAudioCapture.swift".to_string(),
+        "-emit-object".to_string(),
+        "-parse-as-library".to_string(),
+        "-whole-module-optimization".to_string(),
+        "-module-name".to_string(),
+        "SystemAudioCapture".to_string(),
+        "-module-cache-path".to_string(),
+        module_cache_path.clone(),
+        "-target".to_string(),
+        swift_target.clone(),
+        "-o".to_string(),
+        obj_path.clone(),
+    ];
+
+    if let Ok(output) = std::process::Command::new("xcrun")
+        .args(["--show-sdk-path"])
+        .output()
+    {
+        let sdk = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !sdk.is_empty() {
+            swift_args.push("-sdk".to_string());
+            swift_args.push(sdk);
+        }
+    }
+
     // Compile Swift → object file
     let status = std::process::Command::new("swiftc")
-        .args([
-            "swift/SystemAudioCapture.swift",
-            "-emit-object",
-            "-parse-as-library",
-            "-whole-module-optimization",
-            "-module-name",
-            "SystemAudioCapture",
-            "-target",
-            &swift_target,
-            "-o",
-            &obj_path,
-        ])
+        .args(&swift_args)
         .status()
         .expect("Failed to run swiftc — is Xcode installed?");
 
