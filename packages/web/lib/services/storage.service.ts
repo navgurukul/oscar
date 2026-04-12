@@ -29,8 +29,9 @@ export const storageService = {
         sessionStorage.removeItem(STORAGE_KEYS.TITLE);
       }
     } catch (error) {
+      // sessionStorage can fail when storage is full or in private browsing.
+      // Log but do not throw — the note will still be in memory for this session.
       console.error("Failed to save note to storage:", error);
-      throw new Error("Failed to save note data");
     }
   },
 

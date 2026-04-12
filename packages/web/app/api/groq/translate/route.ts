@@ -14,7 +14,7 @@ import {
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
 
-const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
+const REQUEST_TIMEOUT_MS = 15000;
 
 type TranslateRequestBody = {
   text?: unknown;
@@ -64,12 +64,14 @@ export async function POST(req: NextRequest) {
     return inputResult.response;
   }
 
+  const rawTargetLanguage = bodyResult.data.targetLanguage;
   const targetLanguage =
-    bodyResult.data.targetLanguage === undefined
-      ? "en"
-      : bodyResult.data.targetLanguage;
+    rawTargetLanguage === undefined ? "en" : rawTargetLanguage;
 
-  if (targetLanguage !== "en" && targetLanguage !== "hi") {
+  if (
+    typeof targetLanguage !== "string" ||
+    (targetLanguage !== "en" && targetLanguage !== "hi")
+  ) {
     return NextResponse.json(
       { error: "targetLanguage must be 'en' or 'hi'" },
       { status: 400 }

@@ -14,7 +14,7 @@ import {
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
 
-const REQUEST_TIMEOUT_MS = 30000; // 30 seconds
+const REQUEST_TIMEOUT_MS = 12000; // title responses are tiny; fail fast
 
 export async function POST(req: NextRequest) {
   // Check authentication

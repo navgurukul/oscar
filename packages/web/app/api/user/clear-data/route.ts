@@ -8,6 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { deleteAllUserData } from "@/lib/server/delete-user-data";
 
 export async function DELETE() {
   try {
@@ -21,19 +22,9 @@ export async function DELETE() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [notesResult, vocabularyResult] = await Promise.all([
-      supabase.from("notes").delete().eq("user_id", user.id),
-      supabase.from("user_vocabulary").delete().eq("user_id", user.id),
-    ]);
-
-    if (notesResult.error) {
-      console.error("Error deleting notes:", notesResult.error);
-      return NextResponse.json({ error: "Failed to clear notes" }, { status: 500 });
-    }
-
-    if (vocabularyResult.error) {
-      console.error("Error deleting vocabulary:", vocabularyResult.error);
-      return NextResponse.json({ error: "Failed to clear vocabulary" }, { status: 500 });
+    const { error } = await deleteAllUserData(supabase, user.id);
+    if (error) {
+      return NextResponse.json({ error }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
