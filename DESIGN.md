@@ -1,5 +1,5 @@
 # Oscar Design System
-> Inspired by Wispr Flow's editorial approach, with Oscar's cyan identity
+> Inspired by Wispr Flow editorial approach, with Oscar cyan identity
 > Version 1.0 — March 2026
 
 ---
@@ -14,8 +14,8 @@
 **Design Philosophy:**
 - Warm, human, approachable — not clinical
 - Editorial elegance meets functional SaaS
-- Oscar's cyan = energy, voice, motion
-- Inspired by Wispr Flow's "Voice in Motion" ethos
+- Oscar cyan = energy, voice, motion
+- Inspired by Wispr Flow "Voice in Motion" ethos
 
 ---
 
@@ -89,7 +89,7 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 ### Typography Principles
 - **Figtree** for headlines — editorial warmth (load from Google Fonts)
 - **Inter** for body/UI — clean, functional
-- Comfortable line-heights (1.5-1.6 for body)
+- Comfortable line-heights (1.5-1.6 body)
 - Generous letter-spacing on headlines
 
 ---
@@ -120,7 +120,7 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 - Padding: 24px
 - Shadow: `0 1px 3px rgba(0,0,0,0.1)`
 
-**Hover:** Subtle lift with shadow increase
+**Hover:** Subtle lift, shadow increase
 
 ### Input Fields
 
@@ -133,12 +133,12 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 
 ### Recording Button (Hero Component)
 
-- Size: 80px x 80px (mobile), 96px x 96px (desktop)
+- Size: 80×80px (mobile), 96×96px (desktop)
 - Shape: Perfect circle
 - Background: `#06B6D4` (cyan-500)
 - Icon: Microphone (white, 32px)
 - Animation: Pulsing ring when recording
-- Shadow: Large soft shadow `0 20px 40px rgba(6,182,212,0.3)`
+- Shadow: `0 20px 40px rgba(6,182,212,0.3)`
 
 ### Navigation
 
@@ -306,7 +306,7 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 ## 9. Dark Mode Implementation
 
 ### Strategy
-- Use CSS custom properties
+- CSS custom properties
 - Toggle via `dark` class on `<html>`
 - System preference detection
 
@@ -352,7 +352,7 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 ### Requirements
 - WCAG 2.1 AA compliance
 - Focus visible on all interactive elements
-- Minimum contrast ratio 4.5:1
+- Min contrast ratio 4.5:1
 - Keyboard navigation support
 - Screen reader labels on icons
 
@@ -394,17 +394,17 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 
 ## 13. AI Workflow
 
-Use this design system together with the AI workflow below:
+Use design system with AI workflow:
 
-1. Build new UI or redesigns with `$frontend-skill` so the visual direction stays intentional and avoids generic SaaS patterns.
-2. Review the result with [`skills/oscar-design-review/SKILL.md`](/Users/souvikdeb/Desktop/oscar/skills/oscar-design-review/SKILL.md) before merging major UI work.
+1. Build new UI or redesigns with `$frontend-skill` — keeps visual direction intentional, avoids generic SaaS patterns.
+2. Review with [`skills/oscar-design-review/SKILL.md`](/Users/souvikdeb/Desktop/oscar/skills/oscar-design-review/SKILL.md) before merging major UI work.
 
-The review should check:
+Review checks:
 
-- brand alignment with OSCAR's cyan-and-cream editorial system
+- brand alignment with OSCAR cyan-and-cream editorial system
 - consistency across web and desktop patterns
-- hierarchy, spacing, motion, and responsiveness
-- empty, loading, error, and success states
+- hierarchy, spacing, motion, responsiveness
+- empty, loading, error, success states
 - maintainability and shared-component reuse
 
 ---
@@ -419,7 +419,7 @@ The review should check:
   - Pill-shaped everything
   
 - **Oscar's Identity**
-  - Cyan (#06B6D4) as hero/brand color
+  - Cyan (`#06B6D4`) as hero/brand color
   - Voice-first, not just transcription
 
 ---

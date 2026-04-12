@@ -1,12 +1,12 @@
 # CLAUDE.md
 
-Comprehensive reference for AI assistants working in the Oscar codebase.
+Reference for AI assistants in Oscar codebase.
 
 ---
 
 ## Project Overview
 
-Oscar is an AI-powered voice note-taking application. Users record audio, which is transcribed (via Whisper on desktop or a browser-based STT engine on web), then formatted and titled by Groq-backed AI agents.
+Oscar = AI voice note app. Users record audio → transcribed (Whisper on desktop, browser STT on web) → formatted + titled by Groq AI agents.
 
 **Monorepo layout (pnpm workspaces):**
 
@@ -65,7 +65,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_WEB_APP_URL=
 ```
 
-See `packages/web/.env.example` for the full list.
+See `packages/web/.env.example` for full list.
 
 ---
 
@@ -105,7 +105,7 @@ app/
 
 **Services** (`lib/services/`):
 - `ai.service.ts` — Groq API calls (formatting, title, streaming)
-- `stt.service.ts` — Browser speech-to-text pipeline
+- `stt.service.ts` — Browser STT pipeline
 - `notes.service.ts` — Note CRUD (Supabase)
 - `subscription.service.ts` — Subscription state & checks
 - `razorpay.service.ts` — Payment initiation
@@ -144,12 +144,12 @@ ui/             # shadcn primitives + custom: sparkles, dotted-glow-background, 
 
 ### `packages/desktop` — Tauri App
 
-Rust backend + Vite/React frontend sharing UI components with the web package.
+Rust backend + Vite/React frontend, shares UI components with web package.
 
 - STT: **whisper-rs** (local model, GPU-accelerated via CUDA on Windows, Vulkan on Linux)
 - Audio pipeline: Symphonia (codec) → Rubato (resampling) → Opus (encoding)
-- System integration: WASAPI (Windows), global shortcuts, deep links, auto-updater
-- Tauri plugins used: `global-shortcut`, `deep-link`, `updater`, `store`, `process`, `opener`
+- System: WASAPI (Windows), global shortcuts, deep links, auto-updater
+- Tauri plugins: `global-shortcut`, `deep-link`, `updater`, `store`, `process`, `opener`
 
 **Build scripts:**
 - `pnpm dev` — Tauri + Vite dev (hot reload)
@@ -162,9 +162,9 @@ Rust backend + Vite/React frontend sharing UI components with the web package.
 
 TypeScript-only. Exports:
 - `types` — `Note`, `LocalTranscript`, `FeedbackReason`, `FormattingResult`, `TitleGenerationResult`
-- `constants` — Shared configuration values
+- `constants` — Shared config values
 
-Import from other packages: `import { Note } from '@oscar/shared/types'`
+Import: `import { Note } from '@oscar/shared/types'`
 
 ---
 
@@ -172,23 +172,23 @@ Import from other packages: `import { Note } from '@oscar/shared/types'`
 
 ### TypeScript
 
-- Strict mode enabled in all packages
-- Path alias `@/*` → `./src/*` (desktop) and `./*` (web)
+- Strict mode in all packages
+- Path alias `@/*` → `./src/*` (desktop), `./*` (web)
 - Prefer interfaces over type aliases for object shapes
-- Export types from `@oscar/shared` for anything shared across web and desktop
+- Export shared types from `@oscar/shared`
 
 ### Styling
 
-- **Tailwind first** — use utility classes; avoid bespoke CSS unless animation-specific
+- **Tailwind first** — utility classes; avoid bespoke CSS unless animation-specific
 - **CVA** (`class-variance-authority`) for component variants
 - **cn()** helper (`clsx` + `tailwind-merge`) for conditional class merging
-- Design tokens live in `tailwind.config.js` — do not hardcode hex values inline
-- Dark mode is class-based (`.dark` on `<html>`)
+- Design tokens in `tailwind.config.js` — no hardcoded hex inline
+- Dark mode class-based (`.dark` on `<html>`)
 
 ### Component Authoring
 
-- shadcn/ui components live in `components/ui/` — extend, don't modify originals
-- Domain components (notes, recording, results, settings) live in their named folder
+- shadcn/ui in `components/ui/` — extend, don't modify originals
+- Domain components in named folder
 - One component per file; filename = component name (PascalCase)
 - Prefer composition over props-explosion: use `children` or named slots
 
@@ -196,28 +196,28 @@ Import from other packages: `import { Note } from '@oscar/shared/types'`
 
 - All Groq routes use streaming (`ReadableStream`) where possible
 - Rate-limiting middleware wraps AI endpoints — check `lib/rate-limit.ts` before adding new AI routes
-- Server actions are not used; all mutations go through Supabase client SDK or API routes
+- No server actions; mutations go through Supabase client SDK or API routes
 
 ### Git & Commits
 
 - Semantic prefixes: `feat:`, `fix:`, `style:`, `refactor:`, `chore:`, `docs:`
 - Feature branches → PR → merge to main
-- Tag-based releases: `vMAJOR.MINOR.PATCH` triggers the GitHub Actions release pipeline
+- Tag-based releases: `vMAJOR.MINOR.PATCH` triggers GitHub Actions release pipeline
 - Current working branch for AI: `claude/add-claude-documentation-1CYnF`
 
 ### No Testing Framework
 
-There is currently no automated test suite. QA is manual + ESLint + TypeScript type-checking:
+No automated test suite. QA = manual + ESLint + TypeScript type-checking:
 - `pnpm lint` (web)
 - `pnpm typecheck` (shared)
 
-Do not add Jest/Vitest unless the task explicitly calls for it.
+Don't add Jest/Vitest unless task explicitly calls for it.
 
 ---
 
 ## AI Agent Architecture
 
-See [Agents.md](./Agents.md) for the full pipeline specification. Summary:
+See [Agents.md](./Agents.md) for full pipeline spec. Summary:
 
 ```
 Audio → STT (Whisper/browser) → Text Formatting Agent → Title Agent → Stored Note
@@ -242,17 +242,17 @@ Audio → STT (Whisper/browser) → Text Formatting Agent → Title Agent → St
 
 ## UI Build Workflow
 
-For any meaningful UI, UX, styling, layout, navigation, motion, or shared component work:
+For UI, UX, styling, layout, navigation, motion, or shared component work:
 
 1. Read [DESIGN.md](./DESIGN.md) first.
 2. Read [Agents.md](./Agents.md) for product and AI-system context.
-3. Build with the same principles used by Codex's `frontend-skill`:
+3. Build with these principles:
    - favor strong hierarchy over lots of components
    - avoid generic SaaS card grids unless cards are the interaction
-   - keep one dominant idea per section or screen
+   - one dominant idea per section or screen
    - preserve OSCAR's cyan-and-cream editorial identity (`#06B6D4` cyan, `#FCFBF2` cream, `#BDADFF` lavender)
-   - make mobile layout and first-screen clarity intentional
-   - use motion sparingly and purposefully (150-300ms transitions)
+   - mobile layout and first-screen clarity intentional
+   - motion sparse and purposeful (150-300ms transitions)
 
 **Typography:**
 - Headlines: Figtree 500-600
@@ -265,25 +265,25 @@ For any meaningful UI, UX, styling, layout, navigation, motion, or shared compon
 
 ## UI Review Workflow
 
-After implementing UI work, review it using:
+After UI work, review with:
 
 - [skills/oscar-design-review/SKILL.md](./skills/oscar-design-review/SKILL.md)
 - [skills/oscar-design-review/references/review-checklist.md](./skills/oscar-design-review/references/review-checklist.md)
 
-That review should check:
+Review checks:
 
-- visual consistency with the design system
-- UX quality across loading, empty, error, and success states
-- consistency across web and desktop patterns when both surfaces are affected
-- shared-component reuse before introducing one-off patterns
-- maintainability, duplication, and architectural drift
+- visual consistency with design system
+- UX across loading, empty, error, success states
+- consistency across web and desktop when both affected
+- shared-component reuse before one-off patterns
+- maintainability, duplication, architectural drift
 
 ## Review Output Format
 
 When reviewing changes:
 
-- present findings first, ordered by severity
-- include exact file references
-- explain user impact and consistency impact
-- prefer focused fixes over broad redesign advice
-- explicitly say when no major issues are found, and mention residual risks
+- findings first, ordered by severity
+- exact file references
+- user impact + consistency impact
+- focused fixes over broad redesign advice
+- explicitly say when no major issues found; note residual risks

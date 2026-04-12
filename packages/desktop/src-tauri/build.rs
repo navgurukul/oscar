@@ -1,4 +1,22 @@
 fn main() {
+    // Re-run this script when GPU SDK env vars change so feature recommendations stay current.
+    println!("cargo:rerun-if-env-changed=CUDA_PATH");
+    println!("cargo:rerun-if-env-changed=VULKAN_SDK");
+
+    // Warn Windows users who have CUDA installed but aren't building with --features cuda.
+    #[cfg(target_os = "windows")]
+    if std::env::var("CUDA_PATH").is_ok() && !cfg!(feature = "cuda") {
+        println!("cargo:warning=CUDA_PATH is set but the `cuda` feature is not enabled.");
+        println!("cargo:warning=Rebuild with `--features cuda` for GPU-accelerated transcription.");
+    }
+
+    // Warn Linux users who have Vulkan SDK installed but aren't building with --features vulkan.
+    #[cfg(target_os = "linux")]
+    if std::env::var("VULKAN_SDK").is_ok() && !cfg!(feature = "vulkan") {
+        println!("cargo:warning=VULKAN_SDK is set but the `vulkan` feature is not enabled.");
+        println!("cargo:warning=Rebuild with `--features vulkan` for GPU-accelerated transcription.");
+    }
+
     #[cfg(target_os = "macos")]
     {
         link_clang_runtime();

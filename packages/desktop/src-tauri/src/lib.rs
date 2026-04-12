@@ -3,9 +3,13 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
-    Arc, Mutex, OnceLock,
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
 };
+#[cfg(target_os = "windows")]
+use std::sync::atomic::AtomicUsize;
+#[cfg(target_os = "linux")]
+use std::sync::{atomic::AtomicU64, OnceLock};
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -1380,7 +1384,7 @@ fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         if let Some(tray) = LINUX_TRAY.get() {
-            let _ = tray.set_tooltip(Some("● Recording — Oscar"));
+            tray.set_tooltip(Some("● Recording — Oscar")).ok();
         }
         log::debug!("[pill] show_recording_pill → tray tooltip updated (Linux)");
         let _ = app;
@@ -1420,7 +1424,7 @@ fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         if let Some(tray) = LINUX_TRAY.get() {
-            let _ = tray.set_tooltip(Some("Oscar"));
+            tray.set_tooltip(Some("Oscar")).ok();
         }
         log::debug!("[pill] hide_recording_pill → tray tooltip reset (Linux)");
         let _ = app;
@@ -1442,7 +1446,7 @@ fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         if let Some(tray) = LINUX_TRAY.get() {
-            let _ = tray.set_tooltip(Some("⟳ Processing — Oscar"));
+            tray.set_tooltip(Some("⟳ Processing — Oscar")).ok();
         }
         log::debug!("[pill] set_pill_processing → tray tooltip updated (Linux)");
         let _ = app;
@@ -1462,7 +1466,7 @@ fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         if let Some(tray) = LINUX_TRAY.get() {
-            let _ = tray.set_tooltip(Some("● Recording — Oscar"));
+            tray.set_tooltip(Some("● Recording — Oscar")).ok();
         }
         log::debug!("[pill] set_pill_listening → tray tooltip updated (Linux)");
         let _ = app;

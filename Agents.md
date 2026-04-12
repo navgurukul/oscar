@@ -1,10 +1,10 @@
 # OSCAR AI Agents
 
-This document provides an overview of the AI agents and services used in the OSCAR application.
+Overview of AI agents and services in OSCAR.
 
 ## Overview
 
-OSCAR uses AI agents powered by Groq to transform voice recordings into clean, formatted text. The system consists of two primary AI agents that work together to process and organize voice notes.
+OSCAR uses Groq-powered AI agents to transform voice recordings into clean formatted text. Two primary agents process and organize voice notes.
 
 ## Architecture
 
@@ -23,15 +23,15 @@ Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent �
 **Key Responsibilities**:
 
 - Remove filler words (um, uh, like, you know, etc.)
-- Fix grammar, spelling, punctuation, and capitalization
+- Fix grammar, spelling, punctuation, capitalization
 - Break content into readable paragraphs
 - Remove repeated sentences or ideas
 - Preserve original meaning and intent
 
 **Important Behaviors**:
 
-- ❌ NEVER answers questions in the text
-- ❌ NEVER adds content not in the original
+- ❌ NEVER answers questions in text
+- ❌ NEVER adds content not in original
 - ❌ NEVER completes incomplete thoughts
 - ✓ Only formats what was actually spoken
 
@@ -57,17 +57,17 @@ Output: "How to create a React app."
 
 **Key Responsibilities**:
 
-- Create short titles (4-10 words preferred)
+- Short titles (4-10 words preferred)
 - Maintain original language (English/Hindi/Hinglish)
-- Use appropriate casing (Title Case for English)
-- Keep titles under ~60 characters
+- Appropriate casing (Title Case for English)
+- Titles under ~60 characters
 
 **Fallback Behavior**:
-If AI title generation fails, the system uses a heuristic approach:
+If AI title generation fails, system uses heuristic:
 
-- Extracts the first sentence
+- Extracts first sentence
 - Truncates to 60 characters if needed
-- Falls back to "Untitled Note" if no content available
+- Falls back to "Untitled Note" if no content
 
 **Configuration**:
 
@@ -82,19 +82,19 @@ If AI title generation fails, the system uses a heuristic approach:
 
 **Location**: [`/lib/services/ai.service.ts`](file:///Users/souvik/Desktop/oscar/lib/services/ai.service.ts)
 
-The AI service provides a clean interface for interacting with the AI agents:
+Clean interface for interacting with AI agents.
 
 **Methods**:
 
 - `formatText(rawText: string)` - Formats raw transcript text
-- `generateTitle(source: string)` - Generates a title from text
-- `generateFallbackTitle(text: string)` - Creates a heuristic title
+- `generateTitle(source: string)` - Generates title from text
+- `generateFallbackTitle(text: string)` - Creates heuristic title
 - `sanitizeTitle(title: string)` - Cleans title output
 
 **Error Handling**:
 
 - Graceful fallbacks for API failures
-- Local heuristic formatting when AI is unavailable
+- Local heuristic formatting when AI unavailable
 - Comprehensive error messages and logging
 
 ## Prompt Engineering
@@ -103,10 +103,10 @@ The AI service provides a clean interface for interacting with the AI agents:
 
 **Location**: [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) - `SYSTEM_PROMPTS.FORMAT`
 
-The formatting prompt is carefully designed to:
+Formatting prompt designed to:
 
-1. Establish clear boundaries (formatter ONLY, not an assistant)
-2. Prevent the AI from answering questions in the text
+1. Establish clear boundaries (formatter ONLY, not assistant)
+2. Prevent AI from answering questions in text
 3. Preserve original meaning without addition
 4. Handle incomplete inputs appropriately
 5. Correct obvious speech recognition errors for names/titles
@@ -115,7 +115,7 @@ The formatting prompt is carefully designed to:
 
 **Location**: [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) - `SYSTEM_PROMPTS.TITLE`
 
-The title prompt is concise and focused on:
+Focused on:
 
 1. Short, descriptive titles
 2. Language preservation
@@ -128,7 +128,7 @@ The title prompt is concise and focused on:
 
 **Location**: [`/lib/hooks/useAIFormatting.ts`](file:///Users/souvik/Desktop/oscar/lib/hooks/useAIFormatting.ts)
 
-Provides React components with AI formatting capabilities:
+Provides React components AI formatting capabilities:
 
 - `isFormatting` - Loading state
 - `formattingError` - Error state
@@ -138,7 +138,7 @@ Provides React components with AI formatting capabilities:
 
 ### API Configuration
 
-All AI agent configurations are centralized in [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts):
+All AI agent configs centralized in [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts):
 
 ```typescript
 API_CONFIG = {
@@ -156,7 +156,7 @@ API_CONFIG = {
 
 ### Environment Variables
 
-Required environment variable:
+Required:
 
 ```
 GROQ_API_KEY=your_api_key_here
@@ -164,15 +164,15 @@ GROQ_API_KEY=your_api_key_here
 
 ## Error Handling
 
-The AI agents implement comprehensive error handling:
+AI agents implement comprehensive error handling:
 
-1. **API Key Validation**: Checks for missing API key before requests
+1. **API Key Validation**: Checks for missing key before requests
 2. **Input Validation**: Validates request bodies and content
 3. **Network Errors**: Handles connection and timeout issues
 4. **Response Validation**: Verifies API response structure
 5. **Graceful Degradation**: Falls back to local heuristics when AI fails
 
-Error messages are defined in [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts) under `ERROR_MESSAGES`.
+Error messages defined in [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts) under `ERROR_MESSAGES`.
 
 ## Processing Pipeline
 
@@ -188,7 +188,7 @@ Error messages are defined in [`/lib/constants.ts`](file:///Users/souvik/Desktop
 
 ### Overview
 
-The feedback system collects user signals on AI formatting quality to enable continuous improvement of prompts and future model training.
+Feedback system collects user signals on AI formatting quality for continuous prompt improvement and future model training.
 
 ### User Experience
 
@@ -236,11 +236,11 @@ feedback_timestamp: string | null;        // When feedback was given
 **Iterative Process**:
 
 1. **Monitor**: Check `getFeedbackStats()` weekly for trends
-2. **Identify Patterns**: If a reason appears >20% of the time, investigate
-3. **Review Examples**: Use `getRecentNegativeFeedback()` to see actual problem cases
+2. **Identify Patterns**: If reason appears >20%, investigate
+3. **Review Examples**: Use `getRecentNegativeFeedback()` to see problem cases
 4. **Update Prompt**: Make targeted changes to `SYSTEM_PROMPTS.FORMAT`
 5. **Test**: Try updated prompt on previous negative cases
-6. **Deploy & Monitor**: Push changes and track if the issue decreases
+6. **Deploy & Monitor**: Push changes, track if issue decreases
 
 **Example Workflow**:
 
@@ -268,7 +268,7 @@ cases.forEach((note) => {
 
 - **Helpful Rate**: Target >80% positive feedback
 - **Top Issues**: Most common negative feedback reasons
-- **Trend Over Time**: Is the helpful rate improving after prompt changes?
+- **Trend Over Time**: Helpful rate improving after prompt changes?
 - **User Engagement**: What percentage of users provide feedback?
 
 ### Components
@@ -277,12 +277,12 @@ cases.forEach((note) => {
 
 - Displays Yes/No buttons
 - Shows reason tag selection on "No"
-- Handles submission and display of thank you message
+- Handles submission and thank you message display
 - Integrated into results and note detail pages
 
 ### Future Enhancements
 
-- **A/B Testing**: Test prompt variations and track which performs better
+- **A/B Testing**: Test prompt variations, track which performs better
 - **Automated Alerts**: Notify when helpful rate drops below threshold
 - **Training Data Export**: Format feedback for model fine-tuning
 - **Prompt Versioning**: Track which prompt version generated each note
@@ -305,9 +305,9 @@ cases.forEach((note) => {
 For any meaningful UI, UX, styling, layout, navigation, or motion work in OSCAR:
 
 1. Use `$frontend-skill` while designing or building the interface.
-2. Run [`skills/oscar-design-review/SKILL.md`](/Users/souvikdeb/Desktop/oscar/skills/oscar-design-review/SKILL.md) after the implementation, or before merging a PR, to review hierarchy, design-system alignment, repo consistency, and maintainability.
+2. Run [`skills/oscar-design-review/SKILL.md`](/Users/souvikdeb/Desktop/oscar/skills/oscar-design-review/SKILL.md) after implementation, or before merging PR, to review hierarchy, design-system alignment, repo consistency, and maintainability.
 
-Use the review workflow for:
+Use review workflow for:
 
 - landing page or pricing updates
 - recording, notes, results, settings, or billing UI changes
@@ -316,7 +316,7 @@ Use the review workflow for:
 
 ### Prompt Engineering Guidelines:
 
-1. Be explicit about what the agent should NOT do
+1. Explicit about what agent should NOT do
 2. Provide concrete examples of correct and incorrect outputs
 3. Use clear, imperative language
 4. Test prompts with edge cases
@@ -326,7 +326,7 @@ Use the review workflow for:
 
 ## Future Enhancements
 
-Potential improvements to the AI agent system:
+Potential improvements:
 
 - [ ] Multi-language support optimization
 - [ ] Custom formatting styles/preferences
@@ -354,9 +354,9 @@ Potential improvements to the AI agent system:
 
 ## Support
 
-For issues or questions about the AI agents:
+For issues with AI agents:
 
-1. Check the error messages in the browser console
-2. Review the API logs in the terminal
-3. Verify the GROQ_API_KEY is set correctly
-4. Test with the fallback mechanisms disabled to isolate issues
+1. Check error messages in browser console
+2. Review API logs in terminal
+3. Verify `GROQ_API_KEY` set correctly
+4. Test with fallback mechanisms disabled to isolate issues

@@ -17,7 +17,6 @@ import {
   CalendarDays,
   Play,
   Plus,
-  PenLine,
   X,
   Trash2,
   History,
@@ -274,15 +273,15 @@ function MeetingTypePicker({
   onChange: (value: MeetingTypeHint) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1">
       {MEETING_TYPE_OPTIONS.map((option) => (
         <button
           key={option.value}
           className={cn(
-            "rounded-full border px-3 py-1.5 text-[0.75rem] font-medium transition-colors",
+            "rounded-full px-2 py-0.5 text-[0.6875rem] font-medium transition-colors",
             value === option.value
-              ? "border-cyan-500 bg-cyan-50 text-cyan-700"
-              : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700",
+              ? "bg-cyan-50 text-cyan-600"
+              : "text-slate-400 hover:bg-slate-100 hover:text-slate-500",
           )}
           onClick={() => onChange(option.value)}
           type="button"
@@ -439,11 +438,19 @@ export function MeetingsTab({
   const [viewingSaved, setViewingSaved] = useState<SavedMeetingRecord | null>(null);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
+  const [showAttendeeEditor, setShowAttendeeEditor] = useState(false);
   const [calendarError, setCalendarError] =
     useState<"needs_reconnect" | "fetch_error" | null>(null);
   const [calendarErrorMsg, setCalendarErrorMsg] = useState("");
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const lastCalendarFetchRef = useRef<string>("");
+  const liveTranscriptScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (phase === "recording" && liveTranscriptScrollRef.current) {
+      liveTranscriptScrollRef.current.scrollTop = liveTranscriptScrollRef.current.scrollHeight;
+    }
+  }, [transcript, phase]);
 
   const addAttendee = (value: string) => {
     const parsed = parseAttendeeInput(value);
@@ -719,6 +726,7 @@ export function MeetingsTab({
     setMeetingTitle("");
     setAttendees([]);
     setParticipantInput("");
+    setShowAttendeeEditor(false);
     setManualNotes("");
     setSelectedCalendarEvent(null);
     setResult("");
@@ -775,7 +783,7 @@ export function MeetingsTab({
                 className="m-0 text-[1.26rem] font-medium leading-[1.08] text-slate-50 max-md:text-[1.48rem]"
                 style={FIGTREE_FONT_STYLE}
               >
-                Enhanced meeting notes with cited evidence.
+                Enhanced meeting notes, automatically.
               </h2>
               <p className="mt-3 max-w-[348px] text-[0.8rem] leading-[1.55] text-sky-50/90 max-md:max-w-none">
                 Record once, keep your rough notes, and let Minutes turn the meeting into a clean structured summary.
@@ -1064,82 +1072,148 @@ export function MeetingsTab({
   }
 
   if (phase === "recording") {
+    const attendeeSummary = attendees.length > 0
+      ? attendees.length <= 2
+        ? attendees.map(attendeeLabel).join(", ")
+        : `${attendeeLabel(attendees[0])}, ${attendeeLabel(attendees[1])} +${attendees.length - 2}`
+      : null;
+
     return (
-      <div className={cn(MEETINGS_TAB_CLASS_NAME, "relative pb-[140px]")}>
+      <div className={cn(MEETINGS_TAB_CLASS_NAME, "relative pb-[160px]")}>
         <div className={MEETINGS_CONTAINER_CLASS_NAME}>
-          <button
-            className="mb-4 inline-flex items-center gap-1 rounded-md bg-transparent px-2 py-1 pl-1 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-            onClick={handleBack}
-            type="button"
-          >
-            <ChevronLeft size={16} /> Back
-          </button>
+          {/* ── Compact header: back + title + meta ─────────────────────── */}
+          <div className="mb-4 flex items-start gap-2">
+            <button
+              className="mt-0.5 inline-flex shrink-0 items-center justify-center rounded-md bg-transparent p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              onClick={handleBack}
+              type="button"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <div className="min-w-0 flex-1">
+              <input
+                className="w-full border-0 bg-transparent px-0 py-0 text-[1.05rem] font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+                type="text"
+                placeholder="Meeting title"
+                value={meetingTitle}
+                onChange={(event) => setMeetingTitle(event.target.value)}
+                style={FIGTREE_FONT_STYLE}
+              />
+              {/* Collapsed meta line: attendee count + meeting type */}
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.75rem] text-slate-400">
+                {attendeeSummary && (
+                  <button
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-600"
+                    onClick={() => setShowAttendeeEditor((v) => !v)}
+                    type="button"
+                  >
+                    <Users size={10} />
+                    <span>{attendeeSummary}</span>
+                  </button>
+                )}
+                {!attendeeSummary && (
+                  <button
+                    className="inline-flex items-center gap-1 text-slate-400 transition-colors hover:text-slate-500"
+                    onClick={() => setShowAttendeeEditor((v) => !v)}
+                    type="button"
+                  >
+                    <Users size={10} />
+                    <span>Add participants</span>
+                  </button>
+                )}
+                <MeetingTypePicker value={meetingTypeHint} onChange={setMeetingTypeHint} />
+              </div>
+            </div>
+          </div>
+
+          {/* ── Expandable attendee editor ──────────────────────────────── */}
+          {showAttendeeEditor && (
+            <motion.div
+              className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              transition={{ duration: 0.15 }}
+            >
+              <div className={cn(PARTICIPANT_PILLS_CLASS_NAME, "gap-1")}>
+                {attendees.map((attendee, index) => (
+                  <span key={`${attendeeLabel(attendee)}-${index}`} className={PARTICIPANT_PILL_CLASS_NAME}>
+                    <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{attendeeLabel(attendee)}</span>
+                    <button className={PARTICIPANT_PILL_REMOVE_CLASS_NAME} onClick={() => removeAttendee(index)} type="button">
+                      <X size={10} />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  className="min-w-[100px] flex-1 border-0 bg-transparent px-0.5 py-0.5 text-[0.8125rem] text-slate-700 outline-none placeholder:text-slate-400"
+                  type="text"
+                  placeholder={attendees.length === 0 ? "Name or email, press Enter" : "Add more..."}
+                  value={participantInput}
+                  onChange={(event) => setParticipantInput(event.target.value)}
+                  onKeyDown={handleParticipantKeyDown}
+                  onBlur={handleParticipantBlur}
+                  autoFocus
+                  style={FIGTREE_FONT_STYLE}
+                />
+              </div>
+            </motion.div>
+          )}
 
           {systemAudioNotice}
 
-          <div className="mb-1 flex flex-col gap-2">
-            <input
-              className="w-full border-0 border-b border-b-transparent bg-transparent px-0.5 py-1 text-[1.1rem] font-semibold text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-b-slate-200"
-              type="text"
-              placeholder="Meeting title"
-              value={meetingTitle}
-              onChange={(event) => setMeetingTitle(event.target.value)}
-              style={FIGTREE_FONT_STYLE}
-            />
-            <div className={PARTICIPANT_PILLS_CLASS_NAME}>
-              {attendees.map((attendee, index) => (
-                <span key={`${attendeeLabel(attendee)}-${index}`} className={PARTICIPANT_PILL_CLASS_NAME}>
-                  <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{attendeeLabel(attendee)}</span>
-                  <button className={PARTICIPANT_PILL_REMOVE_CLASS_NAME} onClick={() => removeAttendee(index)} type="button">
-                    <X size={10} />
-                  </button>
-                </span>
-              ))}
-              <input
-                className="min-w-[120px] flex-1 border-0 bg-transparent px-0.5 py-1 text-[0.8125rem] text-slate-800 outline-none placeholder:text-slate-400"
-                type="text"
-                placeholder={attendees.length === 0 ? "Add participants (name or email, press Enter)" : "Add more..."}
-                value={participantInput}
-                onChange={(event) => setParticipantInput(event.target.value)}
-                onKeyDown={handleParticipantKeyDown}
-                onBlur={handleParticipantBlur}
-                style={FIGTREE_FONT_STYLE}
-              />
-            </div>
-          </div>
+          {/* ── Notes area (primary focus) ──────────────────────────────── */}
+          <textarea
+            className="min-h-[160px] w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-[1.65] text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-300"
+            placeholder="Jot down key points, action items, or anything worth remembering..."
+            value={manualNotes}
+            onChange={(event) => setManualNotes(event.target.value)}
+            rows={6}
+          />
 
-          <div className="flex items-center gap-3 pb-2 pt-1">
-            <div className="flex flex-col gap-2">
-              <span className="text-[0.75rem] font-semibold uppercase tracking-[0.04em] text-slate-500">
-                Meeting Type
-              </span>
-              <MeetingTypePicker value={meetingTypeHint} onChange={setMeetingTypeHint} />
+          {/* ── Live transcript (visible only while recording) ──────────── */}
+          {isRecording && (
+            <div className="mt-3">
+              <div className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-medium text-slate-400">
+                <Mic size={11} />
+                <span>Live transcript</span>
+                {minutesTranscriptionStatus === "transcribing" && (
+                  <span className="inline-flex items-center gap-1 text-cyan-500">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-500 animate-pulse" />
+                  </span>
+                )}
+              </div>
+              <div
+                ref={liveTranscriptScrollRef}
+                className="max-h-[180px] min-h-[60px] overflow-y-auto rounded-lg bg-slate-50 px-3.5 py-2.5 text-[0.8125rem] leading-[1.65] text-gray-600"
+              >
+                {transcript.trim() ? (
+                  <span className="whitespace-pre-wrap">{transcript}</span>
+                ) : (
+                  <span className="italic text-slate-300">Listening…</span>
+                )}
+              </div>
             </div>
-          </div>
-
-          <div className="mt-1 flex flex-col gap-2">
-            <div className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-slate-600">
-              <PenLine size={13} />
-              <span>Your notes</span>
-              <span className="ml-0.5 text-xs font-normal text-slate-400">type freely while recording</span>
-            </div>
-            <textarea
-              className="min-h-[140px] w-full resize-y border-0 bg-transparent px-0.5 py-3 text-sm leading-[1.6] text-slate-800 outline-none placeholder:text-[#b0b8c4] focus:bg-transparent"
-              placeholder="Jot down key points, action items, or anything worth remembering..."
-              value={manualNotes}
-              onChange={(event) => setManualNotes(event.target.value)}
-              rows={6}
-            />
-          </div>
+          )}
         </div>
 
-        <div className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 flex-col items-center gap-2">
+        {/* ── Floating record control ────────────────────────────────── */}
+        <div className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-4 rounded-full border border-slate-200 bg-white/95 px-5 py-2.5 shadow-[0_8px_30px_rgba(15,23,42,0.1)] backdrop-blur-sm">
+          {isRecording && (
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-red-500 animate-pulse" />
+              <span
+                className="text-[1.1rem] font-semibold tracking-[0.02em] text-slate-700 [font-variant-numeric:tabular-nums]"
+                style={FIGTREE_FONT_STYLE}
+              >
+                {formatTime(recordingTime)}
+              </span>
+            </div>
+          )}
           <motion.button
             className={cn(
-              "flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white transition-all duration-200",
+              "flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white transition-all duration-200",
               isRecording
-                ? "bg-red-600 shadow-[0_4px_14px_rgba(220,38,38,0.3)] hover:bg-red-700"
-                : "bg-cyan-600 shadow-[0_4px_14px_rgba(6,182,212,0.3)] hover:bg-cyan-700 hover:shadow-[0_6px_18px_rgba(6,182,212,0.4)]",
+                ? "bg-red-600 shadow-[0_2px_10px_rgba(220,38,38,0.25)] hover:bg-red-700"
+                : "bg-cyan-600 shadow-[0_2px_10px_rgba(6,182,212,0.25)] hover:bg-cyan-700",
             )}
             onClick={isRecording ? handleStopRecording : onStartRecording}
             whileHover={{ scale: 1.04 }}
@@ -1147,23 +1221,11 @@ export function MeetingsTab({
             transition={{ duration: 0.15 }}
             type="button"
           >
-            {isRecording ? <Square size={28} fill="currentColor" /> : <Mic size={28} />}
+            {isRecording ? <Square size={22} fill="currentColor" /> : <Mic size={22} />}
           </motion.button>
-          <div className="flex items-center gap-2">
-            {isRecording ? (
-              <>
-                <span className="h-2 w-2 shrink-0 rounded-full bg-red-600 animate-pulse" />
-                <span
-                  className="text-[1.5rem] font-semibold tracking-[0.04em] text-slate-800 [font-variant-numeric:tabular-nums]"
-                  style={FIGTREE_FONT_STYLE}
-                >
-                  {formatTime(recordingTime)}
-                </span>
-              </>
-            ) : (
-              <span className="text-[0.8125rem] font-medium text-slate-400">Tap to start recording</span>
-            )}
-          </div>
+          {!isRecording && (
+            <span className="text-[0.8125rem] font-medium text-slate-400">Tap to record</span>
+          )}
         </div>
       </div>
     );

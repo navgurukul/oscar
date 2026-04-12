@@ -1,6 +1,6 @@
 [package]
 name = "oscar"
-version = "0.3.23"
+version = "0.3.27"
 description = "Voice to Text Desktop App"
 authors = ["you"]
 edition = "2021"
@@ -8,6 +8,14 @@ edition = "2021"
 [lib]
 name = "oscar_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# GPU acceleration — optional whisper-rs backends.
+# Windows: build with `--features cuda` when CUDA toolkit is installed (CUDA_PATH must be set).
+# Linux:   build with `--features vulkan` when Vulkan SDK is installed (VULKAN_SDK must be set).
+# CI omits these flags → CPU-only fallback, no extra toolchain deps.
+cuda   = ["whisper-rs/cuda"]
+vulkan = ["whisper-rs/vulkan"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -43,11 +51,11 @@ windows = { version = "0.58", features = [
     "Win32_Media_Audio",
     "Win32_System_Com",
 ] }
-# Whisper with CUDA GPU acceleration (requires CUDA toolkit; drop "cuda" for CPU-only)
-whisper-rs = { version = "0.15", features = ["cuda"] }
+# CPU-only on CI. For GPU: install CUDA toolkit then build with `--features cuda`.
+whisper-rs = "0.15"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# CPU-only whisper; add features = ["vulkan"] with the Vulkan SDK for GPU accel
+# CPU-only on CI. For GPU: install Vulkan SDK then build with `--features vulkan`.
 whisper-rs = "0.15"
 
 [target.'cfg(target_os = "macos")'.dependencies]

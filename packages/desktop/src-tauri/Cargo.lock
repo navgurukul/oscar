@@ -3153,7 +3153,7 @@ dependencies = [
 
 [[package]]
 name = "oscar"
-version = "0.3.23"
+version = "0.3.27"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -3178,6 +3178,8 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "whisper-rs",
+ "windows 0.58.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6174,6 +6176,7 @@ version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71ea5d2401f30f51d08126a2d133fee4c1955136519d7ac6cf6f5ac0a91e6bc8"
 dependencies = [
+ "libc",
  "whisper-rs-sys",
 ]
 

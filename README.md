@@ -1,12 +1,12 @@
 # Oscar - AI Note Taking App
 
-Monorepo for Oscar, an AI-powered voice note-taking application.
+Monorepo for Oscar, AI-powered voice note-taking app.
 
 ## Packages
 
-- **packages/web** - Next.js web application
-- **packages/desktop** - Tauri desktop application  
-- **packages/shared** - Shared types, constants, and utilities
+- **packages/web** - Next.js web app
+- **packages/desktop** - Tauri desktop app
+- **packages/shared** - Shared types, constants, utilities
 
 ## Development
 
@@ -38,13 +38,13 @@ oscar/
 ## Pricing & Free Tier
 
 ### Free Tier
-- Users can configure their own open-source AI models (via Ollama, llama.cpp, etc.)
-- Use local GPU for processing - completely free
-- Works offline once models are downloaded
+- Configure own open-source AI models (Ollama, llama.cpp, etc.)
+- Use local GPU — fully free
+- Works offline once models downloaded
 
 ### Paid Tier
 - Hosted AI processing on our servers
-- No local setup required
+- No local setup
 - Priority support
 
-This makes the app accessible to everyone while monetizing hosting for users who want convenience.
+App accessible to all; monetize hosting for convenience-seekers.
