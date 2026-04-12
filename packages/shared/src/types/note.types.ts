@@ -1,13 +1,26 @@
 // Note-related type definitions — canonical source for all packages
 
+import type {
+  DictationCategory,
+  DictationContextSource,
+} from "./dictation.types";
+
 export interface Note {
   formattedText: string;
   rawText: string;
   title?: string;
 }
 
+export interface DictationNoteMetadata {
+  dictation_category?: DictationCategory | null;
+  dictation_variant?: DictationCategory | null;
+  dictation_app_key?: string | null;
+  dictation_context_source?: DictationContextSource | null;
+  dictation_prompt_version?: string | null;
+}
+
 // Local transcript (desktop-only, but defined centrally for consistency)
-export interface LocalTranscript {
+export interface LocalTranscript extends DictationNoteMetadata {
   id: string;
   text: string;
   createdAt: string;
@@ -24,7 +37,7 @@ export type FeedbackReason =
   | (string & {});
 
 // Database note type (Supabase)
-export interface DBNote {
+export interface DBNote extends DictationNoteMetadata {
   id: string;
   user_id: string;
   title: string;
@@ -45,7 +58,7 @@ export interface DBNote {
 }
 
 // Insert type for creating a new note
-export interface DBNoteInsert {
+export interface DBNoteInsert extends DictationNoteMetadata {
   user_id: string;
   title: string;
   raw_text: string;
@@ -55,7 +68,7 @@ export interface DBNoteInsert {
 }
 
 // Update type for modifying a note
-export interface DBNoteUpdate {
+export interface DBNoteUpdate extends DictationNoteMetadata {
   title?: string;
   raw_text?: string;
   original_formatted_text?: string;

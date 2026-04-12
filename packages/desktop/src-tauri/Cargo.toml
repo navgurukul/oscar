@@ -1,6 +1,6 @@
 [package]
 name = "oscar"
-version = "0.3.27"
+version = "0.3.29"
 description = "Voice to Text Desktop App"
 authors = ["you"]
 edition = "2021"
@@ -44,7 +44,7 @@ opus = "0.3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Win32 paste-target fix (GetForegroundWindow / SetForegroundWindow)
-windows-sys = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+windows-sys = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Threading"] }
 # WASAPI loopback capture for system audio
 windows = { version = "0.58", features = [
     "Win32_Foundation",

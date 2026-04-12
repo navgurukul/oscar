@@ -21,6 +21,10 @@ import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
 import { MeetingsTab } from "./components/MeetingsTab";
+import {
+  isContextAwarePlatform,
+  routeDictationContext,
+} from "./lib/dictation-context";
 import type {
   CalendarReconnectResult,
   MinutesTranscriptionStatus,
@@ -29,7 +33,11 @@ import type {
   MeetingTranscriptSegment,
   SavedMeetingRecord,
 } from "./types/meeting.types";
-import type { LocalTranscript } from "./types/note.types";
+import type {
+  DictationContextSnapshot,
+  DictationRoutingResult,
+  LocalTranscript,
+} from "./types/note.types";
 import "./App.css";
 
 type TabType = "home" | "meetings" | "notes" | "vocabulary" | "billing" | "settings";
@@ -55,6 +63,17 @@ interface MeetingSegmentJob {
   useSystemAudio: boolean;
   startedAtMs: number;
   endedAtMs: number;
+}
+
+interface HotkeyContextEventPayload {
+  platform?: string;
+  appName?: string;
+  appId?: string | null;
+  processName?: string | null;
+  windowTitle?: string | null;
+  siteHost?: string | null;
+  siteTitle?: string | null;
+  targetAppName?: string | null;
 }
 
 type TonePreset = "none" | "professional" | "casual" | "friendly";
@@ -93,6 +112,48 @@ async function saveSetting<T>(key: string, value: T): Promise<void> {
 
 function isMacOS() {
   return navigator.platform.toLowerCase().includes("mac");
+}
+
+function getDesktopPlatform(): string {
+  const platform = navigator.platform.toLowerCase();
+  if (platform.includes("mac")) return "macos";
+  if (platform.includes("win")) return "windows";
+  if (platform.includes("linux")) return "linux";
+  return "unknown";
+}
+
+function buildDictationContextSnapshot(
+  payload?: HotkeyContextEventPayload | null,
+): DictationContextSnapshot | null {
+  if (!payload) return null;
+
+  const appName = payload.appName?.trim() || "";
+  if (!appName) return null;
+
+  return {
+    platform: payload.platform?.trim() || getDesktopPlatform(),
+    appName,
+    appId: payload.appId?.trim() || null,
+    processName: payload.processName?.trim() || null,
+    windowTitle: payload.windowTitle?.trim() || null,
+    siteHost: payload.siteHost?.trim() || null,
+    siteTitle: payload.siteTitle?.trim() || null,
+    capturedAt: new Date().toISOString(),
+  };
+}
+
+function buildDictationMetadata(
+  routing?: DictationRoutingResult | null,
+) {
+  if (!routing) return {};
+
+  return {
+    dictation_category: routing.category,
+    dictation_variant: routing.category,
+    dictation_app_key: routing.appKey,
+    dictation_context_source: routing.source,
+    dictation_prompt_version: routing.promptVersion,
+  };
 }
 
 async function getMicrophonePermissionState(): Promise<MicrophonePermissionState> {
@@ -1047,6 +1108,10 @@ function SetupScreen({ onComplete }: { onComplete: () => Promise<void> | void })
 // ── Component ─────────────────────────────────────────────────────────────────
 
 function App() {
+  const defaultContextAwareDictationEnabled = isContextAwarePlatform(
+    getDesktopPlatform(),
+  );
+
   // Auth
   const [user, setUser] = useState<User | null>(null);
   const [, setSession] = useState<Session | null>(null);
@@ -1089,6 +1154,9 @@ function App() {
   // AI Improvement toggle (user-controllable — controls Groq AI cleanup)
   const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
   const aiImprovementEnabledRef = useRef(true);
+  const [contextAwareDictationEnabled, setContextAwareDictationEnabled] =
+    useState(defaultContextAwareDictationEnabled);
+  const contextAwareDictationEnabledRef = useRef(defaultContextAwareDictationEnabled);
 
   // Transcription language ("auto" = whisper auto-detects, "hi-en" = Hinglish)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("hi-en");
@@ -1158,6 +1226,7 @@ function App() {
   const streamRef = useRef<MediaStream | null>(null);
   const autoPasteRef = useRef(true);
   const targetAppRef = useRef<string>("");
+  const dictationContextRef = useRef<DictationContextSnapshot | null>(null);
   const pendingStopRef = useRef(false);
   const warmStreamRef = useRef<MediaStream | null>(null);
   const voiceEngineWarmupRef = useRef(false);
@@ -1320,30 +1389,29 @@ function App() {
         const calendarCode = urlObj.searchParams.get("calendar_code");
         if (calendarCode) {
           const verifier = pkceCodeVerifierRef.current;
-          pkceCodeVerifierRef.current = ""; // consume immediately
           if (!verifier) {
             console.error("[deep-link] calendar_code received but no PKCE verifier in memory");
             return;
           }
           const redirectUri = `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`;
           try {
-            const { data: { session: s } } = await supabase.auth.getSession();
             const { data, error: fnErr } = await supabase.functions.invoke<{
               access_token: string; refresh_token?: string; expires_in: number;
             }>("exchange-calendar-token", {
-              headers: s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {},
               body: { code: calendarCode, code_verifier: verifier, redirect_uri: redirectUri },
             });
             if (fnErr || !data?.access_token) {
               console.error("[deep-link] Calendar token exchange failed:", fnErr);
               return;
             }
+            // Consume verifier only after successful exchange
+            pkceCodeVerifierRef.current = "";
             const expiry = Date.now() + (data.expires_in ?? 3600) * 1000;
             await persistCalendarConnection({
               accessToken: data.access_token,
               expiry,
               refreshToken: data.refresh_token,
-              userId: s?.user?.id ?? sessionRef.current?.user?.id ?? null,
+              userId: sessionRef.current?.user?.id ?? null,
             });
             console.log("[deep-link] Google Calendar tokens stored (PKCE)");
           } catch (err) {
@@ -1467,6 +1535,7 @@ function App() {
         savedLanguage,
         savedMicId,
         savedAiImprovement,
+        savedContextAwareDictation,
         savedMinutesModelEnabled,
         savedMinutesModelPath,
         savedMinutesModelVariant,
@@ -1488,6 +1557,10 @@ function App() {
         loadSetting<string>("transcriptionLanguage", "hi-en"),
         loadSetting<string>("selectedMicId", ""),
         loadSetting<boolean>("aiImprovementEnabled", true),
+        loadSetting<boolean>(
+          "contextAwareDictationEnabled",
+          defaultContextAwareDictationEnabled,
+        ),
         loadSetting<boolean>("minutesModelEnabled", false),
         loadSetting<string>("minutesModelPath", ""),
         loadSetting<MinutesModelVariant>("minutesModelVariant", MINUTES_MODEL_VARIANT),
@@ -1544,6 +1617,8 @@ function App() {
       selectedMicIdRef.current = savedMicId;
       setAiImprovementEnabled(savedAiImprovement);
       aiImprovementEnabledRef.current = savedAiImprovement;
+      setContextAwareDictationEnabled(savedContextAwareDictation);
+      contextAwareDictationEnabledRef.current = savedContextAwareDictation;
       const normalizedMinutesModelPath = savedMinutesModelPath || "";
       let hasMinutesModel = false;
       if (normalizedMinutesModelPath) {
@@ -1608,17 +1683,23 @@ function App() {
       }
     })();
 
-    const SELF_APP_NAMES = ["oscar", "claude"]; // filter out our own app
-    const unlistenStart = listen<string>("hotkey-recording-start", (ev) => {
-      const raw = (ev.payload || "").trim();
-      // If the frontmost app is ourselves, clear it so we don't try to activate ourselves
-      targetAppRef.current = SELF_APP_NAMES.includes(raw.toLowerCase())
-        ? ""
-        : raw;
-      pendingStopRef.current = false;
-      if (whisperLoadedRef.current && !isRecordingRef.current)
-        startHotkeyRecording();
-    });
+    const SELF_APP_NAMES = ["oscar"];
+    const unlistenStart = listen<HotkeyContextEventPayload>(
+      "hotkey-recording-start",
+      (ev) => {
+        const appName = ev.payload?.appName?.trim() || "";
+        const isSelfApp = SELF_APP_NAMES.includes(appName.toLowerCase());
+        targetAppRef.current = isSelfApp
+          ? ""
+          : ev.payload?.targetAppName?.trim() || "";
+        dictationContextRef.current = isSelfApp
+          ? null
+          : buildDictationContextSnapshot(ev.payload);
+        pendingStopRef.current = false;
+        if (whisperLoadedRef.current && !isRecordingRef.current)
+          startHotkeyRecording();
+      },
+    );
     const unlistenStop = listen("hotkey-recording-stop", () => {
       // ALWAYS set pending stop — this is the safety net for the race condition
       // where STOP arrives before getUserMedia resolves in startHotkeyRecording
@@ -2190,6 +2271,15 @@ function App() {
       }
 
       let finalText = result.text;
+      const activeDictationContext =
+        contextAwareDictationEnabledRef.current
+          ? dictationContextRef.current
+          : null;
+      const dictationRouting =
+        contextAwareDictationEnabledRef.current
+          ? routeDictationContext(activeDictationContext)
+          : null;
+      const dictationMetadata = buildDictationMetadata(dictationRouting);
 
       // Silent AI cleanup via the backend AI function.
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
@@ -2199,6 +2289,12 @@ function App() {
           const cleaned = await aiService.processText(
             finalText,
             "transcribe_cleanup",
+            activeDictationContext && dictationRouting
+              ? {
+                  context: activeDictationContext,
+                  routing: dictationRouting,
+                }
+              : undefined,
           );
           if (cleaned && cleaned.trim().length > 0) {
             finalText = cleaned;
@@ -2253,6 +2349,7 @@ function App() {
         id: crypto.randomUUID(),
         text: finalText,
         createdAt: new Date().toISOString(),
+        ...dictationMetadata,
       };
       // Use functional update to avoid stale closure issues
       setLocalTranscripts((prev) => {
@@ -2278,6 +2375,7 @@ function App() {
             title,
             raw_text: rawText,
             original_formatted_text: finalText,
+            ...dictationMetadata,
           })
           .then(({ error: saveErr }) => {
             if (saveErr) {
@@ -2793,6 +2891,12 @@ function App() {
     saveSetting("aiImprovementEnabled", enabled);
   }, []);
 
+  const handleContextAwareDictationChange = useCallback((enabled: boolean) => {
+    setContextAwareDictationEnabled(enabled);
+    contextAwareDictationEnabledRef.current = enabled;
+    saveSetting("contextAwareDictationEnabled", enabled);
+  }, []);
+
   const handleSystemAudioToggle = useCallback((enabled: boolean) => {
     setSystemAudioEnabled(enabled);
     saveSetting("systemAudioEnabled", enabled);
@@ -3164,6 +3268,9 @@ function App() {
                   onSignOut={handleSignOut}
                   aiImprovementEnabled={aiImprovementEnabled}
                   onAiImprovementChange={handleAiImprovementChange}
+                  contextAwareDictationEnabled={contextAwareDictationEnabled}
+                  onContextAwareDictationChange={handleContextAwareDictationChange}
+                  contextAwarePlatform={getDesktopPlatform()}
                   systemAudioSupported={systemAudioSupported}
                   systemAudioEnabled={systemAudioEnabled}
                   onSystemAudioToggle={handleSystemAudioToggle}

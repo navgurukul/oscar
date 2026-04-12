@@ -4,6 +4,10 @@ import type {
   EnhancedMeetingNoteResponse,
   MeetingTranscriptSegment,
 } from "../types/meeting.types";
+import type {
+  DictationContextSnapshot,
+  DictationRoutingResult,
+} from "../types/note.types";
 
 export type DesktopAIMode =
   | "transcribe_cleanup"
@@ -15,6 +19,13 @@ export type DesktopAIMode =
 interface AIProcessResponse {
   text?: string;
   error?: string;
+}
+
+interface AIProcessRequest {
+  text: string;
+  mode: DesktopAIMode;
+  context?: DictationContextSnapshot;
+  routing?: DictationRoutingResult;
 }
 
 const EDGE_FUNCTION_FETCH_ERROR = "Failed to send a request to the Edge Function";
@@ -206,8 +217,7 @@ async function getSessionAccessToken(): Promise<string> {
 
 async function invokeAIProcess(
   accessToken: string,
-  text: string,
-  mode: DesktopAIMode,
+  request: AIProcessRequest,
 ): Promise<string> {
   const { data, error } = await supabase.functions.invoke<AIProcessResponse>(
     "ai-process",
@@ -215,7 +225,9 @@ async function invokeAIProcess(
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
-      body: { text, mode },
+      body: {
+        ...request,
+      },
     },
   );
 
@@ -278,8 +290,10 @@ async function buildFallbackMeetingMarkdown(
     try {
       summaryBullets = await invokeAIProcess(
         accessToken,
-        sourceForSummary,
-        "bullets",
+        {
+          text: sourceForSummary,
+          mode: "bullets",
+        },
       );
     } catch {
       summaryBullets = "";
@@ -314,13 +328,28 @@ async function buildFallbackMeetingMarkdown(
 }
 
 export const aiService = {
-  async processText(text: string, mode: DesktopAIMode): Promise<string> {
+  async processText(
+    text: string,
+    mode: DesktopAIMode,
+    options?: {
+      context?: DictationContextSnapshot;
+      routing?: DictationRoutingResult;
+    },
+  ): Promise<string> {
     if (!text.trim()) {
       throw new Error("No text provided for AI processing.");
     }
 
     const accessToken = await getSessionAccessToken();
-    return invokeAIProcess(accessToken, text, mode);
+    return invokeAIProcess(
+      accessToken,
+      {
+        text,
+        mode,
+        context: options?.context,
+        routing: options?.routing,
+      },
+    );
   },
 
   async generateEnhancedMeetingNote(
