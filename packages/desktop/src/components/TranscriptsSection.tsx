@@ -22,9 +22,12 @@ export function TranscriptsSection({
   return (
     <div className="mt-8">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">
-          Recent Transcripts
-        </h2>
+        <div>
+          <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">
+            Recent Transcripts
+          </h2>
+          <p className="mt-1 text-xs text-slate-400">Stored only on this device.</p>
+        </div>
         <button
           onClick={onClearAll}
           className="text-xs text-slate-400 hover:text-red-500 transition-colors"

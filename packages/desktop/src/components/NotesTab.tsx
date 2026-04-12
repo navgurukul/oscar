@@ -14,7 +14,6 @@ interface NotesTabProps {
   isRecording: boolean;
   onToggleRecording: () => void;
   recordingTime: number;
-  refreshKey?: number;
 }
 
 // Format recording time as MM:SS
@@ -33,7 +32,12 @@ const SCRIBBLE_CTA_OVERLAY_STYLE = {
 } as const;
 const SCRIBBLE_CTA_GLASS_STYLE = { WebkitBackdropFilter: "blur(10px)" } as const;
 
-export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime, refreshKey }: NotesTabProps) {
+export function NotesTab({
+  userId,
+  isRecording,
+  onToggleRecording,
+  recordingTime,
+}: NotesTabProps) {
   const [allNotes, setAllNotes] = useState<DBNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +57,7 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
   useEffect(() => {
     loadNotes();
     loadTrashCount();
-  }, [userId, refreshKey]);
+  }, [userId]);
 
   const loadTrashCount = async () => {
     const { data, error } = await notesService.getTrashedNotes();
@@ -227,7 +231,7 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
 
   const getEmptyMessage = () => {
     if (allNotes.length === 0) {
-      return "No Scribbles yet. Start a Stream to create your first one.";
+      return "No Scribbles yet. Saved notes sync here when created.";
     }
     if (showStarredOnly && !searchQuery.trim()) {
       return "No starred Scribbles yet. Star one to find it here quickly.";
@@ -368,7 +372,7 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
                 Scribbles that stay searchable and synced.
               </h2>
               <p className="mt-3 text-[0.82rem] leading-[1.6] text-sky-50/90">
-                Stream once, then search, star, and organize every idea across your devices.
+                Saved notes sync here across devices. Stream transcripts stay local to this device.
               </p>
               <button
                 onClick={onToggleRecording}
@@ -376,7 +380,7 @@ export function NotesTab({ userId, isRecording, onToggleRecording, recordingTime
                 className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-white/90 bg-white px-[14px] py-2.5 text-[0.82rem] font-semibold text-cyan-700 shadow-[0_12px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-px hover:text-cyan-800 hover:shadow-[0_16px_28px_rgba(15,23,42,0.18)]"
               >
                 {isRecording ? <Square size={14} /> : <Mic size={14} />}
-                {isRecording ? "Stop Stream" : "Start Stream"}
+                {isRecording ? "Stop Local Stream" : "Start Local Stream"}
               </button>
             </div>
 

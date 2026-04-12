@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, memo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { notesService } from "./services/notes.service";
 import { meetingsService } from "./services/meetings.service";
 import { aiService } from "./services/ai.service";
 import { listen } from "@tauri-apps/api/event";
@@ -1129,7 +1128,6 @@ function App() {
   const [localTranscripts, setLocalTranscripts] = useState<LocalTranscript[]>(
     [],
   );
-  const [notesRefreshKey, setNotesRefreshKey] = useState(0);
   const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
   const [_isProcessing, setIsProcessing] = useState(false);
@@ -2359,33 +2357,6 @@ function App() {
         return updatedTranscripts;
       });
 
-      // Save to Supabase as a note (matches web app behavior)
-      if (user) {
-        const rawText = result.text;
-        // Generate title: first sentence up to 60 chars, fallback to "Untitled Note"
-        const firstSentence = finalText.split(/[.\n]/)[0]?.trim() || "";
-        const title =
-          firstSentence.length > 60
-            ? firstSentence.slice(0, 57) + "..."
-            : firstSentence || "Untitled Note";
-
-        notesService
-          .createNote({
-            user_id: user.id,
-            title,
-            raw_text: rawText,
-            original_formatted_text: finalText,
-            ...dictationMetadata,
-          })
-          .then(({ error: saveErr }) => {
-            if (saveErr) {
-              console.warn("[notes] failed to save note:", saveErr);
-            } else {
-              setNotesRefreshKey((k) => k + 1);
-            }
-          });
-      }
-
       if (!shouldPaste) {
         setStatus("Done! ✓");
       }
@@ -3190,7 +3161,6 @@ function App() {
                     }
                   }}
                   recordingTime={0}
-                  refreshKey={notesRefreshKey}
                 />
               )}
 
