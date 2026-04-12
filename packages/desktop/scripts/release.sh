@@ -17,15 +17,26 @@ fi
 DESKTOP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_DIR="$DESKTOP_DIR/../web"
 TAURI_DIR="$DESKTOP_DIR/src-tauri"
-PUBLIC_TAURI_DIR="$WEB_DIR/public/tauri"
 
 echo "🚀 Releasing OSCAR Desktop v$VERSION"
 echo ""
 
-# 1. Update version in tauri.conf.json
-echo "📦 Updating version in tauri.conf.json..."
+# 1. Update version metadata across the workspace
+echo "📦 Updating package and desktop versions..."
+sed -i.bak "s/\"version\": \"[0-9.]*\"/\"version\": \"$VERSION\"/" "$DESKTOP_DIR/package.json"
+rm "$DESKTOP_DIR/package.json.bak"
+sed -i.bak "s/\"version\": \"[0-9.]*\"/\"version\": \"$VERSION\"/" "$WEB_DIR/package.json"
+rm "$WEB_DIR/package.json.bak"
+sed -i.bak "s/\"version\": \"[0-9.]*\"/\"version\": \"$VERSION\"/" "$DESKTOP_DIR/../shared/package.json"
+rm "$DESKTOP_DIR/../shared/package.json.bak"
+sed -i.bak "s/\"version\": \"[0-9.]*\"/\"version\": \"$VERSION\"/" "$DESKTOP_DIR/../../package.json"
+rm "$DESKTOP_DIR/../../package.json.bak"
 sed -i.bak "s/\"version\": \"[0-9.]*\"/\"version\": \"$VERSION\"/" "$TAURI_DIR/tauri.conf.json"
 rm "$TAURI_DIR/tauri.conf.json.bak"
+sed -i.bak "0,/^version = \".*\"/s//version = \"$VERSION\"/" "$TAURI_DIR/Cargo.toml"
+rm "$TAURI_DIR/Cargo.toml.bak"
+sed -i.bak "0,/^version = \".*\"/s//version = \"$VERSION\"/" "$TAURI_DIR/Cargo.lock"
+rm "$TAURI_DIR/Cargo.lock.bak"
 
 # 2. Build the app
 echo "🔨 Building desktop app..."
@@ -37,18 +48,13 @@ echo "✅ Build complete!"
 echo ""
 echo "Next steps:"
 echo "1. Build Tauri bundles: cd packages/desktop && pnpm tauri build"
-echo "2. Copy bundles to packages/web/public/tauri/:"
-echo "   - oscar_${VERSION}_x64.dmg (Intel Mac)"
-echo "   - oscar_${VERSION}_aarch64.dmg (Apple Silicon)"
-echo "   - oscar_${VERSION}_x64-setup.exe (Windows)"
-echo "   - oscar_${VERSION}_amd64.AppImage (Linux)"
-echo "3. Update packages/web/public/tauri/updates.json:"
+echo "2. Update packages/web/public/tauri/updates.json:"
 echo "   - Change version to \"$VERSION\""
 echo "   - Update pub_date to current date"
 echo "   - Update notes"
-echo "   - Update URLs to point to new bundle files"
-echo "4. (Optional) Generate signatures and add to updates.json"
-echo "5. Commit and push to deploy via Amplify"
+echo "   - Update GitHub release URLs and signatures for each platform"
+echo "3. Set NEXT_PUBLIC_APP_VERSION=$VERSION for the download page if needed"
+echo "4. Commit, tag, push, and publish the GitHub release assets"
 echo ""
 echo "📋 Example updates.json entry:"
 cat << 'EOF'
@@ -59,19 +65,19 @@ cat << 'EOF'
   "platforms": {
     "darwin-x86_64": {
       "signature": "",
-      "url": "https://oscar.samyarth.org/tauri/oscar_VERSION_x64.dmg"
+      "url": "https://github.com/navgurukul/oscar/releases/download/vVERSION/OSCAR_x86_64.app.tar.gz"
     },
     "darwin-aarch64": {
       "signature": "",
-      "url": "https://oscar.samyarth.org/tauri/oscar_VERSION_aarch64.dmg"
-    },
-    "linux-x86_64": {
-      "signature": "",
-      "url": "https://oscar.samyarth.org/tauri/oscar_VERSION_amd64.AppImage"
+      "url": "https://github.com/navgurukul/oscar/releases/download/vVERSION/OSCAR_aarch64.app.tar.gz"
     },
     "windows-x86_64": {
       "signature": "",
-      "url": "https://oscar.samyarth.org/tauri/oscar_VERSION_x64-setup.exe"
+      "url": "https://github.com/navgurukul/oscar/releases/download/vVERSION/OSCAR_VERSION_x64-setup.nsis.zip"
+    },
+    "linux-x86_64": {
+      "signature": "",
+      "url": "https://github.com/navgurukul/oscar/releases/download/vVERSION/OSCAR_VERSION_amd64.AppImage.tar.gz"
     }
   }
 }

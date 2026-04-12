@@ -11,9 +11,17 @@ interface HomeTabProps {
 }
 
 // Simple app icon SVGs — each accepts optional className for color control
-const AppIcon = ({ children, hoverColor }: { children: React.ReactNode; hoverColor: string }) => (
+const AppIcon = ({
+  children,
+  hoverColor,
+  className = "",
+}: {
+  children: React.ReactNode;
+  hoverColor: string;
+  className?: string;
+}) => (
   <div
-    className="text-slate-300 transition-colors duration-200"
+    className={`text-white/85 transition-colors duration-200 ${className}`}
     style={{ ["--hover-color" as string]: hoverColor }}
     onMouseEnter={(e) => (e.currentTarget.style.color = hoverColor)}
     onMouseLeave={(e) => (e.currentTarget.style.color = "")}
@@ -102,6 +110,32 @@ const AppIcons = {
   ),
 };
 
+const STREAM_CTA_STYLE = {
+  background:
+    "radial-gradient(circle at top left, rgba(255, 255, 255, 0.22), transparent 36%), linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)",
+} as const;
+const STREAM_CTA_OVERLAY_STYLE = {
+  background: "linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 60%)",
+} as const;
+const STREAM_CTA_GLASS_STYLE = { WebkitBackdropFilter: "blur(10px)" } as const;
+const STREAM_CTA_APPS = [
+  AppIcons.Slack,
+  AppIcons.Notion,
+  AppIcons.VSCode,
+  AppIcons.GoogleDocs,
+  AppIcons.Chrome,
+  AppIcons.Discord,
+  AppIcons.Teams,
+  AppIcons.Figma,
+  AppIcons.GitHub,
+  AppIcons.Zoom,
+  AppIcons.Spotify,
+] as const;
+const HOME_TAB_CLASS_NAME = "relative flex flex-1 flex-col overflow-y-auto bg-[#fafafa] px-12 pt-8 pb-[120px]";
+const HOME_HEADER_CLASS_NAME = "mx-auto flex w-full max-w-[720px] flex-col items-center";
+const HOME_TITLE_CLASS_NAME = "mb-1 text-center text-[1.75rem] font-semibold tracking-tight text-slate-800";
+const GARAMOND_FONT_STYLE = { fontFamily: '"EB Garamond", Georgia, serif' } as const;
+
 
 function HomeTab({
   userName,
@@ -112,48 +146,69 @@ function HomeTab({
 }: HomeTabProps) {
   // Extract first name
   const firstName = userName?.split(" ")[0] || "";
-  const greeting = firstName ? `Welcome back, ${firstName}` : "Welcome back";
+  const hasStats = typeof totalNotes === "number";
 
   return (
-    <div className="relative flex-1 flex flex-col min-h-full h-full px-6 py-10 bg-[#fafafa] overflow-y-auto">
+    <div className={HOME_TAB_CLASS_NAME}>
       {/* Top Section: Greeting, Stats, Shortcut */}
-      <div className="flex flex-col items-center gap-5 max-w-[500px] w-full mx-auto">
+      <div className={HOME_HEADER_CLASS_NAME}>
         {/* Greeting */}
-        <h1 className="text-[2rem] font-bold text-slate-900 text-center font-['EB_Garamond',Georgia,serif] tracking-tight">
-          {greeting}
+        <h1 className={`${HOME_TITLE_CLASS_NAME} ${hasStats ? "" : "mb-5"} `} style={GARAMOND_FONT_STYLE}>
+          {firstName ? (
+            <>
+              <span className="text-slate-600 font-light text-lg" style={{ fontFamily: '"Figtree", -apple-system, sans-serif' }}>WELCOME BACK,</span>{" "}
+              <span className="font-bold">{firstName}</span>
+            </>
+          ) : (
+            <span className="font-bold text-slate-900">Welcome back</span>
+          )}
         </h1>
 
         {/* Minimal Stats */}
-        {typeof totalNotes === "number" && (
-          <p className="text-sm text-slate-400 text-center mt-1">
-            {totalNotes} {totalNotes === 1 ? "note" : "notes"} recorded
+        {hasStats && (
+          <p className="mb-5 text-center text-sm text-slate-400">
+            {totalNotes} {totalNotes === 1 ? "Scribble" : "Scribbles"} captured
           </p>
         )}
 
         {/* Shortcut Section */}
-        <div className="oscar-info-banner stream-info-banner w-full max-w-[520px] bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center self-center">
-          <p className="text-[0.9375rem] text-slate-600 mb-5 leading-relaxed">
-            Hold <kbd className="inline-block px-2 py-[3px] text-[0.8125rem] font-mono font-semibold bg-slate-200 border border-slate-300 border-b-[3px] rounded-md text-slate-700">Ctrl</kbd> + <kbd className="inline-block px-2 py-[3px] text-[0.8125rem] font-mono font-semibold bg-slate-200 border border-slate-300 border-b-[3px] rounded-md text-slate-700">Space</kbd> to dictate into any app
-          </p>
-          <div className="flex flex-wrap justify-center gap-3.5 mb-3">
-            <AppIcons.Slack />
-            <AppIcons.Notion />
-            <AppIcons.VSCode />
-            <AppIcons.GoogleDocs />
-            <AppIcons.Chrome />
-            <AppIcons.Discord />
-            <AppIcons.Teams />
-            <AppIcons.Figma />
-            <AppIcons.GitHub />
-            <AppIcons.Zoom />
-            <AppIcons.Spotify />
+        <div
+          className="relative w-full min-h-[158px] overflow-hidden rounded-[22px] px-6 py-5 shadow-[0_18px_40px_rgba(8,145,178,0.18)]"
+          style={STREAM_CTA_STYLE}
+        >
+          <div className="pointer-events-none absolute inset-0" style={STREAM_CTA_OVERLAY_STYLE} />
+          <div className="relative z-[1] flex min-h-[118px] flex-col items-center justify-center text-center">
+            <p className="max-w-[510px] text-[0.9375rem] leading-relaxed text-sky-50">
+              Hold{" "}
+              <kbd className="inline-flex min-w-8 items-center justify-center rounded-md border border-white/25 bg-white/20 px-2 py-1 text-[0.75rem] font-semibold text-white shadow-[inset_0_-1px_0_rgba(255,255,255,0.12)]">
+                Ctrl
+              </kbd>{" "}
+              +{" "}
+              <kbd className="inline-flex min-w-8 items-center justify-center rounded-md border border-white/25 bg-white/20 px-2 py-1 text-[0.75rem] font-semibold text-white shadow-[inset_0_-1px_0_rgba(255,255,255,0.12)]">
+                Space
+              </kbd>{" "}
+              to dictate into any app
+            </p>
+            <div className="mt-5 flex min-h-10 items-center justify-center">
+              {STREAM_CTA_APPS.map((Icon, index) => (
+                <div
+                  key={index}
+                  className={`${index === 0 ? "ml-0" : "-ml-2.5"} flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]`}
+                  style={STREAM_CTA_GLASS_STYLE}
+                >
+                  <Icon />
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[0.72rem] font-medium uppercase tracking-[0.12em] text-sky-50/75">
+                Works across your desktop
+            </p>
           </div>
-          <p className="text-xs text-slate-400 uppercase tracking-widest font-medium">Works everywhere</p>
         </div>
       </div>
 
       {/* Transcripts Section */}
-      <div className="w-full max-w-[600px] mx-auto px-5">
+      <div className="mx-auto w-full max-w-[720px] px-5">
         <TranscriptsSection
           transcripts={localTranscripts}
           onDeleteTranscript={onDeleteTranscript}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, Suspense, useCallback } from "react";
+import { useState, useRef, useEffect, Suspense, useCallback, TouchEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useRecording } from "@/lib/hooks/useRecording";
 import { storageService } from "@/lib/services/storage.service";
@@ -53,6 +53,9 @@ function RecordingPageInner() {
   const [isRetryingPermission, setIsRetryingPermission] = useState(false);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
+  // Swipe-to-stop tracking
+  const swipeTouchStartY = useRef<number | null>(null);
+
   // Refs for race condition protection
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const stepIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -96,7 +99,7 @@ function RecordingPageInner() {
           // Start recording with existing transcript as seed
           toast({
             title: "Resuming Recording",
-            description: "Preparing to add more to your note...",
+            description: "Preparing to add more to your Scribble...",
           });
           
           // Clear continue mode flag ONLY after we've read the raw text and are about to start
@@ -355,6 +358,19 @@ function RecordingPageInner() {
     }
   };
 
+  // ── Swipe-down-to-stop (mobile) ───────────────────────────────────────────
+  const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    if (!isRecording) return;
+    swipeTouchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
+    if (!isRecording || swipeTouchStartY.current === null) return;
+    const dy = e.changedTouches[0].clientY - swipeTouchStartY.current;
+    if (dy > 80) handleStopRecording();
+    swipeTouchStartY.current = null;
+  };
+
   // Show permission error modal
   if (isPermissionDenied) {
     return (
@@ -421,16 +437,21 @@ function RecordingPageInner() {
         </div>
       )}
 
-      <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
+      <div className="w-full max-w-xl flex flex-col items-center gap-6 sm:gap-8 mt-8 sm:mt-16">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold">
-            Record Your <span className="text-cyan-500">Voice</span>
+          <h1 className="text-3xl sm:text-4xl font-bold">
+            Start a <span className="text-cyan-500">Stream</span>
           </h1>
         </div>
 
-        {/* Main Recording Container */}
-        <div className="bg-slate-900 w-full max-w-[500px] aspect-square rounded-3xl shadow-xl border border-cyan-700/30 p-6 sm:p-8 md:p-12 relative overflow-hidden">
+        {/* Main Recording Container — min-height instead of aspect-square so
+            content is never clipped on small phones */}
+        <div
+          className="bg-slate-900 w-full max-w-[500px] min-h-[min(80vw,460px)] rounded-3xl shadow-xl border border-cyan-700/30 p-6 sm:p-8 md:p-12 relative overflow-hidden flex flex-col justify-between"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <DottedGlowBackground
             gap={20}
             radius={1.3}
@@ -443,26 +464,32 @@ function RecordingPageInner() {
           />
 
           {/* Timer - always reserve space */}
-          <div className="h-8">
+          <div className="h-8 relative z-10">
             {isRecording && <RecordingTimer seconds={recordingTime} />}
           </div>
 
           {/* Recording Controls */}
-          <RecordingControls
-            isRecording={isRecording}
-            isProcessing={isProcessing}
-            isInitializing={isInitializing}
-            isRequestingPermission={isRequestingPermission}
-            onStart={handleStartRecording}
-            onStop={handleStopRecording}
-          />
+          <div className="relative z-10">
+            <RecordingControls
+              isRecording={isRecording}
+              isProcessing={isProcessing}
+              isInitializing={isInitializing}
+              isRequestingPermission={isRequestingPermission}
+              onStart={handleStartRecording}
+              onStop={handleStopRecording}
+            />
+          </div>
 
-          {/* Instruction Text - only when NOT recording */}
-          <div className="text-center pb-16 h-16 flex items-center justify-center">
-            {!isRecording && (
-              <p className="text-gray-400 text-lg">
-                Press the microphone button and start speaking. Oscar will do
-                the rest.
+          {/* Bottom area: instruction text OR swipe hint */}
+          <div className="relative z-10 flex items-center justify-center min-h-[56px]">
+            {isRecording ? (
+              <p className="text-slate-500 text-sm flex items-center gap-1.5 select-none">
+                <span className="text-base">↓</span>
+                Swipe down or tap to stop
+              </p>
+            ) : (
+              <p className="text-gray-400 text-base sm:text-lg text-center px-2">
+                Speak naturally. OSCAR will turn this Stream into a clean Scribble.
               </p>
             )}
           </div>

@@ -7,23 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
-
-function getSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Supabase admin credentials not configured");
-  }
-
-  return createAdminClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
+import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
 
 export async function DELETE() {
   try {
@@ -38,10 +22,23 @@ export async function DELETE() {
     }
 
     // Delete all user data first
-    await Promise.all([
+    const [notesDeleteResult, vocabularyDeleteResult] = await Promise.all([
       supabase.from("notes").delete().eq("user_id", user.id),
       supabase.from("user_vocabulary").delete().eq("user_id", user.id),
     ]);
+
+    if (notesDeleteResult.error) {
+      console.error("Error deleting notes during account removal:", notesDeleteResult.error);
+      return NextResponse.json({ error: "Failed to delete account data" }, { status: 500 });
+    }
+
+    if (vocabularyDeleteResult.error) {
+      console.error(
+        "Error deleting vocabulary during account removal:",
+        vocabularyDeleteResult.error
+      );
+      return NextResponse.json({ error: "Failed to delete account data" }, { status: 500 });
+    }
 
     // Delete the account using admin client (bypasses RLS)
     const adminClient = getSupabaseAdmin();

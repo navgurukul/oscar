@@ -3,28 +3,9 @@
  * Tracks and enforces usage limits for subscriptions
  */
 
-import { createClient } from "@supabase/supabase-js";
 import { SUBSCRIPTION_CONFIG } from "@/lib/constants";
+import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
 import { subscriptionService } from "./subscription.service";
-
-/**
- * Get Supabase admin client (bypasses RLS)
- */
-function getSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Supabase admin credentials not configured");
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
 
 /**
  * Get current month in YYYY-MM format
@@ -100,20 +81,30 @@ export const usageService = {
 
       if (existing) {
         const newCount = existing.recording_count + 1;
-        await supabase
+        const { error: updateError } = await supabase
           .from("usage_tracking")
           .update({
             recording_count: newCount,
             updated_at: new Date().toISOString(),
           })
           .eq("id", existing.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+
         return newCount;
       } else {
-        await supabase.from("usage_tracking").insert({
+        const { error: insertError } = await supabase.from("usage_tracking").insert({
           user_id: userId,
           month_year: monthYear,
           recording_count: 1,
         });
+
+        if (insertError) {
+          throw insertError;
+        }
+
         return 1;
       }
     }
@@ -164,7 +155,8 @@ export const usageService = {
     const { count, error } = await supabase
       .from("notes")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .is("deleted_at", null);
 
     if (error) {
       console.error("Error fetching note count:", error);

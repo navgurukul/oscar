@@ -16,6 +16,8 @@ const RETRY_CONFIG = {
   TITLE_TIMEOUT_MS: 8000, // ✅ titles are tiny, fail fast
 } as const;
 
+export type TransformMode = "summary" | "bullets";
+
 // ✅ Reusable stream reader — live chunks, UI updates as text arrives
 async function readStream(
   response: Response,
@@ -247,6 +249,49 @@ export const aiService = {
       this.formatEmailText(rawText, title, signal, onEmailChunk),
     ]);
     return { formatting, email };
+  },
+
+  async transformText(
+    text: string,
+    mode: TransformMode,
+    title?: string,
+    signal?: AbortSignal,
+    onChunk?: (text: string) => void
+  ): Promise<FormattingResult> {
+    if (!text?.trim()) {
+      return {
+        success: false,
+        error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_FORMATTING,
+      };
+    }
+    if (signal?.aborted) {
+      return { success: false, error: ERROR_MESSAGES.FORMATTING_CANCELLED };
+    }
+
+    try {
+      const response = await fetchWithTimeout(
+        API_CONFIG.TRANSFORM_ENDPOINT,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, mode, title }),
+        },
+        RETRY_CONFIG.TIMEOUT_MS,
+        signal
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Transform API error: ${response.status}`, errorText);
+        throw new Error(`Formatting failed: ${response.status}`);
+      }
+
+      const formattedText = await parseFormatResponse(response, onChunk);
+      return { success: true, formattedText };
+    } catch (error: unknown) {
+      console.error("Transform text error:", error);
+      return { success: false, error: (error as Error)?.message || "Failed to transform text" };
+    }
   },
 
   async translateText(

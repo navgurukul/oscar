@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SUBSCRIPTION_CONFIG, PRICING } from "@/lib/constants";
+import { SUBSCRIPTION_CONFIG, PRICING, PRICING_USD } from "@/lib/constants";
 
 interface UpgradePromptProps {
   limitType: "recordings" | "notes" | "vocabulary";
@@ -119,7 +119,7 @@ export function UpgradePrompt({
           <p className="text-gray-400 text-sm">
             Starting at just{" "}
             <span className="text-white font-medium">
-              ₹{PRICING.MONTHLY}/month (~$3/month)
+              ₹{PRICING.MONTHLY}/month (~${PRICING_USD.MONTHLY}/month)
             </span>
           </p>
 

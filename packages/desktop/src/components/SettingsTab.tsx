@@ -14,13 +14,9 @@ import {
   Lock,
   Settings2,
   Search,
-  LayoutTemplate,
-  Plus,
-  Pencil,
-  X,
-  Check,
+  Loader2,
+  Mic,
 } from "lucide-react";
-import type { MeetingTemplateData } from "./MeetingsTab";
 import { BillingSection } from "./BillingSection";
 import { VocabularySection } from "./VocabularySection";
 import { getInitials } from "../lib/utils";
@@ -29,7 +25,6 @@ type SettingsTabType =
   | "billing"
   | "vocabulary"
   | "general"
-  | "meetingTemplates"
   | "account"
   | "privacy";
 
@@ -89,13 +84,16 @@ interface SettingsTabProps {
   onSignOut: () => void;
   aiImprovementEnabled: boolean;
   onAiImprovementChange: (enabled: boolean) => void;
-  meetingTemplates: MeetingTemplateData[];
-  onSaveTemplate: (tpl: MeetingTemplateData) => void;
-  onDeleteTemplate: (id: string) => void;
   initialSection?: SettingsTabType;
   systemAudioSupported?: boolean;
   systemAudioEnabled?: boolean;
   onSystemAudioToggle?: (enabled: boolean) => void;
+  minutesModelEnabled?: boolean;
+  minutesModelDownloadState?: "idle" | "downloading" | "installed";
+  minutesModelDownloadProgress?: number;
+  minutesModelVariant?: string;
+  onDownloadMinutesModel?: () => void;
+  onRemoveMinutesModel?: () => void;
 }
 
 const NAV_ITEMS: {
@@ -106,7 +104,6 @@ const NAV_ITEMS: {
   { id: "billing", label: "Plans & Billing", icon: CreditCard },
   { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
   { id: "general", label: "General", icon: Settings2 },
-  { id: "meetingTemplates", label: "Meeting Templates", icon: LayoutTemplate },
   { id: "account", label: "Account", icon: User },
   { id: "privacy", label: "Data & Privacy", icon: Shield },
 ];
@@ -122,23 +119,21 @@ export function SettingsTab({
   onSignOut,
   aiImprovementEnabled,
   onAiImprovementChange,
-  meetingTemplates,
-  onSaveTemplate,
-  onDeleteTemplate,
   initialSection,
   systemAudioSupported = false,
   systemAudioEnabled = true,
   onSystemAudioToggle,
+  minutesModelEnabled = false,
+  minutesModelDownloadState = "idle",
+  minutesModelDownloadProgress = 0,
+  minutesModelVariant = "large-v3-turbo-q5_0",
+  onDownloadMinutesModel,
+  onRemoveMinutesModel,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<SettingsTabType>(initialSection || "billing");
   const [clearConfirm, setClearConfirm] = useState(false);
   const [langSearch, setLangSearch] = useState("");
   const [micDevices, setMicDevices] = useState<MicDevice[]>([]);
-  // Template editing
-  const [editingTpl, setEditingTpl] = useState<MeetingTemplateData | null>(null);
-  const [tplName, setTplName] = useState("");
-  const [tplDesc, setTplDesc] = useState("");
-  const [tplPrompt, setTplPrompt] = useState("");
 
   const autoDetect = transcriptionLanguage === "auto";
 
@@ -167,6 +162,8 @@ export function SettingsTab({
       l.name.toLowerCase().includes(langSearch.toLowerCase()) ||
       l.native.toLowerCase().includes(langSearch.toLowerCase()),
   );
+  const minutesPackInstalled =
+    minutesModelDownloadState === "installed" || minutesModelEnabled;
 
   return (
     <div className="st-layout">
@@ -409,6 +406,109 @@ export function SettingsTab({
               </div>
             )}
 
+            <div className="st-card">
+              <div className="st-card-hd">
+                <span className="st-ico-pill">
+                  <Mic size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title">Minutes Accuracy Pack</h3>
+                  <p className="st-card-desc">
+                    Optional local model for better Hindi, Hinglish, and long-meeting transcription.
+                  </p>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 220 }}>
+                  <div
+                    style={{
+                      fontWeight: 500,
+                      color: "#334155",
+                      fontSize: "0.875rem",
+                    }}
+                  >
+                    <code>{minutesModelVariant}</code> local pack
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "#94a3b8",
+                      marginTop: 2,
+                    }}
+                  >
+                    One-time download: ~574 MB. Minutes will keep transcription local and use this pack only when available.
+                  </div>
+                  {minutesModelDownloadState === "downloading" && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: "0.75rem",
+                        color: "#0891b2",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Downloading… {Math.max(0, Math.min(100, Math.round(minutesModelDownloadProgress)))}%
+                    </div>
+                  )}
+                  {minutesPackInstalled && minutesModelDownloadState !== "downloading" && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: "0.75rem",
+                        color: "#0f766e",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Installed
+                    </div>
+                  )}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {minutesPackInstalled ? (
+                    <button
+                      className="st-btn-ghost"
+                      onClick={() => onRemoveMinutesModel?.()}
+                      disabled={minutesModelDownloadState === "downloading"}
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <button
+                      className="st-btn-primary"
+                      onClick={() => onDownloadMinutesModel?.()}
+                      disabled={minutesModelDownloadState === "downloading"}
+                    >
+                      {minutesModelDownloadState === "downloading" ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          Downloading…
+                        </>
+                      ) : (
+                        <>
+                          <Download size={14} />
+                          Download Pack
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* ── AI Enhancement ── */}
             <div className="st-card">
               <div className="st-card-hd">
@@ -474,123 +574,6 @@ export function SettingsTab({
                 </label>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* ── Meeting Templates ── */}
-        {activeTab === "meetingTemplates" && (
-          <div className="st-content">
-            <h2 className="st-content-title">Meeting Templates</h2>
-            <p className="st-desc">
-              Templates control how Oscar structures your meeting notes.
-              Edit built-in templates or create your own.
-            </p>
-
-            {/* Template list */}
-            <div className="st-tpl-list">
-              {meetingTemplates.map((tpl) => (
-                <div key={tpl.id} className={`st-tpl-card${editingTpl?.id === tpl.id ? " editing" : ""}`}>
-                  {editingTpl?.id === tpl.id ? (
-                    <div className="st-tpl-edit-form">
-                      <input
-                        className="st-tpl-input"
-                        placeholder="Template name"
-                        value={tplName}
-                        onChange={(e) => setTplName(e.target.value)}
-                      />
-                      <input
-                        className="st-tpl-input"
-                        placeholder="Short description"
-                        value={tplDesc}
-                        onChange={(e) => setTplDesc(e.target.value)}
-                      />
-                      <textarea
-                        className="st-tpl-textarea"
-                        placeholder="Custom instructions for the AI (e.g. &quot;Organize notes by speaker, include timestamps&quot;)"
-                        value={tplPrompt}
-                        onChange={(e) => setTplPrompt(e.target.value)}
-                        rows={3}
-                      />
-                      <div className="st-tpl-edit-actions">
-                        <button
-                          className="st-tpl-save-btn"
-                          disabled={!tplName.trim()}
-                          onClick={() => {
-                            onSaveTemplate({
-                              ...editingTpl,
-                              name: tplName.trim(),
-                              desc: tplDesc.trim(),
-                              prompt: tplPrompt.trim(),
-                            });
-                            setEditingTpl(null);
-                          }}
-                        >
-                          <Check size={13} /> Save
-                        </button>
-                        <button className="st-tpl-cancel-btn" onClick={() => setEditingTpl(null)}>
-                          <X size={13} /> Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="st-tpl-display">
-                      <div className="st-tpl-info">
-                        <div className="st-tpl-name">
-                          {tpl.name}
-                          {tpl.builtin && <span className="st-tpl-builtin-badge">built-in</span>}
-                        </div>
-                        <div className="st-tpl-desc">{tpl.desc}</div>
-                        {tpl.prompt && <div className="st-tpl-prompt-preview">{tpl.prompt}</div>}
-                      </div>
-                      <div className="st-tpl-actions">
-                        <button
-                          className="st-tpl-action-btn"
-                          title="Edit"
-                          onClick={() => {
-                            setEditingTpl(tpl);
-                            setTplName(tpl.name);
-                            setTplDesc(tpl.desc);
-                            setTplPrompt(tpl.prompt);
-                          }}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        {!tpl.builtin && (
-                          <button
-                            className="st-tpl-action-btn st-tpl-delete-btn"
-                            title="Delete"
-                            onClick={() => onDeleteTemplate(tpl.id)}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Add new template */}
-            <button
-              className="st-tpl-add-btn"
-              onClick={() => {
-                const newTpl: MeetingTemplateData = {
-                  id: `custom_${Date.now()}`,
-                  name: "",
-                  desc: "",
-                  prompt: "",
-                  builtin: false,
-                };
-                setEditingTpl(newTpl);
-                setTplName("");
-                setTplDesc("");
-                setTplPrompt("");
-              }}
-            >
-              <Plus size={14} />
-              Add Template
-            </button>
           </div>
         )}
 

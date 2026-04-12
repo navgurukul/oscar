@@ -6,7 +6,6 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { razorpayService } from "@/lib/services/razorpay.service";
 import { subscriptionService } from "@/lib/services/subscription.service";
 import {
@@ -14,37 +13,19 @@ import {
   getClientIdentifier,
 } from "@/lib/middleware/rate-limit";
 import { RATE_LIMITS } from "@/lib/constants";
+import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
 import type {
   RazorpayWebhookPayload,
   RazorpaySubscriptionStatus,
   RazorpaySubscriptionEntity,
 } from "@/lib/types/subscription.types";
 
-/**
- * Get Supabase admin client for webhook processing
- */
-function getSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Supabase admin credentials not configured");
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
-
 export async function POST(request: NextRequest) {
   try {
     // Apply rate limiting based on IP to prevent DoS attacks
     // Note: Legitimate Razorpay webhooks should never hit this limit
     const clientId = getClientIdentifier(undefined, request);
-    const rateLimitResult = applyRateLimit(
+    const rateLimitResult = await applyRateLimit(
       clientId,
       "payment-webhook",
       RATE_LIMITS.PAYMENT_WEBHOOK
@@ -82,11 +63,14 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
 
     // Check for duplicate event (idempotency)
-    const { data: existingEvent } = await supabase
+    const existingEventResult = await supabase
       .from("webhook_events")
       .select("id, processed")
       .eq("razorpay_event_id", eventId)
       .single();
+    const existingEvent = existingEventResult.data as
+      | { id: string; processed: boolean }
+      | null;
 
     if (existingEvent?.processed) {
       console.log(`Event ${eventId} already processed, skipping`);

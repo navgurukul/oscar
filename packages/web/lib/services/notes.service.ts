@@ -80,6 +80,27 @@ export const notesService = {
   },
 
   /**
+   * Update multiple notes in one request
+   */
+  async updateNotes(
+    ids: string[],
+    updates: DBNoteUpdate
+  ): Promise<{ data: DBNote[] | null; error: Error | null }> {
+    if (ids.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("notes")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .in("id", ids)
+      .select("*");
+
+    return { data, error: error as Error | null };
+  },
+
+  /**
    * Soft delete a note by setting deleted_at
    */
   async deleteNote(id: string): Promise<{ error: Error | null }> {
@@ -90,6 +111,29 @@ export const notesService = {
       .eq("id", id);
 
     return { error: error as Error | null };
+  },
+
+  /**
+   * Soft delete multiple notes
+   */
+  async deleteNotes(
+    ids: string[]
+  ): Promise<{ data: DBNote[] | null; error: Error | null }> {
+    if (ids.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from("notes")
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", ids)
+      .select("*");
+
+    return { data, error: error as Error | null };
   },
 
   /**
@@ -198,8 +242,14 @@ export const notesService = {
     if (error) return { data: null, error: error as Error };
     if (!data) return { data: [], error: null };
 
-    // Filter unique non-null folder names
-    const folders = Array.from(new Set(data.map((n: { folder: string | null }) => n.folder as string)));
+    const folders = Array.from(
+      new Set(
+        data
+          .map((n: { folder: string | null }) => n.folder?.trim())
+          .filter((folder): folder is string => Boolean(folder))
+      )
+    ).sort((left, right) => left.localeCompare(right));
+
     return { data: folders, error: null };
   },
 };

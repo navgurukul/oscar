@@ -12,8 +12,6 @@ import { VocabularyEntryCard, type EditState } from "./VocabularyEntryCard";
 import type { DBVocabularyEntry } from "@/lib/types/vocabulary.types";
 import { SUBSCRIPTION_CONFIG } from "@/lib/constants";
 
-const MAX_VOCABULARY_ENTRIES = 50;
-
 interface VocabularySectionProps {
   userId: string;
   isProUser: boolean;
@@ -80,16 +78,6 @@ export function VocabularySection({
         vocabulary.length >= SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY
       ) {
         setShowUpgradePrompt(true);
-        return false;
-      }
-
-      // Absolute max entries guard
-      if (vocabulary.length >= MAX_VOCABULARY_ENTRIES) {
-        toast({
-          title: "Vocabulary limit reached",
-          description: `You can only add up to ${MAX_VOCABULARY_ENTRIES} entries.`,
-          variant: "destructive",
-        });
         return false;
       }
 
@@ -208,9 +196,7 @@ export function VocabularySection({
     []
   );
 
-  const maxEntries = isProUser
-    ? MAX_VOCABULARY_ENTRIES
-    : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY;
+  const maxEntries = isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY;
 
   return (
     <>
@@ -223,7 +209,7 @@ export function VocabularySection({
             </h2>
           </div>
           <span className="text-sm text-gray-400">
-            {vocabulary.length}/{maxEntries} entries
+            {vocabulary.length}/{maxEntries ?? "Unlimited"} entries
           </span>
         </div>
 

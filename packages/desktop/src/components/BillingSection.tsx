@@ -3,6 +3,7 @@ import { CreditCard, Check, Loader2, Calendar, Zap, Crown } from "lucide-react";
 import { supabase } from "../supabase";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { formatBillingDate } from "../lib/utils";
+import { SUBSCRIPTION_CONFIG } from "@oscar/shared/constants";
 
 type SubscriptionStatus = "active" | "cancelled" | "expired" | "past_due" | null;
 
@@ -21,10 +22,9 @@ interface SubscriptionData {
   vocabularyLimit: number | null;
 }
 
-const FREE_RECORDINGS_LIMIT = 50;
-const FREE_VOCABULARY_LIMIT = 5;
-const PRO_RECORDINGS_LIMIT = 1000;
-const PRO_VOCABULARY_LIMIT = 50;
+const WEB_APP_URL =
+  import.meta.env.VITE_WEB_APP_URL ?? "https://oscar.samyarth.org";
+const PRICING_URL = `${WEB_APP_URL}/pricing`;
 
 export function BillingSection({ userId, userEmail }: BillingSectionProps) {
   const [isLoading, setIsLoading] = useState(true);
@@ -33,9 +33,9 @@ export function BillingSection({ userId, userEmail }: BillingSectionProps) {
     billingCycle: null,
     currentPeriodEnd: null,
     recordingsThisMonth: 0,
-    recordingsLimit: FREE_RECORDINGS_LIMIT,
+    recordingsLimit: SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS,
     vocabularyCount: 0,
-    vocabularyLimit: FREE_VOCABULARY_LIMIT,
+    vocabularyLimit: SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY,
   });
   const [isUpgrading, setIsUpgrading] = useState(false);
 
@@ -77,9 +77,11 @@ export function BillingSection({ userId, userEmail }: BillingSectionProps) {
         billingCycle: subData?.billing_cycle || null,
         currentPeriodEnd: subData?.current_period_end || null,
         recordingsThisMonth: recordingsCount || 0,
-        recordingsLimit: isPro ? PRO_RECORDINGS_LIMIT : FREE_RECORDINGS_LIMIT,
+        recordingsLimit: isPro
+          ? null
+          : SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS,
         vocabularyCount: vocabCount || 0,
-        vocabularyLimit: isPro ? PRO_VOCABULARY_LIMIT : FREE_VOCABULARY_LIMIT,
+        vocabularyLimit: isPro ? null : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY,
       });
     } catch (e) {
       console.error("Failed to load subscription data:", e);
@@ -91,8 +93,7 @@ export function BillingSection({ userId, userEmail }: BillingSectionProps) {
   const handleUpgrade = useCallback(async () => {
     setIsUpgrading(true);
     try {
-      // Open pricing page in browser
-      await openUrl("https://oscar-ai.app/pricing");
+      await openUrl(PRICING_URL);
     } catch (e) {
       console.error("Failed to open pricing:", e);
     } finally {
@@ -145,7 +146,7 @@ export function BillingSection({ userId, userEmail }: BillingSectionProps) {
         ) : (
           <div className="plan-details">
             <p className="plan-description">
-              Upgrade to Pro for unlimited recordings, vocabulary entries, and priority AI processing.
+              Upgrade to Pro for unlimited recordings, notes, vocabulary entries, and priority AI processing.
             </p>
             <button
               className="upgrade-btn"
@@ -160,7 +161,7 @@ export function BillingSection({ userId, userEmail }: BillingSectionProps) {
               ) : (
                 <>
                   <Crown size={16} />
-                  Upgrade to Pro
+                  View Pro Plans
                 </>
               )}
             </button>
@@ -181,7 +182,10 @@ export function BillingSection({ userId, userEmail }: BillingSectionProps) {
             <div className="usage-header">
               <span className="usage-label">Recordings</span>
               <span className="usage-value">
-                {subscription.recordingsThisMonth} / {subscription.recordingsLimit === PRO_RECORDINGS_LIMIT ? "Unlimited" : subscription.recordingsLimit}
+                {subscription.recordingsThisMonth} /{" "}
+                {subscription.recordingsLimit === null
+                  ? "Unlimited"
+                  : subscription.recordingsLimit}
               </span>
             </div>
             <div className="usage-bar">
@@ -199,7 +203,10 @@ export function BillingSection({ userId, userEmail }: BillingSectionProps) {
             <div className="usage-header">
               <span className="usage-label">Vocabulary Entries</span>
               <span className="usage-value">
-                {subscription.vocabularyCount} / {subscription.vocabularyLimit === PRO_VOCABULARY_LIMIT ? "Unlimited" : subscription.vocabularyLimit}
+                {subscription.vocabularyCount} /{" "}
+                {subscription.vocabularyLimit === null
+                  ? "Unlimited"
+                  : subscription.vocabularyLimit}
               </span>
             </div>
             <div className="usage-bar">
@@ -225,7 +232,11 @@ export function BillingSection({ userId, userEmail }: BillingSectionProps) {
             </li>
             <li>
               <Check size={16} />
-              <span>Up to {PRO_VOCABULARY_LIMIT} vocabulary entries</span>
+              <span>Store unlimited notes forever</span>
+            </li>
+            <li>
+              <Check size={16} />
+              <span>Unlimited vocabulary entries</span>
             </li>
             <li>
               <Check size={16} />

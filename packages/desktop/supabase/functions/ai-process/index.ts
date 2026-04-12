@@ -6,12 +6,7 @@ type Mode =
   | "cleanup"
   | "summary"
   | "bullets"
-  | "email"
-  | "meeting_general"
-  | "meeting_standup"
-  | "meeting_1on1"
-  | "meeting_brainstorm"
-  | "meeting_custom";
+  | "email";
 
 interface AIProcessRequest {
   text: string;
@@ -30,11 +25,6 @@ const VALID_MODES = new Set<Mode>([
   "summary",
   "bullets",
   "email",
-  "meeting_general",
-  "meeting_standup",
-  "meeting_1on1",
-  "meeting_brainstorm",
-  "meeting_custom",
 ]);
 
 function buildPrompt(mode: Mode, text: string): { system: string; user: string } {
@@ -76,64 +66,6 @@ function buildPrompt(mode: Mode, text: string): { system: string; user: string }
           "Output only the email body:\n\n" +
           text
         );
-      case "meeting_general":
-        return (
-          "You are a meeting notes assistant. The transcript may be in Hinglish (Hindi words " +
-          "in Roman script mixed with English), understand both and produce notes in clear English.\n\n" +
-          "Analyze the following meeting transcript and produce structured meeting notes with these sections:\n" +
-          "## Key Discussion Points\n" +
-          "## Decisions Made\n" +
-          "## Action Items\n" +
-          "(include owner if mentioned and deadline if mentioned)\n" +
-          "## Follow-ups\n\n" +
-          "Output only the structured notes in markdown format:\n\n" +
-          text
-        );
-      case "meeting_standup":
-        return (
-          "You are a standup meeting notes assistant. The transcript may be in Hinglish (Hindi words " +
-          "in Roman script mixed with English), understand both and produce notes in clear English.\n\n" +
-          "Analyze the following standup transcript and produce structured notes with these sections:\n" +
-          "## What Was Done (Yesterday/Recently)\n" +
-          "## What's Being Worked On (Today/Next)\n" +
-          "## Blockers & Risks\n\n" +
-          "If multiple people spoke, organize by person. Output only the structured notes in markdown:\n\n" +
-          text
-        );
-      case "meeting_1on1":
-        return (
-          "You are a 1:1 meeting notes assistant. The transcript may be in Hinglish (Hindi words " +
-          "in Roman script mixed with English), understand both and produce notes in clear English.\n\n" +
-          "Analyze the following 1:1 meeting transcript and produce structured notes with these sections:\n" +
-          "## Discussion Points\n" +
-          "## Feedback & Recognition\n" +
-          "## Action Items\n" +
-          "(include owner and deadline if mentioned)\n" +
-          "## Follow-ups for Next Meeting\n\n" +
-          "Output only the structured notes in markdown format:\n\n" +
-          text
-        );
-      case "meeting_brainstorm":
-        return (
-          "You are a brainstorming session notes assistant. The transcript may be in Hinglish (Hindi words " +
-          "in Roman script mixed with English), understand both and produce notes in clear English.\n\n" +
-          "Analyze the following brainstorm transcript and produce structured notes with these sections:\n" +
-          "## Ideas Generated\n" +
-          "(list each idea with a brief description)\n" +
-          "## Key Themes\n" +
-          "## Top Ideas (Ranked by Discussion Energy)\n" +
-          "## Next Steps\n\n" +
-          "Output only the structured notes in markdown format:\n\n" +
-          text
-        );
-      case "meeting_custom":
-        return (
-          "You are a meeting notes assistant. The transcript may be in Hinglish (Hindi words " +
-          "in Roman script mixed with English), understand both and produce notes in clear English.\n\n" +
-          "Analyze the following meeting transcript and produce structured meeting notes following " +
-          "the instructions included in the text. Output only the structured notes in markdown format:\n\n" +
-          text
-        );
       default:
         return text;
     }
@@ -155,6 +87,13 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const accessToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!accessToken) {
+      return new Response(JSON.stringify({ error: "Missing bearer token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -165,7 +104,7 @@ Deno.serve(async (req: Request) => {
     const {
       data: { user },
       error: authError,
-    } = await supabaseClient.auth.getUser();
+    } = await supabaseClient.auth.getUser(accessToken);
 
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {

@@ -20,12 +20,19 @@ export const feedbackService = {
     reasons?: FeedbackReason[]
   ): Promise<{ success: boolean; error: Error | null }> {
     const supabase = getSupabase();
+    const normalizedReasons =
+      helpful
+        ? null
+        : Array.from(new Set((reasons ?? []).filter(Boolean)));
 
     const { error } = await supabase
       .from("notes")
       .update({
         feedback_helpful: helpful,
-        feedback_reasons: reasons || null,
+        feedback_reasons:
+          normalizedReasons && normalizedReasons.length > 0
+            ? normalizedReasons
+            : null,
         feedback_timestamp: new Date().toISOString(),
       })
       .eq("id", noteId);
@@ -111,6 +118,7 @@ export const feedbackService = {
     error: Error | null;
   }> {
     const supabase = getSupabase();
+    const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
 
     const { data, error } = await supabase
       .from("notes")
@@ -120,7 +128,7 @@ export const feedbackService = {
       .eq("feedback_helpful", false)
       .not("feedback_reasons", "is", null)
       .order("feedback_timestamp", { ascending: false })
-      .limit(limit);
+      .limit(safeLimit);
 
     if (error) {
       console.error("Failed to fetch negative feedback:", error);

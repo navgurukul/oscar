@@ -89,7 +89,7 @@ export default function FolderManagementSection() {
     if (!targetNoteId) {
       toast({
         title: "Error",
-        description: "Please select a note to assign to this folder.",
+        description: "Please select a Scribble to place in this folder.",
         variant: "destructive",
       });
       return;
@@ -119,7 +119,7 @@ export default function FolderManagementSection() {
         setTargetNoteId("");
         toast({
           title: "Success",
-          description: `Folder "${newFolderName.trim()}" created and assigned to note.`,
+          description: `Folder "${newFolderName.trim()}" created and assigned to your Scribble.`,
         });
         // Redirect back to notes if coming from notes page
         if (fromNotes) {
@@ -165,13 +165,14 @@ export default function FolderManagementSection() {
     }
 
     try {
-      // Update all notes with old folder name to new folder name
       const notesInFolder = allNotes.filter((n) => n.folder === oldName);
+      const { error } = await notesService.updateNotes(
+        notesInFolder.map((note) => note.id),
+        { folder: editValue.trim() }
+      );
 
-      for (const note of notesInFolder) {
-        await notesService.updateNote(note.id, {
-          folder: editValue.trim(),
-        });
+      if (error) {
+        throw error;
       }
 
       setFolders(folders.map((f) => (f === oldName ? editValue.trim() : f)));
@@ -197,13 +198,14 @@ export default function FolderManagementSection() {
 
   const handleDeleteFolder = async (folderName: string) => {
     try {
-      // Remove folder from all notes
       const notesInFolder = allNotes.filter((n) => n.folder === folderName);
+      const { error } = await notesService.updateNotes(
+        notesInFolder.map((note) => note.id),
+        { folder: null }
+      );
 
-      for (const note of notesInFolder) {
-        await notesService.updateNote(note.id, {
-          folder: null,
-        });
+      if (error) {
+        throw error;
       }
 
       setFolders(folders.filter((f) => f !== folderName));
@@ -235,7 +237,7 @@ export default function FolderManagementSection() {
             Create New Folder
           </CardTitle>
           <CardDescription className="text-gray-400">
-            Create a folder and assign it to a note
+            Folders are created when you place at least one Scribble inside them
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -253,12 +255,12 @@ export default function FolderManagementSection() {
 
               <Select value={targetNoteId} onValueChange={setTargetNoteId}>
                 <SelectTrigger className="bg-slate-800 border-slate-700 text-gray-300 w-[200px]">
-                  <SelectValue placeholder="Select note..." />
+                  <SelectValue placeholder="Select Scribble..." />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-slate-700 text-gray-300 max-h-64 overflow-y-auto">
                   {allNotes.length === 0 ? (
                     <SelectItem value="no-notes" disabled>
-                      No notes available
+                      No Scribbles available
                     </SelectItem>
                   ) : (
                     allNotes.map((note) => (
@@ -309,7 +311,7 @@ export default function FolderManagementSection() {
               <FolderPlus className="w-12 h-12 text-gray-600 mb-3" />
               <p className="text-gray-400 font-medium mb-1">No folders yet</p>
               <p className="text-gray-500 text-sm text-center">
-                Start by creating a folder and assigning it to a note.
+                Start by creating a folder and assigning it to a Scribble.
               </p>
             </div>
           ) : (
@@ -345,7 +347,7 @@ export default function FolderManagementSection() {
                             {folder}
                           </span>
                           <span className="text-xs text-gray-500">
-                            {notesCount} note{notesCount !== 1 ? "s" : ""}
+                            {notesCount} Scribble{notesCount !== 1 ? "s" : ""}
                           </span>
                         </div>
                       )}
@@ -400,8 +402,8 @@ export default function FolderManagementSection() {
                                 </AlertDialogTitle>
                                 <AlertDialogDescription className="text-gray-400">
                                   This will remove the &quot;{folder}&quot; folder from all{" "}
-                                  {notesCount} note{notesCount !== 1 ? "s" : ""}.
-                                  Notes will still exist but won&apos;t be organized by
+                                  {notesCount} Scribble{notesCount !== 1 ? "s" : ""}.
+                                  Scribbles will still exist but won&apos;t be organized by
                                   this folder.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>

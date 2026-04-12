@@ -179,7 +179,7 @@ jobs:
         working-directory: packages/desktop
         env:
           VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
-          VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
+          VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
         run: pnpm build
 
@@ -193,7 +193,7 @@ jobs:
           CXXFLAGS: ${{ matrix.cflags }}
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macosx_deployment_target }}
           VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
-          VITE_SUPABASE_ANON_KEY: "sb_publishable_BqrircmTyzIis-yumtmBTw_GHhCjAoR"
+          VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
         run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 

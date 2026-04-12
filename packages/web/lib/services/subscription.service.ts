@@ -3,7 +3,6 @@
  * Handles subscription business logic and database operations
  */
 
-import { createClient } from "@supabase/supabase-js";
 import type {
   DBSubscription,
   DBSubscriptionInsert,
@@ -12,26 +11,7 @@ import type {
   RazorpaySubscriptionStatus,
   BillingCycle,
 } from "@/lib/types/subscription.types";
-
-/**
- * Get Supabase admin client (bypasses RLS)
- * Used for webhook updates that need to modify any user's data
- */
-function getSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Supabase admin credentials not configured");
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
+import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
 
 export const subscriptionService = {
   /**

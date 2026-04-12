@@ -80,6 +80,14 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${figtree.variable} ${ebGaramond.variable}`} suppressHydrationWarning>
       <head>
+        {/* PWA manifest */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#06B6D4" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="apple-touch-icon" href="/OSCARLOGO.png" />
+
         {/* Load ONNX Runtime Web from CDN to avoid bundling issues and fix 'onnxruntime' missing error */}
         <Script
           src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"
@@ -91,6 +99,18 @@ export default function RootLayout({
             if (typeof window !== 'undefined') {
               // Shim for libraries that expect 'onnxruntime' instead of 'ort'
               window.onnxruntime = window.ort;
+            }
+          `}
+        </Script>
+        {/* Register service worker for offline support */}
+        <Script id="sw-register" strategy="afterInteractive">
+          {`
+            if ('serviceWorker' in navigator) {
+              window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                  .then(function(reg) { console.log('[SW] registered:', reg.scope); })
+                  .catch(function(err) { console.warn('[SW] registration failed:', err); });
+              });
             }
           `}
         </Script>

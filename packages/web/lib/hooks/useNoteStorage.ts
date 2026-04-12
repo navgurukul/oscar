@@ -24,7 +24,7 @@ export function useNoteStorage() {
     storageService.saveNote(formatted, raw, noteTitle);
     setFormattedNote(formatted);
     setRawText(raw);
-    if (noteTitle) setTitle(noteTitle);
+    setTitle(noteTitle || "");
   };
 
   const updateFormattedNote = (text: string) => {

@@ -2,10 +2,21 @@
  * Rate Limiting Middleware
  *
  * Prevents API abuse by limiting requests per user/IP within time windows.
- * Uses in-memory storage with automatic cleanup.
+ * Uses Supabase (rate_limits table) for cross-instance persistence, with an
+ * in-memory map as a fallback when the table is unavailable.
+ *
+ * Required migration (run once):
+ *   CREATE TABLE IF NOT EXISTS rate_limits (
+ *     key        TEXT PRIMARY KEY,
+ *     count      INTEGER NOT NULL DEFAULT 1,
+ *     reset_at   TIMESTAMPTZ NOT NULL,
+ *     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ *   );
+ *   CREATE INDEX IF NOT EXISTS rate_limits_reset_at_idx ON rate_limits (reset_at);
  */
 
 import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
 
 interface RateLimitEntry {
   count: number;
@@ -14,112 +25,111 @@ interface RateLimitEntry {
 }
 
 interface RateLimitConfig {
-  /**
-   * Maximum number of requests allowed in the time window
-   */
+  /** Maximum number of requests allowed in the time window */
   maxRequests: number;
-
-  /**
-   * Time window in milliseconds
-   */
+  /** Time window in milliseconds */
   windowMs: number;
-
-  /**
-   * Custom error message to return when rate limit is exceeded
-   */
+  /** Custom error message to return when rate limit is exceeded */
   message?: string;
-
-  /**
-   * Skip rate limiting for certain conditions (e.g., webhooks with valid signatures)
-   */
+  /** Skip rate limiting for certain conditions */
   skip?: (identifier: string) => boolean;
 }
 
-// In-memory storage for rate limits
-// Key format: "endpoint:identifier"
-const rateLimitStore = new Map<string, RateLimitEntry>();
+// In-memory fallback store (used when Supabase is unavailable)
+const fallbackStore = new Map<string, RateLimitEntry>();
 
-// Cleanup old entries every 5 minutes
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
-let cleanupIntervalId: NodeJS.Timeout | null = null;
+// Cleanup fallback store every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of Array.from(fallbackStore.entries())) {
+    if (entry.resetAt < now) fallbackStore.delete(key);
+  }
+}, 5 * 60 * 1000);
 
 /**
- * Start automatic cleanup of expired rate limit entries
+ * Atomically increment a rate-limit counter in Supabase.
+ * Returns the new {count, resetAt} or null if Supabase is unavailable.
+ *
+ * Uses an upsert: on conflict the count is incremented in-place when the
+ * window is still valid, or reset to 1 when it has expired.
  */
-function startCleanup() {
-  if (cleanupIntervalId) return;
+async function supabaseIncrement(
+  key: string,
+  windowMs: number
+): Promise<{ count: number; resetAt: number } | null> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const now = new Date();
+    const resetAt = new Date(Date.now() + windowMs);
 
-  cleanupIntervalId = setInterval(() => {
-    const now = Date.now();
-    const keysToDelete: string[] = [];
+    // Read current entry first so we can decide the new count atomically.
+    const { data: existing, error: selectError } = await supabase
+      .from("rate_limits")
+      .select("count, reset_at")
+      .eq("key", key)
+      .maybeSingle();
 
-    rateLimitStore.forEach((entry, key) => {
-      if (entry.resetAt < now) {
-        keysToDelete.push(key);
-      }
-    });
+    if (selectError) return null;
 
-    keysToDelete.forEach((key) => rateLimitStore.delete(key));
+    const existingResetAt = existing ? new Date(existing.reset_at).getTime() : 0;
+    const windowExpired = existingResetAt < now.getTime();
+    const newCount = windowExpired || !existing ? 1 : existing.count + 1;
+    const newResetAt = windowExpired || !existing ? resetAt : new Date(existingResetAt);
 
-    if (keysToDelete.length > 0) {
-      console.log(
-        `[Rate Limit] Cleaned up ${keysToDelete.length} expired entries`
+    const { error: upsertError } = await supabase
+      .from("rate_limits")
+      .upsert(
+        {
+          key,
+          count: newCount,
+          reset_at: newResetAt.toISOString(),
+          updated_at: now.toISOString(),
+        },
+        { onConflict: "key" }
       );
-    }
-  }, CLEANUP_INTERVAL_MS);
+
+    if (upsertError) return null;
+
+    return { count: newCount, resetAt: newResetAt.getTime() };
+  } catch {
+    return null;
+  }
 }
 
-// Start cleanup on module load
-startCleanup();
-
 /**
- * Check if a request should be rate limited
- *
- * @param identifier - Unique identifier for the rate limit (e.g., userId or IP address)
- * @param endpoint - API endpoint name for separate rate limit buckets
- * @param config - Rate limit configuration
- * @returns Object with allowed status and remaining requests
+ * Check and increment the rate limit counter for a given identifier/endpoint.
+ * Tries Supabase first; falls back to in-memory on any error.
  */
-export function checkRateLimit(
-  identifier: string,
-  endpoint: string,
+async function incrementAndCheck(
+  key: string,
   config: RateLimitConfig
-): {
-  allowed: boolean;
-  remaining: number;
-  resetAt: number;
-  retryAfter?: number;
-} {
-  // Skip rate limiting if configured
-  if (config.skip?.(identifier)) {
-    return { allowed: true, remaining: config.maxRequests, resetAt: 0 };
-  }
-
-  const key = `${endpoint}:${identifier}`;
+): Promise<{ allowed: boolean; remaining: number; resetAt: number; retryAfter?: number }> {
   const now = Date.now();
 
-  const entry = rateLimitStore.get(key);
+  // Try Supabase-backed throttling
+  const result = await supabaseIncrement(key, config.windowMs);
 
-  // No entry exists or entry has expired - allow request
-  if (!entry || entry.resetAt < now) {
-    const resetAt = now + config.windowMs;
-    rateLimitStore.set(key, {
-      count: 1,
-      resetAt,
-      firstRequestAt: now,
-    });
-    return {
-      allowed: true,
-      remaining: config.maxRequests - 1,
-      resetAt,
-    };
+  if (result) {
+    const { count, resetAt } = result;
+    const allowed = count <= config.maxRequests;
+    const remaining = Math.max(0, config.maxRequests - count);
+    const retryAfter = allowed ? undefined : Math.ceil((resetAt - now) / 1000);
+    return { allowed, remaining, resetAt, retryAfter };
   }
 
-  // Entry exists and hasn't expired
-  if (entry.count < config.maxRequests) {
-    // Within limit - increment and allow
-    entry.count++;
-    rateLimitStore.set(key, entry);
+  // Fallback: in-memory store
+  const entry = fallbackStore.get(key);
+
+  if (!entry || entry.resetAt < now) {
+    const resetAt = now + config.windowMs;
+    fallbackStore.set(key, { count: 1, resetAt, firstRequestAt: now });
+    return { allowed: true, remaining: config.maxRequests - 1, resetAt };
+  }
+
+  entry.count++;
+  fallbackStore.set(key, entry);
+
+  if (entry.count <= config.maxRequests) {
     return {
       allowed: true,
       remaining: config.maxRequests - entry.count,
@@ -127,14 +137,8 @@ export function checkRateLimit(
     };
   }
 
-  // Rate limit exceeded
   const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-  return {
-    allowed: false,
-    remaining: 0,
-    resetAt: entry.resetAt,
-    retryAfter,
-  };
+  return { allowed: false, remaining: 0, resetAt: entry.resetAt, retryAfter };
 }
 
 /**
@@ -142,17 +146,14 @@ export function checkRateLimit(
  */
 export function createRateLimitResponse(
   config: RateLimitConfig,
-  result: ReturnType<typeof checkRateLimit>
+  result: { remaining: number; resetAt: number; retryAfter?: number }
 ): NextResponse {
   const message =
     config.message ||
     `Rate limit exceeded. Please try again in ${result.retryAfter} seconds.`;
 
   return NextResponse.json(
-    {
-      error: message,
-      retryAfter: result.retryAfter,
-    },
+    { error: message, retryAfter: result.retryAfter },
     {
       status: 429,
       headers: {
@@ -166,19 +167,22 @@ export function createRateLimitResponse(
 }
 
 /**
- * Apply rate limiting to an API route
- * Returns null if allowed, or a NextResponse if rate limited
+ * Apply rate limiting to an API route.
+ * Returns null if the request is allowed, or a 429 NextResponse if blocked.
  *
  * @example
- * const rateLimitResult = applyRateLimit(userId, "format-api", { maxRequests: 10, windowMs: 60000 });
+ * const rateLimitResult = await applyRateLimit(userId, "format-api", { maxRequests: 10, windowMs: 60000 });
  * if (rateLimitResult) return rateLimitResult;
  */
-export function applyRateLimit(
+export async function applyRateLimit(
   identifier: string,
   endpoint: string,
   config: RateLimitConfig
-): NextResponse | null {
-  const result = checkRateLimit(identifier, endpoint, config);
+): Promise<NextResponse | null> {
+  if (config.skip?.(identifier)) return null;
+
+  const key = `${endpoint}:${identifier}`;
+  const result = await incrementAndCheck(key, config);
 
   if (!result.allowed) {
     console.warn(
@@ -192,65 +196,14 @@ export function applyRateLimit(
 }
 
 /**
- * Get current rate limit status for an identifier
- * Useful for showing users their remaining quota
- */
-export function getRateLimitStatus(
-  identifier: string,
-  endpoint: string,
-  maxRequests: number
-): { used: number; remaining: number; resetAt: number | null } {
-  const key = `${endpoint}:${identifier}`;
-  const entry = rateLimitStore.get(key);
-  const now = Date.now();
-
-  if (!entry || entry.resetAt < now) {
-    return {
-      used: 0,
-      remaining: maxRequests,
-      resetAt: null,
-    };
-  }
-
-  return {
-    used: entry.count,
-    remaining: Math.max(0, maxRequests - entry.count),
-    resetAt: entry.resetAt,
-  };
-}
-
-/**
- * Clear rate limit for a specific identifier (useful for testing or admin overrides)
- */
-export function clearRateLimit(identifier: string, endpoint?: string): void {
-  if (endpoint) {
-    const key = `${endpoint}:${identifier}`;
-    rateLimitStore.delete(key);
-  } else {
-    // Clear all entries for this identifier
-    const keysToDelete: string[] = [];
-    rateLimitStore.forEach((_, key) => {
-      if (key.endsWith(`:${identifier}`)) {
-        keysToDelete.push(key);
-      }
-    });
-    keysToDelete.forEach((key) => rateLimitStore.delete(key));
-  }
-}
-
-/**
  * Get client identifier from request (user ID or IP address)
  */
 export function getClientIdentifier(
   userId?: string,
   request?: Request
 ): string {
-  // Prefer user ID for authenticated requests
-  if (userId) {
-    return `user:${userId}`;
-  }
+  if (userId) return `user:${userId}`;
 
-  // Fallback to IP address for unauthenticated requests
   if (request) {
     const forwarded = request.headers.get("x-forwarded-for");
     const ip = forwarded
@@ -260,4 +213,25 @@ export function getClientIdentifier(
   }
 
   return "unknown";
+}
+
+/**
+ * Clear rate limit for a specific identifier (useful for testing or admin overrides)
+ */
+export async function clearRateLimit(identifier: string, endpoint?: string): Promise<void> {
+  // Clear in-memory fallback
+  if (endpoint) {
+    const key = `${endpoint}:${identifier}`;
+    fallbackStore.delete(key);
+    try {
+      await getSupabaseAdmin().from("rate_limits").delete().eq("key", key);
+    } catch { /* ignore */ }
+  } else {
+    for (const key of Array.from(fallbackStore.keys())) {
+      if (key.endsWith(`:${identifier}`)) fallbackStore.delete(key);
+    }
+    try {
+      await getSupabaseAdmin().from("rate_limits").delete().like("key", `%:${identifier}`);
+    } catch { /* ignore */ }
+  }
 }

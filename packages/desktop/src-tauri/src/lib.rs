@@ -1,9 +1,10 @@
 use arboard::Clipboard;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
+    Arc, Mutex, OnceLock,
 };
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -289,6 +290,21 @@ mod macos_paste {
 
 static PENDING_DEEP_LINK: Mutex<Option<String>> = Mutex::new(None);
 
+/// HWND (as usize) of the focused window captured at hotkey press on Windows.
+/// Used by paste_transcription to re-focus the correct window before Ctrl+V.
+#[cfg(target_os = "windows")]
+static FOCUSED_WIN_HWND: AtomicUsize = AtomicUsize::new(0);
+
+/// xdotool window ID captured at hotkey press on Linux.
+/// Used by paste_transcription to re-focus the correct window before Ctrl+V.
+#[cfg(target_os = "linux")]
+static FOCUSED_WIN_XID: AtomicU64 = AtomicU64::new(0);
+
+/// System tray indicator used on Linux in place of the pill webview window.
+/// Initialised once in setup(); pill functions update its tooltip to show state.
+#[cfg(target_os = "linux")]
+static LINUX_TRAY: OnceLock<tauri::tray::TrayIcon> = OnceLock::new();
+
 /// Set a pending deep link URL (called from deep link plugin)
 pub fn set_pending_deep_link(url: String) {
     if let Ok(mut pending) = PENDING_DEEP_LINK.lock() {
@@ -300,6 +316,9 @@ pub fn set_pending_deep_link(url: String) {
 
 struct AppState {
     whisper_context: Option<WhisperContext>,
+    loaded_model_role: Option<String>,
+    loaded_model_path: Option<String>,
+    meeting_system_audio_segments: HashMap<usize, Vec<f32>>,
 }
 
 struct HotkeyState {
@@ -308,9 +327,30 @@ struct HotkeyState {
 }
 
 #[derive(Serialize, Deserialize)]
+struct TranscriptSpeaker {
+    source: String,
+    diarization_label: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TranscriptSegmentResult {
+    text: String,
+    start_ms: i64,
+    end_ms: i64,
+    speaker: TranscriptSpeaker,
+}
+
+#[derive(Serialize, Deserialize)]
 struct TranscriptionResult {
     text: String,
     error: Option<String>,
+    segments: Option<Vec<TranscriptSegmentResult>>,
+}
+
+#[derive(Serialize, Clone)]
+struct CalendarAttendee {
+    name: String,
+    email: String,
 }
 
 fn recording_shortcut() -> Shortcut {
@@ -367,7 +407,36 @@ fn register_recording_hotkey<R: tauri::Runtime>(
                             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
                             .unwrap_or_default()
                     };
-                    #[cfg(not(target_os = "macos"))]
+                    #[cfg(target_os = "windows")]
+                    let frontmost_app = {
+                        use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+                        let hwnd = unsafe { GetForegroundWindow() };
+                        FOCUSED_WIN_HWND.store(hwnd as usize, Ordering::SeqCst);
+                        log::info!("[hotkey] captured HWND=0x{:x}", hwnd as usize);
+                        String::new()
+                    };
+
+                    #[cfg(target_os = "linux")]
+                    let frontmost_app = {
+                        match std::process::Command::new("xdotool")
+                            .arg("getactivewindow")
+                            .output()
+                        {
+                            Ok(o) => {
+                                let xid_str = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                                if let Ok(xid) = xid_str.parse::<u64>() {
+                                    FOCUSED_WIN_XID.store(xid, Ordering::SeqCst);
+                                    log::info!("[hotkey] captured xdotool XID={}", xid);
+                                } else {
+                                    log::warn!("[hotkey] xdotool returned non-numeric: {:?}", xid_str);
+                                }
+                            }
+                            Err(e) => log::warn!("[hotkey] xdotool not available: {}", e),
+                        }
+                        String::new()
+                    };
+
+                    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
                     let frontmost_app = String::new();
 
                     log::info!("[hotkey] frontmost app = '{}'", frontmost_app);
@@ -477,24 +546,57 @@ async fn download_whisper_model(
 #[tauri::command]
 fn load_whisper_model(
     path: String,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
+    load_whisper_model_inner("dictation", &path, state.inner())
+}
+
+fn load_whisper_model_inner(
+    role: &str,
+    path: &str,
+    state: &Arc<Mutex<AppState>>,
+) -> Result<String, String> {
+    let should_reload = {
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        !(
+            app_state.whisper_context.is_some()
+                && app_state.loaded_model_role.as_deref() == Some(role)
+                && app_state.loaded_model_path.as_deref() == Some(path)
+        )
+    };
+
+    if !should_reload {
+        log::info!("[whisper] Model already loaded for role={} path={}", role, path);
+        return Ok("Whisper model already loaded".to_string());
+    }
+
     log::info!("[whisper] Loading model from: {}", path);
     let params = WhisperContextParameters::default();
     let context =
-        WhisperContext::new_with_params(&path, params).map_err(|e| {
+        WhisperContext::new_with_params(path, params).map_err(|e| {
             log::error!("[whisper] Failed to load model: {}", e);
             e.to_string()
         })?;
     let mut app_state = state.lock().map_err(|e| e.to_string())?;
     app_state.whisper_context = Some(context);
+    app_state.loaded_model_role = Some(role.to_string());
+    app_state.loaded_model_path = Some(path.to_string());
     log::info!("[whisper] Model loaded successfully");
     Ok("Whisper model loaded successfully".to_string())
 }
 
 #[tauri::command]
+fn ensure_whisper_model_loaded(
+    role: String,
+    path: String,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<String, String> {
+    load_whisper_model_inner(&role, &path, state.inner())
+}
+
+#[tauri::command]
 fn warm_whisper_runtime(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
     let locked = state.lock().map_err(|e| e.to_string())?;
     let context = locked
@@ -526,8 +628,17 @@ fn transcribe_audio_inner(
     audio_data: &[f32],
     initial_prompt: Option<&str>,
     language: Option<&str>,
-    app_state: &Mutex<AppState>,
+    app_state: &Arc<Mutex<AppState>>,
+    source: Option<&str>,
 ) -> Result<TranscriptionResult, String> {
+    if audio_data.is_empty() {
+        return Ok(TranscriptionResult {
+            text: String::new(),
+            error: None,
+            segments: None,
+        });
+    }
+
     log::info!(
         "[whisper] transcribe_audio_inner — {} samples ({:.1}s), lang={:?}",
         audio_data.len(),
@@ -574,12 +685,30 @@ fn transcribe_audio_inner(
     let num_segments = state.full_n_segments();
     log::info!("[whisper] Inference complete — {} segments", num_segments);
     let mut full_text = String::new();
+    let mut structured_segments = Vec::new();
 
     for i in 0..num_segments {
         if let Some(segment) = state.get_segment(i) {
             if let Ok(text) = segment.to_str() {
-                full_text.push_str(text.trim());
+                let trimmed = text.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+
+                full_text.push_str(trimmed);
                 full_text.push(' ');
+
+                if let Some(segment_source) = source {
+                    structured_segments.push(TranscriptSegmentResult {
+                        text: trimmed.to_string(),
+                        start_ms: segment.start_timestamp() * 10,
+                        end_ms: segment.end_timestamp() * 10,
+                        speaker: TranscriptSpeaker {
+                            source: segment_source.to_string(),
+                            diarization_label: None,
+                        },
+                    });
+                }
             }
         }
     }
@@ -590,7 +719,58 @@ fn transcribe_audio_inner(
     Ok(TranscriptionResult {
         text: full_text.trim().to_string(),
         error: None,
+        segments: if structured_segments.is_empty() {
+            None
+        } else {
+            Some(structured_segments)
+        },
     })
+}
+
+fn merge_transcription_results(results: Vec<TranscriptionResult>) -> TranscriptionResult {
+    let mut segments = Vec::new();
+    let mut text_parts = Vec::new();
+
+    for result in results {
+        let trimmed_text = result.text.trim();
+        if !trimmed_text.is_empty() {
+            text_parts.push(trimmed_text.to_string());
+        }
+
+        if let Some(mut result_segments) = result.segments {
+            segments.append(&mut result_segments);
+        }
+    }
+
+    segments.sort_by(|left, right| {
+        left.start_ms
+            .cmp(&right.start_ms)
+            .then(left.end_ms.cmp(&right.end_ms))
+            .then(left.speaker.source.cmp(&right.speaker.source))
+    });
+
+    let text = if segments.is_empty() {
+        text_parts.join(" ").trim().to_string()
+    } else {
+        segments
+            .iter()
+            .map(|segment| segment.text.trim())
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string()
+    };
+
+    TranscriptionResult {
+        text,
+        error: None,
+        segments: if segments.is_empty() {
+            None
+        } else {
+            Some(segments)
+        },
+    }
 }
 
 #[tauri::command]
@@ -598,13 +778,14 @@ fn transcribe_audio(
     audio_data: Vec<f32>,
     initial_prompt: Option<String>,
     language: Option<String>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
     transcribe_audio_inner(
         &audio_data,
         initial_prompt.as_deref(),
         language.as_deref(),
         &state,
+        None,
     )
 }
 
@@ -629,22 +810,9 @@ fn stop_system_audio_capture() -> Result<String, String> {
     Ok("System audio capture stopped".to_string())
 }
 
-/// Mix two audio buffers (same sample rate) by adding them sample-by-sample
-/// and clamping to [-1.0, 1.0].
-fn mix_audio(a: &[f32], b: &[f32]) -> Vec<f32> {
-    let max_len = a.len().max(b.len());
-    let mut mixed = Vec::with_capacity(max_len);
-    for i in 0..max_len {
-        let sa = if i < a.len() { a[i] } else { 0.0 };
-        let sb = if i < b.len() { b[i] } else { 0.0 };
-        mixed.push((sa + sb).clamp(-1.0, 1.0));
-    }
-    mixed
-}
-
 /// Transcribe meeting audio: receives microphone audio from the frontend,
-/// retrieves system audio captured in the background, mixes them together,
-/// and runs Whisper inference on the combined audio.
+/// retrieves system audio captured in the background, transcribes each source
+/// separately, and merges the segment timelines.
 ///
 /// This avoids transferring large system audio buffers across the IPC boundary.
 #[tauri::command]
@@ -652,7 +820,7 @@ fn transcribe_meeting_audio(
     mic_audio_data: Vec<f32>,
     initial_prompt: Option<String>,
     language: Option<String>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
     // Stop system audio capture and retrieve buffered samples
     system_audio::stop_capture();
@@ -664,25 +832,92 @@ fn transcribe_meeting_audio(
         system_audio_data.len()
     );
 
-    // Mix microphone + system audio (both are 16 kHz mono)
-    let audio_to_transcribe = if system_audio_data.is_empty() {
-        log::info!("[meeting] No system audio — transcribing mic only");
-        mic_audio_data
-    } else {
-        log::info!(
-            "[meeting] Mixing mic ({:.1}s) + system audio ({:.1}s)",
-            mic_audio_data.len() as f64 / 16000.0,
-            system_audio_data.len() as f64 / 16000.0
-        );
-        mix_audio(&mic_audio_data, &system_audio_data)
-    };
+    let mut results = Vec::new();
 
-    transcribe_audio_inner(
-        &audio_to_transcribe,
-        initial_prompt.as_deref(),
-        language.as_deref(),
-        &state,
-    )
+    if !mic_audio_data.is_empty() {
+        results.push(transcribe_audio_inner(
+            &mic_audio_data,
+            initial_prompt.as_deref(),
+            language.as_deref(),
+            &state,
+            Some("microphone"),
+        )?);
+    }
+
+    if !system_audio_data.is_empty() {
+        results.push(transcribe_audio_inner(
+            &system_audio_data,
+            initial_prompt.as_deref(),
+            language.as_deref(),
+            &state,
+            Some("speaker"),
+        )?);
+    }
+
+    Ok(merge_transcription_results(results))
+}
+
+fn merge_transcription_prompt(
+    initial_prompt: Option<String>,
+    previous_tail_text: Option<String>,
+) -> Option<String> {
+    let mut parts = Vec::new();
+
+    if let Some(prompt) = initial_prompt {
+        let trimmed = prompt.trim();
+        if !trimmed.is_empty() {
+            parts.push(trimmed.to_string());
+        }
+    }
+
+    if let Some(previous_tail) = previous_tail_text {
+        let trimmed = previous_tail.trim();
+        if !trimmed.is_empty() {
+            parts.push(format!("Previous transcript tail: {}", trimmed));
+        }
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n"))
+    }
+}
+
+#[tauri::command]
+fn clear_meeting_segment_buffers(
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<String, String> {
+    let mut app_state = state.lock().map_err(|e| e.to_string())?;
+    app_state.meeting_system_audio_segments.clear();
+    Ok("Meeting segment buffers cleared".to_string())
+}
+
+#[tauri::command]
+fn rotate_meeting_system_audio_segment(
+    segment_index: usize,
+    restart_capture: bool,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<String, String> {
+    system_audio::stop_capture();
+    let segment = system_audio::get_audio_data();
+    let sample_count = segment.len();
+
+    {
+        let mut app_state = state.lock().map_err(|e| e.to_string())?;
+        app_state
+            .meeting_system_audio_segments
+            .insert(segment_index, segment);
+    }
+
+    if restart_capture {
+        system_audio::start_capture()?;
+    }
+
+    Ok(format!(
+        "Stored system audio segment {} ({} samples)",
+        segment_index, sample_count
+    ))
 }
 
 // ── Audio decoding helpers ───────────────────────────────────────────────────
@@ -933,9 +1168,76 @@ fn decode_audio_to_pcm(bytes: &[u8], ext: &str) -> Result<Vec<f32>, String> {
     }
 }
 
+#[tauri::command]
+async fn transcribe_meeting_segment_bytes(
+    bytes: Vec<u8>,
+    ext: String,
+    use_system_audio: bool,
+    initial_prompt: Option<String>,
+    language: Option<String>,
+    segment_index: usize,
+    previous_tail_text: Option<String>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<TranscriptionResult, String> {
+    let state = state.inner().clone();
+    let merged_prompt = merge_transcription_prompt(initial_prompt, previous_tail_text);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        log::info!(
+            "[meeting-segment] received segment {} ({} bytes, ext={})",
+            segment_index,
+            bytes.len(),
+            ext
+        );
+
+        let mic_pcm = decode_audio_to_pcm(&bytes, &ext)?;
+        log::info!(
+            "[meeting-segment] decoded {} mic samples for segment {}",
+            mic_pcm.len(),
+            segment_index
+        );
+
+        let system_audio_data = if use_system_audio {
+            let mut app_state = state.lock().map_err(|e| e.to_string())?;
+            app_state
+                .meeting_system_audio_segments
+                .remove(&segment_index)
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let mut results = Vec::new();
+
+        if !mic_pcm.is_empty() {
+            results.push(transcribe_audio_inner(
+                &mic_pcm,
+                merged_prompt.as_deref(),
+                language.as_deref(),
+                &state,
+                Some("microphone"),
+            )?);
+        }
+
+        if !system_audio_data.is_empty() {
+            results.push(transcribe_audio_inner(
+                &system_audio_data,
+                merged_prompt.as_deref(),
+                language.as_deref(),
+                &state,
+                Some("speaker"),
+            )?);
+        }
+
+        Ok(merge_transcription_results(results))
+    })
+    .await
+    .map_err(|e| format!("[meeting-segment] worker join error: {e}"))?
+}
+
 /// New IPC command: receive base64-encoded raw audio blob from the frontend,
 /// decode entirely in Rust (no renderer AudioContext), resample to 16 kHz,
-/// mix with system audio if active, and run Whisper.
+/// and merge microphone/system transcription timelines if system audio is active.
 #[tauri::command]
 fn transcribe_meeting_audio_b64(
     audio_b64: String,
@@ -943,7 +1245,7 @@ fn transcribe_meeting_audio_b64(
     use_system_audio: bool,
     initial_prompt: Option<String>,
     language: Option<String>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
     // Decode base64 → raw compressed bytes
     let bytes = base64::engine::general_purpose::STANDARD
@@ -967,24 +1269,29 @@ fn transcribe_meeting_audio_b64(
     }
     let system_audio_data = system_audio::get_audio_data();
 
-    let audio_to_transcribe = if system_audio_data.is_empty() {
-        log::info!("[meeting_b64] No system audio — transcribing mic only");
-        mic_pcm
-    } else {
-        log::info!(
-            "[meeting_b64] Mixing mic ({:.1}s) + system audio ({:.1}s)",
-            mic_pcm.len() as f64 / 16000.0,
-            system_audio_data.len() as f64 / 16000.0
-        );
-        mix_audio(&mic_pcm, &system_audio_data)
-    };
+    let mut results = Vec::new();
 
-    transcribe_audio_inner(
-        &audio_to_transcribe,
-        initial_prompt.as_deref(),
-        language.as_deref(),
-        &state,
-    )
+    if !mic_pcm.is_empty() {
+        results.push(transcribe_audio_inner(
+            &mic_pcm,
+            initial_prompt.as_deref(),
+            language.as_deref(),
+            &state,
+            Some("microphone"),
+        )?);
+    }
+
+    if !system_audio_data.is_empty() {
+        results.push(transcribe_audio_inner(
+            &system_audio_data,
+            initial_prompt.as_deref(),
+            language.as_deref(),
+            &state,
+            Some("speaker"),
+        )?);
+    }
+
+    Ok(merge_transcription_results(results))
 }
 
 // ── Recording Pill Overlay ───────────────────────────────────────────────────
@@ -1072,7 +1379,10 @@ fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     // Skip the pill entirely — recording state is shown in the main window.
     #[cfg(target_os = "linux")]
     {
-        log::debug!("[pill] show_recording_pill skipped on Linux");
+        if let Some(tray) = LINUX_TRAY.get() {
+            let _ = tray.set_tooltip(Some("● Recording — Oscar"));
+        }
+        log::debug!("[pill] show_recording_pill → tray tooltip updated (Linux)");
         let _ = app;
         return Ok(());
     }
@@ -1109,7 +1419,10 @@ fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
 fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        log::debug!("[pill] hide_recording_pill skipped on Linux");
+        if let Some(tray) = LINUX_TRAY.get() {
+            let _ = tray.set_tooltip(Some("Oscar"));
+        }
+        log::debug!("[pill] hide_recording_pill → tray tooltip reset (Linux)");
         let _ = app;
         return Ok(());
     }
@@ -1128,7 +1441,10 @@ fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
 fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        log::debug!("[pill] set_pill_processing skipped on Linux");
+        if let Some(tray) = LINUX_TRAY.get() {
+            let _ = tray.set_tooltip(Some("⟳ Processing — Oscar"));
+        }
+        log::debug!("[pill] set_pill_processing → tray tooltip updated (Linux)");
         let _ = app;
         return Ok(());
     }
@@ -1145,7 +1461,10 @@ fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
 fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        log::debug!("[pill] set_pill_listening skipped on Linux");
+        if let Some(tray) = LINUX_TRAY.get() {
+            let _ = tray.set_tooltip(Some("● Recording — Oscar"));
+        }
+        log::debug!("[pill] set_pill_listening → tray tooltip updated (Linux)");
         let _ = app;
         return Ok(());
     }
@@ -1165,7 +1484,10 @@ struct CalendarEvent {
     title: String,
     start_time: String,
     end_time: String,
-    attendees: Vec<String>,
+    start_at: String,
+    end_at: String,
+    attendees: Vec<CalendarAttendee>,
+    organizer_email: String,
     calendar_name: String,
 }
 
@@ -1256,6 +1578,12 @@ async fn get_calendar_events(
                 })
                 .unwrap_or_default();
 
+            let start_at = item
+                .pointer("/start/dateTime")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_default();
+
             let end_time = item
                 .pointer("/end/dateTime")
                 .and_then(|v| v.as_str())
@@ -1267,37 +1595,62 @@ async fn get_calendar_events(
                 })
                 .unwrap_or_default();
 
+            let end_at = item
+                .pointer("/end/dateTime")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_default();
+
             // Attendees: prefer displayName, fall back to email
-            let attendees: Vec<String> = item
+            let attendees: Vec<CalendarAttendee> = item
                 .get("attendees")
                 .and_then(|a| a.as_array())
                 .map(|arr| {
                     arr.iter()
                         .filter_map(|att| {
-                            att.get("displayName")
+                            let email = att
+                                .get("email")
                                 .and_then(|v| v.as_str())
-                                .map(str::to_string)
-                                .or_else(|| {
-                                    att.get("email")
-                                        .and_then(|v| v.as_str())
-                                        .map(str::to_string)
-                                })
+                                .unwrap_or_default()
+                                .trim()
+                                .to_string();
+                            let name = att
+                                .get("displayName")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_else(|| email.as_str())
+                                .trim()
+                                .to_string();
+
+                            if name.is_empty() && email.is_empty() {
+                                None
+                            } else {
+                                Some(CalendarAttendee { name, email })
+                            }
                         })
                         .collect()
                 })
                 .unwrap_or_default();
 
+            let organizer_email = item
+                .pointer("/organizer/email")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+
             Some(CalendarEvent {
                 title,
                 start_time,
                 end_time,
+                start_at,
+                end_at,
                 attendees,
+                organizer_email,
                 calendar_name: "Google Calendar".into(),
             })
         })
         .collect();
 
-    events.sort_by(|a, b| a.start_time.cmp(&b.start_time));
+    events.sort_by(|a, b| a.start_at.cmp(&b.start_at));
     Ok(events)
 }
 
@@ -1406,6 +1759,28 @@ fn paste_transcription(text: String, target_app: Option<String>) -> Result<Strin
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
+        // Re-focus the window that was active when the hotkey was pressed so
+        // that Ctrl+V lands in the right place instead of an Oscar window.
+        #[cfg(target_os = "windows")]
+        {
+            use windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+            let hwnd = FOCUSED_WIN_HWND.load(Ordering::SeqCst) as isize;
+            if hwnd != 0 {
+                unsafe { SetForegroundWindow(hwnd); }
+                log::info!("[paste] SetForegroundWindow(0x{:x})", hwnd as usize);
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let xid = FOCUSED_WIN_XID.load(Ordering::SeqCst);
+            if xid != 0 {
+                let _ = std::process::Command::new("xdotool")
+                    .args(["windowfocus", "--sync", &xid.to_string()])
+                    .status();
+                log::info!("[paste] xdotool windowfocus {}", xid);
+            }
+        }
+
         use enigo::{Direction, Enigo, Key, Keyboard, Settings};
         std::thread::sleep(std::time::Duration::from_millis(150));
         let mut enigo = Enigo::new(&Settings::default())
@@ -1535,9 +1910,12 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .manage(Mutex::new(AppState {
+        .manage(Arc::new(Mutex::new(AppState {
             whisper_context: None,
-        }))
+            loaded_model_role: None,
+            loaded_model_path: None,
+            meeting_system_audio_segments: HashMap::new(),
+        })))
         .manage(HotkeyState {
             is_recording: is_recording.clone(),
             last_error: Mutex::new(None),
@@ -1545,9 +1923,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             download_whisper_model,
             load_whisper_model,
+            ensure_whisper_model_loaded,
             warm_whisper_runtime,
             transcribe_audio,
             transcribe_meeting_audio,
+            clear_meeting_segment_buffers,
+            rotate_meeting_system_audio_segment,
+            transcribe_meeting_segment_bytes,
             transcribe_meeting_audio_b64,
             paste_transcription,
             show_recording_pill,
@@ -1629,7 +2011,24 @@ pub fn run() {
                 create_pill_window(app.handle());
             }
             #[cfg(target_os = "linux")]
-            log::info!("[setup] Skipping pill window on Linux (tao secondary window bug)");
+            {
+                log::info!("[setup] Skipping pill window on Linux (tao secondary window bug) — using tray instead");
+                let mut tray_builder = tauri::tray::TrayIconBuilder::new()
+                    .tooltip("Oscar");
+                if let Some(icon) = app.default_window_icon() {
+                    tray_builder = tray_builder.icon(icon.clone());
+                }
+                match tray_builder.build(app.handle()) {
+                    Ok(tray) => {
+                        if LINUX_TRAY.set(tray).is_err() {
+                            log::warn!("[setup] LINUX_TRAY was already initialised");
+                        } else {
+                            log::info!("[setup] Linux tray icon created OK");
+                        }
+                    }
+                    Err(e) => log::warn!("[setup] Could not create tray icon on Linux: {}", e),
+                }
+            }
 
             log::info!("[setup] ✓ Setup complete — app ready");
             Ok(())

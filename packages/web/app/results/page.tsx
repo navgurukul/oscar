@@ -69,6 +69,7 @@ export default function ResultsPage() {
   // New Mode states
   const [activeMode, setActiveMode] = useState<"normal" | "email" | "translate" | "summary" | "bullets">("normal");
   const [modeContent, setModeContent] = useState<Record<string, string>>({});
+  const [modeSource, setModeSource] = useState<Record<string, string>>({});
   const [isLoadingMode, setIsLoadingMode] = useState(false);
 
   // Language / translation state (post-recording)
@@ -163,11 +164,14 @@ export default function ResultsPage() {
     }
   }, [formattedNote]);
 
-  // If base content changes, reset translation state
+  // If base content changes, reset translation state and transform cache
   useEffect(() => {
     setSelectedLanguage("original");
     setTranslatedNote(null);
     setTranslatedRaw(null);
+    setModeContent({});
+    setModeSource({});
+    setActiveMode("normal");
   }, [formattedNote, rawText, title]);
 
   useEffect(() => {
@@ -175,6 +179,54 @@ export default function ResultsPage() {
       router.push(ROUTES.HOME);
     }
   }, [isLoading, formattedNote, rawText, router]);
+
+  const getScribbleBaseText = () => {
+    if (activeMode === "normal") {
+      return editedText || formattedNote || rawText || "";
+    }
+
+    return formattedNote || rawText || "";
+  };
+
+  const handleSelectMode = async (
+    nextMode: "normal" | "email" | "translate" | "summary" | "bullets"
+  ) => {
+    if (nextMode === "normal") {
+      setActiveMode("normal");
+      setEditedText(formattedNote || "");
+      return;
+    }
+
+    setActiveMode(nextMode);
+    if (nextMode === "translate") {
+      return;
+    }
+
+    const baseText = getScribbleBaseText();
+    const hasFreshContent =
+      modeContent[nextMode] && modeSource[nextMode] === baseText;
+
+    if (hasFreshContent) {
+      setEditedText(modeContent[nextMode] || baseText);
+      return;
+    }
+
+    setIsLoadingMode(true);
+
+    let resultText = baseText;
+    if (nextMode === "email") {
+      const res = await gmailFormatText(baseText, title || UI_STRINGS.UNTITLED_NOTE);
+      resultText = res.success ? res.formattedText || baseText : baseText;
+    } else {
+      const res = await aiService.transformText(baseText, nextMode, title || UI_STRINGS.UNTITLED_NOTE);
+      resultText = res.success ? res.formattedText || baseText : baseText;
+    }
+
+    setModeContent((previous) => ({ ...previous, [nextMode]: resultText }));
+    setModeSource((previous) => ({ ...previous, [nextMode]: baseText }));
+    setEditedText(resultText);
+    setIsLoadingMode(false);
+  };
 
   const handleCopyNote = async () => {
     if (isCopying) return;
@@ -249,7 +301,7 @@ export default function ResultsPage() {
     }
 
     // Always translate the simple content, not other modes.
-    const baseNote = (activeMode === "normal" ? editedText : formattedNote) || "";
+    const baseNote = getScribbleBaseText();
     const baseRaw = rawText || "";
     if (!baseNote && !baseRaw) return;
 
@@ -420,6 +472,19 @@ export default function ResultsPage() {
           edited_text: editedText || undefined,
         });
       } else {
+        // Enforce note quota before creating a new note
+        const quotaRes = await fetch("/api/usage/check?type=note");
+        if (quotaRes.status === 402) {
+          const quotaData = await quotaRes.json();
+          toast({
+            title: "Note limit reached",
+            description: quotaData.message || "Upgrade to Pro for unlimited notes.",
+            variant: "destructive",
+          });
+          setIsSaving(false);
+          return;
+        }
+
         // Create new note
         saveResult = await notesService.createNote({
           user_id: user.id,
@@ -441,7 +506,7 @@ export default function ResultsPage() {
         setIsNoteSaved(true);
         toast({
           title: "Saved!",
-          description: "Your note has been saved to the cloud.",
+          description: "Your Scribble has been saved to the cloud.",
         });
       }
     } catch (error) {
@@ -517,6 +582,9 @@ export default function ResultsPage() {
           <h1 className="text-3xl md:text-5xl font-bold text-white tracking-tight">
             {title || UI_STRINGS.RESULTS_TITLE}
           </h1>
+          <p className="text-sm uppercase tracking-[0.22em] text-cyan-300/80">
+            Stream to Scribble
+          </p>
 
           {/* Folder Management Section */}
           <div className="flex flex-col items-center gap-3">
@@ -535,7 +603,7 @@ export default function ResultsPage() {
                   </Badge>
                 </div>
               ) : (
-                <span className="text-gray-500 text-sm">No folder assigned</span>
+                <span className="text-gray-500 text-sm">Not in a folder yet</span>
               )}
             </div>
 
@@ -596,7 +664,7 @@ export default function ResultsPage() {
             className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 shadow-2xl z-10"
           >
             {[
-              { id: "normal", icon: FileText, label: "Normal" },
+              { id: "normal", icon: FileText, label: "Scribble" },
               { id: "email", icon: Mail, label: "Email" },
               { id: "bullets", icon: ListChecks, label: "Bullets" },
               { id: "summary", icon: BookOpen, label: "Summary" },
@@ -604,35 +672,7 @@ export default function ResultsPage() {
             ].map((mode) => (
               <button
                 key={mode.id}
-                onClick={async () => {
-                  if (mode.id === "normal") {
-                    setActiveMode("normal");
-                    setEditedText(formattedNote || "");
-                    return;
-                  }
-
-                  setActiveMode(mode.id as typeof activeMode);
-                  const baseText = editedText || formattedNote || rawText || "";
-
-                  if (!modeContent[mode.id] && mode.id !== "translate") {
-                    setIsLoadingMode(true);
-                    let resultText = baseText;
-                    if (mode.id === "email") {
-                      const res = await gmailFormatText(baseText, title || "Untitled Note");
-                      resultText = res.success ? res.formattedText || baseText : baseText;
-                    } else if (mode.id === "bullets") {
-                      resultText = baseText.split('\n').filter(l => l.trim()).map(l => `• ${l.trim()}`).join('\n');
-                    } else if (mode.id === "summary") {
-                      const sentences = baseText.match(/[^.!?]+[.!?]+/g) || [baseText];
-                      resultText = sentences.slice(0, 3).join(' ').trim() || baseText.substring(0, 200) + '...';
-                    }
-                    setModeContent(prev => ({ ...prev, [mode.id]: resultText }));
-                    setEditedText(resultText);
-                    setIsLoadingMode(false);
-                  } else if (mode.id !== "translate") {
-                    setEditedText(modeContent[mode.id] || baseText);
-                  }
-                }}
+                onClick={() => void handleSelectMode(mode.id as typeof activeMode)}
                 className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
                   activeMode === mode.id 
                     ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
@@ -724,7 +764,7 @@ export default function ResultsPage() {
               <div className="flex items-center gap-3">
                 <Share2 className="w-5 h-5 text-cyan-400" />
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Share note</h3>
+                  <h3 className="text-lg font-semibold text-white">Share Scribble</h3>
                   <p className="text-sm text-gray-400">Choose a destination</p>
                 </div>
               </div>
