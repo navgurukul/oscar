@@ -88,8 +88,10 @@ mod platform {
     use windows::Win32::Media::Audio::{
         IAudioCaptureClient, IAudioClient, IMMDeviceEnumerator, MMDeviceEnumerator,
         AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
-        eConsole, eRender, WAVEFORMATEX, WAVE_FORMAT_IEEE_FLOAT,
+        eConsole, eRender, WAVEFORMATEX,
     };
+    // Not exported by windows-rs 0.58; value from Windows SDK mmreg.h
+    const WAVE_FORMAT_IEEE_FLOAT: u16 = 3;
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize,
         CLSCTX_ALL, COINIT_MULTITHREADED,
@@ -182,7 +184,7 @@ mod platform {
         let channels    = fmt.nChannels as usize;
         // Treat as float32 if tag is IEEE_FLOAT (3) or EXTENSIBLE with 32-bit samples.
         let is_float =
-            fmt.wFormatTag == WAVE_FORMAT_IEEE_FLOAT as u16
+            fmt.wFormatTag == WAVE_FORMAT_IEEE_FLOAT
             || (fmt.wFormatTag == 0xFFFE && fmt.wBitsPerSample == 32);
 
         log::info!(
