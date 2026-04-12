@@ -444,6 +444,13 @@ export function MeetingsTab({
   const [calendarErrorMsg, setCalendarErrorMsg] = useState("");
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const lastCalendarFetchRef = useRef<string>("");
+  const liveTranscriptScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (phase === "recording" && liveTranscriptScrollRef.current) {
+      liveTranscriptScrollRef.current.scrollTop = liveTranscriptScrollRef.current.scrollHeight;
+    }
+  }, [transcript, phase]);
 
   const addAttendee = (value: string) => {
     const parsed = parseAttendeeInput(value);
@@ -1131,6 +1138,31 @@ export function MeetingsTab({
               rows={6}
             />
           </div>
+
+          {isRecording && (
+            <div className="mt-4 flex flex-col gap-2">
+              <div className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-slate-600">
+                <Mic size={13} />
+                <span>Live transcript</span>
+                {minutesTranscriptionStatus === "transcribing" && (
+                  <span className="ml-0.5 inline-flex items-center gap-1 text-xs font-normal text-cyan-500">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-500 animate-pulse" />
+                    Transcribing…
+                  </span>
+                )}
+              </div>
+              <div
+                ref={liveTranscriptScrollRef}
+                className="max-h-[200px] min-h-[80px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-[1.65] text-gray-700"
+              >
+                {transcript.trim() ? (
+                  <span className="whitespace-pre-wrap">{transcript}</span>
+                ) : (
+                  <span className="text-slate-400">Listening…</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 flex-col items-center gap-2">
