@@ -180,16 +180,20 @@ mod platform {
         let fmt_ptr = client.GetMixFormat()?;
         let fmt: &WAVEFORMATEX = &*fmt_ptr;
 
-        let native_rate = fmt.nSamplesPerSec;
-        let channels    = fmt.nChannels as usize;
+        // Copy packed-struct fields to locals before any use — WAVEFORMATEX is
+        // 1-byte aligned, so taking a reference to its fields is UB (E0793).
+        let native_rate   = fmt.nSamplesPerSec;
+        let channels      = fmt.nChannels as usize;
+        let format_tag    = fmt.wFormatTag;
+        let bits_per_sample = fmt.wBitsPerSample;
         // Treat as float32 if tag is IEEE_FLOAT (3) or EXTENSIBLE with 32-bit samples.
         let is_float =
-            fmt.wFormatTag == WAVE_FORMAT_IEEE_FLOAT
-            || (fmt.wFormatTag == 0xFFFE && fmt.wBitsPerSample == 32);
+            format_tag == WAVE_FORMAT_IEEE_FLOAT
+            || (format_tag == 0xFFFE && bits_per_sample == 32);
 
         log::info!(
             "[system-audio] WASAPI mix format: {}Hz {}ch {}bit float={}",
-            native_rate, channels, fmt.wBitsPerSample, is_float
+            native_rate, channels, bits_per_sample, is_float
         );
 
         // 200 ms shared-mode loopback buffer (units: 100-ns intervals).

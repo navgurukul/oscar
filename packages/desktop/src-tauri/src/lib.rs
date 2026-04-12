@@ -3,8 +3,8 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
-    Arc, Mutex, OnceLock,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc, Mutex,
 };
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
