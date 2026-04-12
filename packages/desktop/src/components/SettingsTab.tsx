@@ -20,6 +20,7 @@ import {
 import { BillingSection } from "./BillingSection";
 import { VocabularySection } from "./VocabularySection";
 import { getInitials } from "../lib/utils";
+import { isContextAwarePlatform } from "../lib/dictation-context";
 
 type SettingsTabType =
   | "billing"
@@ -84,6 +85,9 @@ interface SettingsTabProps {
   onSignOut: () => void;
   aiImprovementEnabled: boolean;
   onAiImprovementChange: (enabled: boolean) => void;
+  contextAwareDictationEnabled: boolean;
+  onContextAwareDictationChange: (enabled: boolean) => void;
+  contextAwarePlatform: string;
   initialSection?: SettingsTabType;
   systemAudioSupported?: boolean;
   systemAudioEnabled?: boolean;
@@ -119,6 +123,9 @@ export function SettingsTab({
   onSignOut,
   aiImprovementEnabled,
   onAiImprovementChange,
+  contextAwareDictationEnabled,
+  onContextAwareDictationChange,
+  contextAwarePlatform,
   initialSection,
   systemAudioSupported = false,
   systemAudioEnabled = true,
@@ -164,6 +171,13 @@ export function SettingsTab({
   );
   const minutesPackInstalled =
     minutesModelDownloadState === "installed" || minutesModelEnabled;
+  const contextAwareSupported = isContextAwarePlatform(contextAwarePlatform);
+  const contextAwareCaveat =
+    contextAwarePlatform === "windows"
+      ? "Windows uses app and window metadata in v1. Browser site detection stays conservative."
+      : contextAwarePlatform === "linux"
+        ? "Linux keeps the toggle available, but OSCAR currently falls back to default formatting until active-window context is more reliable."
+        : "OSCAR reads active app identity and browser site host during dictation, then adapts cleanup automatically.";
 
   return (
     <div className="st-layout">
@@ -223,6 +237,65 @@ export function SettingsTab({
             <h2 className="st-content-title">General</h2>
 
             {/* ── Microphone ── */}
+            <div className="st-card">
+              <div className="st-card-hd">
+                <span className="st-ico-pill">
+                  <Settings2 size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title">Context-Aware Dictation</h3>
+                  <p className="st-card-desc">
+                    Auto-match Stream formatting to the app you are dictating into
+                  </p>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontWeight: 500,
+                      color: "#334155",
+                      fontSize: "0.875rem",
+                    }}
+                  >
+                    Detect IDE, email, docs, chat, and browser flows
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "#94a3b8",
+                      marginTop: 2,
+                    }}
+                  >
+                    {contextAwareCaveat}
+                  </div>
+                </div>
+                <label className="gen-toggle-label" style={{ marginBottom: 0 }}>
+                  <div
+                    className={`gen-toggle${contextAwareDictationEnabled ? " on" : ""}`}
+                    onClick={() =>
+                      onContextAwareDictationChange(!contextAwareDictationEnabled)
+                    }
+                    role="switch"
+                    aria-checked={contextAwareDictationEnabled}
+                  >
+                    <div className="gen-toggle-thumb" />
+                  </div>
+                </label>
+              </div>
+              <p className="st-card-hint" style={{ marginTop: 10 }}>
+                Works with Cursor, VS Code, Gmail, Google Docs, Notion, Slack, Teams, ChatGPT, Claude, and more.{" "}
+                {!contextAwareSupported && "Unsupported platforms fall back to default cleanup."}
+              </p>
+            </div>
+
             <div className="st-card">
               <div className="st-card-hd">
                 <span className="st-ico-pill">
@@ -654,6 +727,45 @@ export function SettingsTab({
         {activeTab === "privacy" && (
           <div className="st-content">
             <h2 className="st-content-title">Data & Privacy</h2>
+
+            <div className="st-card">
+              <div className="st-card-hd">
+                <span className="st-ico-pill st-ico-pill--neutral">
+                  <Shield size={15} />
+                </span>
+                <div>
+                  <h3 className="st-card-title">Context-Aware Dictation</h3>
+                  <p className="st-card-desc">
+                    What OSCAR reads and what OSCAR stores
+                  </p>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "0.875rem",
+                    color: "#334155",
+                    lineHeight: 1.55,
+                  }}
+                >
+                  OSCAR reads only the active app identity and, when available, the browser site host during the live dictation session. It does not scrape nearby text in v1.
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: "#94a3b8",
+                    lineHeight: 1.55,
+                  }}
+                >
+                  Saved note metadata stays minimal: category, variant, app key, context source, and prompt version. Raw window titles and full URLs are not persisted.
+                </div>
+              </div>
+            </div>
 
             <div className="st-card">
               <div className="st-card-hd">

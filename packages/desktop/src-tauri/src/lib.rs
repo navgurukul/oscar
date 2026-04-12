@@ -357,6 +357,239 @@ struct CalendarAttendee {
     email: String,
 }
 
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct FrontmostContextPayload {
+    platform: String,
+    app_name: String,
+    app_id: Option<String>,
+    process_name: Option<String>,
+    window_title: Option<String>,
+    site_host: Option<String>,
+    site_title: Option<String>,
+    target_app_name: Option<String>,
+}
+
+fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+}
+
+fn extract_host_from_url(url: &str) -> Option<String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let without_scheme = trimmed
+        .strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("http://"))
+        .unwrap_or(trimmed);
+
+    let host = without_scheme
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .split('?')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_start_matches("www.")
+        .to_string();
+
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn run_osascript(script: &str) -> Option<String> {
+    std::process::Command::new("osascript")
+        .args(["-e", script])
+        .output()
+        .ok()
+        .and_then(|output| {
+            if !output.status.success() {
+                return None;
+            }
+
+            Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        })
+        .filter(|value| !value.is_empty())
+}
+
+#[cfg(target_os = "macos")]
+fn get_browser_site_context(app_name: &str) -> (Option<String>, Option<String>) {
+    let lower = app_name.to_lowercase();
+
+    if lower.contains("safari") {
+        let url = run_osascript(
+            r#"tell application "Safari" to get URL of front document"#,
+        );
+        let title = run_osascript(
+            r#"tell application "Safari" to get name of front document"#,
+        );
+        return (
+            url.as_deref().and_then(extract_host_from_url),
+            normalize_optional_string(title),
+        );
+    }
+
+    let chromium_like = ["chrome", "arc", "brave", "edge", "opera"];
+    if chromium_like.iter().any(|candidate| lower.contains(candidate)) {
+        let safe_name = app_name.replace('"', "\\\"");
+        let url = run_osascript(&format!(
+            r#"tell application "{}" to get URL of active tab of front window"#,
+            safe_name
+        ));
+        let title = run_osascript(&format!(
+            r#"tell application "{}" to get title of active tab of front window"#,
+            safe_name
+        ));
+        return (
+            url.as_deref().and_then(extract_host_from_url),
+            normalize_optional_string(title),
+        );
+    }
+
+    (None, None)
+}
+
+#[cfg(target_os = "macos")]
+fn get_frontmost_context_payload() -> FrontmostContextPayload {
+    let app_name = run_osascript(
+        r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
+    )
+    .unwrap_or_default();
+    let app_id = run_osascript(
+        r#"tell application "System Events" to get bundle identifier of first application process whose frontmost is true"#,
+    );
+    let window_title = run_osascript(
+        r#"tell application "System Events"
+    tell (first application process whose frontmost is true)
+        try
+            return name of front window
+        on error
+            return ""
+        end try
+    end tell
+end tell"#,
+    );
+    let (site_host, site_title) = get_browser_site_context(&app_name);
+
+    FrontmostContextPayload {
+        platform: "macos".to_string(),
+        app_name: app_name.clone(),
+        app_id: normalize_optional_string(app_id),
+        process_name: None,
+        window_title: normalize_optional_string(window_title),
+        site_host,
+        site_title,
+        target_app_name: normalize_optional_string(Some(app_name)),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn get_frontmost_context_payload() -> FrontmostContextPayload {
+    use std::path::Path;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
+    };
+
+    fn wide_to_string(buffer: &[u16], length: usize) -> String {
+        String::from_utf16_lossy(&buffer[..length])
+            .trim()
+            .to_string()
+    }
+
+    let hwnd = unsafe { GetForegroundWindow() };
+    let window_title = if hwnd == 0 {
+        None
+    } else {
+        let title_len = unsafe { GetWindowTextLengthW(hwnd) };
+        if title_len <= 0 {
+            None
+        } else {
+            let mut buffer = vec![0u16; title_len as usize + 1];
+            let copied = unsafe { GetWindowTextW(hwnd, buffer.as_mut_ptr(), buffer.len() as i32) };
+            if copied <= 0 {
+                None
+            } else {
+                normalize_optional_string(Some(wide_to_string(&buffer, copied as usize)))
+            }
+        }
+    };
+
+    let mut pid = 0u32;
+    if hwnd != 0 {
+        unsafe {
+            GetWindowThreadProcessId(hwnd, &mut pid);
+        }
+    }
+
+    let process_name = if pid == 0 {
+        None
+    } else {
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if handle == 0 {
+            None
+        } else {
+            let mut buffer = vec![0u16; 1024];
+            let mut buffer_len = buffer.len() as u32;
+            let result = unsafe {
+                QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut buffer_len)
+            };
+            unsafe {
+                CloseHandle(handle);
+            }
+
+            if result == 0 || buffer_len == 0 {
+                None
+            } else {
+                let path = wide_to_string(&buffer, buffer_len as usize);
+                Path::new(&path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().to_string())
+                    .and_then(|name| normalize_optional_string(Some(name)))
+            }
+        }
+    };
+
+    FrontmostContextPayload {
+        platform: "windows".to_string(),
+        app_name: process_name.clone().unwrap_or_default(),
+        app_id: None,
+        process_name,
+        window_title,
+        site_host: None,
+        site_title: None,
+        target_app_name: None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn get_frontmost_context_payload() -> FrontmostContextPayload {
+    FrontmostContextPayload {
+        platform: "linux".to_string(),
+        ..FrontmostContextPayload::default()
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+fn get_frontmost_context_payload() -> FrontmostContextPayload {
+    FrontmostContextPayload {
+        platform: "unknown".to_string(),
+        ..FrontmostContextPayload::default()
+    }
+}
+
 fn recording_shortcut() -> Shortcut {
     Shortcut::new(
         Some(Modifiers::CONTROL),
@@ -398,30 +631,17 @@ fn register_recording_hotkey<R: tauri::Runtime>(
         .on_shortcut(shortcut, move |_app, _sc, event| match event.state {
             ShortcutState::Pressed => {
                 if !is_rec.swap(true, Ordering::SeqCst) {
-                    log::info!("[hotkey] Ctrl+Space PRESSED — capturing frontmost app");
-                    #[cfg(target_os = "macos")]
-                    let frontmost_app = {
-                        std::process::Command::new("osascript")
-                            .args([
-                                "-e",
-                                r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
-                            ])
-                            .output()
-                            .ok()
-                            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                            .unwrap_or_default()
-                    };
+                    log::info!("[hotkey] Ctrl+Space PRESSED — capturing frontmost context");
                     #[cfg(target_os = "windows")]
-                    let frontmost_app = {
+                    {
                         use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
                         let hwnd = unsafe { GetForegroundWindow() };
                         FOCUSED_WIN_HWND.store(hwnd as usize, Ordering::SeqCst);
                         log::info!("[hotkey] captured HWND=0x{:x}", hwnd as usize);
-                        String::new()
-                    };
+                    }
 
                     #[cfg(target_os = "linux")]
-                    let frontmost_app = {
+                    {
                         match std::process::Command::new("xdotool")
                             .arg("getactivewindow")
                             .output()
@@ -437,14 +657,16 @@ fn register_recording_hotkey<R: tauri::Runtime>(
                             }
                             Err(e) => log::warn!("[hotkey] xdotool not available: {}", e),
                         }
-                        String::new()
-                    };
+                    }
 
-                    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-                    let frontmost_app = String::new();
-
-                    log::info!("[hotkey] frontmost app = '{}'", frontmost_app);
-                    let _ = app_handle.emit("hotkey-recording-start", frontmost_app);
+                    let frontmost_context = get_frontmost_context_payload();
+                    log::info!(
+                        "[hotkey] frontmost app='{}' site_host={:?} window_title={:?}",
+                        frontmost_context.app_name,
+                        frontmost_context.site_host.as_deref(),
+                        frontmost_context.window_title.as_deref()
+                    );
+                    let _ = app_handle.emit("hotkey-recording-start", frontmost_context);
                 }
             }
             ShortcutState::Released => {
@@ -1673,29 +1895,11 @@ fn format_rfc3339_time(dt: &str) -> String {
 /// Returns the name of the frontmost application (macOS only).
 #[tauri::command]
 fn get_frontmost_app() -> Result<String, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let output = std::process::Command::new("osascript")
-            .args([
-                "-e",
-                r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
-            ])
-            .output()
-            .map_err(|e| format!("Failed to get frontmost app: {}", e))?;
-
-        let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if name.is_empty() {
-            Err("Could not determine frontmost app".to_string())
-        } else {
-            Ok(name)
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        // On Windows/Linux, return empty string — paste still works because
-        // enigo simulates Ctrl+V on whatever window is currently focused.
-        Ok(String::new())
+    let payload = get_frontmost_context_payload();
+    if payload.app_name.is_empty() {
+        Err("Could not determine frontmost app".to_string())
+    } else {
+        Ok(payload.app_name)
     }
 }
 

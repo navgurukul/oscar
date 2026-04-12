@@ -203,6 +203,9 @@ function HomeTab({
             <p className="mt-3 text-[0.72rem] font-medium uppercase tracking-[0.12em] text-sky-50/75">
                 Works across your desktop
             </p>
+            <p className="mt-1 text-[0.78rem] text-sky-50/90">
+              Auto-adapts for code, email, docs, chat, and browser flows
+            </p>
           </div>
         </div>
       </div>

@@ -9,4 +9,9 @@ export type {
   FormattingResult,
   TitleGenerationResult,
   FeedbackSubmission,
+  DictationCategory,
+  DictationContextSnapshot,
+  DictationContextSource,
+  DictationRoutingConfidence,
+  DictationRoutingResult,
 } from "@oscar/shared/types";

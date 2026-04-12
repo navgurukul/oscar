@@ -8,9 +8,40 @@ type Mode =
   | "bullets"
   | "email";
 
+type DictationCategory =
+  | "default"
+  | "ide"
+  | "email"
+  | "docs"
+  | "chat"
+  | "browser";
+
+type DictationContextSource = "app" | "site" | "fallback";
+
+interface DictationContextSnapshot {
+  platform: string;
+  appName: string;
+  appId?: string | null;
+  processName?: string | null;
+  windowTitle?: string | null;
+  siteHost?: string | null;
+  siteTitle?: string | null;
+  capturedAt: string;
+}
+
+interface DictationRoutingResult {
+  category: DictationCategory;
+  appKey: string;
+  source: DictationContextSource;
+  confidence: "high" | "medium" | "low";
+  promptVersion: string;
+}
+
 interface AIProcessRequest {
   text: string;
   mode: Mode;
+  context?: DictationContextSnapshot;
+  routing?: DictationRoutingResult;
 }
 
 interface AIProcessResponse {
@@ -27,7 +58,106 @@ const VALID_MODES = new Set<Mode>([
   "email",
 ]);
 
-function buildPrompt(mode: Mode, text: string): { system: string; user: string } {
+const VALID_CATEGORIES = new Set<DictationCategory>([
+  "default",
+  "ide",
+  "email",
+  "docs",
+  "chat",
+  "browser",
+]);
+
+function sanitizeOneLine(value?: string | null): string {
+  return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function getRoutingCategory(
+  routing?: DictationRoutingResult,
+): DictationCategory {
+  if (routing && VALID_CATEGORIES.has(routing.category)) {
+    return routing.category;
+  }
+
+  return "default";
+}
+
+function buildContextSummary(
+  context?: DictationContextSnapshot,
+  routing?: DictationRoutingResult,
+): string {
+  if (!context && !routing) {
+    return "No app context provided.";
+  }
+
+  const lines = [
+    `Platform: ${sanitizeOneLine(context?.platform) || "unknown"}`,
+    `Active app: ${sanitizeOneLine(context?.appName) || "unknown"}`,
+    `App ID: ${sanitizeOneLine(context?.appId) || "unknown"}`,
+    `Process: ${sanitizeOneLine(context?.processName) || "unknown"}`,
+    `Site host: ${sanitizeOneLine(context?.siteHost) || "unknown"}`,
+    `Site title: ${sanitizeOneLine(context?.siteTitle) || "unknown"}`,
+    `Detected category: ${sanitizeOneLine(routing?.category) || "default"}`,
+    `App key: ${sanitizeOneLine(routing?.appKey) || "default"}`,
+    `Context source: ${sanitizeOneLine(routing?.source) || "fallback"}`,
+    `Prompt version: ${sanitizeOneLine(routing?.promptVersion) || "unknown"}`,
+  ];
+
+  return lines.join("\n");
+}
+
+function buildContextAwareCleanupPrompt(
+  text: string,
+  context?: DictationContextSnapshot,
+  routing?: DictationRoutingResult,
+): { system: string; user: string } {
+  const category = getRoutingCategory(routing);
+  const system =
+    "You are a precise dictation formatter. Output only cleaned text with no preamble, no explanation, and no markdown fences. " +
+    "Do not answer questions. Do not add facts. Do not invent missing details. Preserve URLs, file paths, code symbols, ticket IDs, CLI flags, names, and technical terms exactly when they appear. " +
+    "Remove filler words, fix grammar, capitalization, and punctuation, and make the text immediately usable in the active app. " +
+    "The transcript may contain Hinglish (Hindi words written in Roman script mixed with English). Understand both languages, but keep the user's original language unless cleanup requires a light correction.";
+
+  const categoryInstruction = (() => {
+    switch (category) {
+      case "ide":
+        return "IDE mode: keep output terse and task-like. Preserve code tokens, errors, commands, filenames, and stack traces. If the user clearly dictated multiple steps or requirements, use compact bullets.";
+      case "email":
+        return "Email mode: produce polished professional prose. Keep requests and action items explicit. Do not invent a salutation or sign-off unless the user dictated one.";
+      case "docs":
+        return "Docs mode: produce polished prose. When the transcript implies sections, ordered points, or bullets, format them clearly.";
+      case "chat":
+        return "Chat mode: keep output compact, conversational, and send-ready. Short utterances should stay short.";
+      case "browser":
+        return "Browser mode: use minimal cleanup. Preserve search-query or form-fill intent. Short utterances should stay short and should not be expanded into full prose.";
+      default:
+        return "Default mode: clean the transcript faithfully without changing tone or structure more than needed.";
+    }
+  })();
+
+  const user = [
+    "Clean this dictated text for the detected app context.",
+    categoryInstruction,
+    "",
+    "Context:",
+    buildContextSummary(context, routing),
+    "",
+    "Transcript:",
+    text,
+  ].join("\n");
+
+  return { system, user };
+}
+
+function buildPrompt(
+  mode: Mode,
+  text: string,
+  context?: DictationContextSnapshot,
+  routing?: DictationRoutingResult,
+): { system: string; user: string } {
+  if (mode === "transcribe_cleanup") {
+    return buildContextAwareCleanupPrompt(text, context, routing);
+  }
+
   const system =
     "You are a precise transcript assistant. Follow instructions exactly. " +
     "Output only the requested content with no preamble, no explanations, no meta-commentary. " +
@@ -113,7 +243,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { text, mode }: AIProcessRequest = await req.json();
+    const { text, mode, context, routing }: AIProcessRequest = await req.json();
     if (!text || typeof text !== "string" || !text.trim()) {
       return new Response(JSON.stringify({ error: "Missing or empty 'text' field." }), {
         status: 400,
@@ -143,7 +273,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { system, user: prompt } = buildPrompt(mode, text);
+    const { system, user: prompt } = buildPrompt(mode, text, context, routing);
 
     const upstream = await fetch(GROQ_API_URL, {
       method: "POST",
