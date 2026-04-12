@@ -1,4 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 // Exchange a Google OAuth2 authorization code (PKCE flow) for tokens.
@@ -18,27 +17,9 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Authenticate the caller via Supabase session
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // No Supabase auth required — the PKCE code_verifier is self-authenticating.
+    // Only the party that generated the code_challenge can provide the matching
+    // code_verifier, so there is no risk of unauthorized token exchange.
 
     const { code, code_verifier, redirect_uri } = await req.json();
     if (!code || !code_verifier || !redirect_uri) {

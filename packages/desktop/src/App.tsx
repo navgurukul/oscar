@@ -1320,30 +1320,29 @@ function App() {
         const calendarCode = urlObj.searchParams.get("calendar_code");
         if (calendarCode) {
           const verifier = pkceCodeVerifierRef.current;
-          pkceCodeVerifierRef.current = ""; // consume immediately
           if (!verifier) {
             console.error("[deep-link] calendar_code received but no PKCE verifier in memory");
             return;
           }
           const redirectUri = `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`;
           try {
-            const { data: { session: s } } = await supabase.auth.getSession();
             const { data, error: fnErr } = await supabase.functions.invoke<{
               access_token: string; refresh_token?: string; expires_in: number;
             }>("exchange-calendar-token", {
-              headers: s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {},
               body: { code: calendarCode, code_verifier: verifier, redirect_uri: redirectUri },
             });
             if (fnErr || !data?.access_token) {
               console.error("[deep-link] Calendar token exchange failed:", fnErr);
               return;
             }
+            // Consume verifier only after successful exchange
+            pkceCodeVerifierRef.current = "";
             const expiry = Date.now() + (data.expires_in ?? 3600) * 1000;
             await persistCalendarConnection({
               accessToken: data.access_token,
               expiry,
               refreshToken: data.refresh_token,
-              userId: s?.user?.id ?? sessionRef.current?.user?.id ?? null,
+              userId: sessionRef.current?.user?.id ?? null,
             });
             console.log("[deep-link] Google Calendar tokens stored (PKCE)");
           } catch (err) {
