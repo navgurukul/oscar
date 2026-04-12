@@ -43,8 +43,8 @@ windows = { version = "0.58", features = [
     "Win32_Media_Audio",
     "Win32_System_Com",
 ] }
-# Whisper with CUDA GPU acceleration (requires CUDA toolkit; drop "cuda" for CPU-only)
-whisper-rs = { version = "0.15", features = ["cuda"] }
+# CPU-only whisper on Windows CI; CUDA requires local build with CUDA toolkit installed
+whisper-rs = "0.15"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # CPU-only whisper; add features = ["vulkan"] with the Vulkan SDK for GPU accel
