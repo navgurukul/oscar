@@ -2302,34 +2302,50 @@ function App() {
     // Don't stop the stream — keep it warm for next recording
   };
 
-  // ── Google Calendar OAuth ────────────────────────────────────────────────
+  // ── Google Calendar OAuth (direct Google PKCE — no Supabase auth) ───────
 
   const connectGoogleCalendar = async () => {
     const redirectUri = `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`;
+    const clientId = "332965035815-v8fnucr2ho5tm0c1jvsd84lch5n8m654.apps.googleusercontent.com";
 
     try {
-      calendarOAuthInProgressRef.current = true;
-      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: redirectUri,
-          scopes: "openid email profile https://www.googleapis.com/auth/calendar.readonly",
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-            include_granted_scopes: "true",
-          },
-          skipBrowserRedirect: true,
-        },
+      // Generate PKCE code_verifier (43-128 chars, unreserved URI chars)
+      const verifierBytes = new Uint8Array(32);
+      crypto.getRandomValues(verifierBytes);
+      const codeVerifier = btoa(String.fromCharCode(...verifierBytes))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+      pkceCodeVerifierRef.current = codeVerifier;
+
+      // Derive code_challenge (S256)
+      const challengeBuffer = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(codeVerifier),
+      );
+      const codeChallenge = btoa(String.fromCharCode(...new Uint8Array(challengeBuffer)))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+
+      const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "https://www.googleapis.com/auth/calendar.readonly",
+        access_type: "offline",
+        prompt: "consent",
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
+        state: "calendar_connect",
       });
 
-      if (oauthError) throw oauthError;
-      if (!data?.url) throw new Error("No OAuth URL returned");
+      const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
-      console.log("[calendar] Opening Supabase OAuth URL with Calendar scope");
-      await openUrl(data.url);
+      console.log("[calendar] Opening direct Google OAuth URL (PKCE, no Supabase auth)");
+      await openUrl(oauthUrl);
     } catch (err) {
-      calendarOAuthInProgressRef.current = false;
+      pkceCodeVerifierRef.current = "";
       console.error("[calendar] Failed to start Google Calendar OAuth:", err);
       alert(`Calendar connect failed: ${(err as Error).message}`);
     }
