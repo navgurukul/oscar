@@ -849,9 +849,13 @@ function PermissionsScreen({
               </div>
             )}
 
+            <p style={{ fontSize: "0.78rem", color: "#9ca3af", marginTop: 20, marginBottom: 0 }}>
+              Next up: downloading the AI speech model (~140 MB, one-time).
+            </p>
+
             <button
               className={`perm-continue-btn-modern ${canContinue ? "active" : ""}`}
-              style={{ marginTop: 24 }}
+              style={{ marginTop: 10 }}
               disabled={!canContinue}
               onClick={onContinue}
             >
@@ -961,8 +965,8 @@ function SetupScreen({ onComplete }: { onComplete: () => Promise<void> | void })
 
               <h1 className="split-title">Warming up the engines...</h1>
               <p className="split-description">
-                Downloading the speech recognition model. This happens entirely
-                on your device — just a quick one-time setup.
+                Downloading the speech recognition model (~140 MB). Processed
+                entirely on your device — this only happens once.
               </p>
 
               <div className="setup-loading">
@@ -974,6 +978,15 @@ function SetupScreen({ onComplete }: { onComplete: () => Promise<void> | void })
                       style={{ width: `${progress?.percentage || 0}%` }}
                     />
                   </div>
+                  {progress && (
+                    <p style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: 6, textAlign: "right" }}>
+                      {(progress.downloaded / 1_048_576).toFixed(1)} MB
+                      {" / "}
+                      {(progress.total / 1_048_576).toFixed(0)} MB
+                      {" · "}
+                      {progress.percentage.toFixed(0)}%
+                    </p>
+                  )}
                 </div>
 
                 {error && <p className="setup-error">{error}</p>}
@@ -1007,9 +1020,9 @@ function SetupScreen({ onComplete }: { onComplete: () => Promise<void> | void })
 
               <h1 className="split-title">Getting your voice ready</h1>
               <p className="split-description">
-                We need to set up the magic that turns your voice into text.
-                This happens entirely on your device — just a quick one-time
-                setup.
+                OSCAR needs a local speech model (~140 MB, one-time download)
+                to transcribe your voice entirely on your device — nothing
+                leaves your machine.
               </p>
 
               {error && <p className="setup-error">{error}</p>}
@@ -1018,7 +1031,7 @@ function SetupScreen({ onComplete }: { onComplete: () => Promise<void> | void })
                 className="perm-continue-btn-modern active"
                 onClick={downloadModel}
               >
-                Get Started
+                Download &amp; Start (~140 MB)
               </button>
             </div>
           </div>

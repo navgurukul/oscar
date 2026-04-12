@@ -374,7 +374,7 @@ function RecordingPageInner() {
   // Show permission error modal
   if (isPermissionDenied) {
     return (
-      <main className="min-h-screen bg-black">
+      <main className="min-h-dvh bg-black">
         <PermissionErrorModal
           onRetry={handleRetryPermission}
           retryCount={permissionRetryCount}
@@ -386,7 +386,7 @@ function RecordingPageInner() {
 
   if (isInitializing || isRequestingPermission) {
     return (
-      <main className="min-h-screen bg-black flex items-center justify-center">
+      <main className="min-h-dvh bg-black flex items-center justify-center">
         <div className="text-center">
           <div className="flex items-center justify-center mb-4">
             <Spinner className="text-cyan-500" />
@@ -417,7 +417,7 @@ function RecordingPageInner() {
   }
 
   return (
-    <main className="flex flex-col items-center px-4 pt-8">
+    <main className="flex flex-col items-center px-4 pt-4 sm:pt-8 min-h-dvh">
       {/* Upgrade Prompt Modal */}
       {showUpgradePrompt && (
         <UpgradePrompt
@@ -437,10 +437,10 @@ function RecordingPageInner() {
         </div>
       )}
 
-      <div className="w-full max-w-xl flex flex-col items-center gap-6 sm:gap-8 mt-8 sm:mt-16">
+      <div className="w-full max-w-xl flex flex-col items-center gap-4 sm:gap-8 mt-4 sm:mt-16">
         {/* Header */}
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl sm:text-4xl font-bold">
+        <div className="text-center space-y-1">
+          <h1 className="text-2xl sm:text-4xl font-bold">
             Start a <span className="text-cyan-500">Stream</span>
           </h1>
         </div>
@@ -448,7 +448,7 @@ function RecordingPageInner() {
         {/* Main Recording Container — min-height instead of aspect-square so
             content is never clipped on small phones */}
         <div
-          className="bg-slate-900 w-full max-w-[500px] min-h-[min(80vw,460px)] rounded-3xl shadow-xl border border-cyan-700/30 p-6 sm:p-8 md:p-12 relative overflow-hidden flex flex-col justify-between"
+          className="bg-slate-900 w-full max-w-[500px] min-h-[min(75vw,460px)] rounded-3xl shadow-xl border border-cyan-700/30 p-5 sm:p-8 md:p-12 relative overflow-hidden flex flex-col justify-between"
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
@@ -481,11 +481,11 @@ function RecordingPageInner() {
           </div>
 
           {/* Bottom area: instruction text OR swipe hint */}
-          <div className="relative z-10 flex items-center justify-center min-h-[56px]">
+          <div className="relative z-10 flex items-center justify-center min-h-[64px]">
             {isRecording ? (
-              <p className="text-slate-500 text-sm flex items-center gap-1.5 select-none">
-                <span className="text-base">↓</span>
-                Swipe down or tap to stop
+              <p className="text-slate-400 text-base sm:text-sm flex flex-col items-center gap-1 select-none">
+                <span className="text-2xl leading-none animate-bounce">↓</span>
+                <span>Swipe down or tap to stop</span>
               </p>
             ) : (
               <p className="text-gray-400 text-base sm:text-lg text-center px-2">
