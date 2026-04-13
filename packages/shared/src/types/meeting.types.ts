@@ -45,6 +45,15 @@ export interface EnhancedMeetingNoteResponse {
   markdown: string;
 }
 
+export interface MeetingUpdate {
+  meetingTitle?: string;
+  attendeesCompact?: string;
+  attendeesFull?: MeetingAttendee[];
+  meetingTypeHint?: MeetingTypeHint;
+  myNotesMarkdown?: string;
+  notesMarkdown?: string;
+}
+
 export interface SavedMeetingRecord {
   id: string;
   startedAt: string;

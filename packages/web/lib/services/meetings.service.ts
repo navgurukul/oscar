@@ -4,6 +4,7 @@ import type {
   MeetingCalendarContext,
   MeetingTranscriptSegment,
   MeetingTypeHint,
+  MeetingUpdate,
   SavedMeetingRecord,
 } from "@oscar/shared/types";
 
@@ -62,5 +63,44 @@ export const meetingsService = {
       data: (data ?? []).map((row) => toSaved(row as DBMeeting)),
       error: null,
     };
+  },
+
+  async updateMeeting(
+    id: string,
+    updates: MeetingUpdate
+  ): Promise<{ data: SavedMeetingRecord | null; error: Error | null }> {
+    const supabase = getSupabase();
+
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.meetingTitle !== undefined)
+      dbUpdates.meeting_title = updates.meetingTitle;
+    if (updates.attendeesCompact !== undefined)
+      dbUpdates.attendees_compact = updates.attendeesCompact;
+    if (updates.attendeesFull !== undefined)
+      dbUpdates.attendees_full = updates.attendeesFull;
+    if (updates.meetingTypeHint !== undefined)
+      dbUpdates.meeting_type_hint = updates.meetingTypeHint;
+    if (updates.myNotesMarkdown !== undefined)
+      dbUpdates.my_notes_markdown = updates.myNotesMarkdown;
+    if (updates.notesMarkdown !== undefined)
+      dbUpdates.notes_markdown = updates.notesMarkdown;
+
+    const { data, error } = await supabase
+      .from("meetings")
+      .update(dbUpdates)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) return { data: null, error: error as Error };
+    return { data: toSaved(data as DBMeeting), error: null };
+  },
+
+  async deleteMeeting(
+    id: string
+  ): Promise<{ error: Error | null }> {
+    const supabase = getSupabase();
+    const { error } = await supabase.from("meetings").delete().eq("id", id);
+    return { error: error ? (error as Error) : null };
   },
 };

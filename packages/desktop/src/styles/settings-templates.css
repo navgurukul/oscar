@@ -1,0 +1,348 @@
+/* ── Settings: Template management ──────────────────────────────────────── */
+
+.st-tpl-page {
+  padding-top: 28px;
+}
+
+.st-tpl-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.st-tpl-title {
+  margin-bottom: 8px;
+}
+
+.st-tpl-desc-copy {
+  max-width: 560px;
+}
+
+.st-tpl-create-btn {
+  flex-shrink: 0;
+}
+
+.st-tpl-workspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 22px;
+  min-height: 520px;
+}
+
+.st-tpl-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.st-tpl-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.st-tpl-summary-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+  padding: 14px 15px;
+}
+
+.st-tpl-summary-item span {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.st-tpl-summary-item strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #0f172a;
+}
+
+.st-tpl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.st-tpl-row-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.st-tpl-row-wrap:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.st-tpl-row-wrap.active {
+  border-color: rgba(6, 182, 212, 0.42);
+  box-shadow: 0 14px 32px rgba(8, 145, 178, 0.12);
+}
+
+.st-tpl-row {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 15px 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.st-tpl-row-main {
+  min-width: 0;
+}
+
+.st-tpl-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.st-tpl-builtin-badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.st-tpl-draft-badge {
+  color: #0891b2;
+  background: rgba(6, 182, 212, 0.1);
+  border-color: rgba(6, 182, 212, 0.14);
+}
+
+.st-tpl-desc {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin-top: 5px;
+  line-height: 1.5;
+}
+
+.st-tpl-prompt-preview {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.st-tpl-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 8px 8px 8px 0;
+}
+
+.st-tpl-action-btn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: rgba(241, 245, 249, 0.8);
+  color: #94a3b8;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.st-tpl-action-btn:hover { background: #ffffff; border-color: #e2e8f0; color: #475569; }
+.st-tpl-delete-btn:hover { background: #fef2f2; color: #dc2626; }
+
+.st-tpl-editor-pane {
+  min-width: 0;
+}
+
+.st-tpl-editor,
+.st-tpl-empty-state {
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.84);
+  min-height: 100%;
+}
+
+.st-tpl-editor {
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+}
+
+.st-tpl-editor-head {
+  padding-bottom: 18px;
+  border-bottom: 1px solid #edf2f7;
+  margin-bottom: 18px;
+}
+
+.st-tpl-editor-title {
+  margin: 0 0 8px;
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+}
+
+.st-tpl-editor-copy {
+  max-width: 560px;
+}
+
+.st-tpl-edit-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.st-tpl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.st-tpl-field-full {
+  grid-column: 1 / -1;
+}
+
+.st-tpl-field-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.st-tpl-input {
+  padding: 11px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: #1e293b;
+  background: #ffffff;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.st-tpl-input:focus {
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.12);
+}
+
+.st-tpl-textarea {
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: #1e293b;
+  outline: none;
+  resize: vertical;
+  min-height: 220px;
+  line-height: 1.6;
+  background: #ffffff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.st-tpl-textarea:focus {
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.12);
+}
+
+.st-tpl-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.st-tpl-empty-state {
+  display: flex;
+  min-height: 420px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 34px;
+  text-align: center;
+}
+
+.st-tpl-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(6, 182, 212, 0.1);
+  color: #0891b2;
+}
+
+.st-tpl-empty-state h3 {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.st-tpl-empty-state p {
+  margin: 0;
+  max-width: 320px;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+@container settings-panel (max-width: 900px) {
+  .st-tpl-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .st-tpl-editor,
+  .st-tpl-empty-state {
+    min-height: auto;
+  }
+}
+
+@container settings-panel (max-width: 600px) {
+  .st-tpl-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .st-tpl-create-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .st-tpl-edit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .st-tpl-field-full {
+    grid-column: auto;
+  }
+}

@@ -17,6 +17,9 @@ use tauri_plugin_store::StoreExt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 use tokio::io::AsyncWriteExt;
 
+mod calendar;
+mod filesystem;
+mod permissions;
 mod system_audio;
 
 #[cfg(target_os = "macos")]
@@ -356,12 +359,6 @@ struct TranscriptionResult {
     text: String,
     error: Option<String>,
     segments: Option<Vec<TranscriptSegmentResult>>,
-}
-
-#[derive(Serialize, Clone)]
-struct CalendarAttendee {
-    name: String,
-    email: String,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -1767,193 +1764,6 @@ fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
-// ── Calendar Integration ─────────────────────────────────────────────────────
-
-#[derive(Serialize, Clone)]
-struct CalendarEvent {
-    title: String,
-    start_time: String,
-    end_time: String,
-    start_at: String,
-    end_at: String,
-    attendees: Vec<CalendarAttendee>,
-    organizer_email: String,
-    calendar_name: String,
-}
-
-/// Fetch calendar events from the Google Calendar API using the user's OAuth provider token.
-///
-/// - `token`    – Google OAuth access token (provider_token from Supabase)
-/// - `time_min` – RFC3339 start of the window, e.g. "2024-06-01T00:00:00Z"
-/// - `time_max` – RFC3339 end of the window
-///
-/// Returns `Err("NEEDS_RECONNECT")` on HTTP 401 so the frontend can prompt the user
-/// to reconnect their Google account.
-#[tauri::command]
-async fn get_calendar_events(
-    token: String,
-    time_min: String,
-    time_max: String,
-) -> Result<Vec<CalendarEvent>, String> {
-    if token.is_empty() {
-        return Ok(vec![]);
-    }
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let url = format!(
-        "https://www.googleapis.com/calendar/v3/calendars/primary/events\
-         ?timeMin={}&timeMax={}&singleEvents=true&orderBy=startTime&maxResults=30",
-        time_min, time_max
-    );
-
-    let response = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {token}"))
-        .send()
-        .await
-        .map_err(|e| format!("Calendar API request failed: {e}"))?;
-
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        return Err("NEEDS_RECONNECT".into());
-    }
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("Calendar API error {status}: {body}"));
-    }
-
-    let body: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse calendar response: {e}"))?;
-
-    let items = match body.get("items").and_then(|v| v.as_array()) {
-        Some(arr) => arr.clone(),
-        None => return Ok(vec![]),
-    };
-
-    let mut events: Vec<CalendarEvent> = items
-        .iter()
-        .filter_map(|item| {
-            let title = item.get("summary")?.as_str()?.trim().to_string();
-            if title.is_empty() {
-                return None;
-            }
-
-            // Skip non-default event types (working location, focus time, out of office)
-            let event_type = item.get("eventType").and_then(|v| v.as_str()).unwrap_or("default");
-            if event_type != "default" {
-                return None;
-            }
-
-            // Skip all-day events (no dateTime, only date)
-            if item.pointer("/start/dateTime").is_none() {
-                return None;
-            }
-
-            // Prefer dateTime (timed events) over date (all-day events)
-            let start_time = item
-                .pointer("/start/dateTime")
-                .and_then(|v| v.as_str())
-                .map(format_rfc3339_time)
-                .or_else(|| {
-                    item.pointer("/start/date")
-                        .and_then(|v| v.as_str())
-                        .map(|d| d.to_string())
-                })
-                .unwrap_or_default();
-
-            let start_at = item
-                .pointer("/start/dateTime")
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-                .unwrap_or_default();
-
-            let end_time = item
-                .pointer("/end/dateTime")
-                .and_then(|v| v.as_str())
-                .map(format_rfc3339_time)
-                .or_else(|| {
-                    item.pointer("/end/date")
-                        .and_then(|v| v.as_str())
-                        .map(|d| d.to_string())
-                })
-                .unwrap_or_default();
-
-            let end_at = item
-                .pointer("/end/dateTime")
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-                .unwrap_or_default();
-
-            // Attendees: prefer displayName, fall back to email
-            let attendees: Vec<CalendarAttendee> = item
-                .get("attendees")
-                .and_then(|a| a.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|att| {
-                            let email = att
-                                .get("email")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or_default()
-                                .trim()
-                                .to_string();
-                            let name = att
-                                .get("displayName")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or_else(|| email.as_str())
-                                .trim()
-                                .to_string();
-
-                            if name.is_empty() && email.is_empty() {
-                                None
-                            } else {
-                                Some(CalendarAttendee { name, email })
-                            }
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            let organizer_email = item
-                .pointer("/organizer/email")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-
-            Some(CalendarEvent {
-                title,
-                start_time,
-                end_time,
-                start_at,
-                end_at,
-                attendees,
-                organizer_email,
-                calendar_name: "Google Calendar".into(),
-            })
-        })
-        .collect();
-
-    events.sort_by(|a, b| a.start_at.cmp(&b.start_at));
-    Ok(events)
-}
-
-/// Extract "HH:MM" from an RFC3339 datetime string like "2024-06-01T14:30:00+05:30".
-fn format_rfc3339_time(dt: &str) -> String {
-    // The time part starts at index 11 (after "YYYY-MM-DDT")
-    if dt.len() >= 16 {
-        dt[11..16].to_string()
-    } else {
-        dt.to_string()
-    }
-}
-
 // ── Focus Management ────────────────────────────────────────────────────────
 
 /// Returns the name of the frontmost application (macOS only).
@@ -2075,59 +1885,6 @@ fn get_pending_deep_link() -> Option<String> {
     pending.take()
 }
 
-// ── Accessibility Commands ────────────────────────────────────────────────────
-
-#[tauri::command]
-fn check_accessibility_permission() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        macos_paste::is_accessibility_trusted()
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        true
-    }
-}
-
-/// Trigger the macOS system prompt to grant Accessibility access.
-/// Uses AXIsProcessTrustedWithOptions which registers the current binary
-/// and opens System Settings → Privacy & Security → Accessibility.
-#[tauri::command]
-fn request_accessibility_permission() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        macos_paste::request_accessibility_with_prompt()
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        true
-    }
-}
-
-#[tauri::command]
-fn check_system_audio_permission() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        macos_paste::is_screen_capture_trusted()
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        !system_audio::is_supported()
-    }
-}
-
-#[tauri::command]
-fn request_system_audio_permission() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        macos_paste::request_screen_capture_with_prompt()
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        !system_audio::is_supported()
-    }
-}
-
 #[tauri::command]
 fn ensure_recording_hotkey_registered(
     app: tauri::AppHandle,
@@ -2139,23 +1896,6 @@ fn ensure_recording_hotkey_registered(
 #[tauri::command]
 fn is_recording_hotkey_registered(app: tauri::AppHandle) -> bool {
     app.global_shortcut().is_registered(recording_shortcut())
-}
-
-// ── File Utilities ────────────────────────────────────────────────────────────
-
-#[tauri::command]
-fn check_file_exists(path: String) -> bool {
-    std::path::Path::new(&path).exists()
-}
-
-#[tauri::command]
-fn delete_file(path: String) -> Result<String, String> {
-    if std::path::Path::new(&path).exists() {
-        std::fs::remove_file(&path).map_err(|e| format!("Failed to delete file: {}", e))?;
-        Ok(format!("Deleted {}", path))
-    } else {
-        Ok(format!("File not found: {}", path))
-    }
 }
 
 // ── App Entry Point ───────────────────────────────────────────────────────────
@@ -2210,18 +1950,18 @@ pub fn run() {
             set_pill_listening,
             get_frontmost_app,
             get_pending_deep_link,
-            check_accessibility_permission,
-            request_accessibility_permission,
-            check_system_audio_permission,
-            request_system_audio_permission,
+            permissions::check_accessibility_permission,
+            permissions::request_accessibility_permission,
+            permissions::check_system_audio_permission,
+            permissions::request_system_audio_permission,
             ensure_recording_hotkey_registered,
             is_recording_hotkey_registered,
             is_system_audio_supported,
             start_system_audio_capture,
             stop_system_audio_capture,
-            check_file_exists,
-            delete_file,
-            get_calendar_events,
+            filesystem::check_file_exists,
+            filesystem::delete_file,
+            calendar::get_calendar_events,
         ])
         .setup(move |app| {
             log::info!("[setup] Tauri setup started");

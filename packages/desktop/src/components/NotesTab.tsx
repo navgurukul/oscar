@@ -374,14 +374,6 @@ export function NotesTab({
               <p className="mt-3 text-[0.82rem] leading-[1.6] text-sky-50/90">
                 Saved notes sync here across devices. Stream transcripts stay local to this device.
               </p>
-              <button
-                onClick={onToggleRecording}
-                type="button"
-                className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-white/90 bg-white px-[14px] py-2.5 text-[0.82rem] font-semibold text-cyan-700 shadow-[0_12px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-px hover:text-cyan-800 hover:shadow-[0_16px_28px_rgba(15,23,42,0.18)]"
-              >
-                {isRecording ? <Square size={14} /> : <Mic size={14} />}
-                {isRecording ? "Stop Local Stream" : "Start Local Stream"}
-              </button>
             </div>
 
             <div className="flex min-h-16 items-center justify-end max-md:w-full max-md:justify-start" aria-hidden="true">
