@@ -1,35 +1,45 @@
 import { useState, useEffect } from "react";
 import {
-  CreditCard,
+  Settings2,
   BookOpen,
   User,
-  Shield,
-  LogOut,
-  AlertTriangle,
-  Download,
-  FileText,
-  Trash2,
-  ExternalLink,
-  Mail,
-  Lock,
-  Settings2,
   Search,
   Loader2,
-  Mic,
+  Download,
+  ExternalLink,
+  LogOut,
+  Trash2,
+  Lock,
+  Mail,
 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { BillingSection } from "./BillingSection";
 import { VocabularySection } from "./VocabularySection";
 import { getInitials } from "../lib/utils";
 import { isContextAwarePlatform } from "../lib/dictation-context";
 
-type SettingsTabType =
+/* ── Types ── */
+
+/** Accepts legacy tab names from callers */
+type SettingsSection =
   | "billing"
   | "vocabulary"
   | "general"
   | "account"
   | "privacy";
 
-// All languages Whisper small supports, with flag + native name
+/** Internal active tab */
+type ActiveTab = "general" | "vocabulary" | "account";
+
+function resolveTab(section?: SettingsSection): ActiveTab {
+  if (section === "billing" || section === "privacy" || section === "account")
+    return "account";
+  if (section === "vocabulary") return "vocabulary";
+  return "general";
+}
+
+/* ── Languages ── */
+
 const LANGUAGES = [
   { code: "hi-en", flag: "🇮🇳", name: "Hinglish", native: "Hindi + English" },
   { code: "en", flag: "🇺🇸", name: "English", native: "English" },
@@ -69,10 +79,58 @@ const LANGUAGES = [
 const WEB_APP_URL =
   import.meta.env.VITE_WEB_APP_URL ?? "https://oscar.samyarth.org";
 
+/* ── Helpers ── */
+
 interface MicDevice {
   deviceId: string;
   label: string;
 }
+
+function Toggle({
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`gen-toggle${checked ? " on" : ""}${disabled ? " disabled" : ""}`}
+      onClick={onChange}
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+    >
+      <span className="gen-toggle-thumb" />
+    </button>
+  );
+}
+
+function openExternalPage(url: string) {
+  void openUrl(url).catch((error) => {
+    console.error("Failed to open external link:", error);
+  });
+}
+
+/* ── Nav ── */
+
+const NAV_ITEMS: {
+  id: ActiveTab;
+  label: string;
+  icon: React.ElementType;
+}[] = [
+  { id: "general", label: "General", icon: Settings2 },
+  { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
+  { id: "account", label: "Account", icon: User },
+];
+
+/* ── Props ── */
 
 interface SettingsTabProps {
   transcriptionLanguage: string;
@@ -88,7 +146,7 @@ interface SettingsTabProps {
   contextAwareDictationEnabled: boolean;
   onContextAwareDictationChange: (enabled: boolean) => void;
   contextAwarePlatform: string;
-  initialSection?: SettingsTabType;
+  initialSection?: SettingsSection;
   systemAudioSupported?: boolean;
   systemAudioEnabled?: boolean;
   onSystemAudioToggle?: (enabled: boolean) => void;
@@ -100,17 +158,7 @@ interface SettingsTabProps {
   onRemoveMinutesModel?: () => void;
 }
 
-const NAV_ITEMS: {
-  id: SettingsTabType;
-  label: string;
-  icon: React.ElementType;
-}[] = [
-  { id: "billing", label: "Plans & Billing", icon: CreditCard },
-  { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
-  { id: "general", label: "General", icon: Settings2 },
-  { id: "account", label: "Account", icon: User },
-  { id: "privacy", label: "Data & Privacy", icon: Shield },
-];
+/* ── Component ── */
 
 export function SettingsTab({
   transcriptionLanguage,
@@ -133,21 +181,23 @@ export function SettingsTab({
   minutesModelEnabled = false,
   minutesModelDownloadState = "idle",
   minutesModelDownloadProgress = 0,
-  minutesModelVariant = "large-v3-turbo-q5_0",
   onDownloadMinutesModel,
   onRemoveMinutesModel,
 }: SettingsTabProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTabType>(initialSection || "billing");
+  const [activeTab, setActiveTab] = useState<ActiveTab>(
+    resolveTab(initialSection),
+  );
   const [clearConfirm, setClearConfirm] = useState(false);
   const [langSearch, setLangSearch] = useState("");
   const [micDevices, setMicDevices] = useState<MicDevice[]>([]);
 
   const autoDetect = transcriptionLanguage === "auto";
 
-  // Sync initialSection when it changes externally
-  useEffect(() => { if (initialSection) setActiveTab(initialSection); }, [initialSection]);
+  useEffect(() => {
+    if (initialSection) setActiveTab(resolveTab(initialSection));
+  }, [initialSection]);
 
-  // Enumerate mic devices when General tab is opened
+  // Enumerate mic devices when General tab opens
   useEffect(() => {
     if (activeTab !== "general") return;
     navigator.mediaDevices
@@ -169,19 +219,14 @@ export function SettingsTab({
       l.name.toLowerCase().includes(langSearch.toLowerCase()) ||
       l.native.toLowerCase().includes(langSearch.toLowerCase()),
   );
+
   const minutesPackInstalled =
     minutesModelDownloadState === "installed" || minutesModelEnabled;
   const contextAwareSupported = isContextAwarePlatform(contextAwarePlatform);
-  const contextAwareCaveat =
-    contextAwarePlatform === "windows"
-      ? "Windows uses app and window metadata in v1. Browser site detection stays conservative."
-      : contextAwarePlatform === "linux"
-        ? "Linux keeps the toggle available, but OSCAR currently falls back to default formatting until active-window context is more reliable."
-        : "OSCAR reads active app identity and browser site host during dictation, then adapts cleanup automatically.";
 
   return (
     <div className="st-layout">
-      {/* ── Left navigation sidebar ── */}
+      {/* ── Sidebar / Tab bar ── */}
       <aside className="st-sidebar">
         <p className="st-sidebar-label">Settings</p>
         <nav className="st-nav">
@@ -194,30 +239,215 @@ export function SettingsTab({
               <span className="st-nav-ico">
                 <Icon size={15} />
               </span>
-              {label}
+              <span className="st-nav-label">{label}</span>
             </button>
           ))}
         </nav>
         <div className="st-sidebar-spacer" />
       </aside>
 
-      {/* ── Right content panel ── */}
+      {/* ── Content ── */}
       <div className="st-panel" key={activeTab}>
-        {/* ── Plans & Billing ── */}
-        {activeTab === "billing" &&
-          (userId && userEmail ? (
-            <BillingSection userId={userId} userEmail={userEmail} />
-          ) : (
-            <div className="st-content">
-              <h2 className="st-content-title">Plans & Billing</h2>
-              <div className="st-empty-state">
-                <CreditCard size={32} />
-                <p>Sign in to manage your subscription.</p>
+        {/* ════════════ General ════════════ */}
+        {activeTab === "general" && (
+          <div className="st-content">
+            <h2 className="st-content-title">General</h2>
+
+            {/* — Recording — */}
+            <div className="st-section-label">Recording</div>
+            <div className="st-card st-card--grouped">
+              <div className="st-row">
+                <div className="st-row-text">
+                  <div className="st-row-label">Context-Aware Dictation</div>
+                  <div className="st-row-desc">
+                    Auto-adapts formatting to active app
+                  </div>
+                </div>
+                <Toggle
+                  checked={contextAwareDictationEnabled}
+                  onChange={() =>
+                    onContextAwareDictationChange(!contextAwareDictationEnabled)
+                  }
+                  label="Context-Aware Dictation"
+                  disabled={!contextAwareSupported}
+                />
+              </div>
+
+              <div className="st-divider" />
+
+              <div className="st-row st-row--col">
+                <div className="st-row-label">Microphone</div>
+                <select
+                  className="st-select"
+                  value={selectedMicId}
+                  onChange={(e) => onMicChange(e.target.value)}
+                >
+                  <option value="">System Default</option>
+                  {micDevices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {systemAudioSupported && (
+                <>
+                  <div className="st-divider" />
+                  <div className="st-row">
+                    <div className="st-row-text">
+                      <div className="st-row-label">System Audio</div>
+                      <div className="st-row-desc">
+                        Capture meeting participants' audio
+                      </div>
+                    </div>
+                    <Toggle
+                      checked={systemAudioEnabled}
+                      onChange={() =>
+                        onSystemAudioToggle?.(!systemAudioEnabled)
+                      }
+                      label="System Audio"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* — Language — */}
+            <div className="st-section-label">Language</div>
+            <div className="st-card st-card--grouped">
+              <div className="st-row">
+                <div className="st-row-label">Auto-detect language</div>
+                <Toggle
+                  checked={autoDetect}
+                  onChange={() => onLanguageChange(autoDetect ? "en" : "auto")}
+                  label="Auto-detect language"
+                />
+              </div>
+
+              {autoDetect && (
+                <p className="st-row-hint">
+                  Detects language from your first few seconds of speech.
+                </p>
+              )}
+
+              {!autoDetect && (
+                <>
+                  <div className="st-divider" />
+                  <div className="gen-search-wrap">
+                    <Search size={14} className="gen-search-icon" />
+                    <input
+                      type="text"
+                      className="gen-search"
+                      placeholder="Search languages…"
+                      value={langSearch}
+                      onChange={(e) => setLangSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="gen-lang-grid">
+                    {filteredLangs.map((lang) => {
+                      const isSelected = transcriptionLanguage === lang.code;
+                      return (
+                        <button
+                          key={lang.code}
+                          className={`gen-lang-tile${isSelected ? " selected" : ""}`}
+                          onClick={() => onLanguageChange(lang.code)}
+                        >
+                          <span className="gen-lang-flag">{lang.flag}</span>
+                          <span className="gen-lang-name">{lang.name}</span>
+                          <span className="gen-lang-native">{lang.native}</span>
+                        </button>
+                      );
+                    })}
+                    {filteredLangs.length === 0 && (
+                      <p className="gen-lang-empty">
+                        No languages match "{langSearch}"
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* — Enhancement — */}
+            <div className="st-section-label">Enhancement</div>
+            <div className="st-card st-card--grouped">
+              <div className="st-row">
+                <div className="st-row-text">
+                  <div className="st-row-label">AI Cleanup</div>
+                  <div className="st-row-desc">
+                    Fix grammar, filler words, and punctuation
+                  </div>
+                </div>
+                <Toggle
+                  checked={aiImprovementEnabled}
+                  onChange={() =>
+                    onAiImprovementChange(!aiImprovementEnabled)
+                  }
+                  label="AI Cleanup"
+                />
+              </div>
+
+              <div className="st-divider" />
+
+              <div className="st-row">
+                <div className="st-row-text">
+                  <div className="st-row-label">Accuracy Pack</div>
+                  <div className="st-row-desc">
+                    Better Hindi, Hinglish, and long-meeting transcription
+                  </div>
+                  {minutesModelDownloadState === "downloading" && (
+                    <div className="st-row-status st-row-status--downloading">
+                      Downloading…{" "}
+                      {Math.max(
+                        0,
+                        Math.min(
+                          100,
+                          Math.round(minutesModelDownloadProgress),
+                        ),
+                      )}
+                      %
+                    </div>
+                  )}
+                  {minutesPackInstalled &&
+                    minutesModelDownloadState !== "downloading" && (
+                      <div className="st-row-status st-row-status--installed">
+                        Installed
+                      </div>
+                    )}
+                </div>
+                <div className="st-row-action">
+                  {minutesPackInstalled ? (
+                    <button
+                      className="st-btn-ghost-sm"
+                      onClick={() => onRemoveMinutesModel?.()}
+                      disabled={minutesModelDownloadState === "downloading"}
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <button
+                      className="st-btn-primary-sm"
+                      onClick={() => onDownloadMinutesModel?.()}
+                      disabled={minutesModelDownloadState === "downloading"}
+                    >
+                      {minutesModelDownloadState === "downloading" ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Download size={14} />
+                      )}
+                      {minutesModelDownloadState === "downloading"
+                        ? "Downloading…"
+                        : "Download"}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          ))}
+          </div>
+        )}
 
-        {/* ── Vocabulary ── */}
+        {/* ════════════ Vocabulary ════════════ */}
         {activeTab === "vocabulary" &&
           (userId ? (
             <VocabularySection userId={userId} />
@@ -231,645 +461,146 @@ export function SettingsTab({
             </div>
           ))}
 
-        {/* ── General ── */}
-        {activeTab === "general" && (
-          <div className="st-content">
-            <h2 className="st-content-title">General</h2>
-
-            {/* ── Microphone ── */}
-            <div className="st-card">
-              <div className="st-card-hd">
-                <span className="st-ico-pill">
-                  <Settings2 size={15} />
-                </span>
-                <div>
-                  <h3 className="st-card-title">Context-Aware Dictation</h3>
-                  <p className="st-card-desc">
-                    Auto-match Stream formatting to the app you are dictating into
-                  </p>
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div
-                    style={{
-                      fontWeight: 500,
-                      color: "#334155",
-                      fontSize: "0.875rem",
-                    }}
-                  >
-                    Detect IDE, email, docs, chat, and browser flows
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "0.8125rem",
-                      color: "#94a3b8",
-                      marginTop: 2,
-                    }}
-                  >
-                    {contextAwareCaveat}
-                  </div>
-                </div>
-                <label className="gen-toggle-label" style={{ marginBottom: 0 }}>
-                  <div
-                    className={`gen-toggle${contextAwareDictationEnabled ? " on" : ""}`}
-                    onClick={() =>
-                      onContextAwareDictationChange(!contextAwareDictationEnabled)
-                    }
-                    role="switch"
-                    aria-checked={contextAwareDictationEnabled}
-                  >
-                    <div className="gen-toggle-thumb" />
-                  </div>
-                </label>
-              </div>
-              <p className="st-card-hint" style={{ marginTop: 10 }}>
-                Works with Cursor, VS Code, Gmail, Google Docs, Notion, Slack, Teams, ChatGPT, Claude, and more.{" "}
-                {!contextAwareSupported && "Unsupported platforms fall back to default cleanup."}
-              </p>
-            </div>
-
-            <div className="st-card">
-              <div className="st-card-hd">
-                <span className="st-ico-pill">
-                  <svg
-                    width="15"
-                    height="15"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="22" />
-                  </svg>
-                </span>
-                <div>
-                  <h3 className="st-card-title">Microphone</h3>
-                  <p className="st-card-desc">
-                    Choose which microphone OSCAR uses for recording
-                  </p>
-                </div>
-              </div>
-              <select
-                className="st-select"
-                value={selectedMicId}
-                onChange={(e) => onMicChange(e.target.value)}
-              >
-                <option value="">System Default</option>
-                {micDevices.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* ── Language ── */}
-            <div className="st-card gen-lang-card-wrap">
-              {/* Header row with auto-detect toggle */}
-              <div className="gen-lang-hd">
-                <div>
-                  <h3 className="st-card-title">Transcription Language</h3>
-                  <p className="st-card-desc">
-                    Select your language or let OSCAR detect it automatically
-                  </p>
-                </div>
-                <label className="gen-toggle-label">
-                  <span className="gen-toggle-text">Auto-detect</span>
-                  <div
-                    className={`gen-toggle${autoDetect ? " on" : ""}`}
-                    onClick={() => onLanguageChange(autoDetect ? "en" : "auto")}
-                    role="switch"
-                    aria-checked={autoDetect}
-                  >
-                    <div className="gen-toggle-thumb" />
-                  </div>
-                </label>
-              </div>
-
-              {/* Search box — only when manual mode */}
-              <div className={`gen-lang-body${autoDetect ? " dimmed" : ""}`}>
-                <div className="gen-search-wrap">
-                  <Search size={14} className="gen-search-icon" />
-                  <input
-                    type="text"
-                    className="gen-search"
-                    placeholder="Search languages…"
-                    value={langSearch}
-                    onChange={(e) => setLangSearch(e.target.value)}
-                    disabled={autoDetect}
-                  />
-                </div>
-
-                {/* Language grid */}
-                <div className="gen-lang-grid">
-                  {filteredLangs.map((lang) => {
-                    const isSelected =
-                      transcriptionLanguage === lang.code && !autoDetect;
-                    return (
-                      <button
-                        key={lang.code}
-                        className={`gen-lang-tile${isSelected ? " selected" : ""}${autoDetect ? " disabled" : ""}`}
-                        onClick={() => {
-                          if (!autoDetect) onLanguageChange(lang.code);
-                        }}
-                        disabled={autoDetect}
-                      >
-                        <span className="gen-lang-flag">{lang.flag}</span>
-                        <span className="gen-lang-name">{lang.name}</span>
-                        <span className="gen-lang-native">{lang.native}</span>
-                      </button>
-                    );
-                  })}
-                  {filteredLangs.length === 0 && (
-                    <p className="gen-lang-empty">
-                      No languages match "{langSearch}"
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {autoDetect && (
-                <p className="st-card-hint" style={{ marginTop: 8 }}>
-                  OSCAR will detect the language from your first few seconds of
-                  speech.
-                </p>
-              )}
-            </div>
-
-            {/* ── System Audio (Meetings) ── */}
-            {systemAudioSupported && (
-              <div className="st-card">
-                <div className="st-card-hd">
-                  <span className="st-ico-pill">
-                    <svg
-                      width="15"
-                      height="15"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                    </svg>
-                  </span>
-                  <div>
-                    <h3 className="st-card-title">System Audio Capture</h3>
-                    <p className="st-card-desc">
-                      Capture other participants' audio during meetings
-                    </p>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        fontWeight: 500,
-                        color: "#334155",
-                        fontSize: "0.875rem",
-                      }}
-                    >
-                      Record system audio in meetings
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.8125rem",
-                        color: "#94a3b8",
-                        marginTop: 2,
-                      }}
-                    >
-                      Captures audio from Zoom, Teams, and other apps so
-                      everyone's voice is transcribed. Requires Screen Recording
-                      permission.
-                    </div>
-                  </div>
-                  <label className="gen-toggle-label" style={{ marginBottom: 0 }}>
-                    <div
-                      className={`gen-toggle${systemAudioEnabled ? " on" : ""}`}
-                      onClick={() => onSystemAudioToggle?.(!systemAudioEnabled)}
-                      role="switch"
-                      aria-checked={systemAudioEnabled}
-                    >
-                      <div className="gen-toggle-thumb" />
-                    </div>
-                  </label>
-                </div>
-              </div>
-            )}
-
-            <div className="st-card">
-              <div className="st-card-hd">
-                <span className="st-ico-pill">
-                  <Mic size={15} />
-                </span>
-                <div>
-                  <h3 className="st-card-title">Minutes Accuracy Pack</h3>
-                  <p className="st-card-desc">
-                    Optional local model for better Hindi, Hinglish, and long-meeting transcription.
-                  </p>
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 220 }}>
-                  <div
-                    style={{
-                      fontWeight: 500,
-                      color: "#334155",
-                      fontSize: "0.875rem",
-                    }}
-                  >
-                    <code>{minutesModelVariant}</code> local pack
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "0.8125rem",
-                      color: "#94a3b8",
-                      marginTop: 2,
-                    }}
-                  >
-                    One-time download: ~574 MB. Minutes will keep transcription local and use this pack only when available.
-                  </div>
-                  {minutesModelDownloadState === "downloading" && (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        fontSize: "0.75rem",
-                        color: "#0891b2",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Downloading… {Math.max(0, Math.min(100, Math.round(minutesModelDownloadProgress)))}%
-                    </div>
-                  )}
-                  {minutesPackInstalled && minutesModelDownloadState !== "downloading" && (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        fontSize: "0.75rem",
-                        color: "#0f766e",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Installed
-                    </div>
-                  )}
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  {minutesPackInstalled ? (
-                    <button
-                      className="st-btn-ghost"
-                      onClick={() => onRemoveMinutesModel?.()}
-                      disabled={minutesModelDownloadState === "downloading"}
-                    >
-                      Remove
-                    </button>
-                  ) : (
-                    <button
-                      className="st-btn-primary"
-                      onClick={() => onDownloadMinutesModel?.()}
-                      disabled={minutesModelDownloadState === "downloading"}
-                    >
-                      {minutesModelDownloadState === "downloading" ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin" />
-                          Downloading…
-                        </>
-                      ) : (
-                        <>
-                          <Download size={14} />
-                          Download Pack
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* ── AI Enhancement ── */}
-            <div className="st-card">
-              <div className="st-card-hd">
-                <span className="st-ico-pill">
-                  <svg
-                    width="15"
-                    height="15"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
-                </span>
-                <div>
-                  <h3 className="st-card-title">AI Enhancement</h3>
-                  <p className="st-card-desc">
-                    Improve transcriptions with Groq AI
-                  </p>
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div
-                    style={{
-                      fontWeight: 500,
-                      color: "#334155",
-                      fontSize: "0.875rem",
-                    }}
-                  >
-                    Improve transcripts with AI
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "0.8125rem",
-                      color: "#94a3b8",
-                      marginTop: 2,
-                    }}
-                  >
-                    Automatically clean up grammar, filler words, and
-                    punctuation using Groq AI.
-                  </div>
-                </div>
-                <label className="gen-toggle-label" style={{ marginBottom: 0 }}>
-                  <div
-                    className={`gen-toggle${aiImprovementEnabled ? " on" : ""}`}
-                    onClick={() => onAiImprovementChange(!aiImprovementEnabled)}
-                    role="switch"
-                    aria-checked={aiImprovementEnabled}
-                  >
-                    <div className="gen-toggle-thumb" />
-                  </div>
-                </label>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Account ── */}
+        {/* ════════════ Account ════════════ */}
         {activeTab === "account" && (
           <div className="st-content">
             <h2 className="st-content-title">Account</h2>
 
-            <div className="st-card">
-              <div className="st-card-hd">
-                <span className="st-ico-pill">
-                  <User size={15} />
-                </span>
-                <div>
-                  <h3 className="st-card-title">Profile</h3>
-                  <p className="st-card-desc">Your account details</p>
-                </div>
-              </div>
+            {/* Profile */}
+            <div className="st-card st-card--grouped">
               <div className="st-profile-row">
                 <div className="st-avatar">{getInitials(userEmail)}</div>
                 <div className="st-profile-info">
                   <span className="st-profile-email">
                     <Mail size={13} />
-                    {userEmail || "No email address"}
+                    {userEmail || "Not signed in"}
                   </span>
-                  <span className="st-profile-note">
-                    <Lock size={11} />
-                    Signed in with Google
-                  </span>
+                  {userEmail && (
+                    <span className="st-profile-note">
+                      <Lock size={11} />
+                      Signed in with Google
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="st-card">
-              <div className="st-card-hd">
-                <span className="st-ico-pill st-ico-pill--neutral">
-                  <LogOut size={15} />
-                </span>
-                <div>
-                  <h3 className="st-card-title">Sign Out</h3>
-                  <p className="st-card-desc">
-                    Sign out of your account on this device
-                  </p>
-                </div>
+            {/* Plan & Usage */}
+            {userId && userEmail ? (
+              <BillingSection userId={userId} />
+            ) : (
+              <div className="st-card st-card--grouped">
+                <p className="st-row-desc" style={{ padding: "4px 0" }}>
+                  Sign in to view your plan and usage.
+                </p>
               </div>
-              <button className="st-btn-muted" onClick={onSignOut}>
-                <LogOut size={14} />
-                Sign out
-              </button>
-            </div>
+            )}
 
-            <div className="st-card st-card-danger">
-              <div className="st-card-hd">
-                <span className="st-ico-pill st-ico-pill--danger">
-                  <AlertTriangle size={15} />
-                </span>
-                <div>
-                  <h3 className="st-card-title st-title-danger">
-                    Delete Account
-                  </h3>
-                  <p className="st-card-desc">
-                    Permanently delete your account and all associated data
-                  </p>
-                </div>
-              </div>
-              <button
-                className="st-btn-danger-ghost"
-                onClick={() => window.open(`${WEB_APP_URL}/settings`, "_blank")}
-              >
-                <AlertTriangle size={14} />
-                Delete Account
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Data & Privacy ── */}
-        {activeTab === "privacy" && (
-          <div className="st-content">
-            <h2 className="st-content-title">Data & Privacy</h2>
-
-            <div className="st-card">
-              <div className="st-card-hd">
-                <span className="st-ico-pill st-ico-pill--neutral">
-                  <Shield size={15} />
-                </span>
-                <div>
-                  <h3 className="st-card-title">Context-Aware Dictation</h3>
-                  <p className="st-card-desc">
-                    What OSCAR reads and what OSCAR stores
-                  </p>
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gap: 10,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.875rem",
-                    color: "#334155",
-                    lineHeight: 1.55,
-                  }}
+            {/* Resources */}
+            <div className="st-section-label">Resources</div>
+            <div className="st-card st-card--links">
+              {[
+                {
+                  label: "Export Your Data",
+                  href: `${WEB_APP_URL}/settings`,
+                },
+                {
+                  label: "Privacy Policy",
+                  href: `${WEB_APP_URL}/privacy`,
+                },
+                {
+                  label: "Terms of Service",
+                  href: `${WEB_APP_URL}/terms`,
+                },
+                {
+                  label: "Refund Policy",
+                  href: `${WEB_APP_URL}/refund-policy`,
+                },
+              ].map(({ label, href }) => (
+                <button
+                  key={href}
+                  type="button"
+                  className="st-link-row"
+                  onClick={() => openExternalPage(href)}
                 >
-                  OSCAR reads only the active app identity and, when available, the browser site host during the live dictation session. It does not scrape nearby text in v1.
+                  <span>{label}</span>
+                  <ExternalLink size={13} />
+                </button>
+              ))}
+            </div>
+
+            {/* Danger Zone */}
+            <div className="st-section-label st-section-label--danger">
+              Danger Zone
+            </div>
+            <div className="st-card st-card-danger st-card--grouped">
+              <div className="st-row">
+                <div className="st-row-text">
+                  <div className="st-row-label">Sign Out</div>
+                  <div className="st-row-desc">
+                    Sign out on this device
+                  </div>
                 </div>
-                <div
-                  style={{
-                    fontSize: "0.8125rem",
-                    color: "#94a3b8",
-                    lineHeight: 1.55,
-                  }}
+                <button className="st-btn-muted-sm" onClick={onSignOut}>
+                  <LogOut size={14} />
+                  Sign Out
+                </button>
+              </div>
+
+              <div className="st-divider" />
+
+              <div className="st-row">
+                <div className="st-row-text">
+                  <div className="st-row-label">Delete Account</div>
+                  <div className="st-row-desc">
+                    Permanently remove your account and data
+                  </div>
+                </div>
+                <button
+                  className="st-btn-danger-ghost-sm"
+                  onClick={() => openExternalPage(`${WEB_APP_URL}/settings`)}
                 >
-                  Saved note metadata stays minimal: category, variant, app key, context source, and prompt version. Raw window titles and full URLs are not persisted.
-                </div>
+                  Delete
+                </button>
               </div>
-            </div>
 
-            <div className="st-card">
-              <div className="st-card-hd">
-                <span className="st-ico-pill">
-                  <Download size={15} />
-                </span>
-                <div>
-                  <h3 className="st-card-title">Export Your Data</h3>
-                  <p className="st-card-desc">
-                    Download a copy of your notes, vocabulary, and account
-                    information
-                  </p>
-                </div>
-              </div>
-              <button
-                className="st-btn-primary"
-                onClick={() => window.open(`${WEB_APP_URL}/settings`, "_blank")}
-              >
-                <Download size={14} />
-                Request Data Export
-              </button>
-            </div>
+              <div className="st-divider" />
 
-            <div className="st-card">
-              <div className="st-card-hd">
-                <span className="st-ico-pill st-ico-pill--neutral">
-                  <FileText size={15} />
-                </span>
-                <div>
-                  <h3 className="st-card-title">Legal & Compliance</h3>
-                  <p className="st-card-desc">Review our terms and policies</p>
+              <div className="st-row">
+                <div className="st-row-text">
+                  <div className="st-row-label">Clear Local Data</div>
+                  <div className="st-row-desc">
+                    Reset app, remove downloads, sign out
+                  </div>
                 </div>
-              </div>
-              <div className="st-legal-list">
-                {[
-                  { label: "Privacy Policy", href: `${WEB_APP_URL}/privacy` },
-                  { label: "Terms of Service", href: `${WEB_APP_URL}/terms` },
-                  {
-                    label: "Refund Policy",
-                    href: `${WEB_APP_URL}/refund-policy`,
-                  },
-                ].map(({ label, href }) => (
-                  <a
-                    key={href}
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="st-legal-link"
-                  >
-                    {label}
-                    <ExternalLink size={12} />
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            <div className="st-card st-card-danger">
-              <div className="st-card-hd">
-                <span className="st-ico-pill st-ico-pill--danger">
-                  <Trash2 size={15} />
-                </span>
-                <div>
-                  <h3 className="st-card-title st-title-danger">
-                    Clear All Data
-                  </h3>
-                  <p className="st-card-desc">
-                    Delete all local data, downloaded models, and sign out.
-                    You'll need to set up OSCAR again.
-                  </p>
-                </div>
-              </div>
-              {clearConfirm ? (
-                <div className="st-confirm-row">
-                  <span className="st-confirm-msg">
-                    This will delete all data, sign you out, and reset the app.
-                    This cannot be undone.
-                  </span>
-                  <div className="st-confirm-btns">
+                {clearConfirm ? (
+                  <div className="st-confirm-inline">
                     <button
-                      className="st-btn-ghost"
-                      onClick={() => setClearConfirm(false)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      className="st-btn-danger"
+                      className="st-btn-danger-sm"
                       onClick={() => {
                         setClearConfirm(false);
                         onClearData();
                       }}
                     >
-                      Yes, reset everything
+                      Confirm
+                    </button>
+                    <button
+                      className="st-btn-ghost-sm"
+                      onClick={() => setClearConfirm(false)}
+                    >
+                      Cancel
                     </button>
                   </div>
-                </div>
-              ) : (
-                <button
-                  className="st-btn-danger-ghost"
-                  onClick={() => setClearConfirm(true)}
-                >
-                  <Trash2 size={14} />
-                  Clear All Local Data
-                </button>
-              )}
+                ) : (
+                  <button
+                    className="st-btn-danger-ghost-sm"
+                    onClick={() => setClearConfirm(true)}
+                  >
+                    <Trash2 size={13} />
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

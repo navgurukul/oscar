@@ -20,6 +20,13 @@ use tokio::io::AsyncWriteExt;
 mod system_audio;
 
 #[cfg(target_os = "macos")]
+extern "C" {
+    fn objc_getClass(name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+    fn sel_registerName(name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+    fn objc_msgSend() -> *mut std::ffi::c_void;
+}
+
+#[cfg(target_os = "macos")]
 mod macos_paste {
     use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
     use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
@@ -406,6 +413,69 @@ fn extract_host_from_url(url: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "macos")]
+fn nsstring_to_string(ns_string: *mut std::ffi::c_void) -> Option<String> {
+    if ns_string.is_null() {
+        return None;
+    }
+
+    unsafe {
+        let sel_utf8 = sel_registerName(b"UTF8String\0".as_ptr() as *const _);
+        type MsgCStr = unsafe extern "C" fn(
+            *mut std::ffi::c_void,
+            *mut std::ffi::c_void,
+        ) -> *const std::ffi::c_char;
+        let msg_cstr: MsgCStr = std::mem::transmute(objc_msgSend as *const ());
+        let c_str = msg_cstr(ns_string, sel_utf8);
+        if c_str.is_null() {
+            return None;
+        }
+
+        std::ffi::CStr::from_ptr(c_str)
+            .to_str()
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn get_frontmost_macos_app_identity() -> (String, Option<String>) {
+    unsafe {
+        let ws_class = objc_getClass(b"NSWorkspace\0".as_ptr() as *const _);
+        if ws_class.is_null() {
+            return (String::new(), None);
+        }
+
+        let sel_shared = sel_registerName(b"sharedWorkspace\0".as_ptr() as *const _);
+        let sel_frontmost =
+            sel_registerName(b"frontmostApplication\0".as_ptr() as *const _);
+        let sel_name = sel_registerName(b"localizedName\0".as_ptr() as *const _);
+        let sel_bundle = sel_registerName(b"bundleIdentifier\0".as_ptr() as *const _);
+
+        type MsgId = unsafe extern "C" fn(
+            *mut std::ffi::c_void,
+            *mut std::ffi::c_void,
+        ) -> *mut std::ffi::c_void;
+        let msg_id: MsgId = std::mem::transmute(objc_msgSend as *const ());
+
+        let shared = msg_id(ws_class, sel_shared);
+        if shared.is_null() {
+            return (String::new(), None);
+        }
+
+        let frontmost = msg_id(shared, sel_frontmost);
+        if frontmost.is_null() {
+            return (String::new(), None);
+        }
+
+        let app_name = nsstring_to_string(msg_id(frontmost, sel_name)).unwrap_or_default();
+        let bundle_id = nsstring_to_string(msg_id(frontmost, sel_bundle));
+
+        (app_name, bundle_id)
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn run_osascript(script: &str) -> Option<String> {
     std::process::Command::new("osascript")
         .args(["-e", script])
@@ -460,13 +530,7 @@ fn get_browser_site_context(app_name: &str) -> (Option<String>, Option<String>) 
 
 #[cfg(target_os = "macos")]
 fn get_frontmost_context_payload() -> FrontmostContextPayload {
-    let app_name = run_osascript(
-        r#"tell application "System Events" to get name of first application process whose frontmost is true"#,
-    )
-    .unwrap_or_default();
-    let app_id = run_osascript(
-        r#"tell application "System Events" to get bundle identifier of first application process whose frontmost is true"#,
-    );
+    let (app_name, native_app_id) = get_frontmost_macos_app_identity();
     let window_title = run_osascript(
         r#"tell application "System Events"
     tell (first application process whose frontmost is true)
@@ -483,7 +547,7 @@ end tell"#,
     FrontmostContextPayload {
         platform: "macos".to_string(),
         app_name: app_name.clone(),
-        app_id: normalize_optional_string(app_id),
+        app_id: normalize_optional_string(native_app_id),
         process_name: None,
         window_title: normalize_optional_string(window_title),
         site_host,
