@@ -8,6 +8,7 @@ import type {
   DictationContextSnapshot,
   DictationRoutingResult,
 } from "../types/note.types";
+import { MEETING_CONFIG } from "@oscar/shared/constants";
 
 export type DesktopAIMode =
   | "transcribe_cleanup"
@@ -30,11 +31,13 @@ interface AIProcessRequest {
 
 const EDGE_FUNCTION_FETCH_ERROR = "Failed to send a request to the Edge Function";
 const EDGE_FUNCTION_RELAY_ERROR = "Relay Error invoking the Edge Function";
-const MAX_MEETING_REQUEST_SEGMENTS = 240;
-const MAX_MEETING_REQUEST_CHARS = 120_000;
-const MAX_COMPACTED_SEGMENT_CHARS = 320;
-const MAX_COMPACTED_GAP_MS = 20_000;
-const MEETING_FALLBACK_SOURCE_CHARS = 12_000;
+const {
+  MAX_REQUEST_SEGMENTS: MAX_MEETING_REQUEST_SEGMENTS,
+  MAX_REQUEST_CHARS: MAX_MEETING_REQUEST_CHARS,
+  MAX_COMPACTED_SEGMENT_CHARS,
+  MAX_COMPACTED_GAP_MS,
+  FALLBACK_SOURCE_CHARS: MEETING_FALLBACK_SOURCE_CHARS,
+} = MEETING_CONFIG;
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
