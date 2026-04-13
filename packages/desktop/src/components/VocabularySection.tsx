@@ -63,6 +63,7 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
       const { data, error } = await supabase
         .from("user_vocabulary")
         .select("*")
+        .eq("user_id", userId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -122,7 +123,8 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
       const { error } = await supabase
         .from("user_vocabulary")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .eq("user_id", userId);
 
       if (error) throw error;
       setVocabulary((prev) => prev.filter((v) => v.id !== id));
@@ -130,7 +132,7 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
       console.error("Failed to delete entry:", e);
       alert("Failed to delete entry.");
     }
-  }, []);
+  }, [userId]);
 
   const startEditing = useCallback((entry: VocabularyEntry) => {
     setEditingId(entry.id);
@@ -159,6 +161,7 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
           updated_at: new Date().toISOString(),
         })
         .eq("id", id)
+        .eq("user_id", userId)
         .select()
         .single();
 
@@ -172,7 +175,7 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
       console.error("Failed to update entry:", e);
       alert("Failed to update entry.");
     }
-  }, [editTerm, editPronunciation, editContext, cancelEditing]);
+  }, [editTerm, editPronunciation, editContext, cancelEditing, userId]);
 
   const maxEntries = isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY;
 
@@ -189,8 +192,7 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
       </div>
 
       <p className="vocabulary-description">
-        Add names, technical terms, or abbreviations that are often misrecognized. 
-        These help improve speech-to-text accuracy.
+        Add names, terms, or abbreviations that are often misrecognized.
       </p>
 
       {/* Add Form */}
