@@ -5,12 +5,6 @@ import { usePathname } from "next/navigation";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useAuth } from "@/lib/contexts/AuthContext";
 
-const NAV_LINKS = [
-  { href: ROUTES.NOTES,    label: "Scribbles" },
-  { href: ROUTES.MEETINGS, label: "Meetings"  },
-  { href: ROUTES.SETTINGS, label: "Settings"  },
-] as const;
-
 export function FloatingNavbar() {
   const pathname = usePathname();
   const { session } = useAuth();
@@ -46,28 +40,6 @@ export function FloatingNavbar() {
             {UI_STRINGS.APP_NAME}
           </span>
         </Link>
-
-        {/* Authenticated nav links */}
-        {isAuthenticated && !isAuthPage && (
-          <div className="hidden sm:flex items-center gap-1">
-            {NAV_LINKS.map(({ href, label }) => {
-              const active = pathname === href || pathname.startsWith(href + "/");
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-                    active
-                      ? "bg-cyan-500/15 text-cyan-400"
-                      : "text-gray-400 hover:text-white hover:bg-white/8"
-                  }`}
-                >
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-        )}
       </div>
     </nav>
   );
