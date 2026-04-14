@@ -3,18 +3,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
-import { useAuth } from "@/lib/contexts/AuthContext";
 
 export function FloatingNavbar() {
   const pathname = usePathname();
-  const { session } = useAuth();
 
   const isAuthPage =
     pathname === ROUTES.AUTH ||
     pathname === ROUTES.PRICING ||
     pathname === ROUTES.DOWNLOAD;
-
-  const isAuthenticated = !!session;
 
   return (
     <nav className="fixed top-0 z-50 w-full transition-opacity duration-500 opacity-100">
