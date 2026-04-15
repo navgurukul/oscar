@@ -453,12 +453,12 @@ export default function Home() {
 
               {/* oscar Minutes */}
               <FadeIn delay={0.05}>
-              <div className="mb-16 rounded-2xl border border-violet-500/20 hover:border-violet-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
+              <div className="mb-16 rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
                 <div className="grid md:grid-cols-2 gap-0">
                   <div className="bg-slate-950/60 p-10 flex items-center justify-center min-h-[280px] order-last md:order-first">
                     <div className="text-center space-y-5 max-w-[280px]">
-                      <div className="w-16 h-16 bg-violet-500/20 rounded-2xl flex items-center justify-center mx-auto icon-spring">
-                        <Users className="w-8 h-8 text-violet-400" />
+                      <div className="w-16 h-16 bg-cyan-500/20 rounded-2xl flex items-center justify-center mx-auto icon-spring">
+                        <Users className="w-8 h-8 text-cyan-400" />
                       </div>
                       <motion.div
                         variants={listVariants}
@@ -474,7 +474,7 @@ export default function Home() {
                           { label: "Follow-ups" },
                         ].map((item) => (
                           <motion.div key={item.label} variants={itemVariants} className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 bg-violet-400 rounded-full shrink-0" />
+                            <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full shrink-0" />
                             <span className="text-xs text-slate-400">{item.label}</span>
                           </motion.div>
                         ))}
@@ -484,13 +484,13 @@ export default function Home() {
                   </div>
                   <div className="p-10 flex flex-col justify-center">
                     <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 bg-violet-500/20 rounded-xl flex items-center justify-center icon-spring">
-                        <Users className="w-5 h-5 text-violet-400" />
+                      <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center icon-spring">
+                        <Users className="w-5 h-5 text-cyan-400" />
                       </div>
-                      <span className="text-xs font-bold uppercase tracking-widest text-violet-400 bg-violet-500/10 border border-violet-500/30 rounded-full px-3 py-1">oscar Minutes</span>
+                      <span className="text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1">oscar Minutes</span>
                     </div>
                     <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                      Full meeting notes, <span className="text-violet-400">automatically.</span>
+                      Full meeting notes, <span className="text-cyan-400">automatically.</span>
                     </h3>
                     <p className="text-gray-300 text-lg mb-6 leading-relaxed">
                       Record your Zoom, Teams, or in-person meeting. OSCAR captures both your voice and other participants&apos; audio, transcribes everything, and generates structured AI notes the moment you stop.
@@ -504,7 +504,7 @@ export default function Home() {
                     >
                       {["Records mic + system audio (Zoom, Teams, etc.)", "AI-structured notes: decisions, action items, follow-ups", "Google Calendar integration — one tap from your schedule", "Standup, 1:1, brainstorm & custom templates"].map((f) => (
                         <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
-                          <Check className="w-4 h-4 text-violet-400 shrink-0" />
+                          <Check className="w-4 h-4 text-cyan-400 shrink-0" />
                           <span>{f}</span>
                         </motion.li>
                       ))}
@@ -516,17 +516,17 @@ export default function Home() {
 
               {/* oscar Scribble */}
               <FadeIn delay={0.05}>
-              <div className="rounded-2xl border border-emerald-500/20 hover:border-emerald-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
+              <div className="rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
                 <div className="grid md:grid-cols-2 gap-0">
                   <div className="p-10 flex flex-col justify-center">
                     <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center icon-spring">
-                        <BookOpen className="w-5 h-5 text-emerald-400" />
+                      <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center icon-spring">
+                        <BookOpen className="w-5 h-5 text-cyan-400" />
                       </div>
-                      <span className="text-xs font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-3 py-1">Scribble</span>
+                      <span className="text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1">oscar Scribble</span>
                     </div>
                     <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                      Your voice notes, <span className="text-emerald-400">beautifully organized.</span>
+                      Your voice notes, <span className="text-cyan-400">beautifully organized.</span>
                     </h3>
                     <p className="text-gray-300 text-lg mb-6 leading-relaxed">
                       Every Stream dictation and idea you capture lives in Scribble — searchable, editable, and synced across devices. Build your personal knowledge base without ever typing a thing.
@@ -540,7 +540,7 @@ export default function Home() {
                     >
                       {["All your voice notes in one searchable place", "Synced to the cloud, accessible anywhere", "AI-cleaned text ready to share or export", "Custom vocabulary for your industry & jargon"].map((f) => (
                         <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
-                          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <Check className="w-4 h-4 text-cyan-400 shrink-0" />
                           <span>{f}</span>
                         </motion.li>
                       ))}
@@ -559,9 +559,9 @@ export default function Home() {
                         { title: "Weekly goals", time: "Yesterday, 9:30 AM" },
                         { title: "Client call ideas", time: "3 days ago" },
                       ].map((note) => (
-                        <motion.div key={note.title} variants={itemVariants} className="flex items-center gap-3 p-3 bg-slate-800/60 hover:bg-slate-800/80 rounded-xl border border-slate-700/50 hover:border-emerald-500/30 transition-colors duration-200 cursor-default">
-                          <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 hover:scale-110">
-                            <FileText className="w-4 h-4 text-emerald-400" />
+                        <motion.div key={note.title} variants={itemVariants} className="flex items-center gap-3 p-3 bg-slate-800/60 hover:bg-slate-800/80 rounded-xl border border-slate-700/50 hover:border-cyan-500/30 transition-colors duration-200 cursor-default">
+                          <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 hover:scale-110">
+                            <FileText className="w-4 h-4 text-cyan-400" />
                           </div>
                           <div>
                             <p className="text-sm text-white font-medium">{note.title}</p>
