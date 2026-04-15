@@ -100,6 +100,7 @@ function App() {
   const [_status, setStatus] = useState("Initializing...");
   const [_isProcessing, setIsProcessing] = useState(false);
   const [hotkeyWarning, setHotkeyWarning] = useState("");
+  const [dictationConflict, setDictationConflict] = useState(false);
 
   // Settings panel
   const [_whisperModelPath, setWhisperModelPath] = useState("");
@@ -563,6 +564,11 @@ function App() {
         if (permsDone && isMacOS() && !accessibilityGranted) {
           nextPermissionsShown = false;
         }
+      }
+
+      if (isMacOS()) {
+        const conflict = await invoke<boolean>("check_dictation_ctrl_conflict").catch(() => false);
+        setDictationConflict(conflict);
       }
 
       setPermissionsShown(nextPermissionsShown);
@@ -1849,6 +1855,22 @@ function App() {
             onClick={() => retryHotkeyRegistration()}
           >
             Retry Hotkey
+          </button>
+        </div>
+      )}
+
+      {dictationConflict && (
+        <div className="px-4 py-3 border-b border-amber-200 bg-amber-50 flex items-center justify-between gap-3">
+          <p className="text-sm text-amber-900 m-0">
+            macOS Dictation is set to &ldquo;Press Control Key Twice&rdquo;, which interferes with Ctrl+Space recording. Go to{" "}
+            <strong>System Settings → Keyboard → Dictation</strong> and change the shortcut to &ldquo;Press 🌐 Key Twice&rdquo; or Off.
+          </p>
+          <button
+            type="button"
+            className="shrink-0 text-sm font-medium text-amber-900 bg-white border border-amber-300 rounded-md px-3 py-1.5"
+            onClick={() => setDictationConflict(false)}
+          >
+            Dismiss
           </button>
         </div>
       )}

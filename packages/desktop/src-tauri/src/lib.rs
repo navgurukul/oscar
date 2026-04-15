@@ -1952,6 +1952,7 @@ pub fn run() {
             get_pending_deep_link,
             permissions::check_accessibility_permission,
             permissions::request_accessibility_permission,
+            permissions::check_dictation_ctrl_conflict,
             permissions::check_system_audio_permission,
             permissions::request_system_audio_permission,
             ensure_recording_hotkey_registered,
