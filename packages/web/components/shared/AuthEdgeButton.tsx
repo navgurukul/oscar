@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { LogIn, FileText, Settings, Video } from "lucide-react";
+import { LogIn, FileText, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
@@ -76,7 +76,7 @@ export function AuthEdgeButton() {
                   whileTap={{ scale: 0.95 }}
                   className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl"
                 >
-                  <Video className="w-4 h-4 text-cyan-400" />
+                  <Users className="w-4 h-4 text-cyan-400" />
                 </motion.div>
               </Link>
             </motion.div>
@@ -178,7 +178,7 @@ export function AuthEdgeButton() {
                       transition={{ duration: 0.2, ease: "easeOut" }}
                       className="flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors"
                     >
-                      <Video className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
+                      <Users className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
                     </motion.div>
                   </Link>
                 </TooltipTrigger>

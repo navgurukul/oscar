@@ -257,7 +257,7 @@ export default function PricingPage() {
           >
             <AccordionItem value="item-1" className="border-gray-800">
               <AccordionTrigger className="px-6 text-md font-bold  text-white hover:no-underline">
-                Can I cancel anytime?
+                Can I cancel my subscription anytime?
               </AccordionTrigger>
               <AccordionContent className="px-6 text-gray-400">
                 Yes! You can cancel your subscription at any time. You&apos;ll

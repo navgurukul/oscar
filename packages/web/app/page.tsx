@@ -393,7 +393,7 @@ export default function Home() {
                   One app. Three <span className="text-cyan-500">superpowers.</span>
                 </h2>
                 <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
-                  Whether you&apos;re dictating on the fly, capturing a full meeting, or building a personal knowledge base — OSCAR has a mode built for it.
+                  Whether you&apos;re dictating on the fly, capturing a full meeting, or building a personal knowledge base, OSCAR has a mode built for it
                 </p>
               </FadeIn>
 
@@ -412,7 +412,7 @@ export default function Home() {
                       Dictate into <span className="text-cyan-400">anything</span>, anywhere.
                     </h3>
                     <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                      Hold <kbd className="key-press inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Ctrl</kbd> + <kbd className="key-press inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Space</kbd> from anywhere on your computer and speak. OSCAR types the cleaned, AI-polished text directly into Slack, Notion, Gmail, VS Code — whatever app you&apos;re in.
+                      Hold <kbd className="key-press inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Ctrl</kbd> + <kbd className="key-press inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Space</kbd> from anywhere on your computer and speak. OSCAR types the cleaned, AI-polished text directly into Slack, Notion, Gmail, VS Code, or any app you&apos;re using.
                     </p>
                     <motion.ul
                       variants={listVariants}
@@ -421,7 +421,7 @@ export default function Home() {
                       viewport={{ once: true }}
                       className="space-y-3"
                     >
-                      {["Global hotkey — no switching apps", "AI removes filler words & fixes grammar instantly", "Works in every app on your system", "Hinglish & 30+ language support"].map((f) => (
+                      {["Global hotkey. No app switching needed", "AI removes filler words & fixes grammar instantly", "Works in every app on your system", "Hinglish & 30+ language support"].map((f) => (
                         <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
                           <Check className="w-4 h-4 text-cyan-400 shrink-0" />
                           <span>{f}</span>
@@ -456,8 +456,8 @@ export default function Home() {
               <div className="mb-16 rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
                 <div className="grid md:grid-cols-2 gap-0">
                   <div className="bg-slate-950/60 p-10 flex items-center justify-center min-h-[280px] order-last md:order-first">
-                    <div className="text-center space-y-5 max-w-[280px]">
-                      <div className="w-16 h-16 bg-cyan-500/20 rounded-2xl flex items-center justify-center mx-auto icon-spring">
+                    <div className="text-left space-y-5 max-w-[280px]">
+                        <div className="w-16 h-16 bg-cyan-500/20 rounded-2xl flex items-center justify-center icon-spring">
                         <Users className="w-8 h-8 text-cyan-400" />
                       </div>
                       <motion.div
@@ -502,7 +502,7 @@ export default function Home() {
                       viewport={{ once: true }}
                       className="space-y-3"
                     >
-                      {["Records mic + system audio (Zoom, Teams, etc.)", "AI-structured notes: decisions, action items, follow-ups", "Google Calendar integration — one tap from your schedule", "Standup, 1:1, brainstorm & custom templates"].map((f) => (
+                      {["Records mic + system audio (Zoom, Teams, etc.)", "AI-structured notes: decisions, action items, follow-ups", "Google Calendar integration with one-tap access from your schedule", "Standup, 1:1, brainstorm & custom templates"].map((f) => (
                         <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
                           <Check className="w-4 h-4 text-cyan-400 shrink-0" />
                           <span>{f}</span>
@@ -529,7 +529,7 @@ export default function Home() {
                       Your voice notes, <span className="text-cyan-400">beautifully organized.</span>
                     </h3>
                     <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                      Every Stream dictation and idea you capture lives in Scribble — searchable, editable, and synced across devices. Build your personal knowledge base without ever typing a thing.
+                      Every Stream dictation and idea you capture lives in Scribble. It is searchable, editable, and synced across devices. Build your personal knowledge base without ever typing a thing.
                     </p>
                     <motion.ul
                       variants={listVariants}
@@ -600,7 +600,7 @@ export default function Home() {
                       You speak at 150+ words per minute. You type at 40. Stop wasting time transcribing your own thoughts.
                     </p>
                     <p className="text-cyan-200 text-sm">
-                      Stream directly into Slack, email, docs — zero copy-paste
+                      Stream directly into Slack, email, docs. Zero copy-paste.
                     </p>
                   </div>
                 </FadeIn>
@@ -612,7 +612,7 @@ export default function Home() {
                     </div>
                     <h3 className="text-2xl font-semibold text-white mb-4">AI That Understands Context</h3>
                     <p className="text-gray-300 mb-4">
-                      Not just speech-to-text. OSCAR formats your ideas intelligently — and Minutes turns raw conversation into structured, actionable notes.
+                      Not just speech-to-text. OSCAR formats your ideas intelligently, and Minutes turns raw conversation into structured, actionable notes.
                     </p>
                     <p className="text-cyan-200 text-sm">
                       Hinglish support, 30+ languages, custom vocabulary
@@ -642,7 +642,7 @@ export default function Home() {
                     </div>
                     <h3 className="text-2xl font-semibold text-white mb-4">Runs Locally. Private by Default.</h3>
                     <p className="text-gray-300 mb-4">
-                      Whisper transcription runs on-device — your audio never leaves your computer. AI processing is opt-in and uses only the text.
+                      Whisper transcription runs on-device. Your audio never leaves your computer. AI processing is opt-in and uses only the text.
                     </p>
                     <p className="text-cyan-200 text-sm">
                       No audio uploads. No surveillance. Just your ideas.

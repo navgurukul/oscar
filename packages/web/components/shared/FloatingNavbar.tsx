@@ -9,7 +9,6 @@ export function FloatingNavbar() {
 
   const isAuthPage =
     pathname === ROUTES.AUTH ||
-    pathname === ROUTES.PRICING ||
     pathname === ROUTES.DOWNLOAD;
 
   return (
