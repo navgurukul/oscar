@@ -108,7 +108,7 @@ function SettingsContent() {
         <div className="mb-8 mt-5">
           <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
           <p className="text-gray-400">
-            Manage your account, subscription, vocabulary, and privacy settings
+            Manage your subscription, vocabulary, folders, account, and privacy settings
           </p>
         </div>
 

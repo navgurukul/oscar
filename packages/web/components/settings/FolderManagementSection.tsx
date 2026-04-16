@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FolderPlus, Trash2, Edit2, Check, X } from "lucide-react";
+import { FolderPlus, Trash2, Edit2, Check, X, Plus } from "lucide-react";
 import { notesService } from "@/lib/services/notes.service";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -272,7 +273,7 @@ export default function FolderManagementSection() {
                 </SelectContent>
               </Select>
 
-              <button
+              <Button
                 onClick={handleCreateFolder}
                 disabled={
                   isCreatingFolder ||
@@ -280,11 +281,15 @@ export default function FolderManagementSection() {
                   !targetNoteId ||
                   allNotes.length === 0
                 }
-                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
+                className="border-2 hover:bg-cyan-600 px-2 h-9"
+                variant="ghost"
               >
-                <FolderPlus className="w-4 h-4" />
-                {isCreatingFolder ? "Creating..." : "Create"}
-              </button>
+                {isCreatingFolder ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                ) : (
+                  <Plus className="w-5 h-5 text-white" strokeWidth={2.5} />
+                )}
+              </Button>
             </div>
           </div>
         </CardContent>
