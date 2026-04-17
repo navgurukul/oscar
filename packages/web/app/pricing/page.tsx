@@ -200,6 +200,13 @@ export default function PricingPage() {
                   <td className="py-4 text-center text-cyan-400">Unlimited</td>
                 </tr>
                 <tr className="border-b border-gray-800/50">
+                  <td className="py-4 text-gray-300">Vocabulary</td>
+                  <td className="py-4 text-center text-gray-400">
+                    {SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY}
+                  </td>
+                  <td className="py-4 text-center text-cyan-400">Unlimited</td>
+                </tr>
+                <tr className="border-b border-gray-800/50">
                   <td className="py-4 text-gray-300">AI formatting</td>
                   <td className="py-4 text-center">
                     <Check className="w-5 h-5 text-gray-400 mx-auto" />
