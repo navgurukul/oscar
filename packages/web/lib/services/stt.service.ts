@@ -29,7 +29,7 @@ export class STTService {
    */
   async initialize(
     onTranscriptUpdate: TranscriptCallback,
-    config?: RecordingConfig
+    config?: RecordingConfig,
   ): Promise<void> {
     // Check browser support
     if (!browserService.isSpeechRecognitionSupported()) {
@@ -41,7 +41,7 @@ export class STTService {
     const permissionResult = await browserService.checkMicrophonePermission();
     if (!permissionResult.granted) {
       throw new Error(
-        permissionResult.error || ERROR_MESSAGES.MIC_PERMISSION_DENIED
+        permissionResult.error || ERROR_MESSAGES.MIC_PERMISSION_DENIED,
       );
     }
 
@@ -55,13 +55,13 @@ export class STTService {
         this.createLogCallback(),
         (transcript) => this.handleTranscriptUpdate(transcript),
         {
-          sessionDurationMs:
-            config?.sessionDurationMs || RECORDING_CONFIG.SESSION_DURATION_MS,
+          continueOnSilence: config?.continueOnSilence || true,
+          silenceThresholdMs: config?.silenceThresholdMs || 1500,
           interimSaveIntervalMs:
             config?.interimSaveIntervalMs ||
             RECORDING_CONFIG.INTERIM_SAVE_INTERVAL_MS,
           preserveTranscriptOnStart: config?.preserveTranscriptOnStart ?? true,
-        }
+        },
       );
 
       // Set up words update callback for real-time tracking
@@ -72,11 +72,11 @@ export class STTService {
             .filter(Boolean)
             .join(" ");
           this.currentInterimText = interimText;
-          
+
           // Immediately update callback for real-time display
           if (this.transcriptCallback && this.isRecordingActive) {
             // Combine accumulated + current interim
-            const fullText = this.accumulatedTranscript 
+            const fullText = this.accumulatedTranscript
               ? `${this.accumulatedTranscript} ${interimText}`
               : interimText;
             this.transcriptCallback(fullText.trim());
@@ -146,7 +146,7 @@ export class STTService {
 
       // Wait for final transcript processing
       await new Promise((resolve) =>
-        setTimeout(resolve, RECORDING_CONFIG.STOP_PROCESSING_DELAY_MS)
+        setTimeout(resolve, RECORDING_CONFIG.STOP_PROCESSING_DELAY_MS),
       );
 
       // Get final transcript by merging accumulated (includes seed for continue mode)
@@ -154,7 +154,7 @@ export class STTService {
       const libraryTranscript = this.sttInstance.getFullTranscript().trim();
       const finalTranscript = this.mergeTranscripts(
         this.accumulatedTranscript,
-        libraryTranscript
+        libraryTranscript,
       );
 
       return finalTranscript;
@@ -202,7 +202,7 @@ export class STTService {
 
     const merged = this.mergeTranscripts(
       this.accumulatedTranscript,
-      transcript
+      transcript,
     );
     this.accumulatedTranscript = merged;
     this.currentInterimText = ""; // Clear interim since it's now finalized

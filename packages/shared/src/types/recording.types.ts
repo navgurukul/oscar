@@ -18,7 +18,8 @@ export interface TranscriptUpdate {
 }
 
 export interface RecordingConfig {
-  sessionDurationMs?: number;
+  continueOnSilence?: boolean;
+  silenceThresholdMs?: number;
   interimSaveIntervalMs?: number;
   preserveTranscriptOnStart?: boolean;
 }
