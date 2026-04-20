@@ -25,8 +25,8 @@ import {
 } from "@/components/ui/accordion";
 
 const FREE_FEATURES = [
-  `${SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} recordings per month`,
-  `Up to ${SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total notes`,
+  `${SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} Streams per month`,
+  `Up to ${SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total Scribbles`,
   `Custom vocabulary (up to ${SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} entries)`,
   "AI-powered text formatting",
   "Basic voice-to-text",
@@ -34,8 +34,8 @@ const FREE_FEATURES = [
 ];
 
 const PRO_FEATURES = [
-  "Unlimited recordings",
-  "Unlimited notes",
+  "Unlimited Streams",
+  "Unlimited Scribbles",
   "Unlimited vocabulary entries",
   "AI-powered text formatting",
   "Priority processing",
@@ -186,14 +186,14 @@ export default function PricingPage() {
               </thead>
               <tbody className="text-sm">
                 <tr className="border-b border-gray-800/50">
-                  <td className="py-4 text-gray-300">Recordings per month</td>
+                  <td className="py-4 text-gray-300">Streams per month</td>
                   <td className="py-4 text-center text-gray-400">
                     {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS}
                   </td>
                   <td className="py-4 text-center text-cyan-400">Unlimited</td>
                 </tr>
                 <tr className="border-b border-gray-800/50">
-                  <td className="py-4 text-gray-300">Total notes</td>
+                  <td className="py-4 text-gray-300">Total Scribbles</td>
                   <td className="py-4 text-center text-gray-400">
                     {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES}
                   </td>

@@ -170,7 +170,7 @@ export default function Home() {
               className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/50 border border-cyan-500/30 text-cyan-400 text-xs font-medium mb-8 backdrop-blur-sm"
             >
               <Sparkles className="w-3 h-3" />
-              <span>AI-Powered Voice Notes</span>
+              <span>AI-Powered Streams</span>
             </motion.div>
 
             {/* App Name / Logo */}
@@ -258,8 +258,8 @@ export default function Home() {
                     <div className="w-full p-4 mb-3 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-cyan-500/20 rounded-2xl flex flex-col transition-all group">
                       <div className="flex items-center justify-between gap-4 mb-1">
                         <div className="flex items-center gap-4 min-w-0 flex-1">
-                          <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
-                            <FileText className="w-5 h-5 text-orange-500" />
+                          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center shrink-0">
+                            <FileText className="w-5 h-5 text-cyan-400" />
                           </div>
                           <h4 className="text-white font-semibold truncate">
                             {note.title || UI_STRINGS.UNTITLED_NOTE}
@@ -759,11 +759,11 @@ export default function Home() {
                   <ul className="space-y-3 mb-8">
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">{SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} recordings per month</span>
+                      <span className="text-gray-300 text-sm">{SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} Streams per month</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Up to {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total notes</span>
+                      <span className="text-gray-300 text-sm">Up to {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total Scribbles</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
@@ -828,11 +828,11 @@ export default function Home() {
                   <ul className="space-y-3 mb-8">
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Unlimited recordings</span>
+                      <span className="text-gray-300 text-sm">Unlimited Streams</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Unlimited notes</span>
+                      <span className="text-gray-300 text-sm">Unlimited Scribbles</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
@@ -885,7 +885,7 @@ export default function Home() {
                 </Button>
               </div>
               <p className="text-gray-500 text-sm mt-6">
-                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free recordings/month • No credit card • Upgrade anytime
+                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free Streams/month • No credit card • Upgrade anytime
               </p>
             </FadeIn>
           </section>
