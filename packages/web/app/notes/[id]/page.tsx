@@ -22,8 +22,6 @@ import {
   ListChecks,
   BookOpen,
   Star,
-  ThumbsUp,
-  ThumbsDown,
   Mic,
   Printer,
 } from "lucide-react";
@@ -404,7 +402,7 @@ export default function NoteDetailPage() {
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-3xl text-center mb-4 space-y-3"
+        className="w-full max-w-3xl text-center mb-4 space-y-3 mt-8"
       >
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
           {note.title || "Untitled Note"}

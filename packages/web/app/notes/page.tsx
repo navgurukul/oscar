@@ -579,20 +579,14 @@ export default function NotesPage() {
     <main className="min-h-screen bg-[#020617] px-4 pt-24 pb-24 text-white">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
-              <Sparkles className="h-3.5 w-3.5" />
+          <div className="space-y-3 mt-12">
+            <h1 className="text-4xl font-semibold tracking-tight text-white">
               Scribble
-            </div>
-            <div className="space-y-2">
-              <h1 className="text-4xl font-semibold tracking-tight text-white">
-                Organize every Stream in one calm workspace.
-              </h1>
-              <p className="max-w-2xl text-sm leading-6 text-slate-400">
-                Jump between recent, starred, and folder views, then tidy multiple
-                Scribbles at once without leaving the page.
-              </p>
-            </div>
+            </h1>
+            <p className="max-w-2xl text-sm leading-6 text-slate-400">
+              Organize every Stream in one calm workspace - jump between recent, starred, and folder views, 
+              then tidy multiple Scribbles at once without leaving the page.
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -626,7 +620,7 @@ export default function NotesPage() {
 
         <div className="grid gap-6 lg:grid-cols-[280px,minmax(0,1fr)]">
           <aside className="space-y-4">
-            <section className="rounded-[28px] border border-white/8 bg-white/[0.03] p-4">
+            <section className="rounded-[28px]  p-4 border border-cyan-700/30 shadow-xl">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-white">Saved Views</h2>
                 <span className="text-xs text-slate-500">{allNotes.length} total</span>
@@ -674,7 +668,7 @@ export default function NotesPage() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-white/8 bg-white/[0.03] p-4">
+            <section className="rounded-[28px]  p-4 border border-cyan-700/30 shadow-xl">
               <div className="mb-3 space-y-1">
                 <div className="flex items-center gap-2 text-sm font-semibold text-white">
                   <Folder className="h-4 w-4 text-cyan-300" />
@@ -726,7 +720,7 @@ export default function NotesPage() {
                         className={cn(
                           "flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left transition",
                           isActive
-                            ? "bg-emerald-500/10 text-emerald-100 ring-1 ring-emerald-500/30"
+                            ? "bg-cyan-500/10 text-cyan-100 ring-1 ring-cyan-500/30"
                             : "bg-transparent text-slate-300 hover:bg-white/5 hover:text-white"
                         )}
                       >
@@ -734,7 +728,7 @@ export default function NotesPage() {
                           <div
                             className={cn(
                               "rounded-full p-1.5",
-                              isActive ? "bg-emerald-500/15" : "bg-white/5"
+                              isActive ? "bg-cyan-500/20" : "bg-white/5"
                             )}
                           >
                             <Folder className="h-4 w-4" />
@@ -752,8 +746,8 @@ export default function NotesPage() {
             </section>
           </aside>
 
-          <section className="rounded-[32px] border border-white/8 bg-white/[0.03] p-4 md:p-6">
-            <div className="flex flex-col gap-4 border-b border-white/8 pb-4">
+          <section className="rounded-[32px] p-4 md:p-6 border border-cyan-700/30 shadow-xl">
+            <div className="flex flex-col gap-4 border-b border-cyan-500/20 pb-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-1">
                   <h2 className="text-2xl font-semibold tracking-tight text-white">
@@ -857,7 +851,7 @@ export default function NotesPage() {
                         key={folderName}
                         onClick={() => void applyBulkUpdate({ folder: folderName }, `Moved to ${folderName}`)}
                         disabled={isApplyingBulkAction}
-                        className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/15 disabled:opacity-50"
+                        className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/15 disabled:opacity-50"
                       >
                         Move to {folderName}
                       </button>
@@ -910,10 +904,10 @@ export default function NotesPage() {
                       <article
                         key={note.id}
                         className={cn(
-                          "group rounded-[28px] border px-4 py-4 transition md:px-5",
+                          "group rounded-[28px] px-4 py-4 transition border md:px-5",
                           isSelected
-                            ? "border-cyan-500/30 bg-cyan-500/[0.08]"
-                            : "border-white/8 bg-white/[0.02] hover:border-cyan-500/20 hover:bg-white/[0.04]"
+                            ? "bg-cyan-500/[0.08] border-cyan-500/30"
+                            : "bg-white/[0.02] border-cyan-700/30 hover:bg-white/[0.04]"
                         )}
                       >
                         <div className="flex gap-4">
@@ -939,19 +933,13 @@ export default function NotesPage() {
                                   <h3 className="truncate text-lg font-semibold text-white">
                                     {note.title || "Untitled Note"}
                                   </h3>
-                                  {note.is_starred && (
-                                    <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200">
-                                      <Star className="h-3 w-3 fill-current" />
-                                      Starred
-                                    </span>
-                                  )}
                                   {note.folder && (
                                     <button
                                       onClick={(event) => {
                                         event.stopPropagation();
                                         setCurrentView(`folder:${note.folder}`);
                                       }}
-                                      className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200"
+                                      className="inline-flex items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200"
                                     >
                                       <Folder className="h-3 w-3" />
                                       {note.folder}
