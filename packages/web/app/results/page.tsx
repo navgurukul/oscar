@@ -578,7 +578,7 @@ export default function ResultsPage() {
   return (
     <main className="flex flex-col items-center px-4 pt-8 pb-24 min-h-screen bg-[#020617] text-white overflow-x-hidden">
       <div className="w-full max-w-2xl flex flex-col items-center gap-6 mt-16">
-        <div className="text-center space-y-4 w-full">
+        <div className="text-center space-y-4 w-full mt-8">
           <h1 className="text-3xl md:text-5xl font-bold text-white tracking-tight">
             {title || UI_STRINGS.RESULTS_TITLE}
           </h1>
@@ -586,74 +586,78 @@ export default function ResultsPage() {
             Stream to Scribble
           </p>
 
-          {/* Folder Management Section */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="flex flex-wrap justify-center items-center gap-2">
-              {selectedFolder ? (
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 px-3 py-1 text-sm flex items-center gap-2">
-                    <FolderPlus className="w-3.5 h-3.5" />
-                    {selectedFolder}
-                    <button 
-                      onClick={() => handleUpdateFolder(null)}
-                      className="hover:text-cyan-200 transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </Badge>
-                </div>
-              ) : (
-                <span className="text-gray-500 text-sm">Not in a folder yet</span>
-              )}
-            </div>
+          {/* Folder Management Section - Only show after saving */}
+          {noteId ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex flex-wrap justify-center items-center gap-2">
+                {selectedFolder ? (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 px-3 py-1 text-sm flex items-center gap-2">
+                      <FolderPlus className="w-3.5 h-3.5" />
+                      {selectedFolder}
+                      <button 
+                        onClick={() => handleUpdateFolder(null)}
+                        className="hover:text-cyan-200 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  </div>
+                ) : (
+                  <span className="text-gray-500 text-sm">Not in a folder yet</span>
+                )}
+              </div>
 
-            <div className="flex items-center gap-2 mt-2">
-              {!isAddingNewFolder ? (
-                <div className="flex items-center gap-2 overflow-x-auto max-w-[90vw] no-scrollbar pb-1">
-                  {availableFolders.filter(f => f !== selectedFolder).map(folder => (
+              <div className="flex items-center gap-2 mt-2">
+                {!isAddingNewFolder ? (
+                  <div className="flex items-center gap-2 overflow-x-auto max-w-[90vw] no-scrollbar pb-1">
+                    {availableFolders.filter(f => f !== selectedFolder).map(folder => (
+                      <button
+                        key={folder}
+                        onClick={() => handleUpdateFolder(folder)}
+                        className="text-[11px] px-3 py-1 rounded-full bg-slate-900 border border-white/5 text-gray-500 hover:text-cyan-400 hover:border-cyan-500/30 transition-all whitespace-nowrap"
+                      >
+                        {folder}
+                      </button>
+                    ))}
                     <button
-                      key={folder}
-                      onClick={() => handleUpdateFolder(folder)}
-                      className="text-[11px] px-3 py-1 rounded-full bg-slate-900 border border-white/5 text-gray-500 hover:text-cyan-400 hover:border-cyan-500/30 transition-all whitespace-nowrap"
+                      onClick={() => setIsAddingNewFolder(true)}
+                      className="text-[11px] px-3 py-1 rounded-full bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-all flex items-center gap-1 font-medium"
                     >
-                      {folder}
+                      <Plus className="w-3 h-3" />
+                      New
                     </button>
-                  ))}
-                  <button
-                    onClick={() => setIsAddingNewFolder(true)}
-                    className="text-[11px] px-3 py-1 rounded-full bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-all flex items-center gap-1 font-medium"
-                  >
-                    <Plus className="w-3 h-3" />
-                    New
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 bg-slate-900/80 border border-cyan-500/30 rounded-full px-2 py-0.5 animate-in fade-in zoom-in duration-200">
-                  <Input
-                    autoFocus
-                    placeholder="Folder..."
-                    value={newFolderName}
-                    onChange={(e) => setNewFolderName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddNewFolder()}
-                    className="h-6 w-24 bg-transparent border-none text-[11px] focus-visible:ring-0 placeholder:text-gray-600 p-0"
-                  />
-                  <button
-                    onClick={handleAddNewFolder}
-                    disabled={newFolderName.trim() === ""}
-                    className="p-1 hover:text-cyan-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setIsAddingNewFolder(false)}
-                    className="p-1 hover:text-red-400 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 bg-slate-900/80 border border-cyan-500/30 rounded-full px-2 py-0.5 animate-in fade-in zoom-in duration-200">
+                    <Input
+                      autoFocus
+                      placeholder="Folder..."
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddNewFolder()}
+                      className="h-6 w-24 bg-transparent border-none text-[11px] focus-visible:ring-0 placeholder:text-gray-600 p-0"
+                    />
+                    <button
+                      onClick={handleAddNewFolder}
+                      disabled={newFolderName.trim() === ""}
+                      className="p-1 hover:text-cyan-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setIsAddingNewFolder(false)}
+                      className="p-1 hover:text-red-400 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <span className="text-gray-500 text-sm">Save your Scribble to organize it into folders</span>
+          )}
         </div>
 
         {/* Mode Selection Bar (Floating) */}
