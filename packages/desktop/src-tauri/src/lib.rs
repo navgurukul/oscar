@@ -1792,7 +1792,7 @@ fn get_frontmost_app() -> Result<String, String> {
 /// This is a SYNC command — Tauri 2 runs it on the main thread. This is intentional:
 /// CGEvent posting and NSRunningApplication activation are most reliable from the main thread.
 #[tauri::command]
-fn paste_transcription(text: String, _target_app: Option<String>) -> Result<String, String> {
+fn paste_transcription(text: String, target_app: Option<String>) -> Result<String, String> {
     // 1. Set clipboard
     let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
     clipboard.set_text(&text).map_err(|e| e.to_string())?;
