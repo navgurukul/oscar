@@ -9,7 +9,7 @@ import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Radio, BookOpen, Users } from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Radio, BookOpen, Users, Lock } from "lucide-react";
 
 // ── Inline app icon SVGs for the Stream section ───────────────────────────────
 const StreamAppIcons = {
@@ -115,10 +115,24 @@ export default function Home() {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 3600 * 24));
-    
-    if (diffDays === 0) return "Today, " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (diffDays === 1) return "Yesterday, " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Use calendar dates (not 24-hour chunks) for accurate "Today/Yesterday" calculation
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const diffDays = Math.floor(
+      (nowOnly.getTime() - dateOnly.getTime()) / (1000 * 3600 * 24)
+    );
+
+    const time = date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).toUpperCase();
+
+    if (diffDays === 0) return "Today, " + time;
+    if (diffDays === 1) return "Yesterday, " + time;
+
     return diffDays + " days ago";
   };
 
@@ -153,20 +167,20 @@ export default function Home() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.4, duration: 0.5 }}
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/50 border border-cyan-500/30 text-cyan-400 text-xs font-medium mb-12 backdrop-blur-sm"
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/50 border border-cyan-500/30 text-cyan-400 text-xs font-medium mb-8 backdrop-blur-sm"
             >
               <Sparkles className="w-3 h-3" />
-              <span>AI-Powered Voice Notes</span>
+              <span>AI-Powered Streams</span>
             </motion.div>
 
             {/* App Name / Logo */}
-            <h1 className="text-6xl md:text-8xl font-bold font-serif text-white mb-6 tracking-tight">
-              {UI_STRINGS.APP_NAME}
+            <h1 className="text-6xl md:text-7xl font-bold font-serif text-white mb-6 tracking-tight">
+              Start a Stream
             </h1>
             
             <div className="flex items-center justify-center gap-3 mb-8">
               <div className="h-px w-8 bg-gradient-to-r from-transparent to-cyan-500/50" />
-              <p className="text-xl md:text-2xl text-gray-400 font-medium italic">
+              <p className="text-lg md:text-xl text-gray-400 font-medium italic">
                 Your voice, written your way.
               </p>
               <div className="h-px w-8 bg-gradient-to-l from-transparent to-cyan-500/50" />
@@ -176,13 +190,13 @@ export default function Home() {
             <div className="relative mb-12">
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-cyan-500/5 blur-[100px] rounded-full" />
               
-              <div className="relative w-36 h-36 md:w-44 md:h-44 bg-gradient-to-b from-slate-900/80 to-slate-950/80 border border-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto backdrop-blur-md shadow-2xl group transition-all duration-500 hover:border-cyan-500/20">
+              <div className="relative w-28 h-28 md:w-36 md:h-36 bg-gradient-to-b from-slate-900/80 to-slate-950/80 border border-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto backdrop-blur-md shadow-2xl group transition-all duration-500 hover:border-cyan-500/20">
                 <div className="absolute inset-0 border border-cyan-500/10 rounded-[2.5rem] animate-pulse" />
                 
                 <div className="relative">
-                  <FileText className="w-14 h-14 md:w-18 md:h-18 text-cyan-400/70 group-hover:text-cyan-400 transition-colors duration-500" />
-                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-cyan-500 rounded-lg flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-500">
-                    <Mic className="w-3 h-3 text-slate-950" />
+                  <FileText className="w-10 h-10 md:w-14 md:h-14 text-cyan-400/70 group-hover:text-cyan-400 transition-colors duration-500" />
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 md:w-6 md:h-6 bg-cyan-500 rounded-lg flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-500">
+                    <Mic className="w-2.5 h-2.5 md:w-3 md:h-3 text-slate-950" />
                   </div>
                 </div>
               </div>
@@ -193,7 +207,7 @@ export default function Home() {
                 Scribble is empty for now.
               </h3>
               <p className="text-gray-500 text-lg md:text-xl max-w-md mx-auto leading-relaxed">
-                Start a Stream and your first Scribble will land here automatically.
+                Tap the mic button below to start your first Stream. Your first Scribble will land here automatically.
               </p>
             </div>
           </motion.div>
@@ -244,8 +258,8 @@ export default function Home() {
                     <div className="w-full p-4 mb-3 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-cyan-500/20 rounded-2xl flex flex-col transition-all group">
                       <div className="flex items-center justify-between gap-4 mb-1">
                         <div className="flex items-center gap-4 min-w-0 flex-1">
-                          <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
-                            <FileText className="w-5 h-5 text-orange-500" />
+                          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center shrink-0">
+                            <FileText className="w-5 h-5 text-cyan-400" />
                           </div>
                           <h4 className="text-white font-semibold truncate">
                             {note.title || UI_STRINGS.UNTITLED_NOTE}
@@ -638,7 +652,7 @@ export default function Home() {
                 <FadeIn delay={0.2}>
                   <div className="bg-slate-900/70 border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl p-8 card-lift group h-full">
                     <div className="text-cyan-400 mb-4 icon-spring w-fit">
-                      <Sparkles className="w-10 h-10" />
+                      <Lock className="w-10 h-10" />
                     </div>
                     <h3 className="text-2xl font-semibold text-white mb-4">Runs Locally. Private by Default.</h3>
                     <p className="text-gray-300 mb-4">
@@ -745,11 +759,11 @@ export default function Home() {
                   <ul className="space-y-3 mb-8">
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">{SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} recordings per month</span>
+                      <span className="text-gray-300 text-sm">{SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} Streams per month</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Up to {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total notes</span>
+                      <span className="text-gray-300 text-sm">Up to {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total Scribbles</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
@@ -814,11 +828,11 @@ export default function Home() {
                   <ul className="space-y-3 mb-8">
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Unlimited recordings</span>
+                      <span className="text-gray-300 text-sm">Unlimited Streams</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Unlimited notes</span>
+                      <span className="text-gray-300 text-sm">Unlimited Scribbles</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
@@ -871,7 +885,7 @@ export default function Home() {
                 </Button>
               </div>
               <p className="text-gray-500 text-sm mt-6">
-                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free recordings/month • No credit card • Upgrade anytime
+                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free Streams/month • No credit card • Upgrade anytime
               </p>
             </FadeIn>
           </section>
