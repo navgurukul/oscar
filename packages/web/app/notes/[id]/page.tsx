@@ -402,7 +402,7 @@ export default function NoteDetailPage() {
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-3xl text-center mb-4 space-y-3 mt-8"
+        className="w-full max-w-3xl text-center mb-4 space-y-3 mt-5"
       >
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
           {note.title || "Untitled Note"}
@@ -446,7 +446,7 @@ export default function NoteDetailPage() {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
-                  <p><span className="font-semibold">{mode.label}</span> — {mode.desc}</p>
+                  <p className="text-sm"><span className="font-semibold">{mode.label}</span> — {mode.desc}</p>
                 </TooltipContent>
               </Tooltip>
             ))}
