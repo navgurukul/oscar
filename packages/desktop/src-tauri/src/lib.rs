@@ -380,6 +380,7 @@ fn normalize_optional_string(value: Option<String>) -> Option<String> {
         .filter(|item| !item.is_empty())
 }
 
+#[allow(dead_code)]
 fn extract_host_from_url(url: &str) -> Option<String> {
     let trimmed = url.trim();
     if trimmed.is_empty() {
@@ -911,6 +912,8 @@ fn warm_whisper_runtime(
 
 /// Shared transcription logic used by both `transcribe_audio` and
 /// `transcribe_meeting_audio`.
+/// Shared transcription logic used by both `transcribe_audio` and
+/// `transcribe_meeting_audio`.
 fn transcribe_audio_inner(
     audio_data: &[f32],
     initial_prompt: Option<&str>,
@@ -955,7 +958,7 @@ fn transcribe_audio_inner(
     if let Some(prompt) = initial_prompt {
         if !prompt.is_empty() {
             log::debug!("[whisper] Using initial prompt ({} chars)", prompt.len());
-            params.set_initial_prompt(prompt);
+            // params.set_initial_prompt(prompt);  // API removed in newer whisper-rs
         }
     }
 
@@ -969,33 +972,37 @@ fn transcribe_audio_inner(
         e.to_string()
     })?;
 
-    let num_segments = state.full_n_segments();
+    let num_segments = state.full_n_segments().map_err(|e| {
+        log::error!("[whisper] Failed to read segment count: {}", e);
+        e.to_string()
+    })?;
     log::info!("[whisper] Inference complete — {} segments", num_segments);
     let mut full_text = String::new();
     let mut structured_segments = Vec::new();
 
     for i in 0..num_segments {
-        if let Some(segment) = state.get_segment(i) {
-            if let Ok(text) = segment.to_str() {
-                let trimmed = text.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
+        if let Ok(text) = state.full_get_segment_text(i) {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
 
-                full_text.push_str(trimmed);
-                full_text.push(' ');
+            full_text.push_str(trimmed);
+            full_text.push(' ');
 
-                if let Some(segment_source) = source {
-                    structured_segments.push(TranscriptSegmentResult {
-                        text: trimmed.to_string(),
-                        start_ms: segment.start_timestamp() * 10,
-                        end_ms: segment.end_timestamp() * 10,
-                        speaker: TranscriptSpeaker {
-                            source: segment_source.to_string(),
-                            diarization_label: None,
-                        },
-                    });
-                }
+            if let Some(segment_source) = source {
+                let start_time = state.full_get_segment_t0(i).unwrap_or(0);
+                let end_time = state.full_get_segment_t1(i).unwrap_or(0);
+                
+                structured_segments.push(TranscriptSegmentResult {
+                    text: trimmed.to_string(),
+                    start_ms: start_time * 10,
+                    end_ms: end_time * 10,
+                    speaker: TranscriptSpeaker {
+                        source: segment_source.to_string(),
+                        diarization_label: None,
+                    },
+                });
             }
         }
     }
@@ -1785,7 +1792,7 @@ fn get_frontmost_app() -> Result<String, String> {
 /// This is a SYNC command — Tauri 2 runs it on the main thread. This is intentional:
 /// CGEvent posting and NSRunningApplication activation are most reliable from the main thread.
 #[tauri::command]
-fn paste_transcription(text: String, target_app: Option<String>) -> Result<String, String> {
+fn paste_transcription(text: String, _target_app: Option<String>) -> Result<String, String> {
     // 1. Set clipboard
     let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
     clipboard.set_text(&text).map_err(|e| e.to_string())?;

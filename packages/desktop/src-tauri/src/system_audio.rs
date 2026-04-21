@@ -115,6 +115,7 @@ mod platform {
         true // WASAPI is present on Windows Vista and later
     }
 
+    #[allow(dead_code)]
     pub fn is_capturing() -> bool {
         STATE.lock().map_or(false, |s| s.is_some())
     }

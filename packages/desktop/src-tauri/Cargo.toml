@@ -10,12 +10,7 @@ name = "oscar_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-# GPU acceleration — optional whisper-rs backends.
-# Windows: build with `--features cuda` when CUDA toolkit is installed (CUDA_PATH must be set).
-# Linux:   build with `--features vulkan` when Vulkan SDK is installed (VULKAN_SDK must be set).
-# CI omits these flags → CPU-only fallback, no extra toolchain deps.
-cuda   = ["whisper-rs/cuda"]
-vulkan = ["whisper-rs/vulkan"]
+cuda = ["whisper-rs/cuda"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -43,23 +38,19 @@ base64 = "0.22"
 opus = "0.3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-# Win32 paste-target fix (GetForegroundWindow / SetForegroundWindow)
 windows-sys = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Threading"] }
-# WASAPI loopback capture for system audio
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_Media_Audio",
     "Win32_System_Com",
 ] }
-# CPU-only on CI. For GPU: install CUDA toolkit then build with `--features cuda`.
-whisper-rs = "0.15"
+whisper-rs = "0.10"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# CPU-only on CI. For GPU: install Vulkan SDK then build with `--features vulkan`.
-whisper-rs = "0.15"
+whisper-rs = "0.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-whisper-rs = { version = "0.15", features = ["metal"] }
+whisper-rs = { version = "0.10", features = ["metal"] }
 core-graphics = "0.24"
 
 [profile.release]
