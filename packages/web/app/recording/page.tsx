@@ -29,6 +29,7 @@ function RecordingPageInner() {
   const {
     canRecord,
     recordingsThisMonth,
+    incrementUsage,
   } = useSubscriptionContext();
 
   const {
@@ -318,6 +319,11 @@ function RecordingPageInner() {
           transcript,
           generatedTitle
         );
+
+        // ✅ Increment recording usage AFTER successful AI processing
+        if (user) {
+          await incrementUsage();
+        }
 
         if (isMountedRef.current) {
           setProcessingProgress(100);

@@ -22,8 +22,6 @@ import {
   ListChecks,
   BookOpen,
   Star,
-  ThumbsUp,
-  ThumbsDown,
   Mic,
   Printer,
 } from "lucide-react";
@@ -32,6 +30,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { FeedbackWidget } from "@/components/results/FeedbackWidget";
 import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
 
 export default function NoteDetailPage() {
@@ -186,7 +185,7 @@ export default function NoteDetailPage() {
   };
 
   // Feedback state
-  const [, setIsFeedbackSubmitting] = useState(false);
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
   const [feedbackValue, setFeedbackValue] = useState<boolean | null>(null);
 
@@ -398,12 +397,12 @@ export default function NoteDetailPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#020617] text-white flex flex-col items-center pt-16 pb-32 px-4 relative overflow-x-hidden">
+    <main className="min-h-screen bg-[#020617] text-white flex flex-col items-center pt-24 pb-32 px-4 relative overflow-x-hidden">
       {/* Note Header Info (Centered) */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-3xl text-center mb-8 space-y-3"
+        className="w-full max-w-3xl text-center mb-4 space-y-3 mt-8"
       >
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
           {note.title || "Untitled Note"}
@@ -446,8 +445,8 @@ export default function NoteDetailPage() {
                     )}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="bg-slate-900 border border-cyan-500 text-cyan-400 rounded-md px-3 py-2">
-                  <p className="text-sm"><span className="font-semibold">{mode.label}</span> — {mode.desc}</p>
+                <TooltipContent side="bottom">
+                  <p><span className="font-semibold">{mode.label}</span> — {mode.desc}</p>
                 </TooltipContent>
               </Tooltip>
             ))}
@@ -511,51 +510,95 @@ export default function NoteDetailPage() {
             </div>
 
             {/* Action Icons */}
-            <div className="flex items-center gap-1 self-end md:self-start">
-              <button 
-                onClick={handleToggleStar}
-                className={`p-2 rounded-lg transition-all duration-300 ${note.is_starred ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
-                title="Star Scribble"
-              >
-                <Star className={`w-4 h-4 ${note.is_starred ? 'fill-cyan-400' : ''}`} />
-              </button>
-              {isSaving && <Spinner className="w-4 h-4 text-cyan-500" />}
-              <button
-                onClick={handleCopy}
-                className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
-                title="Copy text"
-              >
-                <Copy className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleDownload}
-                className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
-                title="Download as .txt"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleDownloadMarkdown}
-                className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
-                title="Download as Markdown (.md)"
-              >
-                <FileCode className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handlePrintPDF}
-                className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
-                title="Print / Save as PDF"
-              >
-                <Printer className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setIsShareModalOpen(true)}
-                className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
-                title="Share"
-              >
-                <Share2 className="w-4 h-4" />
-              </button>
-            </div>
+            <TooltipProvider>
+              <div className="flex items-center gap-1 self-end md:self-start">
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button 
+                      onClick={handleToggleStar}
+                      className={`p-2 rounded-lg transition-all duration-300 ${note.is_starred ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
+                    >
+                      <Star className={`w-4 h-4 ${note.is_starred ? 'fill-cyan-400' : ''}`} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Star</span> — Mark as favourite</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                {isSaving && <Spinner className="w-4 h-4 text-cyan-500" />}
+
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleCopy}
+                      className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Copy</span> — Copy to clipboard</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleDownload}
+                      className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Download</span> — Save as .txt</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleDownloadMarkdown}
+                      className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                    >
+                      <FileCode className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Markdown</span> — Save as .md</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handlePrintPDF}
+                      className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                    >
+                      <Printer className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Print</span> — Save as PDF</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setIsShareModalOpen(true)}
+                      className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Share</span> — Send this Scribble</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </TooltipProvider>
           </div>
 
           {/* Cyan Underline */}
@@ -629,24 +672,13 @@ export default function NoteDetailPage() {
         </div>
 
         {/* Feedback Section (Below Card) */}
-        <div className="mt-4 bg-[#0f172a]/40 border border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-gray-400 text-sm font-medium">Was this formatting helpful?</p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleFeedbackSubmit(true)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${hasFeedbackSubmitted && feedbackValue === true ? 'bg-cyan-500 text-slate-950' : 'bg-slate-900/50 text-gray-400 hover:text-white hover:bg-slate-800'}`}
-            >
-              <ThumbsUp className="w-4 h-4" />
-              <span className="font-semibold text-sm">Yes</span>
-            </button>
-            <button
-              onClick={() => handleFeedbackSubmit(false)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${hasFeedbackSubmitted && feedbackValue === false ? 'bg-red-500/20 text-red-400' : 'bg-slate-900/50 text-gray-400 hover:text-white hover:bg-slate-800'}`}
-            >
-              <ThumbsDown className="w-4 h-4" />
-              <span className="font-semibold text-sm">No</span>
-            </button>
-          </div>
+        <div className="mt-4">
+          <FeedbackWidget
+            onSubmit={handleFeedbackSubmit}
+            isSubmitting={isFeedbackSubmitting}
+            hasSubmitted={hasFeedbackSubmitted}
+            submittedValue={feedbackValue}
+          />
         </div>
       </motion.div>
 

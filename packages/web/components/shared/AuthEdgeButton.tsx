@@ -2,17 +2,24 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { LogIn, FileText, Settings } from "lucide-react";
+import { LogIn, FileText, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { ROUTES } from "@/lib/constants";
 import Image from "next/image";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 /**
  * AuthEdgeButton - A fixed-position authentication button attached to the right edge.
  * Desktop: Horizontal layout with sliding text animation on hover (top-right corner)
  * Mobile: Vertical stack with simple icon-only buttons (top-right corner)
+ * Includes tooltips for better UX clarity
  */
 export function AuthEdgeButton() {
   const { user, signOut, isLoading } = useAuth();
@@ -36,7 +43,7 @@ export function AuthEdgeButton() {
   return (
     <>
       {/* Mobile Layout - Vertical stack with simple icon buttons */}
-      {/* Order: Notes (top) -> Settings -> Auth (bottom, aligned with Mic button at bottom-6) */}
+      {/* Order: Notes (top) -> Meetings -> Settings -> Auth (bottom, aligned with Mic button at bottom-6) */}
       <div className="fixed bottom-6 right-4 z-50 flex flex-col items-center gap-2 md:hidden">
         <AnimatePresence mode="popLayout">
           {user && (
@@ -56,6 +63,25 @@ export function AuthEdgeButton() {
               </Link>
             </motion.div>
           )}
+
+          {user && (
+            <motion.div
+              key="meetings-link-mobile"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+            >
+              <Link href={ROUTES.MEETINGS}>
+                <motion.div
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl"
+                >
+                  <Users className="w-4 h-4 text-cyan-400" />
+                </motion.div>
+              </Link>
+            </motion.div>
+          )}
+
           {user && (
             <motion.div
               key="settings-link-mobile"
@@ -75,7 +101,7 @@ export function AuthEdgeButton() {
           )}
         </AnimatePresence>
 
-        {/* Auth button - displays avatar when logged in, at bottom */}
+        {/* Auth button - Mobile */}
         <motion.button
           onClick={handleAction}
           whileTap={{ scale: 0.95 }}
@@ -102,7 +128,8 @@ export function AuthEdgeButton() {
       </div>
 
       {/* Desktop Layout - Horizontal with sliding animation */}
-      <div className="fixed top-8 right-0 z-50 pointer-events-none items-center gap-3 pr-0 hidden md:flex">
+      <TooltipProvider delayDuration={300}>
+        <div className="fixed top-8 right-0 z-50 pointer-events-none items-center gap-3 pr-0 hidden md:flex">
         <AnimatePresence mode="popLayout">
           {user && (
             <motion.div
@@ -113,18 +140,55 @@ export function AuthEdgeButton() {
               exit={{ opacity: 0, x: 20 }}
               className="pointer-events-auto"
             >
-              <Link href={ROUTES.NOTES}>
-                <motion.div
-                  whileHover={{ y: -5, scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors"
-                >
-                  <FileText className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
-                </motion.div>
-              </Link>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href={ROUTES.NOTES}>
+                    <motion.div
+                      whileHover={{ y: -5, scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors"
+                    >
+                      <FileText className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
+                    </motion.div>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Scribbles</p>
+                </TooltipContent>
+              </Tooltip>
             </motion.div>
           )}
+
+          {user && (
+            <motion.div
+              key="meetings-link"
+              layout
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="pointer-events-auto"
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href={ROUTES.MEETINGS}>
+                    <motion.div
+                      whileHover={{ y: -5, scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors"
+                    >
+                      <Users className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
+                    </motion.div>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Meetings</p>
+                </TooltipContent>
+              </Tooltip>
+            </motion.div>
+          )}
+
           {user && (
             <motion.div
               key="settings-link"
@@ -134,21 +198,28 @@ export function AuthEdgeButton() {
               exit={{ opacity: 0, x: 20 }}
               className="pointer-events-auto"
             >
-              <Link href={ROUTES.SETTINGS}>
-                <motion.div
-                  whileHover={{ y: -5, scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors"
-                >
-                  <Settings className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
-                </motion.div>
-              </Link>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href={ROUTES.SETTINGS}>
+                    <motion.div
+                      whileHover={{ y: -5, scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl group transition-colors"
+                    >
+                      <Settings className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
+                    </motion.div>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Settings</p>
+                </TooltipContent>
+              </Tooltip>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Auth button with sliding animation on desktop */}
+        {/* Auth button - Desktop with sliding animation */}
         <motion.button
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
@@ -201,7 +272,8 @@ export function AuthEdgeButton() {
             </div>
           </div>
         </motion.button>
-      </div>
+        </div>
+      </TooltipProvider>
     </>
   );
 }

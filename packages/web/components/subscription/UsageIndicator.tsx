@@ -26,9 +26,9 @@ export function UsageIndicator({
           <span className="text-sm text-gray-400">
             {current}{" "}
             {type === "recordings"
-              ? "recordings"
+              ? "Streams"
               : type === "notes"
-              ? "notes"
+              ? "Scribbles"
               : "vocabulary entries"}{" "}
             {type === "recordings" ? "this month" : "total"}
           </span>
@@ -75,9 +75,9 @@ export function UsageIndicator({
       <div className="flex items-center justify-between text-sm">
         <span className="text-gray-400">
           {type === "recordings"
-            ? "Recordings this month"
+            ? "Streams this month"
             : type === "notes"
-            ? "Total notes"
+            ? "Total Scribbles"
             : "Vocabulary entries"}
         </span>
         <span className={cn("font-medium", getTextColor())}>
@@ -92,8 +92,12 @@ export function UsageIndicator({
       </div>
       <p className="text-xs text-gray-500">
         {remaining === 0
-          ? `Limit reached. Upgrade to Pro for unlimited ${type}.`
-          : `${remaining} ${type} remaining`}
+          ? `Limit reached. Upgrade to Pro for unlimited ${
+              type === "recordings" ? "Streams" : type === "notes" ? "Scribbles" : type
+            }.`
+          : `${remaining} ${
+              type === "recordings" ? "Streams" : type === "notes" ? "Scribbles" : type
+            } remaining`}
       </p>
     </div>
   );

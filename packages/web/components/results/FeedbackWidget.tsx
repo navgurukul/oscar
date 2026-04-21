@@ -54,6 +54,11 @@ export function FeedbackWidget({
   };
 
   const handleSubmitReasons = () => {
+    // Validation: If "other" is selected, otherText must be filled
+    if (selectedReasons.includes("other") && !otherText.trim()) {
+      return;
+    }
+
     const finalReasons = selectedReasons.filter(r => r !== "other");
     
     if (selectedReasons.includes("other") && otherText.trim()) {
@@ -189,8 +194,8 @@ export function FeedbackWidget({
                     size="sm"
                     variant="ghost"
                     onClick={handleSubmitReasons}
-                    disabled={isSubmitting}
-                    className="hover:text-white text-cyan-500"
+                    disabled={isSubmitting || (selectedReasons.includes("other") && !otherText.trim())}
+                    className="hover:text-white text-cyan-500 disabled:text-gray-600 disabled:cursor-not-allowed"
                   >
                     <SendHorizontal className="w-4 h-4" />
                   </Button>

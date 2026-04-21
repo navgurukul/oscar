@@ -9,7 +9,7 @@ import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
 import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Radio, BookOpen, Users } from "lucide-react";
+import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Radio, BookOpen, Users, Lock } from "lucide-react";
 
 // ── Inline app icon SVGs for the Stream section ───────────────────────────────
 const StreamAppIcons = {
@@ -115,10 +115,24 @@ export default function Home() {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 3600 * 24));
-    
-    if (diffDays === 0) return "Today, " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (diffDays === 1) return "Yesterday, " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Use calendar dates (not 24-hour chunks) for accurate "Today/Yesterday" calculation
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const diffDays = Math.floor(
+      (nowOnly.getTime() - dateOnly.getTime()) / (1000 * 3600 * 24)
+    );
+
+    const time = date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).toUpperCase();
+
+    if (diffDays === 0) return "Today, " + time;
+    if (diffDays === 1) return "Yesterday, " + time;
+
     return diffDays + " days ago";
   };
 
@@ -153,20 +167,20 @@ export default function Home() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.4, duration: 0.5 }}
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/50 border border-cyan-500/30 text-cyan-400 text-xs font-medium mb-12 backdrop-blur-sm"
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/50 border border-cyan-500/30 text-cyan-400 text-xs font-medium mb-8 backdrop-blur-sm"
             >
               <Sparkles className="w-3 h-3" />
-              <span>AI-Powered Voice Notes</span>
+              <span>AI-Powered Streams</span>
             </motion.div>
 
             {/* App Name / Logo */}
-            <h1 className="text-6xl md:text-8xl font-bold font-serif text-white mb-6 tracking-tight">
-              {UI_STRINGS.APP_NAME}
+            <h1 className="text-6xl md:text-7xl font-bold font-serif text-white mb-6 tracking-tight">
+              Start a Stream
             </h1>
             
             <div className="flex items-center justify-center gap-3 mb-8">
               <div className="h-px w-8 bg-gradient-to-r from-transparent to-cyan-500/50" />
-              <p className="text-xl md:text-2xl text-gray-400 font-medium italic">
+              <p className="text-lg md:text-xl text-gray-400 font-medium italic">
                 Your voice, written your way.
               </p>
               <div className="h-px w-8 bg-gradient-to-l from-transparent to-cyan-500/50" />
@@ -176,13 +190,13 @@ export default function Home() {
             <div className="relative mb-12">
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-cyan-500/5 blur-[100px] rounded-full" />
               
-              <div className="relative w-36 h-36 md:w-44 md:h-44 bg-gradient-to-b from-slate-900/80 to-slate-950/80 border border-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto backdrop-blur-md shadow-2xl group transition-all duration-500 hover:border-cyan-500/20">
+              <div className="relative w-28 h-28 md:w-36 md:h-36 bg-gradient-to-b from-slate-900/80 to-slate-950/80 border border-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto backdrop-blur-md shadow-2xl group transition-all duration-500 hover:border-cyan-500/20">
                 <div className="absolute inset-0 border border-cyan-500/10 rounded-[2.5rem] animate-pulse" />
                 
                 <div className="relative">
-                  <FileText className="w-14 h-14 md:w-18 md:h-18 text-cyan-400/70 group-hover:text-cyan-400 transition-colors duration-500" />
-                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-cyan-500 rounded-lg flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-500">
-                    <Mic className="w-3 h-3 text-slate-950" />
+                  <FileText className="w-10 h-10 md:w-14 md:h-14 text-cyan-400/70 group-hover:text-cyan-400 transition-colors duration-500" />
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 md:w-6 md:h-6 bg-cyan-500 rounded-lg flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-500">
+                    <Mic className="w-2.5 h-2.5 md:w-3 md:h-3 text-slate-950" />
                   </div>
                 </div>
               </div>
@@ -193,7 +207,7 @@ export default function Home() {
                 Scribble is empty for now.
               </h3>
               <p className="text-gray-500 text-lg md:text-xl max-w-md mx-auto leading-relaxed">
-                Start a Stream and your first Scribble will land here automatically.
+                Tap the mic button below to start your first Stream. Your first Scribble will land here automatically.
               </p>
             </div>
           </motion.div>
@@ -244,8 +258,8 @@ export default function Home() {
                     <div className="w-full p-4 mb-3 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-cyan-500/20 rounded-2xl flex flex-col transition-all group">
                       <div className="flex items-center justify-between gap-4 mb-1">
                         <div className="flex items-center gap-4 min-w-0 flex-1">
-                          <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
-                            <FileText className="w-5 h-5 text-orange-500" />
+                          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center shrink-0">
+                            <FileText className="w-5 h-5 text-cyan-400" />
                           </div>
                           <h4 className="text-white font-semibold truncate">
                             {note.title || UI_STRINGS.UNTITLED_NOTE}
@@ -393,7 +407,7 @@ export default function Home() {
                   One app. Three <span className="text-cyan-500">superpowers.</span>
                 </h2>
                 <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
-                  Whether you&apos;re dictating on the fly, capturing a full meeting, or building a personal knowledge base — OSCAR has a mode built for it.
+                  Whether you&apos;re dictating on the fly, capturing a full meeting, or building a personal knowledge base, OSCAR has a mode built for it
                 </p>
               </FadeIn>
 
@@ -412,7 +426,7 @@ export default function Home() {
                       Dictate into <span className="text-cyan-400">anything</span>, anywhere.
                     </h3>
                     <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                      Hold <kbd className="key-press inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Ctrl</kbd> + <kbd className="key-press inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Space</kbd> from anywhere on your computer and speak. OSCAR types the cleaned, AI-polished text directly into Slack, Notion, Gmail, VS Code — whatever app you&apos;re in.
+                      Hold <kbd className="key-press inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Ctrl</kbd> + <kbd className="key-press inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Space</kbd> from anywhere on your computer and speak. OSCAR types the cleaned, AI-polished text directly into Slack, Notion, Gmail, VS Code, or any app you&apos;re using.
                     </p>
                     <motion.ul
                       variants={listVariants}
@@ -421,7 +435,7 @@ export default function Home() {
                       viewport={{ once: true }}
                       className="space-y-3"
                     >
-                      {["Global hotkey — no switching apps", "AI removes filler words & fixes grammar instantly", "Works in every app on your system", "Hinglish & 30+ language support"].map((f) => (
+                      {["Global hotkey. No app switching needed", "AI removes filler words & fixes grammar instantly", "Works in every app on your system", "Hinglish & 30+ language support"].map((f) => (
                         <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
                           <Check className="w-4 h-4 text-cyan-400 shrink-0" />
                           <span>{f}</span>
@@ -453,12 +467,12 @@ export default function Home() {
 
               {/* oscar Minutes */}
               <FadeIn delay={0.05}>
-              <div className="mb-16 rounded-2xl border border-violet-500/20 hover:border-violet-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
+              <div className="mb-16 rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
                 <div className="grid md:grid-cols-2 gap-0">
                   <div className="bg-slate-950/60 p-10 flex items-center justify-center min-h-[280px] order-last md:order-first">
-                    <div className="text-center space-y-5 max-w-[280px]">
-                      <div className="w-16 h-16 bg-violet-500/20 rounded-2xl flex items-center justify-center mx-auto icon-spring">
-                        <Users className="w-8 h-8 text-violet-400" />
+                    <div className="text-left space-y-5 max-w-[280px]">
+                        <div className="w-16 h-16 bg-cyan-500/20 rounded-2xl flex items-center justify-center icon-spring">
+                        <Users className="w-8 h-8 text-cyan-400" />
                       </div>
                       <motion.div
                         variants={listVariants}
@@ -474,7 +488,7 @@ export default function Home() {
                           { label: "Follow-ups" },
                         ].map((item) => (
                           <motion.div key={item.label} variants={itemVariants} className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 bg-violet-400 rounded-full shrink-0" />
+                            <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full shrink-0" />
                             <span className="text-xs text-slate-400">{item.label}</span>
                           </motion.div>
                         ))}
@@ -484,13 +498,13 @@ export default function Home() {
                   </div>
                   <div className="p-10 flex flex-col justify-center">
                     <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 bg-violet-500/20 rounded-xl flex items-center justify-center icon-spring">
-                        <Users className="w-5 h-5 text-violet-400" />
+                      <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center icon-spring">
+                        <Users className="w-5 h-5 text-cyan-400" />
                       </div>
-                      <span className="text-xs font-bold uppercase tracking-widest text-violet-400 bg-violet-500/10 border border-violet-500/30 rounded-full px-3 py-1">oscar Minutes</span>
+                      <span className="text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1">oscar Minutes</span>
                     </div>
                     <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                      Full meeting notes, <span className="text-violet-400">automatically.</span>
+                      Full meeting notes, <span className="text-cyan-400">automatically.</span>
                     </h3>
                     <p className="text-gray-300 text-lg mb-6 leading-relaxed">
                       Record your Zoom, Teams, or in-person meeting. OSCAR captures both your voice and other participants&apos; audio, transcribes everything, and generates structured AI notes the moment you stop.
@@ -502,9 +516,9 @@ export default function Home() {
                       viewport={{ once: true }}
                       className="space-y-3"
                     >
-                      {["Records mic + system audio (Zoom, Teams, etc.)", "AI-structured notes: decisions, action items, follow-ups", "Google Calendar integration — one tap from your schedule", "Standup, 1:1, brainstorm & custom templates"].map((f) => (
+                      {["Records mic + system audio (Zoom, Teams, etc.)", "AI-structured notes: decisions, action items, follow-ups", "Google Calendar integration with one-tap access from your schedule", "Standup, 1:1, brainstorm & custom templates"].map((f) => (
                         <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
-                          <Check className="w-4 h-4 text-violet-400 shrink-0" />
+                          <Check className="w-4 h-4 text-cyan-400 shrink-0" />
                           <span>{f}</span>
                         </motion.li>
                       ))}
@@ -516,20 +530,20 @@ export default function Home() {
 
               {/* oscar Scribble */}
               <FadeIn delay={0.05}>
-              <div className="rounded-2xl border border-emerald-500/20 hover:border-emerald-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
+              <div className="rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
                 <div className="grid md:grid-cols-2 gap-0">
                   <div className="p-10 flex flex-col justify-center">
                     <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center icon-spring">
-                        <BookOpen className="w-5 h-5 text-emerald-400" />
+                      <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center icon-spring">
+                        <BookOpen className="w-5 h-5 text-cyan-400" />
                       </div>
-                      <span className="text-xs font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-3 py-1">Scribble</span>
+                      <span className="text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1">oscar Scribble</span>
                     </div>
                     <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                      Your voice notes, <span className="text-emerald-400">beautifully organized.</span>
+                      Your voice notes, <span className="text-cyan-400">beautifully organized.</span>
                     </h3>
                     <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                      Every Stream dictation and idea you capture lives in Scribble — searchable, editable, and synced across devices. Build your personal knowledge base without ever typing a thing.
+                      Every Stream dictation and idea you capture lives in Scribble. It is searchable, editable, and synced across devices. Build your personal knowledge base without ever typing a thing.
                     </p>
                     <motion.ul
                       variants={listVariants}
@@ -540,7 +554,7 @@ export default function Home() {
                     >
                       {["All your voice notes in one searchable place", "Synced to the cloud, accessible anywhere", "AI-cleaned text ready to share or export", "Custom vocabulary for your industry & jargon"].map((f) => (
                         <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
-                          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <Check className="w-4 h-4 text-cyan-400 shrink-0" />
                           <span>{f}</span>
                         </motion.li>
                       ))}
@@ -559,9 +573,9 @@ export default function Home() {
                         { title: "Weekly goals", time: "Yesterday, 9:30 AM" },
                         { title: "Client call ideas", time: "3 days ago" },
                       ].map((note) => (
-                        <motion.div key={note.title} variants={itemVariants} className="flex items-center gap-3 p-3 bg-slate-800/60 hover:bg-slate-800/80 rounded-xl border border-slate-700/50 hover:border-emerald-500/30 transition-colors duration-200 cursor-default">
-                          <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 hover:scale-110">
-                            <FileText className="w-4 h-4 text-emerald-400" />
+                        <motion.div key={note.title} variants={itemVariants} className="flex items-center gap-3 p-3 bg-slate-800/60 hover:bg-slate-800/80 rounded-xl border border-slate-700/50 hover:border-cyan-500/30 transition-colors duration-200 cursor-default">
+                          <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 hover:scale-110">
+                            <FileText className="w-4 h-4 text-cyan-400" />
                           </div>
                           <div>
                             <p className="text-sm text-white font-medium">{note.title}</p>
@@ -600,7 +614,7 @@ export default function Home() {
                       You speak at 150+ words per minute. You type at 40. Stop wasting time transcribing your own thoughts.
                     </p>
                     <p className="text-cyan-200 text-sm">
-                      Stream directly into Slack, email, docs — zero copy-paste
+                      Stream directly into Slack, email, docs. Zero copy-paste.
                     </p>
                   </div>
                 </FadeIn>
@@ -612,7 +626,7 @@ export default function Home() {
                     </div>
                     <h3 className="text-2xl font-semibold text-white mb-4">AI That Understands Context</h3>
                     <p className="text-gray-300 mb-4">
-                      Not just speech-to-text. OSCAR formats your ideas intelligently — and Minutes turns raw conversation into structured, actionable notes.
+                      Not just speech-to-text. OSCAR formats your ideas intelligently, and Minutes turns raw conversation into structured, actionable notes.
                     </p>
                     <p className="text-cyan-200 text-sm">
                       Hinglish support, 30+ languages, custom vocabulary
@@ -638,11 +652,11 @@ export default function Home() {
                 <FadeIn delay={0.2}>
                   <div className="bg-slate-900/70 border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl p-8 card-lift group h-full">
                     <div className="text-cyan-400 mb-4 icon-spring w-fit">
-                      <Sparkles className="w-10 h-10" />
+                      <Lock className="w-10 h-10" />
                     </div>
                     <h3 className="text-2xl font-semibold text-white mb-4">Runs Locally. Private by Default.</h3>
                     <p className="text-gray-300 mb-4">
-                      Whisper transcription runs on-device — your audio never leaves your computer. AI processing is opt-in and uses only the text.
+                      Whisper transcription runs on-device. Your audio never leaves your computer. AI processing is opt-in and uses only the text.
                     </p>
                     <p className="text-cyan-200 text-sm">
                       No audio uploads. No surveillance. Just your ideas.
@@ -745,11 +759,11 @@ export default function Home() {
                   <ul className="space-y-3 mb-8">
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">{SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} recordings per month</span>
+                      <span className="text-gray-300 text-sm">{SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} Streams per month</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Up to {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total notes</span>
+                      <span className="text-gray-300 text-sm">Up to {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total Scribbles</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
@@ -814,11 +828,11 @@ export default function Home() {
                   <ul className="space-y-3 mb-8">
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Unlimited recordings</span>
+                      <span className="text-gray-300 text-sm">Unlimited Streams</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Unlimited notes</span>
+                      <span className="text-gray-300 text-sm">Unlimited Scribbles</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
@@ -871,7 +885,7 @@ export default function Home() {
                 </Button>
               </div>
               <p className="text-gray-500 text-sm mt-6">
-                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free recordings/month • No credit card • Upgrade anytime
+                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free Streams/month • No credit card • Upgrade anytime
               </p>
             </FadeIn>
           </section>
