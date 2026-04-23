@@ -79,7 +79,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
 
               <h1 className="split-title">Warming up the engines...</h1>
               <p className="split-description">
-                Downloading the speech recognition model (~140 MB). Processed
+                Downloading the speech recognition model (~142 MB). Processed
                 entirely on your device — this only happens once.
               </p>
 

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { meetingsService } from "./services/meetings.service";
 import { aiService } from "./services/ai.service";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -670,7 +670,8 @@ function App() {
       // ALWAYS set pending stop — this is the safety net for the race condition
       // where STOP arrives before getUserMedia resolves in startHotkeyRecording
       pendingStopRef.current = true;
-      // Also try the normal stop path
+      // Switch pill to processing immediately — regardless of recorder state
+      invoke("set_pill_processing").catch(console.warn);
       if (
         mediaRecorderRef.current &&
         mediaRecorderRef.current.state === "recording"
@@ -678,9 +679,6 @@ function App() {
         isRecordingRef.current = false;
         setIsRecording(false);
         mediaRecorderRef.current.stop();
-        // Switch to processing dots — pill hides after processAudio finishes
-        invoke("set_pill_processing").catch(console.warn);
-      } else {
       }
     });
     const unlistenErr = listen<string>("hotkey-permission-error", (ev) => {

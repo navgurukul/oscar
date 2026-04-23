@@ -953,6 +953,13 @@ fn transcribe_audio_inner(
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
+    // Use all available CPU cores (capped at 8) for faster transcription
+    let n_threads = (std::thread::available_parallelism()
+        .map(|n| n.get() as i32)
+        .unwrap_or(4))
+    .min(8);
+    params.set_n_threads(n_threads);
+    log::info!("[whisper] using {} threads", n_threads);
 
     // Inject personal dictionary words as Whisper initial prompt
     if let Some(prompt) = initial_prompt {
@@ -972,30 +979,31 @@ fn transcribe_audio_inner(
         e.to_string()
     })?;
 
-    let num_segments = state.full_n_segments().map_err(|e| {
-        log::error!("[whisper] Failed to read segment count: {}", e);
-        e.to_string()
-    })?;
+    let num_segments = state.full_n_segments();
     log::info!("[whisper] Inference complete — {} segments", num_segments);
     let mut full_text = String::new();
     let mut structured_segments = Vec::new();
 
     for i in 0..num_segments {
-        if let Ok(text) = state.full_get_segment_text(i) {
-            let trimmed = text.trim();
+        if let Some(segment) = state.get_segment(i) {
+            let text = match segment.to_str() {
+                Ok(t) => t.to_string(),
+                Err(_) => continue,
+            };
+            let trimmed = text.trim().to_string();
             if trimmed.is_empty() {
                 continue;
             }
 
-            full_text.push_str(trimmed);
+            full_text.push_str(&trimmed);
             full_text.push(' ');
 
             if let Some(segment_source) = source {
-                let start_time = state.full_get_segment_t0(i).unwrap_or(0);
-                let end_time = state.full_get_segment_t1(i).unwrap_or(0);
-                
+                let start_time = segment.start_timestamp();
+                let end_time = segment.end_timestamp();
+
                 structured_segments.push(TranscriptSegmentResult {
-                    text: trimmed.to_string(),
+                    text: trimmed,
                     start_ms: start_time * 10,
                     end_ms: end_time * 10,
                     speaker: TranscriptSpeaker {
@@ -1600,8 +1608,8 @@ fn create_pill_window(app: &tauri::AppHandle) {
         return; // already exists
     }
 
-    let pill_w = 48.0_f64;
-    let pill_h = 32.0_f64;
+    let pill_w = 72.0_f64;
+    let pill_h = 26.0_f64;
     let (pos_x, pos_y): (f64, f64) = app
         .primary_monitor()
         .ok()
@@ -1688,7 +1696,7 @@ fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
         create_pill_window(&app);
 
         if let Some(w) = app.get_webview_window("recording-pill") {
-            let _ = app.emit_to("recording-pill", "pill-set-listening", ());
+            let _ = w.eval("document.body.classList.remove('processing')");
             w.show().map_err(|e| e.to_string())?;
             log::info!("[pill] pill window shown");
 
@@ -1746,7 +1754,9 @@ fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(not(target_os = "linux"))]
     {
         log::info!("[pill] set_pill_processing called");
-        let _ = app.emit_to("recording-pill", "pill-set-processing", ());
+        if let Some(w) = app.get_webview_window("recording-pill") {
+            let _ = w.eval("document.body.classList.add('processing')");
+        }
         Ok(())
     }
 }
@@ -1766,7 +1776,9 @@ fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(not(target_os = "linux"))]
     {
         log::info!("[pill] set_pill_listening called");
-        let _ = app.emit_to("recording-pill", "pill-set-listening", ());
+        if let Some(w) = app.get_webview_window("recording-pill") {
+            let _ = w.eval("document.body.classList.remove('processing')");
+        }
         Ok(())
     }
 }
