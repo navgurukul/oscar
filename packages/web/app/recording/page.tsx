@@ -29,6 +29,7 @@ function RecordingPageInner() {
   const {
     canRecord,
     recordingsThisMonth,
+    incrementUsage,
   } = useSubscriptionContext();
 
   const {
@@ -319,6 +320,11 @@ function RecordingPageInner() {
           generatedTitle
         );
 
+        // ✅ Increment recording usage AFTER successful AI processing
+        if (user) {
+          await incrementUsage();
+        }
+
         if (isMountedRef.current) {
           setProcessingProgress(100);
 
@@ -417,7 +423,7 @@ function RecordingPageInner() {
   }
 
   return (
-    <main className="flex flex-col items-center px-4 pt-4 sm:pt-8 min-h-dvh">
+    <main className="flex flex-col items-center px-4 pt-8 min-h-dvh">
       {/* Upgrade Prompt Modal */}
       {showUpgradePrompt && (
         <UpgradePrompt
@@ -437,7 +443,7 @@ function RecordingPageInner() {
         </div>
       )}
 
-      <div className="w-full max-w-xl flex flex-col items-center gap-4 sm:gap-8 mt-4 sm:mt-16">
+      <div className="w-full max-w-xl flex flex-col items-center gap-4 sm:gap-8 mt-16">
         {/* Header */}
         <div className="text-center space-y-1">
           <h1 className="text-2xl sm:text-4xl font-bold">

@@ -133,6 +133,7 @@ export default function NotesPage() {
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isApplyingBulkAction, setIsApplyingBulkAction] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const folderCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -576,29 +577,30 @@ export default function NotesPage() {
   const isEmptyWorkspace = allNotes.length === 0;
 
   return (
-    <main className="min-h-screen bg-[#020617] px-4 pt-24 pb-24 text-white">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <main className="min-h-screen bg-[#020617] px-4 pt-24 pb-24 text-white overflow-x-hidden">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 min-w-0">
         <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
-              <Sparkles className="h-3.5 w-3.5" />
+          <div className="space-y-3 mt-5">
+            <h1 className="text-4xl font-semibold tracking-tight text-white">
               Scribble
-            </div>
-            <div className="space-y-2">
-              <h1 className="text-4xl font-semibold tracking-tight text-white">
-                Organize every Stream in one calm workspace.
-              </h1>
-              <p className="max-w-2xl text-sm leading-6 text-slate-400">
-                Jump between recent, starred, and folder views, then tidy multiple
-                Scribbles at once without leaving the page.
-              </p>
-            </div>
+            </h1>
+            <p className="max-w-2xl text-sm leading-6 text-slate-400">
+              Organize every Stream in one calm workspace - jump between recent, starred, and folder views, 
+              then tidy multiple Scribbles at once without leaving the page.
+            </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-500/30 hover:text-cyan-200 lg:hidden"
+            >
+              <Folder className="h-4 w-4" />
+              Views
+            </button>
             <button
               onClick={() => setIsTrashOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-500/30 hover:text-cyan-200"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-500/30 hover:text-cyan-200"
             >
               <Trash2 className="h-4 w-4" />
               Trash
@@ -610,7 +612,7 @@ export default function NotesPage() {
             </button>
             <button
               onClick={() => router.push("/recording")}
-              className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+              className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
             >
               <Sparkles className="h-4 w-4" />
               Start a Stream
@@ -624,9 +626,13 @@ export default function NotesPage() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[280px,minmax(0,1fr)]">
-          <aside className="space-y-4">
-            <section className="rounded-[28px] border border-white/8 bg-white/[0.03] p-4">
+        <div className="grid gap-4 lg:gap-6 lg:grid-cols-[280px,minmax(0,1fr)] min-w-0">
+          <aside className={cn(
+            "space-y-4 min-w-0",
+            "lg:block",
+            isSidebarOpen ? "block" : "hidden lg:block"
+          )}>
+            <section className="rounded-[28px] p-4 border border-cyan-700/30 shadow-xl min-w-0">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-white">Saved Views</h2>
                 <span className="text-xs text-slate-500">{allNotes.length} total</span>
@@ -674,7 +680,7 @@ export default function NotesPage() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-white/8 bg-white/[0.03] p-4">
+            <section className="rounded-[28px] p-4 border border-cyan-700/30 shadow-xl min-w-0">
               <div className="mb-3 space-y-1">
                 <div className="flex items-center gap-2 text-sm font-semibold text-white">
                   <Folder className="h-4 w-4 text-cyan-300" />
@@ -685,7 +691,7 @@ export default function NotesPage() {
                 </p>
               </div>
 
-              <div className="mb-4 flex gap-2">
+              <div className="mb-4 flex gap-2 min-w-0">
                 <Input
                   value={newFolderName}
                   onChange={(event) => setNewFolderName(event.target.value)}
@@ -695,7 +701,7 @@ export default function NotesPage() {
                     }
                   }}
                   placeholder="New folder"
-                  className="border-white/10 bg-white/5 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/30"
+                  className="border-white/10 bg-white/5 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/30 min-w-0"
                 />
                 <button
                   onClick={() => void handleCreateFolderFromSelection()}
@@ -726,7 +732,7 @@ export default function NotesPage() {
                         className={cn(
                           "flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left transition",
                           isActive
-                            ? "bg-emerald-500/10 text-emerald-100 ring-1 ring-emerald-500/30"
+                            ? "bg-cyan-500/10 text-cyan-100 ring-1 ring-cyan-500/30"
                             : "bg-transparent text-slate-300 hover:bg-white/5 hover:text-white"
                         )}
                       >
@@ -734,7 +740,7 @@ export default function NotesPage() {
                           <div
                             className={cn(
                               "rounded-full p-1.5",
-                              isActive ? "bg-emerald-500/15" : "bg-white/5"
+                              isActive ? "bg-cyan-500/20" : "bg-white/5"
                             )}
                           >
                             <Folder className="h-4 w-4" />
@@ -752,8 +758,8 @@ export default function NotesPage() {
             </section>
           </aside>
 
-          <section className="rounded-[32px] border border-white/8 bg-white/[0.03] p-4 md:p-6">
-            <div className="flex flex-col gap-4 border-b border-white/8 pb-4">
+          <section className="rounded-[32px] p-4 md:p-6 border border-cyan-700/30 shadow-xl min-w-0">
+            <div className="flex flex-col gap-4 border-b border-cyan-500/20 pb-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-1">
                   <h2 className="text-2xl font-semibold tracking-tight text-white">
@@ -766,8 +772,8 @@ export default function NotesPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-                <div className="relative flex-1">
+              <div className="flex flex-col gap-3 lg:flex-col xl:flex-row xl:items-center">
+                <div className="relative flex-1 min-w-0">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   <Input
                     value={searchQuery}
@@ -782,7 +788,7 @@ export default function NotesPage() {
                     value={sortBy}
                     onValueChange={(value) => setSortBy(value as SortOption)}
                   >
-                    <SelectTrigger className="h-10 w-[180px] border-white/10 bg-white/5 text-white">
+                    <SelectTrigger className="h-10 w-full md:w-[180px] border-white/10 bg-white/5 text-white">
                       <div className="flex items-center gap-2 text-sm text-slate-300">
                         <ArrowUpDown className="h-4 w-4 text-slate-500" />
                         <SelectValue placeholder="Sort" />
@@ -857,7 +863,7 @@ export default function NotesPage() {
                         key={folderName}
                         onClick={() => void applyBulkUpdate({ folder: folderName }, `Moved to ${folderName}`)}
                         disabled={isApplyingBulkAction}
-                        className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/15 disabled:opacity-50"
+                        className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/15 disabled:opacity-50"
                       >
                         Move to {folderName}
                       </button>
@@ -910,10 +916,10 @@ export default function NotesPage() {
                       <article
                         key={note.id}
                         className={cn(
-                          "group rounded-[28px] border px-4 py-4 transition md:px-5",
+                          "group rounded-[28px] px-4 py-4 transition border md:px-5",
                           isSelected
-                            ? "border-cyan-500/30 bg-cyan-500/[0.08]"
-                            : "border-white/8 bg-white/[0.02] hover:border-cyan-500/20 hover:bg-white/[0.04]"
+                            ? "bg-cyan-500/[0.08] border-cyan-500/30"
+                            : "bg-white/[0.02] border-cyan-700/30 hover:bg-white/[0.04]"
                         )}
                       >
                         <div className="flex gap-4">
@@ -939,19 +945,13 @@ export default function NotesPage() {
                                   <h3 className="truncate text-lg font-semibold text-white">
                                     {note.title || "Untitled Note"}
                                   </h3>
-                                  {note.is_starred && (
-                                    <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200">
-                                      <Star className="h-3 w-3 fill-current" />
-                                      Starred
-                                    </span>
-                                  )}
                                   {note.folder && (
                                     <button
                                       onClick={(event) => {
                                         event.stopPropagation();
                                         setCurrentView(`folder:${note.folder}`);
                                       }}
-                                      className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-200"
+                                      className="inline-flex items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200"
                                     >
                                       <Folder className="h-3 w-3" />
                                       {note.folder}
