@@ -205,8 +205,8 @@ importers:
         specifier: '19'
         version: 19.2.4(react@19.2.4)
       speech-to-speech:
-        specifier: ^0.1.2
-        version: 0.1.4(onnxruntime-web@1.24.3)
+        specifier: ^0.1.5
+        version: 0.1.5(onnxruntime-web@1.24.3)
       tailwind-merge:
         specifier: ^3.4.0
         version: 3.5.0
@@ -3245,8 +3245,8 @@ packages:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
 
-  speech-to-speech@0.1.4:
-    resolution: {integrity: sha512-eWAOhjIco9RjcCEYS6jrmyuvdyJyi/hMeZMa9opS2iSqZ5+tbsa8hcUBS7f7rD4KAUH1QoOHblLzGC+b6iNR5A==}
+  speech-to-speech@0.1.5:
+    resolution: {integrity: sha512-s51jnQ8Pg1Ptdy/gRYqhwP0f/+xQz8vUbrg0VWiBA/vuwL81hQx+iiV3t8jdx7Trvp0BUSqU1Y1v80kFXJBctA==}
     peerDependencies:
       '@onnxruntime/node': '>=1.14.0'
       '@onnxruntime/web': '>=1.14.0'
@@ -6717,7 +6717,7 @@ snapshots:
 
   source-map-js@1.2.1: {}
 
-  speech-to-speech@0.1.4(onnxruntime-web@1.24.3):
+  speech-to-speech@0.1.5(onnxruntime-web@1.24.3):
     dependencies:
       '@realtimex/piper-tts-web': 1.1.1(onnxruntime-web@1.24.3)
       '@ricky0123/vad-web': 0.0.30
