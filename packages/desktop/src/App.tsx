@@ -822,6 +822,7 @@ function App() {
     }
 
     const paths = [
+      `${home}/${MODEL_PATH}`,
       `${home}/.oscar/models/ggml-small.bin`,
       `${home}/.whisper/ggml-small.bin`,
       "./models/ggml-small.bin",

@@ -2009,6 +2009,14 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
 
+            // Register oscar:// URL scheme in the OS (required on Windows dev builds;
+            // production installers handle this, but dev mode needs it explicitly).
+            if let Err(e) = app.deep_link().register_all() {
+                log::warn!("[setup] Could not register deep link schemes: {:?}", e);
+            } else {
+                log::info!("[setup] Deep link schemes registered OK");
+            }
+
             // Set up deep link handler (may not be available on all Linux desktops)
             log::info!("[setup] Registering deep link handler...");
             if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -2016,11 +2024,7 @@ pub fn run() {
                     for url in event.urls() {
                         let url_str = url.to_string();
                         log::info!("[deep-link] received: {}", url_str);
-
-                        // Store the deep link
                         set_pending_deep_link(url_str.clone());
-
-                        // Emit to frontend
                         let _ = app_handle.emit("deep-link", url_str);
                     }
                 });
