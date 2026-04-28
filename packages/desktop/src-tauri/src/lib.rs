@@ -772,14 +772,16 @@ async fn download_whisper_model(
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
     }
     
-    // Download the file using async client with progress
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(600))
+        .no_gzip()
         .build()
         .map_err(|e| e.to_string())?;
-    
+
     let response = client
         .get(&url)
+        .header("Accept-Encoding", "identity")
+        .header("User-Agent", "oscar-desktop/1.0")
         .send()
         .await
         .map_err(|e| format!("Download failed: {}", e))?;
