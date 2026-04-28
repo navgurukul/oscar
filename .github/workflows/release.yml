@@ -231,7 +231,18 @@ jobs:
         run: |
           $TAURI_BIN = "../../node_modules/.bin/tauri"
           $BASE = "src-tauri/target/$env:TARGET/release/bundle/nsis"
-          Get-ChildItem "$BASE/*.nsis.zip" -ErrorAction SilentlyContinue | ForEach-Object {
+
+          # Tauri v2 does not always auto-generate the .nsis.zip updater artifact.
+          # Create it manually from the .exe if it doesn't exist.
+          Get-ChildItem "$BASE\*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
+            $zipPath = $_.FullName -replace '\.exe$', '.nsis.zip'
+            if (-not (Test-Path $zipPath)) {
+              Write-Host "Creating updater zip: $(Split-Path $zipPath -Leaf)"
+              Compress-Archive -Path $_.FullName -DestinationPath $zipPath -Force
+            }
+          }
+
+          Get-ChildItem "$BASE\*.nsis.zip" -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Host "Signing $($_.Name)..."
             & $TAURI_BIN signer sign $_.FullName
           }
