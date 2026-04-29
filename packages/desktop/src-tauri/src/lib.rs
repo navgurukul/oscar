@@ -876,48 +876,38 @@ fn load_whisper_model_inner(
 }
 
 #[tauri::command]
-async fn ensure_whisper_model_loaded(
+fn ensure_whisper_model_loaded(
     role: String,
     path: String,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        load_whisper_model_inner(&role, &path, &state)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    load_whisper_model_inner(&role, &path, state.inner())
 }
 
 #[tauri::command]
-async fn warm_whisper_runtime(
+fn warm_whisper_runtime(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let locked = state.lock().map_err(|e| e.to_string())?;
-        let context = locked
-            .whisper_context
-            .as_ref()
-            .ok_or_else(|| "Whisper model not loaded".to_string())?;
+    let locked = state.lock().map_err(|e| e.to_string())?;
+    let context = locked
+        .whisper_context
+        .as_ref()
+        .ok_or_else(|| "Whisper model not loaded".to_string())?;
 
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_language(Some("en"));
-        params.set_print_special(false);
-        params.set_print_progress(false);
-        params.set_print_realtime(false);
-        params.set_print_timestamps(false);
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    params.set_language(Some("en"));
+    params.set_print_special(false);
+    params.set_print_progress(false);
+    params.set_print_realtime(false);
+    params.set_print_timestamps(false);
 
-        let mut whisper_state = context.create_state().map_err(|e| e.to_string())?;
-        let silence = vec![0.0f32; 16_000];
-        whisper_state
-            .full(params, &silence)
-            .map_err(|e| e.to_string())?;
+    let mut whisper_state = context.create_state().map_err(|e| e.to_string())?;
+    let silence = vec![0.0f32; 16_000];
+    whisper_state
+        .full(params, &silence)
+        .map_err(|e| e.to_string())?;
 
-        Ok("Whisper runtime warmed".to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    Ok("Whisper runtime warmed".to_string())
 }
 
 // ── Whisper: Transcribe ───────────────────────────────────────────────────────
@@ -1088,24 +1078,19 @@ fn merge_transcription_results(results: Vec<TranscriptionResult>) -> Transcripti
 }
 
 #[tauri::command]
-async fn transcribe_audio(
+fn transcribe_audio(
     audio_data: Vec<f32>,
     initial_prompt: Option<String>,
     language: Option<String>,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        transcribe_audio_inner(
-            &audio_data,
-            initial_prompt.as_deref(),
-            language.as_deref(),
-            &state,
-            None,
-        )
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    transcribe_audio_inner(
+        &audio_data,
+        initial_prompt.as_deref(),
+        language.as_deref(),
+        &state,
+        None,
+    )
 }
 
 // ── System Audio: Tauri Commands ─────────────────────────────────────────────
