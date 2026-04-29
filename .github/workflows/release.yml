@@ -80,7 +80,7 @@ jobs:
             cflags: ""
             macosx_deployment_target: ""
             bundles: "nsis"
-            extra_cargo_args: "-- --features vulkan"
+            extra_cargo_args: ""
           # ── Linux ──
           - target: x86_64-unknown-linux-gnu
             label: linux-x64
@@ -164,22 +164,6 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install oniguruma
-
-      - name: Setup Vulkan SDK (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $version = "1.3.283.0"
-          $url = "https://sdk.lunarg.com/sdk/download/$version/windows/VulkanSDK-$version-Installer.exe"
-          $installer = "$env:TEMP\VulkanSDK.exe"
-          $sdkPath = "C:\VulkanSDK\$version"
-          Write-Host "Downloading Vulkan SDK $version..."
-          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
-          Write-Host "Extracting SDK with 7-Zip (no installer)..."
-          & "C:\Program Files\7-Zip\7z.exe" x $installer -o"$sdkPath" -y | Out-Null
-          echo "VULKAN_SDK=$sdkPath" >> $env:GITHUB_ENV
-          echo "$sdkPath\Bin" >> $env:GITHUB_PATH
-          Write-Host "Vulkan SDK extracted at: $sdkPath"
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
