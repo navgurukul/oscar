@@ -293,6 +293,7 @@ function App() {
     setSession(null);
     sessionRef.current = null;
     setUser(null);
+    setSavedMeetings([]);
   }, [clearCalendarConnection]);
 
   // ── Supabase auth listener ─────────────────────────────────────────────────
@@ -511,7 +512,6 @@ function App() {
         savedCalConnectedUserId,
         savedCalTokenExpiry,
         savedSystemAudioEnabled,
-        savedMeetingsData,
         savedMinutesDataResetVersion,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
@@ -536,7 +536,6 @@ function App() {
         loadSetting<string>("googleCalendarConnectedUserId", ""),
         loadSetting<number>("googleCalendarTokenExpiry", 0),
         loadSetting<boolean>("systemAudioEnabled", true),
-        loadSetting<SavedMeetingRecord[]>("savedMeetings", []),
         loadSetting<string>("minutesDataResetVersion", ""),
       ]);
 
@@ -628,14 +627,11 @@ function App() {
       if (!hasLegacyCalendarConnection && savedCalTokenExpiry) setGoogleCalendarTokenExpiry(savedCalTokenExpiry);
 
       if (savedMinutesDataResetVersion !== MINUTES_DATA_RESET_VERSION) {
-        setSavedMeetings([]);
         await Promise.all([
           saveSetting("savedMeetings", []),
           saveSetting("meetingTemplates", []),
           saveSetting("minutesDataResetVersion", MINUTES_DATA_RESET_VERSION),
         ]);
-      } else if (savedMeetingsData && savedMeetingsData.length > 0) {
-        setSavedMeetings(savedMeetingsData);
       }
 
       // Check system audio capture support (macOS 13+ only)
@@ -708,7 +704,7 @@ function App() {
   const loadMeetingsFromSupabase = useCallback(async () => {
     const { data, error } = await meetingsService.getMeetings();
     if (error) { console.warn("[minutes] Supabase load failed:", error); return; }
-    if (data && data.length > 0) setSavedMeetings(data);
+    setSavedMeetings(data ?? []);
   }, []);
 
   const syncDictionaryFromSupabase = useCallback(async (userId: string) => {
@@ -1959,13 +1955,11 @@ function App() {
                   onSaveMeeting={(meeting) => {
                     const updated = [meeting, ...savedMeetings.filter((m) => m.id !== meeting.id)];
                     setSavedMeetings(updated);
-                    saveSetting("savedMeetings", updated);
                     if (user) meetingsService.saveMeeting(meeting, user.id).catch((e) => console.warn("[minutes] save failed:", e));
                   }}
                   onDeleteMeeting={(id) => {
                     const updated = savedMeetings.filter((m) => m.id !== id);
                     setSavedMeetings(updated);
-                    saveSetting("savedMeetings", updated);
                     meetingsService.deleteMeeting(id).catch((e) => console.warn("[minutes] delete failed:", e));
                   }}
                   minutesTranscriptionStatus={minutesTranscriptionStatus}
