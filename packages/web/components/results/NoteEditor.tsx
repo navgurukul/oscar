@@ -48,7 +48,7 @@ export function NoteEditor({
   feedbackValue = null,
   showFeedback = false,
 }: NoteEditorProps) {
-  const [activeTab, setActiveTab] = useState<"notes" | "transcript">("transcript");
+  const [activeTab, setActiveTab] = useState<"scribble" | "transcript">("scribble");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea to fit content
@@ -109,16 +109,6 @@ export function NoteEditor({
           {/* Tabs */}
           <div className="flex gap-1 mt-2">
             <button
-              onClick={() => setActiveTab("notes")}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "notes"
-                  ? "bg-cyan-500/10 text-cyan-400"
-                  : "text-gray-500 hover:text-gray-300"
-              }`}
-            >
-              Notes
-            </button>
-            <button
               onClick={() => setActiveTab("transcript")}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === "transcript"
@@ -126,25 +116,35 @@ export function NoteEditor({
                   : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              Transcript
+              Stream Transcript
+            </button>
+            <button
+              onClick={() => setActiveTab("scribble")}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === "scribble"
+                  ? "bg-cyan-500/10 text-cyan-400"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              Scribble
             </button>
           </div>
         </CardHeader>
 
         <CardContent>
-          {activeTab === "notes" ? (
-            <div className="text-md text-start text-gray-300 whitespace-pre-wrap min-h-[120px]">
-              {rawText || "No notes available."}
-            </div>
-          ) : (
+          {activeTab === "scribble" ? (
             <textarea
               ref={textareaRef}
               value={formattedNote}
               onChange={(e) => onTextChange?.(e.target.value)}
               onBlur={onSaveEdit}
-              placeholder="AI output will appear here..."
+              placeholder="Your Scribble will appear here..."
               className="w-full bg-transparent text-md text-gray-300 leading-relaxed focus:outline-none resize-none border-none p-0 min-h-[120px] placeholder:text-gray-600"
             />
+          ) : (
+            <div className="text-md text-start text-gray-300 whitespace-pre-wrap min-h-[120px]">
+              {rawText || "No transcript available."}
+            </div>
           )}
 
           {/* Mobile action buttons */}

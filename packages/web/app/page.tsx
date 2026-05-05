@@ -231,7 +231,7 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-2xl flex flex-col items-center mt-8"
+          className="w-full max-w-2xl flex flex-col items-center mt-12"
         >
           {/* Welcome Text */}
           <div className="text-center mb-12">
@@ -288,9 +288,9 @@ export default function Home() {
   }
 
   return (
-      <main className="flex flex-col items-center pt-8 pb-24 px-4">
+      <main className="flex flex-col items-center pt-8 pb-24 px-4 w-full overflow-x-hidden">
         {/* Hero Section */}
-        <section className="flex items-center justify-center min-h-[80vh]">
+        <section className="flex items-center justify-center min-h-[80vh] w-full">
         <LampContainer >
           <motion.div
             initial={{ opacity: 0.5, y: 100 }}
@@ -347,8 +347,8 @@ export default function Home() {
       {!session && (
         <>
           {/* Problem Statement Section */}
-      <section className="min-h-[80vh] flex items-center justify-center py-16 sm:py-24 px-4 mt-8">
-            <div className="max-w-6xl mx-auto">
+      <section className="min-h-[80vh] flex items-center justify-center py-16 sm:py-24 px-4 mt-8 w-full">
+            <div className="max-w-6xl mx-auto w-full">
               <FadeIn className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
                   Your <span className="text-cyan-500">Best Ideas</span> Vanish Before You Type Them
@@ -399,8 +399,8 @@ export default function Home() {
           </section>
 
           {/* Three Modes Section */}
-          <section id="how-it-works" className="py-24 px-4 mt-8">
-            <div className="max-w-6xl mx-auto">
+          <section id="how-it-works" className="py-24 px-4 mt-8 w-full">
+            <div className="max-w-6xl mx-auto w-full">
               <FadeIn className="text-center mb-20">
                 <p className="text-cyan-400 text-sm font-semibold uppercase tracking-widest mb-4">Three ways to use OSCAR</p>
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
@@ -413,8 +413,8 @@ export default function Home() {
 
               {/* oscar Stream */}
               <FadeIn delay={0.05}>
-              <div className="mb-16 rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
-                <div className="grid md:grid-cols-2 gap-0">
+              <div className="mb-16 rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 card-lift group w-full">
+                <div className="grid md:grid-cols-2 gap-0 w-full">
                   <div className="p-10 flex flex-col justify-center">
                     <div className="flex items-center gap-3 mb-6">
                       <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center icon-spring">
@@ -467,8 +467,8 @@ export default function Home() {
 
               {/* oscar Minutes */}
               <FadeIn delay={0.05}>
-              <div className="mb-16 rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
-                <div className="grid md:grid-cols-2 gap-0">
+              <div className="mb-16 rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 card-lift group w-full">
+                <div className="grid md:grid-cols-2 gap-0 w-full">
                   <div className="bg-slate-950/60 p-10 flex items-center justify-center min-h-[280px] order-last md:order-first">
                     <div className="text-left space-y-5 max-w-[280px]">
                         <div className="w-16 h-16 bg-cyan-500/20 rounded-2xl flex items-center justify-center icon-spring">
@@ -489,11 +489,11 @@ export default function Home() {
                         ].map((item) => (
                           <motion.div key={item.label} variants={itemVariants} className="flex items-center gap-2">
                             <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full shrink-0" />
-                            <span className="text-xs text-slate-400">{item.label}</span>
+                            <span className="text-gray-300">{item.label}</span>
                           </motion.div>
                         ))}
                       </motion.div>
-                      <p className="text-xs text-slate-500">AI-generated in seconds after your meeting</p>
+                      <p className="text-gray-300">AI-generated in seconds after your meeting</p>
                     </div>
                   </div>
                   <div className="p-10 flex flex-col justify-center">
@@ -530,8 +530,8 @@ export default function Home() {
 
               {/* oscar Scribble */}
               <FadeIn delay={0.05}>
-              <div className="rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden card-lift group">
-                <div className="grid md:grid-cols-2 gap-0">
+              <div className="rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 card-lift group w-full">
+                <div className="grid md:grid-cols-2 gap-0 w-full">
                   <div className="p-10 flex flex-col justify-center">
                     <div className="flex items-center gap-3 mb-6">
                       <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center icon-spring">
@@ -592,8 +592,8 @@ export default function Home() {
           </section>
 
           {/* Why OSCAR Section */}
-          <section className="md:min-h-screen flex items-center justify-center py-16 px-4">
-            <div className="max-w-6xl mx-auto">
+          <section className="md:min-h-screen flex items-center justify-center py-16 px-4 w-full">
+            <div className="max-w-6xl mx-auto w-full">
               <FadeIn className="text-center mb-16">
                 <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
                   Why <span className="text-cyan-500">OSCAR</span>?
@@ -668,7 +668,7 @@ export default function Home() {
           </section>
 
           {/* Testimonials Section */}
-          <section className="md:min-h-[80vh] flex items-center justify-center py-8 md:py-16 mt-8">
+          <section className="md:min-h-[80vh] flex items-center justify-center py-8 md:py-16 mt-8 w-full">
             <div className="w-full">
               <div className="mx-auto max-w-4xl px-4 md:px-8 lg:px-12 text-center mb-6 md:mb-12">
                 <h2 className="text-2xl md:text-5xl font-bold text-white mb-3 md:mb-6">
@@ -683,7 +683,7 @@ export default function Home() {
           </section>
 
           {/* Pricing Section */}
-          <section className="min-h-auto md:min-h-[80vh] flex items-center justify-center py-16 md:py-20 px-4 mt-8">
+          <section className="min-h-auto md:min-h-[80vh] flex items-center justify-center py-16 md:py-20 px-4 mt-8 w-full">
             <div className="max-w-5xl mx-auto w-full">
               <FadeIn className="text-center mb-8 md:mb-12">
                 <h2 className="text-2xl md:text-4xl font-bold text-white mb-3 md:mb-4">
@@ -865,7 +865,7 @@ export default function Home() {
           </section>
 
           {/* Final CTA Section */}
-          <section className="min-h-auto md:min-h-[80vh] flex items-center justify-center py-12 md:py-16 px-4 mt-8">
+          <section className="min-h-auto md:min-h-[80vh] flex items-center justify-center py-12 md:py-16 px-4 mt-8 w-full">
             <FadeIn className="max-w-4xl mx-auto text-center">
               <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
                 Your Voice.<br />

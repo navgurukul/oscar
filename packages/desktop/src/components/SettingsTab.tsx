@@ -11,6 +11,7 @@ import {
   Trash2,
   Lock,
   Mail,
+  CreditCard,
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { BillingSection } from "./BillingSection";
@@ -29,11 +30,11 @@ type SettingsSection =
   | "privacy";
 
 /** Internal active tab */
-type ActiveTab = "general" | "vocabulary" | "account";
+type ActiveTab = "general" | "vocabulary" | "billing" | "account";
 
 function resolveTab(section?: SettingsSection): ActiveTab {
-  if (section === "billing" || section === "privacy" || section === "account")
-    return "account";
+  if (section === "billing") return "billing";
+  if (section === "privacy" || section === "account") return "account";
   if (section === "vocabulary") return "vocabulary";
   return "general";
 }
@@ -127,6 +128,7 @@ const NAV_ITEMS: {
 }[] = [
   { id: "general", label: "General", icon: Settings2 },
   { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
+  { id: "billing", label: "Plans & Billing", icon: CreditCard },
   { id: "account", label: "Account", icon: User },
 ];
 
@@ -461,6 +463,22 @@ export function SettingsTab({
             </div>
           ))}
 
+        {/* ════════════ Plans & Billing ════════════ */}
+        {activeTab === "billing" && (
+          <div className="st-content">
+            <h2 className="st-content-title">Plans & Billing</h2>
+            {userId && userEmail ? (
+              <BillingSection userId={userId} />
+            ) : (
+              <div className="st-card st-card--grouped">
+                <p className="st-row-desc" style={{ padding: "4px 0" }}>
+                  Sign in to view your plan and usage.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ════════════ Account ════════════ */}
         {activeTab === "account" && (
           <div className="st-content">
@@ -484,17 +502,6 @@ export function SettingsTab({
                 </div>
               </div>
             </div>
-
-            {/* Plan & Usage */}
-            {userId && userEmail ? (
-              <BillingSection userId={userId} />
-            ) : (
-              <div className="st-card st-card--grouped">
-                <p className="st-row-desc" style={{ padding: "4px 0" }}>
-                  Sign in to view your plan and usage.
-                </p>
-              </div>
-            )}
 
             {/* Resources */}
             <div className="st-section-label">Resources</div>

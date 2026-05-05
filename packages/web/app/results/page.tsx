@@ -33,6 +33,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Lazy load the NoteEditor component
 const NoteEditor = dynamic(
@@ -321,6 +322,11 @@ export default function ResultsPage() {
       setSelectedLanguage(lang);
       setTranslatedNote(cachedNote || "");
       setTranslatedRaw(cachedRaw || "");
+      
+      // Update modeContent for translate mode
+      setModeContent(prev => ({ ...prev, translate: cachedNote || "" }));
+      setEditedText(cachedNote || "");
+      
       toast({
         title: "Language updated",
         description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
@@ -577,8 +583,8 @@ export default function ResultsPage() {
 
   return (
     <main className="flex flex-col items-center px-4 pt-8 pb-24 min-h-screen bg-[#020617] text-white overflow-x-hidden">
-      <div className="w-full max-w-2xl flex flex-col items-center gap-6 mt-16">
-        <div className="text-center space-y-4 w-full mt-8">
+      <div className="w-full max-w-2xl flex flex-col items-center gap-3 mt-16">
+        <div className="text-center space-y-4 w-full mt-5">
           <h1 className="text-3xl md:text-5xl font-bold text-white tracking-tight">
             {title || UI_STRINGS.RESULTS_TITLE}
           </h1>
@@ -592,12 +598,12 @@ export default function ResultsPage() {
               <div className="flex flex-wrap justify-center items-center gap-2">
                 {selectedFolder ? (
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 px-3 py-1 text-sm flex items-center gap-2">
+                    <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 px-3 py-1 text-sm flex items-center gap-2 hover:bg-cyan-500/20 transition-colors cursor-default">
                       <FolderPlus className="w-3.5 h-3.5" />
                       {selectedFolder}
                       <button 
                         onClick={() => handleUpdateFolder(null)}
-                        className="hover:text-cyan-200 transition-colors"
+                        className="text-cyan-400 hover:text-red-400 transition-colors ml-1"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -661,37 +667,45 @@ export default function ResultsPage() {
         </div>
 
         {/* Mode Selection Bar (Floating) */}
-        <div className="flex flex-col items-center gap-4 w-full">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 shadow-2xl z-10"
-          >
-            {[
-              { id: "normal", icon: FileText, label: "Scribble" },
-              { id: "email", icon: Mail, label: "Email" },
-              { id: "bullets", icon: ListChecks, label: "Bullets" },
-              { id: "summary", icon: BookOpen, label: "Summary" },
-              { id: "translate", icon: Languages, label: "Translate" }
-            ].map((mode) => (
-              <button
-                key={mode.id}
-                onClick={() => void handleSelectMode(mode.id as typeof activeMode)}
-                className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
-                  activeMode === mode.id 
-                    ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
-                    : "text-gray-400 hover:text-white hover:bg-white/5"
-                }`}
-                title={mode.label}
-              >
-                {isLoadingMode && activeMode === mode.id ? (
-                  <Spinner className="w-5 h-5" />
-                ) : (
-                  <mode.icon className="w-5 h-5" />
-                )}
-              </button>
-            ))}
-          </motion.div>
+        <div className="flex flex-col items-center gap-1.5 w-full mb-2">
+          <p className="text-sm text-gray-400 font-medium">Transform this Scribble into <span className="text-base font-bold text-cyan-400">→</span></p>
+          <TooltipProvider>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 shadow-2xl z-10"
+            >
+              {[
+                { id: "normal", icon: FileText, label: "Scribble", desc: "Your clean working draft" },
+                { id: "email", icon: Mail, label: "Email", desc: "Send-ready draft" },
+                { id: "bullets", icon: ListChecks, label: "Bullets", desc: "Quick key points" },
+                { id: "summary", icon: BookOpen, label: "Summary", desc: "Condensed overview" },
+                { id: "translate", icon: Languages, label: "Translate", desc: "Change language" }
+              ].map((mode) => (
+                <Tooltip key={mode.id} delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => void handleSelectMode(mode.id as typeof activeMode)}
+                      className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
+                        activeMode === mode.id 
+                          ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
+                          : "text-gray-400 hover:text-white hover:bg-white/5"
+                      }`}
+                    >
+                      {isLoadingMode && activeMode === mode.id ? (
+                        <Spinner className="w-5 h-5" />
+                      ) : (
+                        <mode.icon className="w-5 h-5" />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">{mode.label}</span> — {mode.desc}</p>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </motion.div>
+          </TooltipProvider>
 
           {/* Translation Dropdown - only when translate mode is active */}
           <AnimatePresence>

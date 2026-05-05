@@ -18,8 +18,8 @@ export function ProcessingScreen({
   if (!isProcessing) return null;
 
   return (
-    <main className="flex flex-col items-center px-4 pt-8">
-      <div className="w-full max-w-xl flex flex-col items-center gap-6 sm:gap-8 mt-8 sm:mt-16">
+    <main className="flex flex-col items-center px-4 pt-8 min-h-dvh">
+      <div className="w-full max-w-xl flex flex-col items-center gap-6 sm:gap-8 mt-16">
         <div className="text-center space-y-2">
           <h1 className="text-3xl sm:text-4xl font-bold">
             Processing Your <span className="text-cyan-500">Speech</span>

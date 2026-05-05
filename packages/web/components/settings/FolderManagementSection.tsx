@@ -390,8 +390,8 @@ export default function FolderManagementSection() {
                             title="Rename folder"
                           >
                             <Edit2 className="w-4 h-4" />
-                          </button>
-                          <AlertDialog>
+                          </button>                       
+                             <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <button
                                 className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-colors"
@@ -400,25 +400,25 @@ export default function FolderManagementSection() {
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </AlertDialogTrigger>
-                            <AlertDialogContent className="bg-slate-900 border-slate-700">
-                              <AlertDialogHeader>
-                                <AlertDialogTitle className="text-white">
+                            <AlertDialogContent className="bg-slate-900 border-slate-700 w-[90vw] max-w-sm rounded-2xl p-6 sm:p-8 gap-6">
+                              <AlertDialogHeader className="space-y-4">
+                                <AlertDialogTitle className="text-white text-xl font-semibold">
                                   Delete folder?
                                 </AlertDialogTitle>
-                                <AlertDialogDescription className="text-gray-400">
+                                <AlertDialogDescription className="text-gray-400 text-sm leading-relaxed">
                                   This will remove the &quot;{folder}&quot; folder from all{" "}
                                   {notesCount} Scribble{notesCount !== 1 ? "s" : ""}.
                                   Scribbles will still exist but won&apos;t be organized by
                                   this folder.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel className="bg-slate-800 text-white border-slate-700 hover:bg-slate-700">
+                              <AlertDialogFooter className="gap-3 sm:gap-3 flex-col sm:flex-row sm:justify-end">
+                                <AlertDialogCancel className="bg-slate-800 text-white border-slate-700 hover:bg-slate-700 h-10 order-2 sm:order-1">
                                   Cancel
                                 </AlertDialogCancel>
                                 <AlertDialogAction
                                   onClick={() => handleDeleteFolder(folder)}
-                                  className="bg-red-600 hover:bg-red-700 text-white"
+                                  className="bg-red-600 hover:bg-red-700 text-white h-10 order-1 sm:order-2"
                                 >
                                   Delete
                                 </AlertDialogAction>
