@@ -12,7 +12,7 @@
 use std::sync::atomic::Ordering;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{Emitter, Manager};
+use tauri::{image::Image, Emitter, Manager};
 
 use crate::frontmost::get_frontmost_context_payload;
 use crate::state::{HotkeyState, MAC_TRAY};
@@ -25,6 +25,10 @@ const ID_QUIT: &str = "tray:quit";
 const TOOLTIP_IDLE: &str = "Oscar";
 const TOOLTIP_RECORDING: &str = "● Recording — Oscar";
 const TOOLTIP_PROCESSING: &str = "⟳ Processing — Oscar";
+// Raw RGBA generated from tray-icon-template.png because PNG decoding is not enabled here.
+const TRAY_ICON_TEMPLATE_RGBA: &[u8] = include_bytes!("../icons/tray-icon-template.rgba");
+const TRAY_ICON_TEMPLATE_WIDTH: u32 = 56;
+const TRAY_ICON_TEMPLATE_HEIGHT: u32 = 36;
 
 /// Build and install the macOS tray icon. Idempotent — second call is a no-op
 /// if the tray is already initialized. Called from `lib.rs` setup hook on the
@@ -48,9 +52,13 @@ pub(crate) fn install(app: &tauri::AppHandle) {
         .menu(&menu)
         .on_menu_event(handle_menu_event);
 
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
-    }
+    builder = builder
+        .icon(Image::new(
+            TRAY_ICON_TEMPLATE_RGBA,
+            TRAY_ICON_TEMPLATE_WIDTH,
+            TRAY_ICON_TEMPLATE_HEIGHT,
+        ))
+        .icon_as_template(true);
 
     match builder.build(app) {
         Ok(tray) => {
