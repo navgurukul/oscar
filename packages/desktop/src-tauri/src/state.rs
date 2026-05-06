@@ -34,6 +34,12 @@ pub(crate) static FOCUSED_WIN_XID: AtomicU64 = AtomicU64::new(0);
 #[cfg(target_os = "linux")]
 pub(crate) static LINUX_TRAY: OnceLock<tauri::tray::TrayIcon> = OnceLock::new();
 
+/// macOS status-bar (NSStatusItem) tray. Initialised once from `mac_tray::install`
+/// during setup(). Pill helpers update its tooltip to reflect recording state.
+#[cfg(target_os = "macos")]
+pub(crate) static MAC_TRAY: std::sync::OnceLock<tauri::tray::TrayIcon> =
+    std::sync::OnceLock::new();
+
 /// Set a pending deep link URL (called from deep link plugin).
 pub fn set_pending_deep_link(url: String) {
     if let Ok(mut pending) = PENDING_DEEP_LINK.lock() {

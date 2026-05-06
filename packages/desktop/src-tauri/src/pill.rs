@@ -120,6 +120,10 @@ pub fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
                 }
             }
         }
+
+        #[cfg(target_os = "macos")]
+        crate::mac_tray::set_tooltip_recording();
+
         Ok(())
     }
 }
@@ -142,6 +146,10 @@ pub fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
         if let Some(w) = app.get_webview_window("recording-pill") {
             w.hide().map_err(|e| e.to_string())?;
         }
+
+        #[cfg(target_os = "macos")]
+        crate::mac_tray::set_tooltip_idle();
+
         Ok(())
     }
 }
@@ -162,6 +170,10 @@ pub fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
     {
         log::info!("[pill] set_pill_processing called");
         let _ = app.emit_to("recording-pill", "pill-set-processing", ());
+
+        #[cfg(target_os = "macos")]
+        crate::mac_tray::set_tooltip_processing();
+
         Ok(())
     }
 }
@@ -182,6 +194,10 @@ pub fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
     {
         log::info!("[pill] set_pill_listening called");
         let _ = app.emit_to("recording-pill", "pill-set-listening", ());
+
+        #[cfg(target_os = "macos")]
+        crate::mac_tray::set_tooltip_recording();
+
         Ok(())
     }
 }

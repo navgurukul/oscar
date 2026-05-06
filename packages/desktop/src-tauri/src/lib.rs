@@ -16,6 +16,8 @@ mod filesystem;
 mod frontmost;
 mod hotkey;
 #[cfg(target_os = "macos")]
+mod mac_tray;
+#[cfg(target_os = "macos")]
 mod macos_paste;
 mod meeting;
 mod paste;
@@ -154,6 +156,14 @@ pub fn run() {
             {
                 log::info!("[setup] Pre-creating pill window...");
                 create_pill_window(app.handle());
+            }
+
+            // Install the macOS status-bar tray (additive — pill window remains
+            // the primary recording indicator; tray adds menu access + tooltip).
+            #[cfg(target_os = "macos")]
+            {
+                log::info!("[setup] Installing macOS tray icon...");
+                mac_tray::install(app.handle());
             }
             #[cfg(target_os = "linux")]
             {
