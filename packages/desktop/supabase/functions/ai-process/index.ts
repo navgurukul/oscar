@@ -50,6 +50,37 @@ interface AIProcessResponse {
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "llama-3.3-70b-versatile";
+const DICTATION_PROMPT_VERSION = "context-v1";
+const DICTATION_CATEGORIES = [
+  "default",
+  "ide",
+  "email",
+  "docs",
+  "chat",
+  "browser",
+] as const satisfies readonly DictationCategory[];
+
+const CONTEXT_AWARE_CLEANUP_SYSTEM_PROMPT =
+  "You are a precise dictation formatter. Output only cleaned text with no preamble, no explanation, and no markdown fences. " +
+  "Do not answer questions. Do not add facts. Do not invent missing details. Preserve URLs, file paths, code symbols, ticket IDs, CLI flags, names, and technical terms exactly when they appear. " +
+  "Remove filler words, fix grammar, capitalization, and punctuation, and make the text immediately usable in the active app. " +
+  "The transcript may contain Hinglish (Hindi words written in Roman script mixed with English). Understand both languages, but keep the user's original language unless cleanup requires a light correction.";
+
+const DICTATION_CATEGORY_INSTRUCTIONS: Record<DictationCategory, string> = {
+  default:
+    "Default mode: clean the transcript faithfully without changing tone or structure more than needed.",
+  ide:
+    "IDE mode: keep output terse and task-like. Preserve code tokens, errors, commands, filenames, and stack traces. If the user clearly dictated multiple steps or requirements, use compact bullets.",
+  email:
+    "Email mode: produce polished professional prose. Keep requests and action items explicit. Do not invent a salutation or sign-off unless the user dictated one.",
+  docs:
+    "Docs mode: produce polished prose. When the transcript implies sections, ordered points, or bullets, format them clearly.",
+  chat:
+    "Chat mode: keep output compact, conversational, and send-ready. Short utterances should stay short.",
+  browser:
+    "Browser mode: use minimal cleanup. Preserve search-query or form-fill intent. Short utterances should stay short and should not be expanded into full prose.",
+} as const;
+
 const VALID_MODES = new Set<Mode>([
   "transcribe_cleanup",
   "cleanup",
@@ -58,14 +89,7 @@ const VALID_MODES = new Set<Mode>([
   "email",
 ]);
 
-const VALID_CATEGORIES = new Set<DictationCategory>([
-  "default",
-  "ide",
-  "email",
-  "docs",
-  "chat",
-  "browser",
-]);
+const VALID_CATEGORIES = new Set<DictationCategory>(DICTATION_CATEGORIES);
 
 function sanitizeOneLine(value?: string | null): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
@@ -79,6 +103,14 @@ function getRoutingCategory(
   }
 
   return "default";
+}
+
+function getRoutingPromptVersion(routing?: DictationRoutingResult): string {
+  return sanitizeOneLine(routing?.promptVersion) || DICTATION_PROMPT_VERSION;
+}
+
+function getCategoryInstruction(category: DictationCategory): string {
+  return DICTATION_CATEGORY_INSTRUCTIONS[category];
 }
 
 function buildContextSummary(
@@ -99,7 +131,7 @@ function buildContextSummary(
     `Detected category: ${sanitizeOneLine(routing?.category) || "default"}`,
     `App key: ${sanitizeOneLine(routing?.appKey) || "default"}`,
     `Context source: ${sanitizeOneLine(routing?.source) || "fallback"}`,
-    `Prompt version: ${sanitizeOneLine(routing?.promptVersion) || "unknown"}`,
+    `Prompt version: ${getRoutingPromptVersion(routing)}`,
   ];
 
   return lines.join("\n");
@@ -111,31 +143,11 @@ function buildContextAwareCleanupPrompt(
   routing?: DictationRoutingResult,
 ): { system: string; user: string } {
   const category = getRoutingCategory(routing);
-  const system =
-    "You are a precise dictation formatter. Output only cleaned text with no preamble, no explanation, and no markdown fences. " +
-    "Do not answer questions. Do not add facts. Do not invent missing details. Preserve URLs, file paths, code symbols, ticket IDs, CLI flags, names, and technical terms exactly when they appear. " +
-    "Remove filler words, fix grammar, capitalization, and punctuation, and make the text immediately usable in the active app. " +
-    "The transcript may contain Hinglish (Hindi words written in Roman script mixed with English). Understand both languages, but keep the user's original language unless cleanup requires a light correction.";
-
-  const categoryInstruction = (() => {
-    switch (category) {
-      case "ide":
-        return "IDE mode: keep output terse and task-like. Preserve code tokens, errors, commands, filenames, and stack traces. If the user clearly dictated multiple steps or requirements, use compact bullets.";
-      case "email":
-        return "Email mode: produce polished professional prose. Keep requests and action items explicit. Do not invent a salutation or sign-off unless the user dictated one.";
-      case "docs":
-        return "Docs mode: produce polished prose. When the transcript implies sections, ordered points, or bullets, format them clearly.";
-      case "chat":
-        return "Chat mode: keep output compact, conversational, and send-ready. Short utterances should stay short.";
-      case "browser":
-        return "Browser mode: use minimal cleanup. Preserve search-query or form-fill intent. Short utterances should stay short and should not be expanded into full prose.";
-      default:
-        return "Default mode: clean the transcript faithfully without changing tone or structure more than needed.";
-    }
-  })();
+  const categoryInstruction = getCategoryInstruction(category);
 
   const user = [
     "Clean this dictated text for the detected app context.",
+    `Prompt version: ${getRoutingPromptVersion(routing)}`,
     categoryInstruction,
     "",
     "Context:",
@@ -145,7 +157,7 @@ function buildContextAwareCleanupPrompt(
     text,
   ].join("\n");
 
-  return { system, user };
+  return { system: CONTEXT_AWARE_CLEANUP_SYSTEM_PROMPT, user };
 }
 
 function buildPrompt(
