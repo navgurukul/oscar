@@ -142,6 +142,17 @@ function DesktopCallbackContent() {
     handleCallback();
   }, [searchParams]);
 
+  // Auto-launch the desktop app via custom protocol once we know which deep
+  // link to fire. The manual "Open Oscar" button below remains as a fallback
+  // for browsers that gate custom-scheme navigation behind a user gesture
+  // (or for users who dismissed the system "Open in Oscar?" prompt).
+  // Skip auto-launch on the error path so the user can read the message.
+  useEffect(() => {
+    if (state !== "ready" || !deepLinkUrl) return;
+    // Use replace() so the deep-link URL doesn't pollute browser history.
+    window.location.replace(deepLinkUrl);
+  }, [state, deepLinkUrl]);
+
   if (state === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-black">
