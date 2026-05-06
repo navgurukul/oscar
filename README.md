@@ -5,7 +5,7 @@ Monorepo for Oscar, an AI-powered voice note-taking application.
 ## Packages
 
 - **packages/web** - Next.js web application
-- **packages/desktop** - Tauri desktop application  
+- **packages/desktop** - Tauri desktop application
 - **packages/shared** - Shared types, constants, and utilities
 
 ## Development
@@ -35,16 +35,12 @@ oscar/
 
 ---
 
-## Pricing & Free Tier
+## Pricing Direction
 
-### Free Tier
-- Users can configure their own open-source AI models (via Ollama, llama.cpp, etc.)
-- Use local GPU for processing - completely free
-- Works offline once models are downloaded
+Oscar currently focuses on hosted AI processing for a simple setup experience.
+Self-hosted or user-managed AI processing is not part of the current product
+scope.
 
-### Paid Tier
-- Hosted AI processing on our servers
-- No local setup required
-- Priority support
-
-This makes the app accessible to everyone while monetizing hosting for users who want convenience.
+The web app includes subscription and usage-tracking infrastructure for free and
+paid plans. Plan limits, pricing, and billing details should be treated as
+product configuration.

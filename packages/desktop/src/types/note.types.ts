@@ -15,3 +15,11 @@ export type {
   DictationRoutingConfidence,
   DictationRoutingResult,
 } from "@oscar/shared/types";
+
+export {
+  DICTATION_CATEGORIES,
+  DICTATION_CATEGORY_DESCRIPTIONS,
+  DICTATION_CATEGORY_LABELS,
+  DICTATION_PROMPT_VERSION,
+  isDictationCategory,
+} from "@oscar/shared/types";
