@@ -124,6 +124,14 @@ pub fn run() {
                         // Store the deep link
                         set_pending_deep_link(url_str.clone());
 
+                        // Bring the main window to the foreground so the user
+                        // sees Oscar after returning from the browser callback.
+                        if let Some(main_window) = app_handle.get_webview_window("main") {
+                            let _ = main_window.unminimize();
+                            let _ = main_window.show();
+                            let _ = main_window.set_focus();
+                        }
+
                         // Emit to frontend
                         let _ = app_handle.emit("deep-link", url_str);
                     }
