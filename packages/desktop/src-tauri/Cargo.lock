@@ -3153,7 +3153,7 @@ dependencies = [
 
 [[package]]
 name = "oscar"
-version = "0.3.47"
+version = "0.3.48"
 dependencies = [
  "arboard",
  "base64 0.22.1",
