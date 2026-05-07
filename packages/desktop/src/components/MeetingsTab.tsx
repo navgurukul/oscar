@@ -201,6 +201,23 @@ function formatEventTimeRange(event: CalendarEvent): string {
   return `${event.start_time} - ${event.end_time}`;
 }
 
+function groupEventsByDay(
+  events: CalendarEvent[],
+  currentTime: number,
+): Array<{ key: string; label: string; events: CalendarEvent[] }> {
+  const groups = new Map<string, { label: string; events: CalendarEvent[] }>();
+  for (const event of events) {
+    const live = isEventOngoing(event, currentTime);
+    const label = live ? "Ongoing" : getEventDayLabel(event, currentTime);
+    const key = label;
+    if (!groups.has(key)) {
+      groups.set(key, { label, events: [] });
+    }
+    groups.get(key)!.events.push(event);
+  }
+  return Array.from(groups.entries()).map(([key, value]) => ({ key, ...value }));
+}
+
 function buildMeetingLocalDatetime(dateValue: string): string {
   const date = new Date(dateValue);
   if (Number.isNaN(date.getTime())) {
@@ -340,14 +357,12 @@ function CalendarEventRow({
   event,
   onUse,
   isLive,
-  currentTime,
 }: {
   event: CalendarEvent;
   onUse: (event: CalendarEvent) => void;
   isLive?: boolean;
-  currentTime: number;
 }) {
-  const label =
+  const attendeeLabel =
     event.attendees.length === 1
       ? "1 attendee"
       : `${event.attendees.length} attendees`;
@@ -355,7 +370,8 @@ function CalendarEventRow({
   return (
     <button
       className={cn(
-        "group flex w-full items-center justify-between gap-4 border-b border-[#eef2f7] px-[18px] py-4 text-left transition-colors last:border-b-0 max-md:flex-col max-md:items-start",
+        "group relative flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors",
+        "after:pointer-events-none after:absolute after:bottom-0 after:left-4 after:right-4 after:h-px after:bg-[#eef2f7] last:after:hidden",
         isLive
           ? "bg-gradient-to-r from-cyan-50/95 via-white to-white hover:from-cyan-50 hover:via-slate-50 hover:to-slate-50"
           : "bg-white hover:bg-slate-50",
@@ -363,39 +379,39 @@ function CalendarEventRow({
       onClick={() => onUse(event)}
       type="button"
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span
-            className={cn(
-              "inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[0.69rem] font-bold uppercase tracking-[0.05em] text-slate-500",
-              isLive && "bg-teal-100 text-teal-700",
-            )}
-          >
-            {isLive ? "Ongoing" : getEventDayLabel(event, currentTime)}
-          </span>
-          <span className="flex items-center gap-[5px] text-[0.78rem] font-medium text-slate-500">
-            <Clock size={11} />
-            {formatEventTimeRange(event)}
-          </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="truncate text-[0.875rem] font-semibold leading-[1.3] text-slate-900">
+          {event.title}
         </div>
-        <div className="text-[0.95rem] font-semibold leading-[1.35] text-slate-900">{event.title}</div>
-        {event.attendees.length > 0 && (
-          <div className="flex items-center gap-1 text-[0.76rem] text-slate-400">
-            <Users size={10} />
-            {label}
-          </div>
-        )}
+        <div className="mt-0.5 flex items-center gap-1.5 text-[0.75rem] text-slate-500">
+          <Clock size={10} />
+          <span>{formatEventTimeRange(event)}</span>
+          {event.attendees.length > 0 && (
+            <>
+              <span className="text-slate-300">·</span>
+              <Users size={10} />
+              <span>{attendeeLabel}</span>
+            </>
+          )}
+          {isLive && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span className="font-semibold text-teal-600">● Live</span>
+            </>
+          )}
+        </div>
       </div>
       <span
+        title="Record this meeting"
+        aria-label="Record this meeting"
         className={cn(
-          "inline-flex shrink-0 items-center gap-[5px] rounded-full px-3 py-[9px] text-[0.78rem] font-semibold transition-colors max-md:self-start",
+          "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
           isLive
             ? "bg-teal-100 text-teal-700"
             : "bg-sky-50 text-cyan-700 group-hover:bg-cyan-100 group-hover:text-cyan-800",
         )}
       >
         <Play size={12} fill="currentColor" />
-        Record
       </span>
     </button>
   );
@@ -882,14 +898,20 @@ export function MeetingsTab({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.22 }}
                 >
-                  {nextCalendarEvents.map((event, index) => (
-                    <CalendarEventRow
-                      key={`${event.title}-${event.start_at}-${index}`}
-                      event={event}
-                      onUse={startFromEvent}
-                      isLive={isEventOngoing(event, currentTime)}
-                      currentTime={currentTime}
-                    />
+                  {groupEventsByDay(nextCalendarEvents, currentTime).map((group) => (
+                    <div key={group.key} className="border-b border-[#eef2f7] last:border-b-0">
+                      <div className="bg-slate-50/60 px-4 py-1.5 text-[0.6875rem] font-bold uppercase tracking-[0.06em] text-slate-400">
+                        {group.label}
+                      </div>
+                      {group.events.map((event, index) => (
+                        <CalendarEventRow
+                          key={`${event.title}-${event.start_at}-${index}`}
+                          event={event}
+                          onUse={startFromEvent}
+                          isLive={isEventOngoing(event, currentTime)}
+                        />
+                      ))}
+                    </div>
                   ))}
                 </motion.div>
               )
