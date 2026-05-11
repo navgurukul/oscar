@@ -11,7 +11,7 @@ export default function PrivacyPolicyPage() {
 
         <div className="space-y-8 text-gray-300">
           <p className="mb-8 text-base leading-relaxed">
-            Welcome to OSCAR (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). We are committed to protecting your privacy. This Privacy Policy explains what is collected, how it is used, and with whom it is shared when you use our voice note application. It may be revised from time to time. We will notify you of any changes by posting the new policy on this page and updating the &quot;Last updated&quot; date.
+            Welcome to OSCAR (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). We are committed to protecting your privacy. This Privacy Policy explains what is collected, how it is used, and with whom it is shared when you use our voice capture application. It may be revised from time to time. We will notify you of any changes by posting the new policy on this page and updating the &quot;Last updated&quot; date.
           </p>
 
           <section>
@@ -34,7 +34,7 @@ export default function PrivacyPolicyPage() {
                   Voice and Content Data
                 </h3>
                 <p className="ml-6 text-base leading-relaxed">
-                  When you record a voice note, your audio is processed in real-time to generate a text transcription. OSCAR does not permanently store your audio recordings on our servers. The audio is discarded as soon as transcription is complete. Only the resulting transcribed and formatted text is saved to your account.
+                  When you record a voice capture, your audio is processed in real-time to generate a text transcription. OSCAR does not permanently store your audio recordings on our servers. The audio is discarded as soon as transcription is complete. Only the resulting transcribed and formatted text is saved to your account.
                 </p>
               </li>
 
@@ -78,7 +78,7 @@ export default function PrivacyPolicyPage() {
                   Supabase
                 </h3>
                 <p className="ml-6 text-base leading-relaxed">
-                  For authentication, database, and file storage, OSCAR uses Supabase (www.supabase.com). Your account data and notes are stored on Supabase&apos;s servers, which encrypt data at rest.
+                  For authentication, database, and file storage, OSCAR uses Supabase (www.supabase.com). Your account data and Scribbles are stored on Supabase&apos;s servers, which encrypt data at rest.
                 </p>
               </li>
 
@@ -118,7 +118,7 @@ export default function PrivacyPolicyPage() {
             
             <div className="space-y-4">
               <p className="text-base leading-relaxed">
-                All notes created by you and stored on our servers will be retained for as long as your account remains active. Audio from your recordings is automatically discarded from our servers immediately after transcription — we do not retain your audio files.
+                All Scribbles created by you and stored on our servers will be retained for as long as your account remains active. Audio from your recordings is automatically discarded from our servers immediately after transcription — we do not retain your audio files.
               </p>
               
               <p className="text-base leading-relaxed">

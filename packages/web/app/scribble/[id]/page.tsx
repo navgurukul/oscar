@@ -3,12 +3,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { notesService } from "@/lib/services/notes.service";
+import { scribblesService } from "@/lib/services/scribbles.service";
 import { feedbackService } from "@/lib/services/feedback.service";
 import { storageService } from "@/lib/services/storage.service";
 import { aiService } from "@/lib/services/ai.service";
 import { ROUTES } from "@/lib/constants";
-import { NoteEditorSkeleton } from "@/components/results/NoteEditorSkeleton";
+import { ScribbleEditorSkeleton } from "@/components/results/ScribbleEditorSkeleton";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Copy,
@@ -31,20 +31,20 @@ import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { FeedbackWidget } from "@/components/results/FeedbackWidget";
-import type { DBNote, FeedbackReason } from "@/lib/types/note.types";
+import type { DBScribble, FeedbackReason } from "@/lib/types/scribble.types";
 
-export default function NoteDetailPage() {
+export default function ScribbleDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id as string;
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
-  const [note, setNote] = useState<DBNote | null>(null);
+  const [scribble, setScribble] = useState<DBScribble | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [editedText, setEditedText] = useState("");
-  const [activeTab, setActiveTab] = useState<"transcript" | "ai-notes">("ai-notes");
+  const [activeTab, setActiveTab] = useState<"transcript" | "ai-scribbles">("ai-scribbles");
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [shareSubject, setShareSubject] = useState<string | null>(null);
@@ -58,27 +58,27 @@ export default function NoteDetailPage() {
   // Translation states
   const [selectedLanguage, setSelectedLanguage] = useState<"original" | "en" | "hi">("original");
   const [isTranslating, setIsTranslating] = useState(false);
-  const translationCacheNoteRef = useRef<Map<string, string>>(new Map());
+  const translationCacheScribbleRef = useRef<Map<string, string>>(new Map());
   const translateControllerRef = useRef<AbortController | null>(null);
 
   const getScribbleBaseText = () => {
-    if (!note) return "";
+    if (!scribble) return "";
 
     if (activeMode === "normal") {
-      return editedText || note.edited_text || note.original_formatted_text || note.raw_text || "";
+      return editedText || scribble.edited_text || scribble.original_formatted_text || scribble.raw_text || "";
     }
 
-    return note.edited_text || note.original_formatted_text || note.raw_text || "";
+    return scribble.edited_text || scribble.original_formatted_text || scribble.raw_text || "";
   };
 
   const handleSelectMode = async (
     nextMode: "normal" | "email" | "translate" | "summary" | "bullets"
   ) => {
-    if (!note) return;
+    if (!scribble) return;
 
     if (nextMode === "normal") {
       setActiveMode("normal");
-      setEditedText(note.edited_text || note.original_formatted_text || "");
+      setEditedText(scribble.edited_text || scribble.original_formatted_text || "");
       return;
     }
 
@@ -100,10 +100,10 @@ export default function NoteDetailPage() {
 
     let resultText = baseText;
     if (nextMode === "email") {
-      const res = await gmailFormatText(baseText, note.title || "Untitled Note");
+      const res = await gmailFormatText(baseText, scribble.title || "Untitled Scribble");
       resultText = res.success ? res.formattedText || baseText : baseText;
     } else {
-      const res = await aiService.transformText(baseText, nextMode, note.title || "Untitled Note");
+      const res = await aiService.transformText(baseText, nextMode, scribble.title || "Untitled Scribble");
       resultText = res.success ? res.formattedText || baseText : baseText;
     }
 
@@ -114,31 +114,31 @@ export default function NoteDetailPage() {
   };
 
   const applyLanguage = async (lang: "original" | "en" | "hi") => {
-    if (!note) return;
+    if (!scribble) return;
     
     if (lang === "original") {
       translateControllerRef.current?.abort();
       translateControllerRef.current = null;
       setSelectedLanguage("original");
       setModeContent(prev => ({ ...prev, translate: "" }));
-      setEditedText(note.edited_text || note.original_formatted_text || "");
+      setEditedText(scribble.edited_text || scribble.original_formatted_text || "");
       return;
     }
 
-    const baseNote = getScribbleBaseText();
-    if (!baseNote) return;
+    const baseScribble = getScribbleBaseText();
+    if (!baseScribble) return;
 
     if (isTranslating && translateControllerRef.current) {
       translateControllerRef.current.abort();
     }
 
-    const noteKey = `${lang}|note|${baseNote}`;
-    const cachedNote = translationCacheNoteRef.current.get(noteKey);
+    const scribbleKey = `${lang}|scribble|${baseScribble}`;
+    const cachedScribble = translationCacheScribbleRef.current.get(scribbleKey);
 
-    if (cachedNote) {
+    if (cachedScribble) {
       setSelectedLanguage(lang);
-      setModeContent(prev => ({ ...prev, translate: cachedNote }));
-      setEditedText(cachedNote);
+      setModeContent(prev => ({ ...prev, translate: cachedScribble }));
+      setEditedText(cachedScribble);
       toast({
         title: "Language updated",
         description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
@@ -150,7 +150,7 @@ export default function NoteDetailPage() {
     translateControllerRef.current = controller;
     setIsTranslating(true);
     try {
-      const res = await aiService.translateText(baseNote, lang, controller.signal);
+      const res = await aiService.translateText(baseScribble, lang, controller.signal);
 
       if (!res.success) {
         if (controller.signal.aborted) return;
@@ -165,12 +165,12 @@ export default function NoteDetailPage() {
         return;
       }
 
-      const noteText = res.translatedText || "";
-      translationCacheNoteRef.current.set(noteKey, noteText);
+      const scribbleText = res.translatedText || "";
+      translationCacheScribbleRef.current.set(scribbleKey, scribbleText);
 
       setSelectedLanguage(lang);
-      setModeContent(prev => ({ ...prev, translate: noteText }));
-      setEditedText(noteText);
+      setModeContent(prev => ({ ...prev, translate: scribbleText }));
+      setEditedText(scribbleText);
 
       toast({
         title: "Language updated",
@@ -193,27 +193,27 @@ export default function NoteDetailPage() {
   const [isStarring, setIsStarring] = useState(false);
 
   useEffect(() => {
-    const loadNote = async () => {
+    const loadScribble = async () => {
       if (!id) return;
       if (authLoading) return;
       if (!user) {
-        router.push(`/auth?redirectTo=${encodeURIComponent(`/notes/${id}`)}`);
+        router.push(`/auth?redirectTo=${encodeURIComponent(`/scribble/${id}`)}`);
         return;
       }
       setIsLoading(true);
-      const { data, error } = await notesService.getNoteById(id);
+      const { data, error } = await scribblesService.getScribbleById(id);
       if (error || !data) {
-        router.push("/notes");
+        router.push("/scribble");
       } else if (user && data.user_id !== user.id) {
         // Ownership check
-        router.push("/notes");
+        router.push("/scribble");
       } else {
-        setNote(data);
+        setScribble(data);
         setEditedText(data.edited_text || data.original_formatted_text);
-        // Set current note ID and raw text in storage for "Continue Recording" support
-        storageService.setCurrentNoteId(data.id);
+        // Set current scribble ID and raw text in storage for "Continue Recording" support
+        storageService.setCurrentScribbleId(data.id);
         storageService.updateRawText(data.raw_text);
-        storageService.saveNote(
+        storageService.saveScribble(
           data.original_formatted_text,
           data.raw_text,
           data.title
@@ -227,7 +227,7 @@ export default function NoteDetailPage() {
       setIsLoading(false);
     };
 
-    loadNote();
+    loadScribble();
   }, [id, router, user, authLoading]);
 
   useEffect(() => {
@@ -235,13 +235,13 @@ export default function NoteDetailPage() {
     setModeSource({});
     setActiveMode("normal");
     setSelectedLanguage("original");
-  }, [note?.id, note?.updated_at]);
+  }, [scribble?.id, scribble?.updated_at]);
 
   const handleSaveEdit = async () => {
-    if (!note || !editedText) return;
+    if (!scribble || !editedText) return;
     setIsSaving(true);
 
-    const { error } = await notesService.updateNote(note.id, {
+    const { error } = await scribblesService.updateScribble(scribble.id, {
       edited_text: editedText,
     });
 
@@ -252,7 +252,7 @@ export default function NoteDetailPage() {
         variant: "destructive",
       });
     } else {
-      setNote({ ...note, edited_text: editedText });
+      setScribble({ ...scribble, edited_text: editedText });
       if (activeMode !== "normal") {
         setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
       }
@@ -262,25 +262,25 @@ export default function NoteDetailPage() {
 
   const handleCopy = async () => {
     const text = activeMode === "normal"
-      ? (editedText || note?.edited_text || note?.original_formatted_text || "")
-      : (modeContent[activeMode] || editedText || note?.edited_text || note?.original_formatted_text || "");
+      ? (editedText || scribble?.edited_text || scribble?.original_formatted_text || "")
+      : (modeContent[activeMode] || editedText || scribble?.edited_text || scribble?.original_formatted_text || "");
     await navigator.clipboard.writeText(text);
     toast({
       title: "Copied!",
-      description: "Note copied to clipboard.",
+      description: "Scribble copied to clipboard.",
     });
   };
 
   const handleDownload = () => {
-    if (!note) return;
+    if (!scribble) return;
     const text = activeMode === "normal"
-      ? (editedText || note.edited_text || note.original_formatted_text)
-      : (modeContent[activeMode] || editedText || note.edited_text || note.original_formatted_text);
+      ? (editedText || scribble.edited_text || scribble.original_formatted_text)
+      : (modeContent[activeMode] || editedText || scribble.edited_text || scribble.original_formatted_text);
     const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${note.title.replace(/[^a-z0-9]/gi, "_")}.txt`;
+    a.download = `${scribble.title.replace(/[^a-z0-9]/gi, "_")}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -288,19 +288,19 @@ export default function NoteDetailPage() {
   };
 
   const handleDownloadMarkdown = () => {
-    if (!note) return;
+    if (!scribble) return;
     const body = activeMode === "normal"
-      ? (editedText || note.edited_text || note.original_formatted_text)
-      : (modeContent[activeMode] || editedText || note.edited_text || note.original_formatted_text);
-    const date = new Date(note.created_at).toLocaleDateString("en-US", {
+      ? (editedText || scribble.edited_text || scribble.original_formatted_text)
+      : (modeContent[activeMode] || editedText || scribble.edited_text || scribble.original_formatted_text);
+    const date = new Date(scribble.created_at).toLocaleDateString("en-US", {
       month: "long", day: "numeric", year: "numeric",
     });
-    const md   = `# ${note.title || "Untitled Note"}\n\n_${date}_\n\n---\n\n${body}`;
+    const md   = `# ${scribble.title || "Untitled Scribble"}\n\n_${date}_\n\n---\n\n${body}`;
     const blob = new Blob([md], { type: "text/markdown" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `${note.title.replace(/[^a-z0-9]/gi, "_")}.md`;
+    a.download = `${scribble.title.replace(/[^a-z0-9]/gi, "_")}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -325,10 +325,10 @@ export default function NoteDetailPage() {
     helpful: boolean,
     reasons?: FeedbackReason[]
   ) => {
-    if (!note) {
+    if (!scribble) {
       toast({
         title: "Error",
-        description: "Could not submit feedback - note not found.",
+        description: "Could not submit feedback - scribble not found.",
         variant: "destructive",
       });
       return;
@@ -336,7 +336,7 @@ export default function NoteDetailPage() {
 
     setIsFeedbackSubmitting(true);
     const { success, error } = await feedbackService.submitFeedback(
-      note.id,
+      scribble.id,
       helpful,
       reasons
     );
@@ -359,16 +359,16 @@ export default function NoteDetailPage() {
   };
 
   const handleToggleStar = async () => {
-    if (!note || isStarring) return;
-    const currentNote = note;
-    const newStarred = !currentNote.is_starred;
+    if (!scribble || isStarring) return;
+    const currentScribble = scribble;
+    const newStarred = !currentScribble.is_starred;
     setIsStarring(true);
     // Optimistic update
-    setNote((prev) => prev ? { ...prev, is_starred: newStarred } : prev);
-    const { data, error } = await notesService.toggleStar(currentNote.id, newStarred);
+    setScribble((prev) => prev ? { ...prev, is_starred: newStarred } : prev);
+    const { data, error } = await scribblesService.toggleStar(currentScribble.id, newStarred);
     if (error || !data) {
       // Revert on failure
-      setNote((prev) => prev ? { ...prev, is_starred: currentNote.is_starred } : prev);
+      setScribble((prev) => prev ? { ...prev, is_starred: currentScribble.is_starred } : prev);
       toast({
         title: "Error",
         description: "Failed to update star. Please try again.",
@@ -376,7 +376,7 @@ export default function NoteDetailPage() {
       });
     } else {
       // Sync with actual DB value
-      setNote((prev) => prev ? { ...prev, is_starred: data.is_starred } : prev);
+      setScribble((prev) => prev ? { ...prev, is_starred: data.is_starred } : prev);
     }
     setIsStarring(false);
   };
@@ -386,29 +386,29 @@ export default function NoteDetailPage() {
       <main className="flex flex-col items-center px-4 pt-8 pb-24">
         <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
           <div className="w-9" />
-          <NoteEditorSkeleton />
+          <ScribbleEditorSkeleton />
         </div>
       </main>
     );
   }
 
-  if (!note) {
+  if (!scribble) {
     return null;
   }
 
   return (
     <main className="min-h-screen bg-[#020617] text-white flex flex-col items-center pt-24 pb-32 px-4 relative overflow-x-hidden">
-      {/* Note Header Info (Centered) */}
+      {/* Scribble Header Info (Centered) */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-3xl text-center mb-4 space-y-3 mt-5"
       >
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-          {note.title || "Untitled Note"}
+          {scribble.title || "Untitled Scribble"}
         </h1>
         <p className="text-gray-500 text-sm font-medium">
-          {formatDate(note.created_at)}
+          {formatDate(scribble.created_at)}
         </p>
       </motion.div>
 
@@ -488,7 +488,7 @@ export default function NoteDetailPage() {
         </AnimatePresence>
       </div>
 
-      {/* Main Note Card */}
+      {/* Main Scribble Card */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -502,10 +502,10 @@ export default function NoteDetailPage() {
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
             <div className="space-y-1.5">
               <h2 className="text-xl font-bold text-white leading-tight">
-                {note.title || "Untitled Note"}
+                {scribble.title || "Untitled Scribble"}
               </h2>
               <p className="text-gray-500 text-xs font-medium">
-                {formatDate(note.created_at)}
+                {formatDate(scribble.created_at)}
               </p>
             </div>
 
@@ -516,9 +516,9 @@ export default function NoteDetailPage() {
                   <TooltipTrigger asChild>
                     <button 
                       onClick={handleToggleStar}
-                      className={`p-2 rounded-lg transition-all duration-300 ${note.is_starred ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
+                      className={`p-2 rounded-lg transition-all duration-300 ${scribble.is_starred ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
                     >
-                      <Star className={`w-4 h-4 ${note.is_starred ? 'fill-cyan-400' : ''}`} />
+                      <Star className={`w-4 h-4 ${scribble.is_starred ? 'fill-cyan-400' : ''}`} />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">
@@ -617,9 +617,9 @@ export default function NoteDetailPage() {
               Stream Transcript
             </button>
             <button
-              onClick={() => setActiveTab("ai-notes")}
+              onClick={() => setActiveTab("ai-scribbles")}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "ai-notes"
+                activeTab === "ai-scribbles"
                   ? "bg-cyan-500/10 text-cyan-400"
                   : "text-gray-500 hover:text-gray-300"
               }`}
@@ -632,7 +632,7 @@ export default function NoteDetailPage() {
           <div className="min-h-[120px]">
             {activeTab === "transcript" ? (
               <div className="text-gray-300 text-base leading-relaxed whitespace-pre-wrap">
-                {note.raw_text || "No transcript available."}
+                {scribble.raw_text || "No transcript available."}
               </div>
             ) : (
               <textarea
@@ -648,7 +648,7 @@ export default function NoteDetailPage() {
           <div className="flex border-white/5 border-t mt-4 pt-4 justify-end">
             <button
               onClick={() => {
-                const raw = note.raw_text;
+                const raw = scribble.raw_text;
                 if (!raw) {
                   toast({
                     title: "Error",
@@ -658,7 +658,7 @@ export default function NoteDetailPage() {
                   return;
                 }
                 storageService.updateRawText(raw);
-                storageService.setCurrentNoteId(note.id);
+                storageService.setCurrentScribbleId(scribble.id);
                 storageService.setContinueMode(true);
                 router.push("/recording");
               }}
@@ -713,7 +713,7 @@ export default function NoteDetailPage() {
               <label className="text-sm text-gray-400 block mb-1">Email subject</label>
               <input
                 type="text"
-                value={shareSubject ?? (note.title || "Untitled Note")}
+                value={shareSubject ?? (scribble.title || "Untitled Scribble")}
                 onChange={(e) => setShareSubject(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 placeholder="Subject"
@@ -727,7 +727,7 @@ export default function NoteDetailPage() {
                   const bodyText = activeMode === "normal"
                     ? editedText || ""
                     : modeContent[activeMode] || editedText || "";
-                  const payload = `${note.title || "Untitled Note"}\n\n${bodyText}`.trim();
+                  const payload = `${scribble.title || "Untitled Scribble"}\n\n${bodyText}`.trim();
                   const url = `https://wa.me/?text=${encodeURIComponent(payload)}`;
                   window.open(url, "_blank", "noopener,noreferrer");
                   setIsShareModalOpen(false);
@@ -741,7 +741,7 @@ export default function NoteDetailPage() {
               {/* Gmail */}
               <button
                 onClick={() => {
-                  const subjectText = shareSubject ?? (note.title || "Untitled Note");
+                  const subjectText = shareSubject ?? (scribble.title || "Untitled Scribble");
                   const subject = encodeURIComponent(subjectText);
                   const bodyText = activeMode === "normal"
                     ? editedText || ""
@@ -763,7 +763,7 @@ export default function NoteDetailPage() {
               {/* Default Email Client */}
               <button
                 onClick={() => {
-                  const subjectText = shareSubject ?? (note.title || "Untitled Note");
+                  const subjectText = shareSubject ?? (scribble.title || "Untitled Scribble");
                   const subject = encodeURIComponent(subjectText);
                   const bodyText = activeMode === "normal"
                     ? editedText || ""
@@ -788,7 +788,7 @@ export default function NoteDetailPage() {
                     const bodyText = activeMode === "normal"
                       ? editedText || ""
                       : modeContent[activeMode] || editedText || "";
-                    const shareTitle = note.title || "Untitled Note";
+                    const shareTitle = scribble.title || "Untitled Scribble";
                     const payload = `${shareTitle}\n\n${bodyText}`.trim();
                     try {
                       setIsSharing(true);

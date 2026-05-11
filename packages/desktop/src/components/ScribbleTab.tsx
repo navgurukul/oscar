@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
 import { Search, Star, Trash2, Loader2, SquaresSubtract, FileText, ChevronLeft, ChevronRight, Mic, Square, Download } from "lucide-react";
 import { motion } from "framer-motion";
-import { notesService } from "../services/notes.service";
-import { NoteCard } from "./NoteCard";
+import { scribblesService } from "../services/scribbles.service";
+import { ScribbleCard } from "./ScribbleCard";
 import { TrashPanel } from "./TrashPanel";
-import type { DBNote } from "../types/note.types";
+import type { DBScribble } from "../types/scribble.types";
 
 type SortOption = "created" | "updated" | "length";
 
-interface NotesTabProps {
+interface ScribbleTabProps {
   // userId available for future use (e.g., filtering by user)
   userId: string;
   isRecording: boolean;
@@ -32,19 +32,19 @@ const SCRIBBLE_CTA_OVERLAY_STYLE = {
 } as const;
 const SCRIBBLE_CTA_GLASS_STYLE = { WebkitBackdropFilter: "blur(10px)" } as const;
 
-export function NotesTab({
+export function ScribbleTab({
   userId,
   isRecording,
   onToggleRecording,
   recordingTime,
-}: NotesTabProps) {
-  const [allNotes, setAllNotes] = useState<DBNote[]>([]);
+}: ScribbleTabProps) {
+  const [allScribbles, setAllScribbles] = useState<DBScribble[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [trashCount, setTrashCount] = useState(0);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
-  const [selectedNote, setSelectedNote] = useState<DBNote | null>(null);
+  const [selectedScribble, setSelectedScribble] = useState<DBScribble | null>(null);
   
   const ITEMS_PER_PAGE = 5;
 
@@ -55,12 +55,12 @@ export function NotesTab({
   const [showStarredOnly, setShowStarredOnly] = useState(false);
 
   useEffect(() => {
-    loadNotes();
+    loadScribbles();
     loadTrashCount();
   }, [userId]);
 
   const loadTrashCount = async () => {
-    const { data, error } = await notesService.getTrashedNotes();
+    const { data, error } = await scribblesService.getTrashedScribbles();
     if (!error && data) {
       setTrashCount(data.length);
     }
@@ -71,22 +71,22 @@ export function NotesTab({
     setCurrentPage(1);
   }, [searchQuery, sortBy, showStarredOnly]);
 
-  // Filter and sort notes
-  const filteredNotes = useMemo(() => {
-    let result = [...allNotes];
+  // Filter and sort scribbles
+  const filteredScribbles = useMemo(() => {
+    let result = [...allScribbles];
 
     // Filter starred only
     if (showStarredOnly) {
-      result = result.filter((note) => note.is_starred);
+      result = result.filter((scribble) => scribble.is_starred);
     }
 
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
-      result = result.filter((note) => {
-        const title = (note.title || "").toLowerCase();
+      result = result.filter((scribble) => {
+        const title = (scribble.title || "").toLowerCase();
         const content = (
-          note.edited_text || note.original_formatted_text
+          scribble.edited_text || scribble.original_formatted_text
         ).toLowerCase();
         return title.includes(query) || content.includes(query);
       });
@@ -118,22 +118,22 @@ export function NotesTab({
     });
 
     return result;
-  }, [allNotes, searchQuery, sortBy, showStarredOnly]);
+  }, [allScribbles, searchQuery, sortBy, showStarredOnly]);
 
-  const totalPages = Math.ceil(filteredNotes.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredScribbles.length / ITEMS_PER_PAGE);
 
-  const paginatedNotes = useMemo(() => {
+  const paginatedScribbles = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredNotes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredNotes, currentPage]);
+    return filteredScribbles.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredScribbles, currentPage]);
 
-  const loadNotes = async () => {
+  const loadScribbles = async () => {
     setIsLoading(true);
-    const { data, error } = await notesService.getNotes();
+    const { data, error } = await scribblesService.getScribbles();
     if (error) {
-      setError("Failed to load notes. Please try again.");
+      setError("Failed to load scribbles. Please try again.");
     } else {
-      setAllNotes(data || []);
+      setAllScribbles(data || []);
     }
     setIsLoading(false);
   };
@@ -143,59 +143,59 @@ export function NotesTab({
 
     setDeletingId(id);
     try {
-      const { error } = await notesService.deleteNote(id);
+      const { error } = await scribblesService.deleteScribble(id);
       if (error) {
-        console.error("[NotesTab] delete failed:", error);
+        console.error("[ScribbleTab] delete failed:", error);
         // Inline error feedback instead of alert() which may not work in WKWebView
-        setError("Failed to delete note. Please try again.");
+        setError("Failed to delete scribble. Please try again.");
         setTimeout(() => setError(null), 3000);
       } else {
-        setAllNotes((prev) => prev.filter((note) => note.id !== id));
+        setAllScribbles((prev) => prev.filter((scribble) => scribble.id !== id));
         setTrashCount((prev) => prev + 1);
       }
     } catch (err) {
-      console.error("[NotesTab] delete error:", err);
-      setError("Failed to delete note. Please try again.");
+      console.error("[ScribbleTab] delete error:", err);
+      setError("Failed to delete scribble. Please try again.");
       setTimeout(() => setError(null), 3000);
     }
     setDeletingId(null);
   };
 
   const handleRestore = () => {
-    loadNotes();
+    loadScribbles();
     loadTrashCount();
   };
 
-  const handleToggleStar = async (note: DBNote, e: React.MouseEvent) => {
+  const handleToggleStar = async (scribble: DBScribble, e: React.MouseEvent) => {
     e.stopPropagation();
-    const newStarred = !note.is_starred;
+    const newStarred = !scribble.is_starred;
     // Optimistic update
-    setAllNotes((prev) =>
-      prev.map((n) => (n.id === note.id ? { ...n, is_starred: newStarred } : n))
+    setAllScribbles((prev) =>
+      prev.map((n) => (n.id === scribble.id ? { ...n, is_starred: newStarred } : n))
     );
-    const { data, error } = await notesService.toggleStar(note.id, newStarred);
+    const { data, error } = await scribblesService.toggleStar(scribble.id, newStarred);
     if (error || !data) {
       // Revert on failure
-      setAllNotes((prev) =>
+      setAllScribbles((prev) =>
         prev.map((n) =>
-          n.id === note.id ? { ...n, is_starred: note.is_starred } : n
+          n.id === scribble.id ? { ...n, is_starred: scribble.is_starred } : n
         )
       );
     } else {
       // Sync with actual DB value
-      setAllNotes((prev) =>
+      setAllScribbles((prev) =>
         prev.map((n) => (n.id === data.id ? { ...n, is_starred: data.is_starred } : n))
       );
     }
   };
 
-  const handleNoteClick = (note: DBNote) => {
-    setSelectedNote(note);
+  const handleScribbleClick = (scribble: DBScribble) => {
+    setSelectedScribble(scribble);
   };
 
   const handleBackToList = () => {
-    setSelectedNote(null);
-    loadNotes(); // Refresh in case of changes
+    setSelectedScribble(null);
+    loadScribbles(); // Refresh in case of changes
   };
 
   const triggerDownload = (content: string, filename: string, mime: string) => {
@@ -210,18 +210,18 @@ export function NotesTab({
     URL.revokeObjectURL(url);
   };
 
-  const handleExportTxt = (note: DBNote) => {
-    const body = note.edited_text || note.original_formatted_text;
-    const slug = (note.title || "note").replace(/[^a-z0-9]/gi, "_");
+  const handleExportTxt = (scribble: DBScribble) => {
+    const body = scribble.edited_text || scribble.original_formatted_text;
+    const slug = (scribble.title || "scribble").replace(/[^a-z0-9]/gi, "_");
     triggerDownload(body, `${slug}.txt`, "text/plain");
   };
 
-  const handleExportMarkdown = (note: DBNote) => {
-    const title = note.title || "Untitled Note";
-    const date  = new Date(note.created_at).toLocaleDateString("en-US", {
+  const handleExportMarkdown = (scribble: DBScribble) => {
+    const title = scribble.title || "Untitled Scribble";
+    const date  = new Date(scribble.created_at).toLocaleDateString("en-US", {
       month: "long", day: "numeric", year: "numeric",
     });
-    const body  = note.edited_text || note.original_formatted_text;
+    const body  = scribble.edited_text || scribble.original_formatted_text;
     const md    = `# ${title}\n\n_${date}_\n\n---\n\n${body}`;
     const slug  = title.replace(/[^a-z0-9]/gi, "_");
     triggerDownload(md, `${slug}.md`, "text/markdown");
@@ -230,8 +230,8 @@ export function NotesTab({
   const hasActiveFilters = searchQuery.trim() || showStarredOnly;
 
   const getEmptyMessage = () => {
-    if (allNotes.length === 0) {
-      return "No Scribbles yet. Saved notes sync here when created.";
+    if (allScribbles.length === 0) {
+      return "No Scribbles yet. Saved scribbles sync here when created.";
     }
     if (showStarredOnly && !searchQuery.trim()) {
       return "No starred Scribbles yet. Star one to find it here quickly.";
@@ -299,28 +299,28 @@ export function NotesTab({
     return items;
   };
 
-  // Note Detail View
-  if (selectedNote) {
+  // Scribble Detail View
+  if (selectedScribble) {
     return (
-      <div className="notes-tab">
-        <div className="notes-detail-view">
-          <div className="notes-detail-header">
-            <button onClick={handleBackToList} className="notes-detail-back">
+      <div className="scribbles-tab">
+        <div className="scribbles-detail-view">
+          <div className="scribbles-detail-header">
+            <button onClick={handleBackToList} className="scribbles-detail-back">
               <ChevronLeft size={20} />
               Back to Scribble
             </button>
-            <div className="notes-detail-actions">
+            <div className="scribbles-detail-actions">
               <button
-                onClick={() => handleExportTxt(selectedNote)}
-                className="notes-detail-action-btn"
+                onClick={() => handleExportTxt(selectedScribble)}
+                className="scribbles-detail-action-btn"
                 title="Download as plain text (.txt)"
               >
                 <Download size={15} />
                 <span>.txt</span>
               </button>
               <button
-                onClick={() => handleExportMarkdown(selectedNote)}
-                className="notes-detail-action-btn"
+                onClick={() => handleExportMarkdown(selectedScribble)}
+                className="scribbles-detail-action-btn"
                 title="Download as Markdown (.md)"
               >
                 <Download size={15} />
@@ -328,12 +328,12 @@ export function NotesTab({
               </button>
             </div>
           </div>
-          <div className="notes-detail-content">
-            <h1 className="notes-detail-title">
-              {selectedNote.title || "Untitled Note"}
+          <div className="scribbles-detail-content">
+            <h1 className="scribbles-detail-title">
+              {selectedScribble.title || "Untitled Scribble"}
             </h1>
-            <p className="notes-detail-date">
-              {new Date(selectedNote.created_at).toLocaleDateString("en-US", {
+            <p className="scribbles-detail-date">
+              {new Date(selectedScribble.created_at).toLocaleDateString("en-US", {
                 month: "long",
                 day: "numeric",
                 year: "numeric",
@@ -341,9 +341,9 @@ export function NotesTab({
                 minute: "2-digit",
               })}
             </p>
-            <div className="notes-detail-separator" />
-            <div className="notes-detail-text">
-              {selectedNote.edited_text || selectedNote.original_formatted_text}
+            <div className="scribbles-detail-separator" />
+            <div className="scribbles-detail-text">
+              {selectedScribble.edited_text || selectedScribble.original_formatted_text}
             </div>
           </div>
         </div>
@@ -351,11 +351,11 @@ export function NotesTab({
     );
   }
 
-  // Notes List View
+  // Scribbles List View
   return (
-    <div className="notes-tab">
-      <div className="notes-container">
-        <h1 className="notes-title">
+    <div className="scribbles-tab">
+      <div className="scribbles-container">
+        <h1 className="scribbles-title">
           <span className="text-slate-600 font-light text-lg" style={{ fontFamily: '"Figtree", -apple-system, sans-serif' }}>OSCAR</span>{" "}
           <span className="font-bold">Scribble</span>
         </h1>
@@ -372,7 +372,7 @@ export function NotesTab({
                 Scribbles that stay searchable and synced.
               </h2>
               <p className="mt-3 text-[0.82rem] leading-[1.6] text-sky-50/90">
-                Saved notes sync here across devices. Stream transcripts stay local to this device.
+                Saved scribbles sync here across devices. Stream transcripts stay local to this device.
               </p>
             </div>
 
@@ -397,23 +397,23 @@ export function NotesTab({
         </div>
 
         {error && (
-          <div className="notes-error">
+          <div className="scribbles-error">
             <p>{error}</p>
           </div>
         )}
 
         {/* Filter Bar */}
-        {allNotes.length > 0 && (
-          <div className="notes-filter-bar">
+        {allScribbles.length > 0 && (
+          <div className="scribbles-filter-bar">
             {/* Search Input */}
-            <div className="notes-search">
-              <Search size={16} className="notes-search-icon" />
+            <div className="scribbles-search">
+              <Search size={16} className="scribbles-search-icon" />
               <input
                 type="text"
                 placeholder="Search Scribble..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="notes-search-input"
+                className="scribbles-search-input"
               />
             </div>
 
@@ -421,7 +421,7 @@ export function NotesTab({
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="notes-sort-select"
+              className="scribbles-sort-select"
             >
               <option value="created">Date Created</option>
               <option value="updated">Date Updated</option>
@@ -431,8 +431,8 @@ export function NotesTab({
             {/* Starred filter toggle */}
             <button
               onClick={() => setShowStarredOnly((v) => !v)}
-              title={showStarredOnly ? "Show all notes" : "Show starred only"}
-              className={`notes-starred-toggle ${showStarredOnly ? "active" : ""}`}
+              title={showStarredOnly ? "Show all scribbles" : "Show starred only"}
+              className={`scribbles-starred-toggle ${showStarredOnly ? "active" : ""}`}
             >
               <Star
                 size={16}
@@ -466,47 +466,47 @@ export function NotesTab({
         />
 
         {isLoading ? (
-          <div className="notes-loading">
+          <div className="scribbles-loading">
             <Loader2 size={32} className="spin" />
           </div>
-        ) : filteredNotes.length === 0 ? (
-          <div className="notes-empty">
-            {allNotes.length === 0 ? (
-              <FileText size={64} className="notes-empty-icon" />
+        ) : filteredScribbles.length === 0 ? (
+          <div className="scribbles-empty">
+            {allScribbles.length === 0 ? (
+              <FileText size={64} className="scribbles-empty-icon" />
             ) : (
-              <SquaresSubtract size={64} className="notes-empty-icon" />
+              <SquaresSubtract size={64} className="scribbles-empty-icon" />
             )}
-            <p className="notes-empty-text">{getEmptyMessage()}</p>
+            <p className="scribbles-empty-text">{getEmptyMessage()}</p>
             {hasActiveFilters && (
               <button
                 onClick={() => {
                   setSearchQuery("");
                   setShowStarredOnly(false);
                 }}
-                className="notes-clear-filters"
+                className="scribbles-clear-filters"
               >
                 Clear filters
               </button>
             )}
           </div>
         ) : (
-          <div className="notes-list">
-            <div className="notes-list-content">
-              {paginatedNotes.map((note) => (
-                <NoteCard
-                  key={note.id}
-                  note={note}
-                  onClick={() => handleNoteClick(note)}
-                  onToggleStar={(e) => handleToggleStar(note, e)}
-                  onDelete={(e) => handleDelete(note.id, e)}
-                  isDeleting={deletingId === note.id}
+          <div className="scribbles-list">
+            <div className="scribbles-list-content">
+              {paginatedScribbles.map((scribble) => (
+                <ScribbleCard
+                  key={scribble.id}
+                  scribble={scribble}
+                  onClick={() => handleScribbleClick(scribble)}
+                  onToggleStar={(e) => handleToggleStar(scribble, e)}
+                  onDelete={(e) => handleDelete(scribble.id, e)}
+                  isDeleting={deletingId === scribble.id}
                 />
               ))}
             </div>
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="notes-pagination">
+              <div className="scribbles-pagination">
                 <button
                   onClick={() => setCurrentPage(currentPage - 1)}
                   disabled={currentPage === 1}

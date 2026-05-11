@@ -47,9 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
       setIsLoading(false);
 
-      // Clear any note-related sessionStorage on sign-out to prevent cross-user carryover
+      // Clear any scribble-related sessionStorage on sign-out to prevent cross-user carryover
       if (_event === "SIGNED_OUT") {
-        storageService.clearNote();
+        storageService.clearScribble();
       }
     });
 
@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
-    storageService.clearNote();
+    storageService.clearScribble();
     await supabase.auth.signOut();
   }, [supabase.auth]);
 

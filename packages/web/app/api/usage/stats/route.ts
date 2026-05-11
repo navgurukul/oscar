@@ -46,11 +46,11 @@ export async function GET() {
       currentPeriodEnd: subscription?.current_period_end || null,
       recordingsThisMonth: usageStats.recordingsThisMonth,
       recordingsLimit: usageStats.recordingsLimit,
-      notesCount: usageStats.notesCount,
-      notesLimit: usageStats.notesLimit,
+      scribblesCount: usageStats.scribblesCount,
+      scribblesLimit: usageStats.scribblesLimit,
       isProUser: usageStats.isProUser,
       canRecord: usageStats.canRecord,
-      canCreateNote: usageStats.canCreateNote,
+      canCreateScribble: usageStats.canCreateScribble,
     };
 
     return NextResponse.json(response);

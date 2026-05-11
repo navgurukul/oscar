@@ -1,11 +1,11 @@
-// Re-export all note types from the shared package (single source of truth)
+// Re-export all scribble types from the shared package (single source of truth)
 export type {
-  Note,
+  Scribble,
   LocalTranscript,
   FeedbackReason,
-  DBNote,
-  DBNoteInsert,
-  DBNoteUpdate,
+  DBScribble,
+  DBScribbleInsert,
+  DBScribbleUpdate,
   FormattingResult,
   TitleGenerationResult,
   FeedbackSubmission,

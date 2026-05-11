@@ -1,10 +1,10 @@
 import { TranscriptsSection } from "./TranscriptsSection";
-import type { LocalTranscript } from "../types/note.types";
+import type { LocalTranscript } from "../types/scribble.types";
 
 interface HomeTabProps {
   userName: string;
   userId: string;
-  totalNotes?: number;
+  totalScribbles?: number;
   localTranscripts: LocalTranscript[];
   onDeleteTranscript: (id: string) => void;
   onClearAllTranscripts: () => void;
@@ -139,14 +139,14 @@ const GARAMOND_FONT_STYLE = { fontFamily: '"EB Garamond", Georgia, serif' } as c
 
 function HomeTab({
   userName,
-  totalNotes,
+  totalScribbles,
   localTranscripts,
   onDeleteTranscript,
   onClearAllTranscripts,
 }: HomeTabProps) {
   // Extract first name
   const firstName = userName?.split(" ")[0] || "";
-  const hasStats = typeof totalNotes === "number";
+  const hasStats = typeof totalScribbles === "number";
 
   return (
     <div className={HOME_TAB_CLASS_NAME}>
@@ -167,7 +167,7 @@ function HomeTab({
         {/* Minimal Stats */}
         {hasStats && (
           <p className="mb-5 text-center text-sm text-slate-400">
-            {totalNotes} {totalNotes === 1 ? "Scribble" : "Scribbles"} captured
+            {totalScribbles} {totalScribbles === 1 ? "Scribble" : "Scribbles"} captured
           </p>
         )}
 

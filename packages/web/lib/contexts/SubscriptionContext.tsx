@@ -25,15 +25,15 @@ interface SubscriptionContextType {
   // Usage data
   recordingsThisMonth: number;
   recordingsLimit: number | null;
-  notesCount: number;
-  notesLimit: number | null;
+  scribblesCount: number;
+  scribblesLimit: number | null;
 
   // Computed values
   isProUser: boolean;
   canRecord: boolean;
-  canCreateNote: boolean;
+  canCreateScribble: boolean;
   remainingRecordings: number | null;
-  remainingNotes: number | null;
+  remainingScribbles: number | null;
 
   // State
   isLoading: boolean;
@@ -67,14 +67,14 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
   const [recordingsLimit, setRecordingsLimit] = useState<number | null>(
     SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS
   );
-  const [notesCount, setNotesCount] = useState(0);
-  const [notesLimit, setNotesLimit] = useState<number | null>(
-    SUBSCRIPTION_CONFIG.FREE_MAX_NOTES
+  const [scribblesCount, setScribblesCount] = useState(0);
+  const [scribblesLimit, setScribblesLimit] = useState<number | null>(
+    SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES
   );
 
   const [isProUser, setIsProUser] = useState(false);
   const [canRecord, setCanRecord] = useState(true);
-  const [canCreateNote, setCanCreateNote] = useState(true);
+  const [canCreateScribble, setCanCreateScribble] = useState(true);
 
   const fetchStats = useCallback(async () => {
     if (!user) {
@@ -85,11 +85,11 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
       setCurrentPeriodEnd(null);
       setRecordingsThisMonth(0);
       setRecordingsLimit(SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS);
-      setNotesCount(0);
-      setNotesLimit(SUBSCRIPTION_CONFIG.FREE_MAX_NOTES);
+      setScribblesCount(0);
+      setScribblesLimit(SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES);
       setIsProUser(false);
       setCanRecord(true);
-      setCanCreateNote(true);
+      setCanCreateScribble(true);
       setIsLoading(false);
       return;
     }
@@ -110,11 +110,11 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
       setCurrentPeriodEnd(data.currentPeriodEnd);
       setRecordingsThisMonth(data.recordingsThisMonth);
       setRecordingsLimit(data.recordingsLimit);
-      setNotesCount(data.notesCount);
-      setNotesLimit(data.notesLimit);
+      setScribblesCount(data.scribblesCount);
+      setScribblesLimit(data.scribblesLimit);
       setIsProUser(data.isProUser);
       setCanRecord(data.canRecord);
-      setCanCreateNote(data.canCreateNote);
+      setCanCreateScribble(data.canCreateScribble);
     } catch (err) {
       console.error("Error fetching subscription stats:", err);
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -164,8 +164,8 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
       ? Math.max(0, recordingsLimit - recordingsThisMonth)
       : null;
 
-  const remainingNotes =
-    notesLimit !== null ? Math.max(0, notesLimit - notesCount) : null;
+  const remainingScribbles =
+    scribblesLimit !== null ? Math.max(0, scribblesLimit - scribblesCount) : null;
 
   const value: SubscriptionContextType = {
     tier,
@@ -174,13 +174,13 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
     currentPeriodEnd,
     recordingsThisMonth,
     recordingsLimit,
-    notesCount,
-    notesLimit,
+    scribblesCount,
+    scribblesLimit,
     isProUser,
     canRecord,
-    canCreateNote,
+    canCreateScribble,
     remainingRecordings,
-    remainingNotes,
+    remainingScribbles,
     isLoading,
     error,
     refetch: fetchStats,

@@ -311,10 +311,10 @@ function RecordingPageInner() {
 
         const generatedTitle = titleResult.success
           ? titleResult.title
-          : "Untitled Note";
+          : "Untitled Scribble";
 
         // Store in session storage for immediate display
-        storageService.saveNote(
+        storageService.saveScribble(
           result.formattedText,
           transcript,
           generatedTitle

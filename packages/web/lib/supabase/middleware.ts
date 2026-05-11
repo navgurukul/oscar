@@ -44,7 +44,7 @@ export async function updateSession(request: NextRequest) {
   const protectedPaths = [
     "/recording",
     "/results",
-    "/notes",
+    "/scribble",
     "/settings",
     "/billing",
   ];

@@ -55,7 +55,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-white mb-6">Your Content</h2>
             <p className="text-base leading-relaxed">
-              You own what you create. All voice recordings and notes you produce using OSCAR remain yours and are protected by applicable intellectual property laws. By using OSCAR, you grant us a limited license to process, store, and display your content solely for the purpose of providing the Service to you. We do not claim ownership over anything you create.
+              You own what you create. All voice recordings and Scribbles you produce using OSCAR remain yours and are protected by applicable intellectual property laws. By using OSCAR, you grant us a limited license to process, store, and display your content solely for the purpose of providing the Service to you. We do not claim ownership over anything you create.
             </p>
           </section>
 
@@ -76,7 +76,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-white mb-6">AI-Generated Content</h2>
             <p className="text-base leading-relaxed">
-              Our AI formatting aims to produce clean, accurate notes but it is not perfect. You are responsible for reviewing and verifying all AI-generated content before relying on it. We do not guarantee complete accuracy.
+              Our AI formatting aims to produce clean, accurate Scribbles but it is not perfect. You are responsible for reviewing and verifying all AI-generated content before relying on it. We do not guarantee complete accuracy.
             </p>
           </section>
 

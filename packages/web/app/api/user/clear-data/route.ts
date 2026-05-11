@@ -2,7 +2,7 @@
  * Clear User Data API Route
  * DELETE /api/user/clear-data
  *
- * Permanently deletes all notes and vocabulary for the authenticated user.
+ * Permanently deletes all scribbles and vocabulary for the authenticated user.
  * The account itself is preserved.
  */
 

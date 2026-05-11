@@ -10,7 +10,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { Navigation } from "./components/Navigation";
 import { Header } from "./components/Header";
-import { NotesTab } from "./components/NotesTab";
+import { ScribbleTab } from "./components/ScribbleTab";
 import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
@@ -34,7 +34,7 @@ import type {
 import type {
   DictationContextSnapshot,
   LocalTranscript,
-} from "./types/note.types";
+} from "./types/scribble.types";
 import type {
   DownloadProgress,
   HotkeyContextEventPayload,
@@ -1054,6 +1054,24 @@ function App() {
       return;
     }
 
+    let sumSq = 0;
+    let peak = 0;
+    for (let i = 0; i < audioData.length; i++) {
+      const v = audioData[i];
+      sumSq += v * v;
+      const abs = v < 0 ? -v : v;
+      if (abs > peak) peak = abs;
+    }
+    const rms = Math.sqrt(sumSq / audioData.length);
+    if (rms < 0.005 || peak < 0.02) {
+      console.warn(
+        `[process] ABORT: silent audio (rms=${rms.toFixed(4)}, peak=${peak.toFixed(4)})`,
+      );
+      setStatus("⚠️ No speech detected. Try speaking louder or closer.");
+      invoke("hide_recording_pill").catch(console.warn);
+      return;
+    }
+
     const durationSec = (audioData.length / 16000).toFixed(1);
     setIsProcessing(true);
     setStatus(`Transcribing ${durationSec}s...`);
@@ -1070,25 +1088,29 @@ function App() {
       });
 
       if (!result.text) {
-        console.warn("[process] ABORT: no speech detected");
+        console.warn("[process] ABORT: no speech detected (whisper empty)");
         setStatus("⚠️ No speech detected. Try speaking louder or closer.");
         return;
       }
 
       let finalText = result.text;
-      const activeDictationContext =
-        contextAwareDictationEnabledRef.current
-          ? dictationContextRef.current
-          : null;
-      const dictationRouting =
-        contextAwareDictationEnabledRef.current
-          ? routeDictationContext(activeDictationContext)
-          : null;
+      const aiCleanupEnabled = aiImprovementEnabledRef.current;
+      const effectiveContextAwareDictation =
+        aiCleanupEnabled &&
+        contextAwareDictationEnabledRef.current &&
+        isContextAwarePlatform(getDesktopPlatform());
+      const activeDictationContext = effectiveContextAwareDictation
+        ? dictationContextRef.current
+        : null;
+      const dictationRouting = activeDictationContext
+        ? routeDictationContext(activeDictationContext)
+        : null;
       const dictationMetadata = buildDictationMetadata(dictationRouting);
+      let cleanupReturnedEmpty = false;
 
       // Silent AI cleanup via the backend AI function.
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
-      if (aiImprovementEnabledRef.current) {
+      if (aiCleanupEnabled) {
         setStatus("Improving with AI...");
         try {
           const cleaned = await aiService.processText(
@@ -1103,6 +1125,11 @@ function App() {
           );
           if (cleaned && cleaned.trim().length > 0) {
             finalText = cleaned;
+          } else {
+            // Server signalled "no real speech" (silence / hallucination).
+            // Skip paste and persistence so the user is not surprised by a
+            // chatty refusal or stray hallucinated text.
+            cleanupReturnedEmpty = true;
           }
         } catch (aiErr) {
           // Silently fall back to raw transcript — user never sees this
@@ -1111,6 +1138,12 @@ function App() {
             aiErr,
           );
         }
+      }
+
+      if (cleanupReturnedEmpty) {
+        console.info("[process] AI cleanup returned empty — treating as silence");
+        setStatus("⚠️ No speech detected. Try speaking louder or closer.");
+        return;
       }
 
       // ── Auto-paste: do this AFTER AI cleanup ──────────────────────────────
@@ -1975,8 +2008,8 @@ function App() {
                 />
               )}
 
-              {activeTab === "notes" && user && (
-                <NotesTab
+              {activeTab === "scribble" && user && (
+                <ScribbleTab
                   userId={user.id}
                   isRecording={isRecording}
                   onToggleRecording={() => {

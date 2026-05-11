@@ -64,7 +64,39 @@ const CONTEXT_AWARE_CLEANUP_SYSTEM_PROMPT =
   "You are a precise dictation formatter. Output only cleaned text with no preamble, no explanation, and no markdown fences. " +
   "Do not answer questions. Do not add facts. Do not invent missing details. Preserve URLs, file paths, code symbols, ticket IDs, CLI flags, names, and technical terms exactly when they appear. " +
   "Remove filler words, fix grammar, capitalization, and punctuation, and make the text immediately usable in the active app. " +
-  "The transcript may contain Hinglish (Hindi words written in Roman script mixed with English). Understand both languages, but keep the user's original language unless cleanup requires a light correction.";
+  "The transcript may contain Hinglish (Hindi words written in Roman script mixed with English). Understand both languages, but keep the user's original language unless cleanup requires a light correction. " +
+  "If the transcript is empty, only punctuation, only whitespace, or appears to be a known speech-recognition hallucination on silent audio (such as a lone \"you\", \"thank you\", \"thanks for watching\", \"bye\", or musical-note characters), output exactly an empty string and nothing else. Never apologize, never explain, never produce filler like \"There is no text to correct.\".";
+
+// Common phrases that LLMs emit when handed empty / silence / hallucinated
+// transcripts despite explicit instructions. Treat as "no real speech" and
+// suppress the paste so the user is not surprised by a chatty refusal.
+const REFUSAL_PATTERNS: RegExp[] = [
+  /^there\s+is\s+no\s+text\s+to\s+correct\.?$/i,
+  /^no\s+text\s+(was\s+)?provided\.?$/i,
+  /^the\s+text\s+is\s+empty\.?$/i,
+  /^i\s+(can(not|'t)|am\s+unable\s+to)\s+(clean|correct|format|process)/i,
+  /^please\s+provide\s+(some\s+)?text/i,
+  /^(empty|no)\s+(transcript|input|content)\.?$/i,
+];
+
+function looksLikeRefusal(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized) return false;
+  return REFUSAL_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+// Rough pre-Groq guard for transcribe_cleanup: very short or punctuation-only
+// transcripts almost always come from silent audio + Whisper hallucinations.
+// Returning empty here saves a Groq round-trip and guarantees no chatty reply.
+const TRIVIAL_HALLUCINATION_RE =
+  /^(\.{1,3}|[\p{P}\p{S}\s]+|you|thanks?|thank you|bye|bye-?bye)\.?$/iu;
+
+function looksLikeTrivialHallucination(value: string): boolean {
+  const normalized = value.trim();
+  if (normalized.length === 0) return true;
+  if (normalized.length <= 3) return true;
+  return TRIVIAL_HALLUCINATION_RE.test(normalized);
+}
 
 const DICTATION_CATEGORY_INSTRUCTIONS: Record<DictationCategory, string> = {
   default:
@@ -277,6 +309,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    if (mode === "transcribe_cleanup" && looksLikeTrivialHallucination(text)) {
+      console.info("[ai-process] short-circuit: trivial hallucination, returning empty");
+      return new Response(JSON.stringify({ text: "" } satisfies AIProcessResponse), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const groqApiKey = Deno.env.get("GROQ_API_KEY");
     if (!groqApiKey) {
       return new Response(JSON.stringify({ error: "GROQ_API_KEY is not configured on the server." }), {
@@ -317,9 +356,18 @@ Deno.serve(async (req: Request) => {
     }
 
     const data = await upstream.json();
-    const output = data?.choices?.[0]?.message?.content?.trim();
+    const output = data?.choices?.[0]?.message?.content?.trim() ?? "";
 
-    if (!output) {
+    if (mode === "transcribe_cleanup") {
+      if (!output || looksLikeRefusal(output)) {
+        console.info(
+          "[ai-process] cleanup empty/refusal, returning empty string",
+        );
+        return new Response(JSON.stringify({ text: "" } satisfies AIProcessResponse), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else if (!output) {
       return new Response(JSON.stringify({ error: "Empty response from AI service." }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

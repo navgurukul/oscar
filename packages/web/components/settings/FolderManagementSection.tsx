@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FolderPlus, Trash2, Edit2, Check, X, Plus } from "lucide-react";
-import { notesService } from "@/lib/services/notes.service";
+import { scribblesService } from "@/lib/services/scribbles.service";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,32 +26,32 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { DBNote } from "@/lib/types/note.types";
+import type { DBScribble } from "@/lib/types/scribble.types";
 
 export default function FolderManagementSection() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const fromNotes = searchParams.get("from") === "notes";
+  const fromScribbles = searchParams.get("from") === "scribbles";
   const { toast } = useToast();
   const [folders, setFolders] = useState<string[]>([]);
-  const [allNotes, setAllNotes] = useState<DBNote[]>([]);
+  const [allScribbles, setAllScribbles] = useState<DBScribble[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newFolderName, setNewFolderName] = useState("");
-  const [targetNoteId, setTargetNoteId] = useState("");
+  const [targetScribbleId, setTargetScribbleId] = useState("");
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [editingFolder, setEditingFolder] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
   useEffect(() => {
     loadFolders();
-    loadNotes();
+    loadScribbles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadFolders = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await notesService.getFolders();
+      const { data, error } = await scribblesService.getFolders();
       if (!error && data) {
         setFolders(data);
       }
@@ -66,14 +66,14 @@ export default function FolderManagementSection() {
     }
   };
 
-  const loadNotes = async () => {
+  const loadScribbles = async () => {
     try {
-      const { data, error } = await notesService.getNotes();
+      const { data, error } = await scribblesService.getScribbles();
       if (!error && data) {
-        setAllNotes(data);
+        setAllScribbles(data);
       }
     } catch {
-      // Silent fail for notes loading
+      // Silent fail for scribbles loading
     }
   };
 
@@ -87,7 +87,7 @@ export default function FolderManagementSection() {
       return;
     }
 
-    if (!targetNoteId) {
+    if (!targetScribbleId) {
       toast({
         title: "Error",
         description: "Please select a Scribble to place in this folder.",
@@ -107,25 +107,25 @@ export default function FolderManagementSection() {
 
     setIsCreatingFolder(true);
     try {
-      const { data, error } = await notesService.updateNote(targetNoteId, {
+      const { data, error } = await scribblesService.updateScribble(targetScribbleId, {
         folder: newFolderName.trim(),
       });
 
       if (!error && data) {
         setFolders([...folders, newFolderName.trim()]);
-        setAllNotes((prev) =>
+        setAllScribbles((prev) =>
           prev.map((n) => (n.id === data.id ? { ...n, folder: data.folder } : n))
         );
         setNewFolderName("");
-        setTargetNoteId("");
+        setTargetScribbleId("");
         toast({
           title: "Success",
           description: `Folder "${newFolderName.trim()}" created and assigned to your Scribble.`,
         });
-        // Redirect back to notes if coming from notes page
-        if (fromNotes) {
+        // Redirect back to scribbles if coming from scribbles page
+        if (fromScribbles) {
           setTimeout(() => {
-            router.push("/notes");
+            router.push("/scribble");
           }, 500);
         }
       } else {
@@ -166,9 +166,9 @@ export default function FolderManagementSection() {
     }
 
     try {
-      const notesInFolder = allNotes.filter((n) => n.folder === oldName);
-      const { error } = await notesService.updateNotes(
-        notesInFolder.map((note) => note.id),
+      const scribblesInFolder = allScribbles.filter((n) => n.folder === oldName);
+      const { error } = await scribblesService.updateScribbles(
+        scribblesInFolder.map((scribble) => scribble.id),
         { folder: editValue.trim() }
       );
 
@@ -177,7 +177,7 @@ export default function FolderManagementSection() {
       }
 
       setFolders(folders.map((f) => (f === oldName ? editValue.trim() : f)));
-      setAllNotes((prev) =>
+      setAllScribbles((prev) =>
         prev.map((n) =>
           n.folder === oldName ? { ...n, folder: editValue.trim() } : n
         )
@@ -199,9 +199,9 @@ export default function FolderManagementSection() {
 
   const handleDeleteFolder = async (folderName: string) => {
     try {
-      const notesInFolder = allNotes.filter((n) => n.folder === folderName);
-      const { error } = await notesService.updateNotes(
-        notesInFolder.map((note) => note.id),
+      const scribblesInFolder = allScribbles.filter((n) => n.folder === folderName);
+      const { error } = await scribblesService.updateScribbles(
+        scribblesInFolder.map((scribble) => scribble.id),
         { folder: null }
       );
 
@@ -210,7 +210,7 @@ export default function FolderManagementSection() {
       }
 
       setFolders(folders.filter((f) => f !== folderName));
-      setAllNotes((prev) =>
+      setAllScribbles((prev) =>
         prev.map((n) =>
           n.folder === folderName ? { ...n, folder: null } : n
         )
@@ -254,19 +254,19 @@ export default function FolderManagementSection() {
                 className="bg-slate-800 border-slate-700 text-gray-300 focus:border-cyan-500 flex-1"
               />
 
-              <Select value={targetNoteId} onValueChange={setTargetNoteId}>
+              <Select value={targetScribbleId} onValueChange={setTargetScribbleId}>
                 <SelectTrigger className="bg-slate-800 border-slate-700 text-gray-300 w-[200px]">
                   <SelectValue placeholder="Select Scribble..." />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-900 border-slate-700 text-gray-300 max-h-64 overflow-y-auto">
-                  {allNotes.length === 0 ? (
-                    <SelectItem value="no-notes" disabled>
+                  {allScribbles.length === 0 ? (
+                    <SelectItem value="no-scribbles" disabled>
                       No Scribbles available
                     </SelectItem>
                   ) : (
-                    allNotes.map((note) => (
-                      <SelectItem key={note.id} value={note.id}>
-                        {(note.title || "Untitled Note").slice(0, 50)}
+                    allScribbles.map((scribble) => (
+                      <SelectItem key={scribble.id} value={scribble.id}>
+                        {(scribble.title || "Untitled Scribble").slice(0, 50)}
                       </SelectItem>
                     ))
                   )}
@@ -278,8 +278,8 @@ export default function FolderManagementSection() {
                 disabled={
                   isCreatingFolder ||
                   !newFolderName.trim() ||
-                  !targetNoteId ||
-                  allNotes.length === 0
+                  !targetScribbleId ||
+                  allScribbles.length === 0
                 }
                 className="border-2 hover:bg-cyan-600 px-2 h-9"
                 variant="ghost"
@@ -322,7 +322,7 @@ export default function FolderManagementSection() {
           ) : (
             <div className="space-y-2">
               {folders.map((folder) => {
-                const notesCount = allNotes.filter(
+                const scribblesCount = allScribbles.filter(
                   (n) => n.folder === folder
                 ).length;
                 return (
@@ -352,7 +352,7 @@ export default function FolderManagementSection() {
                             {folder}
                           </span>
                           <span className="text-xs text-gray-500">
-                            {notesCount} Scribble{notesCount !== 1 ? "s" : ""}
+                            {scribblesCount} Scribble{scribblesCount !== 1 ? "s" : ""}
                           </span>
                         </div>
                       )}
@@ -407,7 +407,7 @@ export default function FolderManagementSection() {
                                 </AlertDialogTitle>
                                 <AlertDialogDescription className="text-gray-400 text-sm leading-relaxed">
                                   This will remove the &quot;{folder}&quot; folder from all{" "}
-                                  {notesCount} Scribble{notesCount !== 1 ? "s" : ""}.
+                                  {scribblesCount} Scribble{scribblesCount !== 1 ? "s" : ""}.
                                   Scribbles will still exist but won&apos;t be organized by
                                   this folder.
                                 </AlertDialogDescription>

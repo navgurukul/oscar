@@ -15,8 +15,8 @@ import {
   Square,
   ArrowUpDown,
 } from "lucide-react";
-import { TrashSheet } from "@/components/notes/TrashSheet";
-import { NotesListSkeleton } from "@/components/shared/NotesListSkeleton";
+import { TrashSheet } from "@/components/scribble/TrashSheet";
+import { ScribbleListSkeleton } from "@/components/shared/ScribbleListSkeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import {
@@ -36,10 +36,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { notesService } from "@/lib/services/notes.service";
+import { scribblesService } from "@/lib/services/scribbles.service";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import type { DBNote } from "@/lib/types/note.types";
+import type { DBScribble } from "@/lib/types/scribble.types";
 
 type SortOption = "updated" | "created" | "length" | "title";
 type SavedViewKey = "all" | "recent" | "starred" | "unfoldered" | `folder:${string}`;
@@ -89,8 +89,8 @@ function formatDate(dateString: string) {
   });
 }
 
-function getPreview(note: DBNote) {
-  const text = note.edited_text || note.original_formatted_text;
+function getPreview(scribble: DBScribble) {
+  const text = scribble.edited_text || scribble.original_formatted_text;
   return text.length > 180 ? `${text.slice(0, 180).trim()}...` : text;
 }
 
@@ -108,19 +108,19 @@ function getRecentCutoff() {
   return cutoff.getTime();
 }
 
-function mergeNotes(previous: DBNote[], incoming: DBNote[]) {
-  const map = new Map(previous.map((note) => [note.id, note]));
-  incoming.forEach((note) => {
-    map.set(note.id, note);
+function mergeScribbles(previous: DBScribble[], incoming: DBScribble[]) {
+  const map = new Map(previous.map((scribble) => [scribble.id, scribble]));
+  incoming.forEach((scribble) => {
+    map.set(scribble.id, scribble);
   });
   return Array.from(map.values());
 }
 
-export default function NotesPage() {
+export default function ScribblePage() {
   const router = useRouter();
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
-  const [allNotes, setAllNotes] = useState<DBNote[]>([]);
+  const [allScribbles, setAllScribbles] = useState<DBScribble[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -137,12 +137,12 @@ export default function NotesPage() {
 
   const folderCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    allNotes.forEach((note) => {
-      if (!note.folder) return;
-      counts.set(note.folder, (counts.get(note.folder) ?? 0) + 1);
+    allScribbles.forEach((scribble) => {
+      if (!scribble.folder) return;
+      counts.set(scribble.folder, (counts.get(scribble.folder) ?? 0) + 1);
     });
     return counts;
-  }, [allNotes]);
+  }, [allScribbles]);
 
   const folders = useMemo(() => {
     return Array.from(folderCounts.keys()).sort((left, right) => left.localeCompare(right));
@@ -151,7 +151,7 @@ export default function NotesPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      router.push(`/auth?redirectTo=${encodeURIComponent("/notes")}`);
+      router.push(`/auth?redirectTo=${encodeURIComponent("/scribble")}`);
       return;
     }
 
@@ -201,51 +201,51 @@ export default function NotesPage() {
   const viewCounts = useMemo(() => {
     const recentCutoff = getRecentCutoff();
     return {
-      all: allNotes.length,
-      recent: allNotes.filter(
-        (note) => new Date(note.updated_at).getTime() >= recentCutoff
+      all: allScribbles.length,
+      recent: allScribbles.filter(
+        (scribble) => new Date(scribble.updated_at).getTime() >= recentCutoff
       ).length,
-      starred: allNotes.filter((note) => note.is_starred).length,
-      unfoldered: allNotes.filter((note) => !note.folder).length,
+      starred: allScribbles.filter((scribble) => scribble.is_starred).length,
+      unfoldered: allScribbles.filter((scribble) => !scribble.folder).length,
     };
-  }, [allNotes]);
+  }, [allScribbles]);
 
-  const filteredNotes = useMemo(() => {
+  const filteredScribbles = useMemo(() => {
     const recentCutoff = getRecentCutoff();
     const query = deferredSearch.trim().toLowerCase();
 
-    let notes = allNotes.filter((note) => {
+    let scribbles = allScribbles.filter((scribble) => {
       if (currentView === "recent") {
-        return new Date(note.updated_at).getTime() >= recentCutoff;
+        return new Date(scribble.updated_at).getTime() >= recentCutoff;
       }
 
       if (currentView === "starred") {
-        return note.is_starred;
+        return scribble.is_starred;
       }
 
       if (currentView === "unfoldered") {
-        return !note.folder;
+        return !scribble.folder;
       }
 
       if (isFolderView(currentView)) {
-        return note.folder === getFolderName(currentView);
+        return scribble.folder === getFolderName(currentView);
       }
 
       return true;
     });
 
     if (query) {
-      notes = notes.filter((note) => {
-        const content = (note.edited_text || note.original_formatted_text).toLowerCase();
+      scribbles = scribbles.filter((scribble) => {
+        const content = (scribble.edited_text || scribble.original_formatted_text).toLowerCase();
         return (
-          note.title.toLowerCase().includes(query) ||
+          scribble.title.toLowerCase().includes(query) ||
           content.includes(query) ||
-          (note.folder ?? "").toLowerCase().includes(query)
+          (scribble.folder ?? "").toLowerCase().includes(query)
         );
       });
     }
 
-    notes.sort((left, right) => {
+    scribbles.sort((left, right) => {
       switch (sortBy) {
         case "created":
           return (
@@ -266,23 +266,23 @@ export default function NotesPage() {
       }
     });
 
-    return notes;
-  }, [allNotes, currentView, deferredSearch, sortBy]);
+    return scribbles;
+  }, [allScribbles, currentView, deferredSearch, sortBy]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredNotes.length / ITEMS_PER_PAGE));
-  const paginatedNotes = useMemo(() => {
+  const totalPages = Math.max(1, Math.ceil(filteredScribbles.length / ITEMS_PER_PAGE));
+  const paginatedScribbles = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredNotes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredNotes, currentPage]);
+    return filteredScribbles.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredScribbles, currentPage]);
 
   const selectedCount = selectedIds.size;
   const pageSelectionState = useMemo(() => {
-    if (paginatedNotes.length === 0) return "none";
-    const selectedOnPage = paginatedNotes.filter((note) => selectedIds.has(note.id)).length;
+    if (paginatedScribbles.length === 0) return "none";
+    const selectedOnPage = paginatedScribbles.filter((scribble) => selectedIds.has(scribble.id)).length;
     if (selectedOnPage === 0) return "none";
-    if (selectedOnPage === paginatedNotes.length) return "all";
+    if (selectedOnPage === paginatedScribbles.length) return "all";
     return "some";
-  }, [paginatedNotes, selectedIds]);
+  }, [paginatedScribbles, selectedIds]);
 
   const activeViewLabel = useMemo(() => {
     if (isFolderView(currentView)) return getFolderName(currentView);
@@ -304,15 +304,15 @@ export default function NotesPage() {
     setIsLoading(true);
     setError(null);
 
-    const [notesResult, trashedResult] = await Promise.all([
-      notesService.getNotes(),
-      notesService.getTrashedNotes(),
+    const [scribblesResult, trashedResult] = await Promise.all([
+      scribblesService.getScribbles(),
+      scribblesService.getTrashedScribbles(),
     ]);
 
-    if (notesResult.error) {
+    if (scribblesResult.error) {
       setError("Could not load Scribble right now. Please try again.");
     } else {
-      setAllNotes(notesResult.data ?? []);
+      setAllScribbles(scribblesResult.data ?? []);
     }
     if (!trashedResult.error) {
       setTrashCount(trashedResult.data?.length ?? 0);
@@ -321,8 +321,8 @@ export default function NotesPage() {
     setIsLoading(false);
   }
 
-  function updateNotesInState(updatedNotes: DBNote[]) {
-    setAllNotes((previous) => mergeNotes(previous, updatedNotes));
+  function updateScribblesInState(updatedScribbles: DBScribble[]) {
+    setAllScribbles((previous) => mergeScribbles(previous, updatedScribbles));
   }
 
   function handleToggleSelection(id: string) {
@@ -342,30 +342,30 @@ export default function NotesPage() {
       const next = new Set(previous);
 
       if (pageSelectionState === "all") {
-        paginatedNotes.forEach((note) => next.delete(note.id));
+        paginatedScribbles.forEach((scribble) => next.delete(scribble.id));
       } else {
-        paginatedNotes.forEach((note) => next.add(note.id));
+        paginatedScribbles.forEach((scribble) => next.add(scribble.id));
       }
 
       return next;
     });
   }
 
-  async function handleToggleStar(note: DBNote, event: React.MouseEvent) {
+  async function handleToggleStar(scribble: DBScribble, event: React.MouseEvent) {
     event.stopPropagation();
-    const newStarred = !note.is_starred;
+    const newStarred = !scribble.is_starred;
 
-    setAllNotes((previous) =>
+    setAllScribbles((previous) =>
       previous.map((item) =>
-        item.id === note.id ? { ...item, is_starred: newStarred } : item
+        item.id === scribble.id ? { ...item, is_starred: newStarred } : item
       )
     );
 
-    const { data, error } = await notesService.toggleStar(note.id, newStarred);
+    const { data, error } = await scribblesService.toggleStar(scribble.id, newStarred);
     if (error || !data) {
-      setAllNotes((previous) =>
+      setAllScribbles((previous) =>
         previous.map((item) =>
-          item.id === note.id ? { ...item, is_starred: note.is_starred } : item
+          item.id === scribble.id ? { ...item, is_starred: scribble.is_starred } : item
         )
       );
       toast({
@@ -376,14 +376,14 @@ export default function NotesPage() {
       return;
     }
 
-    updateNotesInState([data]);
+    updateScribblesInState([data]);
   }
 
-  async function handleDeleteOne(noteId: string, event: React.MouseEvent) {
+  async function handleDeleteOne(scribbleId: string, event: React.MouseEvent) {
     event.stopPropagation();
     if (!window.confirm("Move this Scribble to trash?")) return;
 
-    const { error: deleteError } = await notesService.deleteNote(noteId);
+    const { error: deleteError } = await scribblesService.deleteScribble(scribbleId);
     if (deleteError) {
       toast({
         title: "Couldn’t move Scribble to trash",
@@ -393,24 +393,24 @@ export default function NotesPage() {
       return;
     }
 
-    setAllNotes((previous) => previous.filter((note) => note.id !== noteId));
+    setAllScribbles((previous) => previous.filter((scribble) => scribble.id !== scribbleId));
     setSelectedIds((previous) => {
       const next = new Set(previous);
-      next.delete(noteId);
+      next.delete(scribbleId);
       return next;
     });
     setTrashCount((previous) => previous + 1);
   }
 
   async function applyBulkUpdate(
-    updates: Parameters<typeof notesService.updateNotes>[1],
+    updates: Parameters<typeof scribblesService.updateScribbles>[1],
     successMessage: string
   ) {
     if (selectedCount === 0) return;
 
     setIsApplyingBulkAction(true);
     const ids = Array.from(selectedIds);
-    const { data, error: updateError } = await notesService.updateNotes(ids, updates);
+    const { data, error: updateError } = await scribblesService.updateScribbles(ids, updates);
 
     if (updateError || !data) {
       toast({
@@ -422,7 +422,7 @@ export default function NotesPage() {
       return;
     }
 
-    updateNotesInState(data);
+    updateScribblesInState(data);
     setSelectedIds(new Set());
     toast({
       title: successMessage,
@@ -437,7 +437,7 @@ export default function NotesPage() {
 
     setIsApplyingBulkAction(true);
     const ids = Array.from(selectedIds);
-    const { data, error: deleteError } = await notesService.deleteNotes(ids);
+    const { data, error: deleteError } = await scribblesService.deleteScribbles(ids);
 
     if (deleteError || !data) {
       toast({
@@ -449,7 +449,7 @@ export default function NotesPage() {
       return;
     }
 
-    setAllNotes((previous) => previous.filter((note) => !selectedIds.has(note.id)));
+    setAllScribbles((previous) => previous.filter((scribble) => !selectedIds.has(scribble.id)));
     setSelectedIds(new Set());
     setTrashCount((previous) => previous + data.length);
     toast({
@@ -568,13 +568,13 @@ export default function NotesPage() {
             <div className="h-4 w-24 rounded-full bg-white/10" />
             <div className="h-10 w-64 rounded-full bg-white/10" />
           </div>
-          <NotesListSkeleton />
+          <ScribbleListSkeleton />
         </div>
       </main>
     );
   }
 
-  const isEmptyWorkspace = allNotes.length === 0;
+  const isEmptyWorkspace = allScribbles.length === 0;
 
   return (
     <main className="min-h-screen bg-[#020617] px-4 pt-24 pb-24 text-white overflow-x-hidden">
@@ -635,7 +635,7 @@ export default function NotesPage() {
             <section className="rounded-[28px] p-4 border border-cyan-700/30 shadow-xl min-w-0">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-white">Saved Views</h2>
-                <span className="text-xs text-slate-500">{allNotes.length} total</span>
+                <span className="text-xs text-slate-500">{allScribbles.length} total</span>
               </div>
 
               <div className="space-y-1.5">
@@ -768,7 +768,7 @@ export default function NotesPage() {
                   <p className="text-sm text-slate-400">{activeViewDescription}</p>
                 </div>
                 <div className="text-sm text-slate-500">
-                  {filteredNotes.length} result{filteredNotes.length === 1 ? "" : "s"}
+                  {filteredScribbles.length} result{filteredScribbles.length === 1 ? "" : "s"}
                 </div>
               </div>
 
@@ -889,7 +889,7 @@ export default function NotesPage() {
                     Start a Stream
                   </button>
                 </div>
-              ) : filteredNotes.length === 0 ? (
+              ) : filteredScribbles.length === 0 ? (
                 <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[28px] border border-dashed border-white/10 px-6 text-center">
                   <Search className="mb-4 h-12 w-12 text-slate-600" />
                   <h3 className="text-2xl font-semibold text-white">Nothing matches this view</h3>
@@ -909,12 +909,12 @@ export default function NotesPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {paginatedNotes.map((note) => {
-                    const isSelected = selectedIds.has(note.id);
+                  {paginatedScribbles.map((scribble) => {
+                    const isSelected = selectedIds.has(scribble.id);
 
                     return (
                       <article
-                        key={note.id}
+                        key={scribble.id}
                         className={cn(
                           "group rounded-[28px] px-4 py-4 transition border md:px-5",
                           isSelected
@@ -924,7 +924,7 @@ export default function NotesPage() {
                       >
                         <div className="flex gap-4">
                           <button
-                            onClick={() => handleToggleSelection(note.id)}
+                            onClick={() => handleToggleSelection(scribble.id)}
                             className="mt-1 h-5 w-5 shrink-0 rounded-md text-slate-400 transition hover:text-cyan-200"
                             aria-label={isSelected ? "Deselect Scribble" : "Select Scribble"}
                           >
@@ -937,59 +937,59 @@ export default function NotesPage() {
 
                           <div
                             className="min-w-0 flex-1 cursor-pointer"
-                            onClick={() => router.push(`/notes/${note.id}`)}
+                            onClick={() => router.push(`/scribble/${scribble.id}`)}
                           >
                             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                               <div className="min-w-0 space-y-2">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <h3 className="truncate text-lg font-semibold text-white">
-                                    {note.title || "Untitled Note"}
+                                    {scribble.title || "Untitled Scribble"}
                                   </h3>
-                                  {note.folder && (
+                                  {scribble.folder && (
                                     <button
                                       onClick={(event) => {
                                         event.stopPropagation();
-                                        setCurrentView(`folder:${note.folder}`);
+                                        setCurrentView(`folder:${scribble.folder}`);
                                       }}
                                       className="inline-flex items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200"
                                     >
                                       <Folder className="h-3 w-3" />
-                                      {note.folder}
+                                      {scribble.folder}
                                     </button>
                                   )}
                                 </div>
 
                                 <p className="max-w-3xl text-sm leading-6 text-slate-400">
-                                  {getPreview(note)}
+                                  {getPreview(scribble)}
                                 </p>
                               </div>
 
                               <div className="shrink-0 text-xs text-slate-500">
-                                {formatDate(note.updated_at)}
+                                {formatDate(scribble.updated_at)}
                               </div>
                             </div>
                           </div>
 
                           <div className="flex shrink-0 items-start gap-1">
                             <button
-                              onClick={(event) => void handleToggleStar(note, event)}
+                              onClick={(event) => void handleToggleStar(scribble, event)}
                               className={cn(
                                 "rounded-xl p-2 transition",
-                                note.is_starred
+                                scribble.is_starred
                                   ? "text-cyan-300 hover:bg-cyan-500/10"
                                   : "text-slate-500 hover:bg-white/5 hover:text-cyan-200"
                               )}
-                              title={note.is_starred ? "Unstar Scribble" : "Star Scribble"}
+                              title={scribble.is_starred ? "Unstar Scribble" : "Star Scribble"}
                             >
                               <Star
                                 className={cn(
                                   "h-4 w-4",
-                                  note.is_starred && "fill-current"
+                                  scribble.is_starred && "fill-current"
                                 )}
                               />
                             </button>
                             <button
-                              onClick={(event) => void handleDeleteOne(note.id, event)}
+                              onClick={(event) => void handleDeleteOne(scribble.id, event)}
                               className="rounded-xl p-2 text-slate-500 transition hover:bg-white/5 hover:text-red-200"
                               title="Move Scribble to trash"
                             >
@@ -1004,7 +1004,7 @@ export default function NotesPage() {
               )}
             </div>
 
-            {filteredNotes.length > 0 && totalPages > 1 && (
+            {filteredScribbles.length > 0 && totalPages > 1 && (
               <div className="mt-6 overflow-x-auto pb-2">
                 <Pagination>
                   <PaginationContent className="flex-nowrap gap-1">

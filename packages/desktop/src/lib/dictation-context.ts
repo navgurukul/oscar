@@ -2,8 +2,8 @@ import type {
   DictationCategory,
   DictationContextSnapshot,
   DictationRoutingResult,
-} from "../types/note.types";
-import { DICTATION_PROMPT_VERSION } from "../types/note.types";
+} from "../types/scribble.types";
+import { DICTATION_PROMPT_VERSION } from "../types/scribble.types";
 
 export const CONTEXT_AWARE_DICTATION_PROMPT_VERSION = DICTATION_PROMPT_VERSION;
 

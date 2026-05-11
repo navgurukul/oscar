@@ -91,8 +91,8 @@ export interface DBUsageTracking {
 export interface UsageInfo {
   recordingsThisMonth: number;
   recordingsLimit: number | null; // null = unlimited (pro)
-  notesCount: number;
-  notesLimit: number | null; // null = unlimited (pro)
+  scribblesCount: number;
+  scribblesLimit: number | null; // null = unlimited (pro)
 }
 
 /**
@@ -103,9 +103,9 @@ export interface SubscriptionWithUsage {
   usage: UsageInfo;
   isProUser: boolean;
   canRecord: boolean;
-  canCreateNote: boolean;
+  canCreateScribble: boolean;
   remainingRecordings: number | null;
-  remainingNotes: number | null;
+  remainingScribbles: number | null;
 }
 
 // ============================================
@@ -139,11 +139,11 @@ export interface UsageStatsResponse {
   currentPeriodEnd: string | null;
   recordingsThisMonth: number;
   recordingsLimit: number | null;
-  notesCount: number;
-  notesLimit: number | null;
+  scribblesCount: number;
+  scribblesLimit: number | null;
   isProUser: boolean;
   canRecord: boolean;
-  canCreateNote: boolean;
+  canCreateScribble: boolean;
 }
 
 /**
@@ -273,7 +273,7 @@ export interface RazorpayPaymentEntity {
  * Props for UpgradePrompt component
  */
 export interface UpgradePromptProps {
-  limitType: "recordings" | "notes";
+  limitType: "recordings" | "scribbles";
   currentUsage: number;
   limit: number;
   onClose: () => void;
@@ -284,7 +284,7 @@ export interface UpgradePromptProps {
  * Props for UsageIndicator component
  */
 export interface UsageIndicatorProps {
-  type: "recordings" | "notes" | "vocabulary";
+  type: "recordings" | "scribbles" | "vocabulary";
   current: number;
   limit: number | null;
   variant?: "compact" | "full";

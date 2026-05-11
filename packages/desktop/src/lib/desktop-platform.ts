@@ -1,4 +1,4 @@
-import type { DictationContextSnapshot, DictationRoutingResult } from "../types/note.types";
+import type { DictationContextSnapshot, DictationRoutingResult } from "../types/scribble.types";
 import type {
   HotkeyContextEventPayload,
   MicrophonePermissionState,

@@ -7,7 +7,7 @@ import type {
 import type {
   DictationContextSnapshot,
   DictationRoutingResult,
-} from "../types/note.types";
+} from "../types/scribble.types";
 import { MEETING_CONFIG } from "@oscar/shared/constants";
 
 export type DesktopAIMode =
@@ -238,8 +238,11 @@ async function invokeAIProcess(
     throw new Error(await extractInvokeError(error));
   }
 
-  const processedText = data?.text?.trim();
-  if (!processedText) {
+  const processedText = data?.text?.trim() ?? "";
+  // transcribe_cleanup may legitimately return empty when the server detects
+  // silence / Whisper hallucinations. Surface that instead of throwing so the
+  // caller can skip the paste step.
+  if (!processedText && request.mode !== "transcribe_cleanup") {
     throw new Error(data?.error || "AI returned an empty response.");
   }
 

@@ -7,10 +7,10 @@ import { Separator } from "@/components/ui/separator";
 import { Copy, Download, Share2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { FeedbackWidget } from "@/components/results/FeedbackWidget";
-import type { FeedbackReason } from "@/lib/types/note.types";
+import type { FeedbackReason } from "@/lib/types/scribble.types";
 
-interface NoteEditorProps {
-  formattedNote: string;
+interface ScribbleEditorProps {
+  formattedScribble: string;
   title: string;
   onCopy: () => void;
   onDownload: () => void;
@@ -29,8 +29,8 @@ interface NoteEditorProps {
   showFeedback?: boolean;
 }
 
-export function NoteEditor({
-  formattedNote,
+export function ScribbleEditor({
+  formattedScribble,
   title,
   onCopy,
   onDownload,
@@ -47,7 +47,7 @@ export function NoteEditor({
   hasFeedbackSubmitted = false,
   feedbackValue = null,
   showFeedback = false,
-}: NoteEditorProps) {
+}: ScribbleEditorProps) {
   const [activeTab, setActiveTab] = useState<"scribble" | "transcript">("scribble");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -58,7 +58,7 @@ export function NoteEditor({
       el.style.height = "auto";
       el.style.height = el.scrollHeight + "px";
     }
-  }, [formattedNote, activeTab]);
+  }, [formattedScribble, activeTab]);
 
   return (
     <div className="w-full max-w-[650px]">
@@ -67,7 +67,7 @@ export function NoteEditor({
           {/* Title + action icons */}
           <div className="flex gap-6 justify-between items-center">
             <h2 className="text-xl font-semibold text-white truncate">
-              {title || "Untitled Note"}
+              {title || "Untitled Scribble"}
             </h2>
 
             <div className="hidden md:flex items-center gap-1">
@@ -135,7 +135,7 @@ export function NoteEditor({
           {activeTab === "scribble" ? (
             <textarea
               ref={textareaRef}
-              value={formattedNote}
+              value={formattedScribble}
               onChange={(e) => onTextChange?.(e.target.value)}
               onBlur={onSaveEdit}
               placeholder="Your Scribble will appear here..."

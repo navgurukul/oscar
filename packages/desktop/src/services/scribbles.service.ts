@@ -1,20 +1,20 @@
 import { supabase } from "../supabase";
 import type {
-  DBNote,
-  DBNoteInsert,
-  DBNoteUpdate,
-} from "../types/note.types";
+  DBScribble,
+  DBScribbleInsert,
+  DBScribbleUpdate,
+} from "../types/scribble.types";
 
-export const notesService = {
+export const scribblesService = {
   /**
-   * Create a new note in the database
+   * Create a new scribble in the database
    */
-  async createNote(
-    note: DBNoteInsert
-  ): Promise<{ data: DBNote | null; error: Error | null }> {
+  async createScribble(
+    scribble: DBScribbleInsert
+  ): Promise<{ data: DBScribble | null; error: Error | null }> {
     const { data, error } = await supabase
-      .from("notes")
-      .insert(note)
+      .from("scribbles")
+      .insert(scribble)
       .select()
       .single();
 
@@ -22,11 +22,11 @@ export const notesService = {
   },
 
   /**
-   * Get all notes for the current user (excluding soft-deleted)
+   * Get all scribbles for the current user (excluding soft-deleted)
    */
-  async getNotes(): Promise<{ data: DBNote[] | null; error: Error | null }> {
+  async getScribbles(): Promise<{ data: DBScribble[] | null; error: Error | null }> {
     const { data, error } = await supabase
-      .from("notes")
+      .from("scribbles")
       .select("*")
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
@@ -35,13 +35,13 @@ export const notesService = {
   },
 
   /**
-   * Get a single note by ID (excluding soft-deleted)
+   * Get a single scribble by ID (excluding soft-deleted)
    */
-  async getNoteById(
+  async getScribbleById(
     id: string
-  ): Promise<{ data: DBNote | null; error: Error | null }> {
+  ): Promise<{ data: DBScribble | null; error: Error | null }> {
     const { data, error } = await supabase
-      .from("notes")
+      .from("scribbles")
       .select("*")
       .eq("id", id)
       .is("deleted_at", null)
@@ -51,14 +51,14 @@ export const notesService = {
   },
 
   /**
-   * Update a note (primarily for editing text)
+   * Update a scribble (primarily for editing text)
    */
-  async updateNote(
+  async updateScribble(
     id: string,
-    updates: DBNoteUpdate
-  ): Promise<{ data: DBNote | null; error: Error | null }> {
+    updates: DBScribbleUpdate
+  ): Promise<{ data: DBScribble | null; error: Error | null }> {
     const { data, error } = await supabase
-      .from("notes")
+      .from("scribbles")
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq("id", id)
       .select()
@@ -68,11 +68,11 @@ export const notesService = {
   },
 
   /**
-   * Soft delete a note by setting deleted_at
+   * Soft delete a scribble by setting deleted_at
    */
-  async deleteNote(id: string): Promise<{ error: Error | null }> {
+  async deleteScribble(id: string): Promise<{ error: Error | null }> {
     const { data, error } = await supabase
-      .from("notes")
+      .from("scribbles")
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", id)
       .select();
@@ -80,20 +80,20 @@ export const notesService = {
     if (error) return { error: error as Error };
     // RLS may silently block the update → 0 rows returned
     if (!data || data.length === 0) {
-      return { error: new Error("Delete failed: note not found or permission denied") };
+      return { error: new Error("Delete failed: scribble not found or permission denied") };
     }
     return { error: null };
   },
 
   /**
-   * Toggle the starred status of a note
+   * Toggle the starred status of a scribble
    */
   async toggleStar(
     id: string,
     isStarred: boolean
-  ): Promise<{ data: DBNote | null; error: Error | null }> {
+  ): Promise<{ data: DBScribble | null; error: Error | null }> {
     const { data, error } = await supabase
-      .from("notes")
+      .from("scribbles")
       .update({ is_starred: isStarred })
       .eq("id", id)
       .select();
@@ -105,7 +105,7 @@ export const notesService = {
     if (!updated) {
       return {
         data: null,
-        error: new Error("Update failed: note not found or permission denied"),
+        error: new Error("Update failed: scribble not found or permission denied"),
       };
     }
 
@@ -113,14 +113,14 @@ export const notesService = {
   },
 
   /**
-   * Get all soft-deleted (trashed) notes for the current user
+   * Get all soft-deleted (trashed) scribbles for the current user
    */
-  async getTrashedNotes(): Promise<{
-    data: DBNote[] | null;
+  async getTrashedScribbles(): Promise<{
+    data: DBScribble[] | null;
     error: Error | null;
   }> {
     const { data, error } = await supabase
-      .from("notes")
+      .from("scribbles")
       .select("*")
       .not("deleted_at", "is", null)
       .order("deleted_at", { ascending: false });
@@ -129,13 +129,13 @@ export const notesService = {
   },
 
   /**
-   * Restore a soft-deleted note by clearing deleted_at
+   * Restore a soft-deleted scribble by clearing deleted_at
    */
-  async restoreNote(
+  async restoreScribble(
     id: string
-  ): Promise<{ data: DBNote | null; error: Error | null }> {
+  ): Promise<{ data: DBScribble | null; error: Error | null }> {
     const { data, error } = await supabase
-      .from("notes")
+      .from("scribbles")
       .update({ deleted_at: null, updated_at: new Date().toISOString() })
       .eq("id", id)
       .select()
@@ -145,10 +145,10 @@ export const notesService = {
   },
 
   /**
-   * Permanently delete a note (hard delete)
+   * Permanently delete a scribble (hard delete)
    */
   async permanentDelete(id: string): Promise<{ error: Error | null }> {
-    const { error } = await supabase.from("notes").delete().eq("id", id);
+    const { error } = await supabase.from("scribbles").delete().eq("id", id);
 
     return { error: error as Error | null };
   },

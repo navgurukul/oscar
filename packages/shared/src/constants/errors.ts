@@ -27,7 +27,7 @@ export const ERROR_MESSAGES = {
   FORMATTING_FAILED: "Failed to format text. Please try again.",
   TITLE_GENERATION_FAILED: "Failed to generate title.",
   FORMATTING_FALLBACK:
-    "AI unavailable - basic formatting applied. You can still edit your note.",
+    "AI unavailable - basic formatting applied. You can still edit your Scribble.",
   FORMATTING_CANCELLED: "Formatting cancelled.",
 
   // API Errors

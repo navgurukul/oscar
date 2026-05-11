@@ -59,15 +59,17 @@ jobs:
       matrix:
         include:
           # ── macOS ──
+          # Pinned to macos-14 (Sonoma): macos-latest moved to Sequoia, which
+          # breaks Tauri's bundle_dmg.sh (osascript/Finder API change).
           - target: aarch64-apple-darwin
             label: macos-silicon
-            os: macos-latest
+            os: macos-14
             cflags: "-march=armv8-a -mmacosx-version-min=12.0"
             macosx_deployment_target: "12.0"
             bundles: "app,dmg"
           - target: x86_64-apple-darwin
             label: macos-intel
-            os: macos-latest
+            os: macos-14
             cflags: "-mmacosx-version-min=12.0"
             macosx_deployment_target: "12.0"
             bundles: "app,dmg"

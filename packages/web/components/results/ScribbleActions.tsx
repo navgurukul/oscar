@@ -16,13 +16,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-interface NoteActionsProps {
+interface ScribbleActionsProps {
   onSave?: () => Promise<void>;
   isSaving?: boolean;
   showSave?: boolean;
 }
 
-export function NoteActions({ onSave, isSaving, showSave }: NoteActionsProps) {
+export function ScribbleActions({ onSave, isSaving, showSave }: ScribbleActionsProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
@@ -38,7 +38,7 @@ export function NoteActions({ onSave, isSaving, showSave }: NoteActionsProps) {
   };
 
   const handleRecordAgain = async () => {
-    storageService.clearNote();
+    storageService.clearScribble();
     router.push(ROUTES.RECORDING);
   };
 

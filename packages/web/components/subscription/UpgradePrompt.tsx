@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SUBSCRIPTION_CONFIG, PRICING, PRICING_USD } from "@/lib/constants";
 
 interface UpgradePromptProps {
-  limitType: "recordings" | "notes" | "vocabulary";
+  limitType: "recordings" | "scribbles" | "vocabulary";
   currentUsage: number;
   onClose: () => void;
 }
@@ -21,8 +21,8 @@ export function UpgradePrompt({
   const limit =
     limitType === "recordings"
       ? SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS
-      : limitType === "notes"
-      ? SUBSCRIPTION_CONFIG.FREE_MAX_NOTES
+      : limitType === "scribbles"
+      ? SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES
       : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY;
 
   const handleUpgrade = () => {
@@ -64,8 +64,8 @@ export function UpgradePrompt({
           <h2 className="text-xl font-bold text-white">
             {limitType === "recordings"
               ? "Recording Limit Reached"
-              : limitType === "notes"
-              ? "Note Limit Reached"
+              : limitType === "scribbles"
+              ? "Scribble Limit Reached"
               : "Vocabulary Limit Reached"}
           </h2>
 
@@ -75,8 +75,8 @@ export function UpgradePrompt({
             <span className="text-white font-medium">{limit}</span>{" "}
             {limitType === "recordings"
               ? "recordings this month"
-              : limitType === "notes"
-              ? "note slots"
+              : limitType === "scribbles"
+              ? "Scribble slots"
               : "vocabulary entries"}
             . Upgrade to Pro for unlimited {limitType}.
           </p>
@@ -104,7 +104,7 @@ export function UpgradePrompt({
                 <span className="text-cyan-400">✓</span> Unlimited recordings
               </li>
               <li className="flex items-center gap-2">
-                <span className="text-cyan-400">✓</span> Unlimited notes
+                <span className="text-cyan-400">✓</span> Unlimited Scribbles
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-cyan-400">✓</span> Unlimited vocabulary entries

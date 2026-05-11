@@ -1,7 +1,7 @@
 import type {
   FormattingResult,
   TitleGenerationResult,
-} from "../types/note.types";
+} from "../types/scribble.types";
 import type {
   GroqFormatResponse,
   GroqTitleResponse,
@@ -416,7 +416,7 @@ export const aiService = {
         title: this.sanitizeTitle(truncated || cleaned.slice(0, API_CONFIG.TITLE_MAX_LENGTH)),
       };
     } catch {
-      return { success: true, title: UI_STRINGS.UNTITLED_NOTE };
+      return { success: true, title: UI_STRINGS.UNTITLED_SCRIBBLE };
     }
   },
 
