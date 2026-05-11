@@ -246,7 +246,7 @@ function buildCalendarContext(
   };
 }
 
-function getNotesLoadingLabel(
+function getScribblesLoadingLabel(
   status: MinutesTranscriptionStatus,
   transcript: string,
   completed: number,
@@ -1312,7 +1312,7 @@ export function MeetingsTab({
               <div className="flex flex-col items-center gap-4 py-16">
                 <Loader2 size={28} className="animate-spin" />
                 <span className="text-[0.9375rem] font-medium text-slate-500">
-                  {getNotesLoadingLabel(
+                  {getScribblesLoadingLabel(
                     minutesTranscriptionStatus,
                     transcript,
                     minutesSegmentsCompleted,

@@ -74,8 +74,8 @@ function SettingsContent() {
     currentPeriodEnd,
     recordingsThisMonth,
     recordingsLimit,
-    notesCount,
-    notesLimit,
+    scribblesCount,
+    scribblesLimit,
     isProUser,
     isLoading: subscriptionLoading,
     refetch,
@@ -185,8 +185,8 @@ function SettingsContent() {
                 currentPeriodEnd={currentPeriodEnd}
                 recordingsThisMonth={recordingsThisMonth}
                 recordingsLimit={recordingsLimit}
-                notesCount={notesCount}
-                notesLimit={notesLimit}
+                scribblesCount={scribblesCount}
+                scribblesLimit={scribblesLimit}
                 isProUser={isProUser}
                 isLoading={subscriptionLoading}
                 onRefetch={refetch}

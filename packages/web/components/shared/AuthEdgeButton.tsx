@@ -43,17 +43,17 @@ export function AuthEdgeButton() {
   return (
     <>
       {/* Mobile Layout - Vertical stack with simple icon buttons */}
-      {/* Order: Notes (top) -> Meetings -> Settings -> Auth (bottom, aligned with Mic button at bottom-6) */}
+      {/* Order: Scribbles (top) -> Meetings -> Settings -> Auth (bottom, aligned with Mic button at bottom-6) */}
       <div className="fixed bottom-6 right-4 z-50 flex flex-col items-center gap-2 md:hidden">
         <AnimatePresence mode="popLayout">
           {user && (
             <motion.div
-              key="notes-link-mobile"
+              key="scribbles-link-mobile"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
             >
-              <Link href={ROUTES.NOTES}>
+              <Link href={ROUTES.SCRIBBLE}>
                 <motion.div
                   whileTap={{ scale: 0.95 }}
                   className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 active:bg-cyan-500/20 border border-cyan-500/30 backdrop-blur-md shadow-2xl"
@@ -133,7 +133,7 @@ export function AuthEdgeButton() {
         <AnimatePresence mode="popLayout">
           {user && (
             <motion.div
-              key="notes-link"
+              key="scribbles-link"
               layout
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -142,7 +142,7 @@ export function AuthEdgeButton() {
             >
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Link href={ROUTES.NOTES}>
+                  <Link href={ROUTES.SCRIBBLE}>
                     <motion.div
                       whileHover={{ y: -5, scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}

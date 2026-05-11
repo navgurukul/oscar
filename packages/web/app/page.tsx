@@ -47,8 +47,8 @@ const StreamAppIcons = {
 import { FadeIn, listVariants, itemVariants } from "@/components/ui/fade-in";
 import { useAuth } from "@/lib/contexts/AuthContext";
 
-import { notesService } from "@/lib/services/notes.service";
-import type { DBNote } from "@/lib/types/note.types";
+import { scribblesService } from "@/lib/services/scribbles.service";
+import type { DBScribble } from "@/lib/types/scribble.types";
 import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency, UI_STRINGS, ROUTES } from "@/lib/constants";
 import type { BillingCycle } from "@/lib/types/subscription.types";
 import img1 from "@/components/ui/assets/image_1.png";
@@ -73,7 +73,7 @@ const TESTIMONIALS = [
   },
   {
     quote:
-      "OSCAR is really helpful for turning voice notes into clear text. It saves time and makes capturing ideas much easier. I find it very useful for learning and work notes",
+      "OSCAR is really helpful for turning voice scribbles into clear text. It saves time and makes capturing ideas much easier. I find it very useful for learning and work",
     name: "Komal Ahire",
     designation: "Senior Fullstack Developer",
     src: img3,
@@ -89,28 +89,28 @@ const TESTIMONIALS = [
 
 export default function Home() {
   const { session, user } = useAuth();
-  const [recentNotes, setRecentNotes] = useState<DBNote[]>([]);
-  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
+  const [recentScribbles, setRecentScribbles] = useState<DBScribble[]>([]);
+  const [isLoadingScribbles, setIsLoadingScribbles] = useState(false);
   const router = useRouter();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [currency, setCurrency] = useState<Currency>("INR");
 
   useEffect(() => {
     if (session) {
-      loadRecentNotes();
+      loadRecentScribbles();
     }
   }, [session]);
 
-  const loadRecentNotes = async () => {
-    setIsLoadingNotes(true);
-    const { data, error } = await notesService.getNotes();
+  const loadRecentScribbles = async () => {
+    setIsLoadingScribbles(true);
+    const { data, error } = await scribblesService.getScribbles();
     if (!error && data) {
-      setRecentNotes(data.slice(0, 3));
+      setRecentScribbles(data.slice(0, 3));
     }
-    setIsLoadingNotes(false);
+    setIsLoadingScribbles(false);
   };
 
-  // Recording CTA is currently disabled; uncomment when re-enabling "New Note" button
+  // Recording CTA is currently disabled; uncomment when re-enabling "New Scribble" button
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -149,8 +149,8 @@ export default function Home() {
   if (session) {
     const firstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || "there";
 
-    // If no notes exist and not loading, show the empty state UI
-    if (!isLoadingNotes && recentNotes.length === 0) {
+    // If no Scribbles exist and not loading, show the empty state UI
+    if (!isLoadingScribbles && recentScribbles.length === 0) {
       return (
         <main className="flex flex-col items-center pt-8 pb-24 px-4 bg-[#020617] relative">
         {/* Top Decoration */}
@@ -225,7 +225,7 @@ export default function Home() {
       );
     }
 
-    // If notes exist, show the dashboard UI
+    // If Scribbles exist, show the dashboard UI
     return (
       <main className="flex flex-col items-center pt-8 pb-24 px-4 bg-[#020617] relative">
         <motion.div
@@ -248,13 +248,13 @@ export default function Home() {
             <h2 className="text-gray-400 font-medium mb-6 text-center">Recent Scribbles</h2>
             
             <div className="space-y-3">
-              {isLoadingNotes ? (
+              {isLoadingScribbles ? (
                 [1, 2, 3].map((i) => (
                   <div key={i} className="h-20 bg-slate-900/50 rounded-2xl animate-pulse border border-white/5" />
                 ))
-              ) : recentNotes.length > 0 ? (
-                recentNotes.map((note) => (
-                  <Link key={note.id} href={`${ROUTES.NOTES}/${note.id}`}>
+              ) : recentScribbles.length > 0 ? (
+                recentScribbles.map((scribble) => (
+                  <Link key={scribble.id} href={`${ROUTES.SCRIBBLE}/${scribble.id}`}>
                     <div className="w-full p-4 mb-3 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-cyan-500/20 rounded-2xl flex flex-col transition-all group">
                       <div className="flex items-center justify-between gap-4 mb-1">
                         <div className="flex items-center gap-4 min-w-0 flex-1">
@@ -262,15 +262,15 @@ export default function Home() {
                             <FileText className="w-5 h-5 text-cyan-400" />
                           </div>
                           <h4 className="text-white font-semibold truncate">
-                            {note.title || UI_STRINGS.UNTITLED_NOTE}
+                            {scribble.title || UI_STRINGS.UNTITLED_SCRIBBLE}
                           </h4>
                         </div>
                         <p className="text-gray-500 text-xs ml-4 shrink-0">
-                          {formatDate(note.created_at)}
+                          {formatDate(scribble.created_at)}
                         </p>
                       </div>
                       <p className="text-gray-400 text-sm line-clamp-1 ml-14">
-                        {note.original_formatted_text}
+                        {scribble.original_formatted_text}
                       </p>
                     </div>
                   </Link>
@@ -376,7 +376,7 @@ export default function Home() {
                     <div className="text-cyan-300 mb-4 icon-spring w-fit">
                       <FileText className="w-10 h-10" />
                     </div>
-                    <h3 className="text-xl font-semibold text-white mb-3">Voice Notes Are Messy</h3>
+                    <h3 className="text-xl font-semibold text-white mb-3">Voice Scribbles Need Cleanup</h3>
                     <p className="text-gray-400">
                       Full of ums and uhs. Too embarrassing to share with anyone.
                     </p>
@@ -504,10 +504,10 @@ export default function Home() {
                       <span className="text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1">oscar Minutes</span>
                     </div>
                     <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                      Full meeting notes, <span className="text-cyan-400">automatically.</span>
+                      Full meeting Minutes, <span className="text-cyan-400">automatically.</span>
                     </h3>
                     <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                      Record your Zoom, Teams, or in-person meeting. OSCAR captures both your voice and other participants&apos; audio, transcribes everything, and generates structured AI notes the moment you stop.
+                      Record your Zoom, Teams, or in-person meeting. OSCAR captures both your voice and other participants&apos; audio, transcribes everything, and generates structured AI Minutes the moment you stop.
                     </p>
                     <motion.ul
                       variants={listVariants}
@@ -516,7 +516,7 @@ export default function Home() {
                       viewport={{ once: true }}
                       className="space-y-3"
                     >
-                      {["Records mic + system audio (Zoom, Teams, etc.)", "AI-structured notes: decisions, action items, follow-ups", "Google Calendar integration with one-tap access from your schedule", "Standup, 1:1, brainstorm & custom templates"].map((f) => (
+                      {["Records mic + system audio (Zoom, Teams, etc.)", "AI-structured Minutes: decisions, action items, follow-ups", "Google Calendar integration with one-tap access from your schedule", "Standup, 1:1, brainstorm & custom templates"].map((f) => (
                         <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
                           <Check className="w-4 h-4 text-cyan-400 shrink-0" />
                           <span>{f}</span>
@@ -540,10 +540,10 @@ export default function Home() {
                       <span className="text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1">oscar Scribble</span>
                     </div>
                     <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                      Your voice notes, <span className="text-cyan-400">beautifully organized.</span>
+                      Your voice scribbles, <span className="text-cyan-400">beautifully organized.</span>
                     </h3>
                     <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                      Every Stream dictation and idea you capture lives in Scribble. It is searchable, editable, and synced across devices. Build your personal knowledge base without ever typing a thing.
+                      Saved Stream dictations become Scribbles. They are searchable, editable, and synced across devices. Build your personal knowledge base without ever typing a thing.
                     </p>
                     <motion.ul
                       variants={listVariants}
@@ -552,7 +552,7 @@ export default function Home() {
                       viewport={{ once: true }}
                       className="space-y-3"
                     >
-                      {["All your voice notes in one searchable place", "Synced to the cloud, accessible anywhere", "AI-cleaned text ready to share or export", "Custom vocabulary for your industry & jargon"].map((f) => (
+                      {["All your voice scribbles in one searchable place", "Synced to the cloud, accessible anywhere", "AI-cleaned text ready to share or export", "Custom vocabulary for your industry & jargon"].map((f) => (
                         <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
                           <Check className="w-4 h-4 text-cyan-400 shrink-0" />
                           <span>{f}</span>
@@ -572,14 +572,14 @@ export default function Home() {
                         { title: "Product brainstorm", time: "Today, 2:14 PM" },
                         { title: "Weekly goals", time: "Yesterday, 9:30 AM" },
                         { title: "Client call ideas", time: "3 days ago" },
-                      ].map((note) => (
-                        <motion.div key={note.title} variants={itemVariants} className="flex items-center gap-3 p-3 bg-slate-800/60 hover:bg-slate-800/80 rounded-xl border border-slate-700/50 hover:border-cyan-500/30 transition-colors duration-200 cursor-default">
+                      ].map((scribble) => (
+                        <motion.div key={scribble.title} variants={itemVariants} className="flex items-center gap-3 p-3 bg-slate-800/60 hover:bg-slate-800/80 rounded-xl border border-slate-700/50 hover:border-cyan-500/30 transition-colors duration-200 cursor-default">
                           <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 hover:scale-110">
                             <FileText className="w-4 h-4 text-cyan-400" />
                           </div>
                           <div>
-                            <p className="text-sm text-white font-medium">{note.title}</p>
-                            <p className="text-xs text-slate-500">{note.time}</p>
+                            <p className="text-sm text-white font-medium">{scribble.title}</p>
+                            <p className="text-xs text-slate-500">{scribble.time}</p>
                           </div>
                         </motion.div>
                       ))}
@@ -626,7 +626,7 @@ export default function Home() {
                     </div>
                     <h3 className="text-2xl font-semibold text-white mb-4">AI That Understands Context</h3>
                     <p className="text-gray-300 mb-4">
-                      Not just speech-to-text. OSCAR formats your ideas intelligently, and Minutes turns raw conversation into structured, actionable notes.
+                      Not just speech-to-text. OSCAR formats your ideas intelligently, and Minutes turns raw conversation into structured, actionable Minutes.
                     </p>
                     <p className="text-cyan-200 text-sm">
                       Hinglish support, 30+ languages, custom vocabulary
@@ -641,7 +641,7 @@ export default function Home() {
                     </div>
                     <h3 className="text-2xl font-semibold text-white mb-4">Always Shareable</h3>
                     <p className="text-gray-300 mb-4">
-                      Every Scribble note and Minutes summary is clean enough to send directly. No embarrassing filler words or messy raw transcripts.
+                      Every Scribble and Minutes summary is clean enough to send directly. No embarrassing filler words or messy raw transcripts.
                     </p>
                     <p className="text-cyan-200 text-sm">
                       Email, copy, or export with one click
@@ -763,7 +763,7 @@ export default function Home() {
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Up to {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total Scribbles</span>
+                      <span className="text-gray-300 text-sm">Up to {SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES} total Scribbles</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />

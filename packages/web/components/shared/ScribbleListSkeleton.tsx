@@ -4,9 +4,9 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
 /**
- * Skeleton component for notes list - shows 3 card placeholders
+ * Skeleton component for scribbles list - shows 3 card placeholders
  */
-export function NotesListSkeleton() {
+export function ScribbleListSkeleton() {
   return (
     <div className="space-y-4">
       {[1, 2, 3].map((i) => (

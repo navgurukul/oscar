@@ -4,12 +4,12 @@ Overview of AI agents and services in OSCAR.
 
 ## Overview
 
-OSCAR uses Groq-powered AI agents to transform voice recordings into clean formatted text. Two primary agents process and organize voice notes.
+OSCAR uses Groq-powered AI agents to transform voice recordings into clean formatted text. Two primary agents process and organize Stream transcripts into Scribbles.
 
 ## Architecture
 
 ```
-Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent → Formatted Note
+Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent → Formatted Scribble
 ```
 
 ## AI Agents
@@ -51,7 +51,7 @@ Output: "How to create a React app."
 
 ### 2. Title Generation Agent
 
-**Purpose**: Generates concise, descriptive titles for formatted notes.
+**Purpose**: Generates concise, descriptive titles for formatted Scribbles.
 
 **Location**: [`/app/api/groq/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/title/route.ts)
 
@@ -67,7 +67,7 @@ If AI title generation fails, system uses heuristic:
 
 - Extracts first sentence
 - Truncates to 60 characters if needed
-- Falls back to "Untitled Note" if no content
+- Falls back to "Untitled Scribble" if no content
 
 **Configuration**:
 
@@ -180,7 +180,7 @@ Error messages defined in [`/lib/constants.ts`](file:///Users/souvik/Desktop/osc
 2. **Speech-to-Text**: Browser API or stt-tts-lib converts audio to text
 3. **AI Formatting**: Raw transcript sent to formatting agent
 4. **AI Title Generation**: Formatted text sent to title agent
-5. **Storage**: Results saved to sessionStorage and Supabase
+5. **Storage**: Results saved to sessionStorage, and to Supabase when saved as a Scribble
 6. **Display**: User can view, edit, copy, or download
 7. **Feedback Collection**: User provides quality feedback on AI formatting
 
@@ -192,7 +192,7 @@ Feedback system collects user signals on AI formatting quality for continuous pr
 
 ### User Experience
 
-On each formatted note, users see:
+On each formatted Scribble, users see:
 
 - **"Was this formatting helpful?"** with Yes/No buttons
 - If "No", optional reason tags:
@@ -205,9 +205,9 @@ On each formatted note, users see:
 
 ### Data Storage
 
-**Location**: [`/lib/types/note.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/note.types.ts)
+**Location**: [`/lib/types/scribble.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/scribble.types.ts)
 
-Each note stores:
+Each Scribble stores:
 
 ```typescript
 feedback_helpful: boolean | null;        // User's yes/no response
@@ -221,7 +221,7 @@ feedback_timestamp: string | null;        // When feedback was given
 
 **Methods**:
 
-- `submitFeedback(noteId, helpful, reasons?)` - Store user feedback
+- `submitFeedback(scribbleId, helpful, reasons?)` - Store user feedback
 - `getFeedbackStats()` - Get aggregated statistics:
   - Total feedback count
   - Helpful vs not helpful counts
@@ -254,10 +254,10 @@ console.log("Top issues:", stats.reasonBreakdown);
 
 // If "missed_key_info" is high, review examples
 const { data: cases } = await feedbackService.getRecentNegativeFeedback(20);
-cases.forEach((note) => {
-  console.log("Raw:", note.raw_text);
-  console.log("Formatted:", note.original_formatted_text);
-  console.log("Issues:", note.feedback_reasons);
+cases.forEach((scribble) => {
+  console.log("Raw:", scribble.raw_text);
+  console.log("Formatted:", scribble.original_formatted_text);
+  console.log("Issues:", scribble.feedback_reasons);
 });
 
 // Update SYSTEM_PROMPTS.FORMAT in /lib/prompts.ts
@@ -278,7 +278,7 @@ cases.forEach((note) => {
 - Displays Yes/No buttons
 - Shows reason tag selection on "No"
 - Handles submission and thank you message display
-- Integrated into results and note detail pages
+- Integrated into results and Scribble detail pages
 
 ### Future Enhancements
 
@@ -310,7 +310,7 @@ For any meaningful UI, UX, styling, layout, navigation, or motion work in OSCAR:
 Use review workflow for:
 
 - landing page or pricing updates
-- recording, notes, results, settings, or billing UI changes
+- recording, Scribble, results, settings, or billing UI changes
 - shared component or design-token changes
 - cross-cutting refactors that can create visual or architectural drift
 
@@ -346,7 +346,7 @@ Potential improvements:
 - [`/lib/services/feedback.service.ts`](file:///Users/souvik/Desktop/oscar/lib/services/feedback.service.ts) - Feedback collection and analytics
 - [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) - Agent prompts and optimization guide
 - [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts) - Configuration constants
-- [`/lib/types/note.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/note.types.ts) - Type definitions
+- [`/lib/types/scribble.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/scribble.types.ts) - Type definitions
 - [`/lib/types/api.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/api.types.ts) - API type definitions
 - [`/app/api/groq/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/format/route.ts) - Format endpoint
 - [`/app/api/groq/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/title/route.ts) - Title endpoint

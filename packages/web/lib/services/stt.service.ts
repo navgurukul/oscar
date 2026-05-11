@@ -55,8 +55,6 @@ export class STTService {
         this.createLogCallback(),
         (transcript) => this.handleTranscriptUpdate(transcript),
         {
-          continueOnSilence: config?.continueOnSilence || true,
-          silenceThresholdMs: config?.silenceThresholdMs || 1500,
           interimSaveIntervalMs:
             config?.interimSaveIntervalMs ||
             RECORDING_CONFIG.INTERIM_SAVE_INTERVAL_MS,

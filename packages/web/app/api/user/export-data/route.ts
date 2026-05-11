@@ -2,7 +2,7 @@
  * Export User Data API Route
  * GET /api/user/export-data
  *
- * Returns all user data (notes, vocabulary) as a downloadable JSON file.
+ * Returns all user data (scribbles, vocabulary) as a downloadable JSON file.
  */
 
 import { NextResponse } from "next/server";
@@ -20,8 +20,8 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [notesResult, vocabularyResult] = await Promise.all([
-      supabase.from("notes").select("*").eq("user_id", user.id),
+    const [scribblesResult, vocabularyResult] = await Promise.all([
+      supabase.from("scribbles").select("*").eq("user_id", user.id),
       supabase.from("user_vocabulary").select("*").eq("user_id", user.id),
     ]);
 
@@ -32,7 +32,7 @@ export async function GET() {
         email: user.email,
         createdAt: user.created_at,
       },
-      notes: notesResult.data ?? [],
+      scribbles: scribblesResult.data ?? [],
       vocabulary: vocabularyResult.data ?? [],
     };
 

@@ -1,6 +1,6 @@
 {
   "name": "@oscar/shared",
-  "version": "0.3.49",
+  "version": "0.3.50",
   "private": true,
   "main": "./src/index.ts",
   "types": "./src/index.ts",

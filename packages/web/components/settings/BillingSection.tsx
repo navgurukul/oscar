@@ -20,8 +20,8 @@ interface BillingSectionProps {
   currentPeriodEnd: string | null;
   recordingsThisMonth: number;
   recordingsLimit: number | null;
-  notesCount: number;
-  notesLimit: number | null;
+  scribblesCount: number;
+  scribblesLimit: number | null;
   isProUser: boolean;
   isLoading: boolean;
   onRefetch: () => void;
@@ -33,8 +33,8 @@ export function BillingSection({
   currentPeriodEnd,
   recordingsThisMonth,
   recordingsLimit,
-  notesCount,
-  notesLimit,
+  scribblesCount,
+  scribblesLimit,
   isProUser,
   isLoading,
   onRefetch,
@@ -128,9 +128,9 @@ export function BillingSection({
                 variant="full"
               />
               <UsageIndicator
-                type="notes"
-                current={notesCount}
-                limit={notesLimit}
+                type="scribbles"
+                current={scribblesCount}
+                limit={scribblesLimit}
                 variant="full"
               />
               <UsageIndicator

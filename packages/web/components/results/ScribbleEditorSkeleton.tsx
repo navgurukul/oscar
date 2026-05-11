@@ -4,9 +4,9 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
 /**
- * Skeleton component for NoteEditor - matches the layout with pulsing placeholders
+ * Skeleton component for ScribbleEditor - matches the layout with pulsing placeholders
  */
-export function NoteEditorSkeleton() {
+export function ScribbleEditorSkeleton() {
   return (
     <div className="w-full max-w-[650px]">
       <Card className="bg-slate-900 border-cyan-700/30 rounded-t-2xl shadow-xl overflow-hidden">

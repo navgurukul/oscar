@@ -3,7 +3,7 @@ import type {
   DictationCategory,
   DictationContextSource,
   FeedbackReason,
-} from "@/lib/types/note.types";
+} from "@/lib/types/scribble.types";
 
 /**
  * Feedback Service
@@ -16,10 +16,10 @@ function getSupabase() {
 
 export const feedbackService = {
   /**
-   * Submit feedback for a note's AI formatting
+   * Submit feedback for a scribble's AI formatting
    */
   async submitFeedback(
-    noteId: string,
+    scribbleId: string,
     helpful: boolean,
     reasons?: FeedbackReason[]
   ): Promise<{ success: boolean; error: Error | null }> {
@@ -30,7 +30,7 @@ export const feedbackService = {
         : Array.from(new Set((reasons ?? []).filter(Boolean)));
 
     const { error } = await supabase
-      .from("notes")
+      .from("scribbles")
       .update({
         feedback_helpful: helpful,
         feedback_reasons:
@@ -39,7 +39,7 @@ export const feedbackService = {
             : null,
         feedback_timestamp: new Date().toISOString(),
       })
-      .eq("id", noteId);
+      .eq("id", scribbleId);
 
     if (error) {
       console.error("Failed to submit feedback:", error);
@@ -69,9 +69,9 @@ export const feedbackService = {
   }> {
     const supabase = getSupabase();
 
-    // Get all notes with feedback
-    const { data: notes, error } = await supabase
-      .from("notes")
+    // Get all scribbles with feedback
+    const { data: scribbles, error } = await supabase
+      .from("scribbles")
       .select(
         "feedback_helpful, feedback_reasons, dictation_variant, dictation_category, dictation_app_key, dictation_prompt_version"
       )
@@ -83,11 +83,11 @@ export const feedbackService = {
     }
 
     // Calculate statistics
-    const total = notes?.length || 0;
+    const total = scribbles?.length || 0;
     const helpful =
-      notes?.filter((n) => n.feedback_helpful === true).length || 0;
+      scribbles?.filter((n) => n.feedback_helpful === true).length || 0;
     const notHelpful =
-      notes?.filter((n) => n.feedback_helpful === false).length || 0;
+      scribbles?.filter((n) => n.feedback_helpful === false).length || 0;
     const helpfulPercentage = total > 0 ? (helpful / total) * 100 : 0;
 
     // Breakdown reasons for negative feedback
@@ -96,17 +96,17 @@ export const feedbackService = {
     const categoryBreakdown: Record<string, number> = {};
     const appBreakdown: Record<string, number> = {};
     const promptVersionBreakdown: Record<string, number> = {};
-    notes?.forEach((note) => {
-      if (note.feedback_helpful === false && note.feedback_reasons) {
-        note.feedback_reasons.forEach((reason: string) => {
+    scribbles?.forEach((scribble) => {
+      if (scribble.feedback_helpful === false && scribble.feedback_reasons) {
+        scribble.feedback_reasons.forEach((reason: string) => {
           reasonBreakdown[reason] = (reasonBreakdown[reason] || 0) + 1;
         });
       }
 
-      const variant = note.dictation_variant || "unknown";
-      const category = note.dictation_category || "unknown";
-      const appKey = note.dictation_app_key || "unknown";
-      const promptVersion = note.dictation_prompt_version || "unknown";
+      const variant = scribble.dictation_variant || "unknown";
+      const category = scribble.dictation_category || "unknown";
+      const appKey = scribble.dictation_app_key || "unknown";
+      const promptVersion = scribble.dictation_prompt_version || "unknown";
 
       variantBreakdown[variant] = (variantBreakdown[variant] || 0) + 1;
       categoryBreakdown[category] = (categoryBreakdown[category] || 0) + 1;
@@ -155,7 +155,7 @@ export const feedbackService = {
     const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
 
     const { data, error } = await supabase
-      .from("notes")
+      .from("scribbles")
       .select(
         "id, title, raw_text, original_formatted_text, feedback_reasons, feedback_timestamp, dictation_variant, dictation_category, dictation_app_key, dictation_context_source, dictation_prompt_version"
       )

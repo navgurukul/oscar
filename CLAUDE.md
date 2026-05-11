@@ -78,16 +78,16 @@ See `packages/web/.env.example` for full list.
 app/
 ├── page.tsx            # Landing page
 ├── auth/               # Auth flows (sign-in, callback)
-├── notes/              # Notes list + detail
+├── scribble/              # Notes list + detail
 ├── recording/          # Recording interface
 ├── results/            # Post-recording result view
 ├── settings/           # User settings (billing, vocabulary, data)
 ├── pricing/            # Pricing page
-├── meetings/           # Meeting notes
+├── meetings/           # Meeting Minutes
 ├── download/           # Desktop download handler
 └── api/
     ├── groq/
-    │   ├── format/       # Stream-format transcript → clean note
+    │   ├── format/       # Stream-format transcript → clean Scribble
     │   ├── format-email/ # Email-specific formatting
     │   ├── title/        # Generate 4-10 word title
     │   ├── transform/    # Custom text transforms
@@ -106,7 +106,7 @@ app/
 **Services** (`lib/services/`):
 - `ai.service.ts` — Groq API calls (formatting, title, streaming)
 - `stt.service.ts` — Browser STT pipeline
-- `notes.service.ts` — Note CRUD (Supabase)
+- `scribbles.service.ts` — Scribble CRUD (Supabase)
 - `subscription.service.ts` — Subscription state & checks
 - `razorpay.service.ts` — Payment initiation
 - `feedback.service.ts` — User feedback collection
@@ -122,15 +122,15 @@ app/
 - `useRecording.ts` — Recording lifecycle state machine
 - `useAIFormatting.ts` — Format streaming hook
 - `useAIEmailFormatting.ts` — Email format hook
-- `useNoteStorage.ts` — Note persistence hook
+- `useScribbleStorage.ts` — Scribble persistence hook
 
 **Components** (`components/`):
 ```
-notes/          # TrashSheet
+scribble/          # TrashSheet
 recording/      # HomeRecordingButton, RecordingControls, RecordingTimer, PermissionErrorModal
-results/        # NoteEditor, NoteEditorSkeleton, NoteActions, FeedbackWidget
+results/        # ScribbleEditor, ScribbleEditorSkeleton, ScribbleActions, FeedbackWidget
 settings/       # AccountSection, BillingSection, VocabularySection, FolderManagementSection, DataPrivacySection
-shared/         # FloatingNavbar, Footer, ProcessingScreen, AuthEdgeButton, NotesListSkeleton
+shared/         # FloatingNavbar, Footer, ProcessingScreen, AuthEdgeButton, ScribbleListSkeleton
 subscription/   # PricingCard, RazorpayCheckout, UpgradePrompt, UsageIndicator
 ui/             # shadcn primitives + custom: sparkles, dotted-glow-background, animated-testimonials, lamp
 ```

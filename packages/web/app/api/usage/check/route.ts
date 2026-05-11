@@ -1,10 +1,10 @@
 /**
  * Check Usage Limit API Route
  * GET /api/usage/check
- * GET /api/usage/check?type=note
+ * GET /api/usage/check?type=scribble
  *
- * Pre-flight check to verify if user can record or save a note.
- * - Free tier: Limited to FREE_MONTHLY_RECORDINGS per month and FREE_MAX_NOTES total
+ * Pre-flight check to verify if user can record or save a scribble.
+ * - Free tier: Limited to FREE_MONTHLY_RECORDINGS per month and FREE_MAX_SCRIBBLES total
  * - Pro tier: Unlimited
  * - Returns 402 Payment Required if limit exceeded
  */
@@ -29,19 +29,19 @@ export async function GET(request: NextRequest) {
 
     const type = request.nextUrl.searchParams.get("type");
 
-    if (type === "note") {
-      const { allowed, current, remaining } = await usageService.canUserCreateNote(user.id);
+    if (type === "scribble") {
+      const { allowed, current, remaining } = await usageService.canUserCreateScribble(user.id);
 
       if (!allowed) {
         return NextResponse.json(
           {
-            error: "Note limit reached",
+            error: "Scribble limit reached",
             message:
-              "You've reached your note limit. Upgrade to Pro for unlimited notes.",
-            canCreateNote: false,
+              "You've reached your Scribble limit. Upgrade to Pro for unlimited scribbles.",
+            canCreateScribble: false,
             current,
             remaining: 0,
-            limit: SUBSCRIPTION_CONFIG.FREE_MAX_NOTES,
+            limit: SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES,
             upgradeRequired: true,
           },
           { status: 402 }
@@ -49,10 +49,10 @@ export async function GET(request: NextRequest) {
       }
 
       return NextResponse.json({
-        canCreateNote: true,
+        canCreateScribble: true,
         current,
         remaining,
-        limit: remaining !== null ? SUBSCRIPTION_CONFIG.FREE_MAX_NOTES : null,
+        limit: remaining !== null ? SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES : null,
       });
     }
 

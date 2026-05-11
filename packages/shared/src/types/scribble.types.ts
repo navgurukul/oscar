@@ -1,17 +1,17 @@
-// Note-related type definitions — canonical source for all packages
+// Scribble-related type definitions — canonical source for all packages
 
 import type {
   DictationCategory,
   DictationContextSource,
 } from "./dictation.types";
 
-export interface Note {
+export interface Scribble {
   formattedText: string;
   rawText: string;
   title?: string;
 }
 
-export interface DictationNoteMetadata {
+export interface DictationScribbleMetadata {
   dictation_category?: DictationCategory | null;
   dictation_variant?: DictationCategory | null;
   dictation_app_key?: string | null;
@@ -20,7 +20,7 @@ export interface DictationNoteMetadata {
 }
 
 // Local transcript (desktop-only, but defined centrally for consistency)
-export interface LocalTranscript extends DictationNoteMetadata {
+export interface LocalTranscript extends DictationScribbleMetadata {
   id: string;
   text: string;
   createdAt: string;
@@ -36,8 +36,8 @@ export type FeedbackReason =
   | "other"
   | (string & {});
 
-// Database note type (Supabase)
-export interface DBNote extends DictationNoteMetadata {
+// Database scribble type (Supabase)
+export interface DBScribble extends DictationScribbleMetadata {
   id: string;
   user_id: string;
   title: string;
@@ -57,8 +57,8 @@ export interface DBNote extends DictationNoteMetadata {
   folder: string | null;
 }
 
-// Insert type for creating a new note
-export interface DBNoteInsert extends DictationNoteMetadata {
+// Insert type for creating a new scribble
+export interface DBScribbleInsert extends DictationScribbleMetadata {
   user_id: string;
   title: string;
   raw_text: string;
@@ -67,8 +67,8 @@ export interface DBNoteInsert extends DictationNoteMetadata {
   folder?: string | null;
 }
 
-// Update type for modifying a note
-export interface DBNoteUpdate extends DictationNoteMetadata {
+// Update type for modifying a scribble
+export interface DBScribbleUpdate extends DictationScribbleMetadata {
   title?: string;
   raw_text?: string;
   original_formatted_text?: string;
@@ -101,7 +101,7 @@ export interface TitleGenerationResult {
 
 // Feedback submission data
 export interface FeedbackSubmission {
-  noteId: string;
+  scribbleId: string;
   helpful: boolean;
   reasons?: FeedbackReason[];
 }

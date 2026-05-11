@@ -6,10 +6,10 @@
 
 ## 1. Brand Overview
 
-**Product:** Oscar — AI Voice Notes  
+**Product:** Oscar — AI Voice Scribbles
 **Tagline:** "Just talk. We handle the rest."  
 **Core Concept:** Voice-to-text made beautiful  
-**Mission:** Transform voice notes into polished, usable text with AI
+**Mission:** Transform voice streams into polished, usable Scribbles with AI
 
 **Design Philosophy:**
 - Warm, human, approachable — not clinical

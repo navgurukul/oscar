@@ -738,6 +738,11 @@
   gap: 8px;
 }
 
+.st-row--sub {
+  background: #f8fafc;
+  border-left: 2px solid #e2e8f0;
+}
+
 .st-row-text {
   flex: 1;
   min-width: 0;
@@ -1531,4 +1536,3 @@
 @media (max-width: 480px) {
   /* Vocabulary handled by container queries above; only non-vocabulary rules here */
 }
-

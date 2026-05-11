@@ -1,4 +1,4 @@
-import type { LocalTranscript } from "../types/note.types";
+import type { LocalTranscript } from "../types/scribble.types";
 
 interface TranscriptsSectionProps {
   transcripts: LocalTranscript[];

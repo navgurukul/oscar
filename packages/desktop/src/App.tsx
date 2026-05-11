@@ -10,7 +10,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { Navigation } from "./components/Navigation";
 import { Header } from "./components/Header";
-import { NotesTab } from "./components/NotesTab";
+import { ScribbleTab } from "./components/ScribbleTab";
 import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
@@ -34,7 +34,7 @@ import type {
 import type {
   DictationContextSnapshot,
   LocalTranscript,
-} from "./types/note.types";
+} from "./types/scribble.types";
 import type {
   DownloadProgress,
   HotkeyContextEventPayload,
@@ -1088,26 +1088,29 @@ function App() {
       });
 
       if (!result.text) {
-        console.warn("[process] ABORT: no speech detected");
+        console.warn("[process] ABORT: no speech detected (whisper empty)");
         setStatus("⚠️ No speech detected. Try speaking louder or closer.");
         return;
       }
 
       let finalText = result.text;
-      const activeDictationContext =
-        contextAwareDictationEnabledRef.current
-          ? dictationContextRef.current
-          : null;
-      const dictationRouting =
-        contextAwareDictationEnabledRef.current
-          ? routeDictationContext(activeDictationContext)
-          : null;
+      const aiCleanupEnabled = aiImprovementEnabledRef.current;
+      const effectiveContextAwareDictation =
+        aiCleanupEnabled &&
+        contextAwareDictationEnabledRef.current &&
+        isContextAwarePlatform(getDesktopPlatform());
+      const activeDictationContext = effectiveContextAwareDictation
+        ? dictationContextRef.current
+        : null;
+      const dictationRouting = activeDictationContext
+        ? routeDictationContext(activeDictationContext)
+        : null;
       const dictationMetadata = buildDictationMetadata(dictationRouting);
       let cleanupReturnedEmpty = false;
 
       // Silent AI cleanup via the backend AI function.
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
-      if (aiImprovementEnabledRef.current) {
+      if (aiCleanupEnabled) {
         setStatus("Improving with AI...");
         try {
           const cleaned = await aiService.processText(
@@ -2005,8 +2008,8 @@ function App() {
                 />
               )}
 
-              {activeTab === "notes" && user && (
-                <NotesTab
+              {activeTab === "scribble" && user && (
+                <ScribbleTab
                   userId={user.id}
                   isRecording={isRecording}
                   onToggleRecording={() => {

@@ -1,9 +1,9 @@
-import type { DictationContextSnapshot } from "../types/note.types";
+import type { DictationContextSnapshot } from "../types/scribble.types";
 
 export type TabType =
   | "home"
   | "meetings"
-  | "notes"
+  | "scribble"
   | "vocabulary"
   | "billing"
   | "settings";

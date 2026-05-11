@@ -2,7 +2,7 @@
    NOTES TAB - Matching Web App Design
    ═════════════════════════════════════════════════════════════════════════════ */
 
-.notes-tab {
+.scribbles-tab {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -11,13 +11,13 @@
   background: #fafafa;
 }
 
-.notes-container {
+.scribbles-container {
   max-width: 800px;
   width: 100%;
   margin: 0 auto;
 }
 
-.notes-title {
+.scribbles-title {
   font-size: 1.75rem;
   font-weight: 700;
   color: #0f172a;
@@ -64,7 +64,7 @@
 }
 
 /* Error State */
-.notes-error {
+.scribbles-error {
   padding: 16px;
   background: #fef2f2;
   border: 1px solid #fecaca;
@@ -72,13 +72,13 @@
   margin-bottom: 24px;
 }
 
-.notes-error p {
+.scribbles-error p {
   color: #dc2626;
   font-size: 0.9375rem;
 }
 
 /* Filter Bar */
-.notes-filter-bar {
+.scribbles-filter-bar {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -86,13 +86,13 @@
   flex-wrap: wrap;
 }
 
-.notes-search {
+.scribbles-search {
   position: relative;
   flex: 1;
   min-width: 200px;
 }
 
-.notes-search-icon {
+.scribbles-search-icon {
   position: absolute;
   left: 12px;
   top: 50%;
@@ -101,7 +101,7 @@
   pointer-events: none;
 }
 
-.notes-search-input {
+.scribbles-search-input {
   width: 100%;
   height: 42px;
   padding: 0 16px 0 40px;
@@ -113,17 +113,17 @@
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.notes-search-input::placeholder {
+.scribbles-search-input::placeholder {
   color: #9ca3af;
 }
 
-.notes-search-input:focus {
+.scribbles-search-input:focus {
   outline: none;
   border-color: #06b6d4;
   box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
 }
 
-.notes-sort-select {
+.scribbles-sort-select {
   height: 42px;
   padding: 0 12px;
   background: #ffffff;
@@ -136,12 +136,12 @@
   min-width: 140px;
 }
 
-.notes-sort-select:focus {
+.scribbles-sort-select:focus {
   outline: none;
   border-color: #06b6d4;
 }
 
-.notes-starred-toggle {
+.scribbles-starred-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -157,23 +157,23 @@
   transition: all 0.2s;
 }
 
-.notes-starred-toggle:hover {
+.scribbles-starred-toggle:hover {
   border-color: #06b6d4;
   color: #0891b2;
 }
 
-.notes-starred-toggle.active {
+.scribbles-starred-toggle.active {
   background: rgba(6, 182, 212, 0.1);
   border-color: #06b6d4;
   color: #0891b2;
 }
 
-.notes-starred-toggle .star-filled {
+.scribbles-starred-toggle .star-filled {
   color: #06b6d4;
 }
 
 /* Loading State */
-.notes-loading {
+.scribbles-loading {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -190,7 +190,7 @@
 }
 
 /* Empty State */
-.notes-empty {
+.scribbles-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -199,18 +199,18 @@
   text-align: center;
 }
 
-.notes-empty-icon {
+.scribbles-empty-icon {
   color: #d1d5db;
   margin-bottom: 20px;
 }
 
-.notes-empty-text {
+.scribbles-empty-text {
   font-size: 1rem;
   color: #6b7280;
   margin-bottom: 16px;
 }
 
-.notes-clear-filters {
+.scribbles-clear-filters {
   font-size: 0.9375rem;
   color: #06b6d4;
   background: none;
@@ -220,27 +220,27 @@
   transition: color 0.2s;
 }
 
-.notes-clear-filters:hover {
+.scribbles-clear-filters:hover {
   color: #0891b2;
   text-decoration: underline;
 }
 
-/* Notes List */
-.notes-list {
+/* Scribbles List */
+.scribbles-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.notes-list-content {
+.scribbles-list-content {
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-height: 300px;
 }
 
-/* Note Card */
-.note-card {
+/* Scribble Card */
+.scribble-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
@@ -250,13 +250,13 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.note-card:hover {
+.scribble-card:hover {
   border-color: #06b6d4;
   box-shadow: 0 4px 12px rgba(6, 182, 212, 0.1);
   transform: translateY(-1px);
 }
 
-.note-card-header {
+.scribble-card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -264,12 +264,12 @@
   margin-bottom: 12px;
 }
 
-.note-card-title-section {
+.scribble-card-title-section {
   flex: 1;
   min-width: 0;
 }
 
-.note-card-title {
+.scribble-card-title {
   font-size: 1.125rem;
   font-weight: 600;
   color: #0f172a;
@@ -279,19 +279,19 @@
   text-overflow: ellipsis;
 }
 
-.note-card-date {
+.scribble-card-date {
   font-size: 0.875rem;
   color: #6b7280;
 }
 
-.note-card-actions {
+.scribble-card-actions {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
 }
 
-.note-card-action-btn {
+.scribble-card-action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -305,29 +305,29 @@
   transition: all 0.2s;
 }
 
-.note-card-action-btn:hover {
+.scribble-card-action-btn:hover {
   background: #f3f4f6;
 }
 
-.note-card-action-btn.star:hover {
+.scribble-card-action-btn.star:hover {
   color: #06b6d4;
 }
 
-.note-card-action-btn.star.starred {
+.scribble-card-action-btn.star.starred {
   color: #06b6d4;
 }
 
-.note-card-action-btn.delete:hover {
+.scribble-card-action-btn.delete:hover {
   color: #dc2626;
   background: #fef2f2;
 }
 
-.note-card-action-btn:disabled {
+.scribble-card-action-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.note-card-separator {
+.scribble-card-separator {
   width: 60px;
   height: 3px;
   background: #06b6d4;
@@ -335,11 +335,11 @@
   margin-bottom: 12px;
 }
 
-.note-card-content {
+.scribble-card-content {
   color: #6b7280;
 }
 
-.note-card-preview {
+.scribble-card-preview {
   font-size: 0.9375rem;
   line-height: 1.6;
   display: -webkit-box;
@@ -349,7 +349,7 @@
 }
 
 /* Pagination */
-.notes-pagination {
+.scribbles-pagination {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -553,20 +553,20 @@
   font-size: 0.9375rem;
 }
 
-.trash-notes-list {
+.trash-scribbles-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.trash-note-item {
+.trash-scribble-item {
   padding: 16px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
 }
 
-.trash-note-header {
+.trash-scribble-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -574,7 +574,7 @@
   margin-bottom: 8px;
 }
 
-.trash-note-title {
+.trash-scribble-title {
   font-size: 0.9375rem;
   font-weight: 600;
   color: #0f172a;
@@ -584,13 +584,13 @@
   text-overflow: ellipsis;
 }
 
-.trash-note-date {
+.trash-scribble-date {
   font-size: 0.75rem;
   color: #9ca3af;
   flex-shrink: 0;
 }
 
-.trash-note-preview {
+.trash-scribble-preview {
   font-size: 0.875rem;
   color: #6b7280;
   line-height: 1.5;
@@ -601,7 +601,7 @@
   margin-bottom: 12px;
 }
 
-.trash-note-actions {
+.trash-scribble-actions {
   display: flex;
   gap: 12px;
 }
@@ -654,14 +654,14 @@
   cursor: not-allowed;
 }
 
-/* Note Detail View */
-.notes-detail-view {
+/* Scribble Detail View */
+.scribbles-detail-view {
   max-width: 700px;
   width: 100%;
   margin: 0 auto;
 }
 
-.notes-detail-header {
+.scribbles-detail-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -670,13 +670,13 @@
   margin-bottom: 24px;
 }
 
-.notes-detail-actions {
+.scribbles-detail-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.notes-detail-action-btn {
+.scribbles-detail-action-btn {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -691,12 +691,12 @@
   transition: all 0.2s;
 }
 
-.notes-detail-action-btn:hover {
+.scribbles-detail-action-btn:hover {
   border-color: #06b6d4;
   color: #0891b2;
 }
 
-.notes-detail-back {
+.scribbles-detail-back {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -711,19 +711,19 @@
   transition: all 0.2s;
 }
 
-.notes-detail-back:hover {
+.scribbles-detail-back:hover {
   border-color: #06b6d4;
   color: #0891b2;
 }
 
-.notes-detail-content {
+.scribbles-detail-content {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   padding: 32px;
 }
 
-.notes-detail-title {
+.scribbles-detail-title {
   font-size: 1.5rem;
   font-weight: 700;
   color: #0f172a;
@@ -731,13 +731,13 @@
   font-family: 'EB Garamond', Georgia, serif;
 }
 
-.notes-detail-date {
+.scribbles-detail-date {
   font-size: 0.875rem;
   color: #6b7280;
   margin-bottom: 16px;
 }
 
-.notes-detail-separator {
+.scribbles-detail-separator {
   width: 60px;
   height: 3px;
   background: #06b6d4;
@@ -745,7 +745,7 @@
   margin-bottom: 24px;
 }
 
-.notes-detail-text {
+.scribbles-detail-text {
   font-size: 1rem;
   line-height: 1.8;
   color: #374151;

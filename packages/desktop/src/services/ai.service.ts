@@ -7,7 +7,7 @@ import type {
 import type {
   DictationContextSnapshot,
   DictationRoutingResult,
-} from "../types/note.types";
+} from "../types/scribble.types";
 import { MEETING_CONFIG } from "@oscar/shared/constants";
 
 export type DesktopAIMode =

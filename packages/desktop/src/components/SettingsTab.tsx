@@ -225,6 +225,12 @@ export function SettingsTab({
   const minutesPackInstalled =
     minutesModelDownloadState === "installed" || minutesModelEnabled;
   const contextAwareSupported = isContextAwarePlatform(contextAwarePlatform);
+  const contextAwareDisabled = !aiImprovementEnabled || !contextAwareSupported;
+  const contextAwareDescription = !contextAwareSupported
+    ? "Available on macOS and Windows"
+    : aiImprovementEnabled
+      ? "Adapt cleanup style to active app"
+      : "Requires AI Cleanup";
 
   return (
     <div className="st-layout">
@@ -258,25 +264,6 @@ export function SettingsTab({
             {/* — Recording — */}
             <div className="st-section-label">Recording</div>
             <div className="st-card st-card--grouped">
-              <div className="st-row">
-                <div className="st-row-text">
-                  <div className="st-row-label">Context-Aware Dictation</div>
-                  <div className="st-row-desc">
-                    Auto-adapts formatting to active app
-                  </div>
-                </div>
-                <Toggle
-                  checked={contextAwareDictationEnabled}
-                  onChange={() =>
-                    onContextAwareDictationChange(!contextAwareDictationEnabled)
-                  }
-                  label="Context-Aware Dictation"
-                  disabled={!contextAwareSupported}
-                />
-              </div>
-
-              <div className="st-divider" />
-
               <div className="st-row st-row--col">
                 <div className="st-row-label">Microphone</div>
                 <select
@@ -387,6 +374,29 @@ export function SettingsTab({
                     onAiImprovementChange(!aiImprovementEnabled)
                   }
                   label="AI Cleanup"
+                />
+              </div>
+
+              <div className="st-divider" />
+
+              <div className="st-row st-row--sub">
+                <div className="st-row-text">
+                  <div className="st-row-label">Adapt to Active App</div>
+                  <div className="st-row-desc">
+                    {contextAwareDescription}
+                  </div>
+                </div>
+                <Toggle
+                  checked={
+                    contextAwareDictationEnabled &&
+                    aiImprovementEnabled &&
+                    contextAwareSupported
+                  }
+                  onChange={() =>
+                    onContextAwareDictationChange(!contextAwareDictationEnabled)
+                  }
+                  label="Adapt to Active App"
+                  disabled={contextAwareDisabled}
                 />
               </div>
 

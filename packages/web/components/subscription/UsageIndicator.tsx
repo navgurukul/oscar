@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 
 interface UsageIndicatorProps {
-  type: "recordings" | "notes" | "vocabulary";
+  type: "recordings" | "scribbles" | "vocabulary";
   current: number;
   limit: number | null;
   variant?: "compact" | "full";
@@ -27,7 +27,7 @@ export function UsageIndicator({
             {current}{" "}
             {type === "recordings"
               ? "Streams"
-              : type === "notes"
+              : type === "scribbles"
               ? "Scribbles"
               : "vocabulary entries"}{" "}
             {type === "recordings" ? "this month" : "total"}
@@ -76,7 +76,7 @@ export function UsageIndicator({
         <span className="text-gray-400">
           {type === "recordings"
             ? "Streams this month"
-            : type === "notes"
+            : type === "scribbles"
             ? "Total Scribbles"
             : "Vocabulary entries"}
         </span>
@@ -93,10 +93,10 @@ export function UsageIndicator({
       <p className="text-xs text-gray-500">
         {remaining === 0
           ? `Limit reached. Upgrade to Pro for unlimited ${
-              type === "recordings" ? "Streams" : type === "notes" ? "Scribbles" : type
+              type === "recordings" ? "Streams" : type === "scribbles" ? "Scribbles" : type
             }.`
           : `${remaining} ${
-              type === "recordings" ? "Streams" : type === "notes" ? "Scribbles" : type
+              type === "recordings" ? "Streams" : type === "scribbles" ? "Scribbles" : type
             } remaining`}
       </p>
     </div>

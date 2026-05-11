@@ -101,7 +101,7 @@ export default function AccountSection() {
                   This action cannot be undone. This will permanently delete your account
                   and remove all your data from our servers, including:
                   <ul className="list-disc list-inside mt-2 space-y-1 text-gray-300">
-                    <li>All your notes and transcriptions</li>
+                    <li>All your scribbles and transcriptions</li>
                     <li>Your vocabulary entries</li>
                     <li>Your subscription information</li>
                     <li>Account settings and preferences</li>

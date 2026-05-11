@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ThumbsUp, ThumbsDown, X, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { FeedbackReason } from "@/lib/types/note.types";
+import type { FeedbackReason } from "@/lib/types/scribble.types";
 import { Textarea } from "@/components/ui/textarea";
 
 interface FeedbackWidgetProps {
@@ -184,7 +184,7 @@ export function FeedbackWidget({
                       className="text-sm text-gray-200 bg-slate-800/50 border-slate-700/50 placeholder:text-gray-500"
                     />
                     <p className="mt-1 text-xs text-gray-500">
-                      Your note will be sent with feedback.
+                      Your scribble will be sent with feedback.
                     </p>
                   </div>
                 )}

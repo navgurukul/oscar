@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { RotateCcw, X, Loader2 } from "lucide-react";
-import { notesService } from "../services/notes.service";
-import type { DBNote } from "../types/note.types";
+import { scribblesService } from "../services/scribbles.service";
+import type { DBScribble } from "../types/scribble.types";
 import { formatShortDate } from "../lib/utils";
 
 interface TrashPanelProps {
@@ -11,7 +11,7 @@ interface TrashPanelProps {
 }
 
 export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
-  const [trashedNotes, setTrashedNotes] = useState<DBNote[]>([]);
+  const [trashedScribbles, setTrashedScribbles] = useState<DBScribble[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -19,23 +19,23 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
 
   useEffect(() => {
     if (isOpen) {
-      loadTrashedNotes();
+      loadTrashedScribbles();
     }
   }, [isOpen]);
 
-  const loadTrashedNotes = async () => {
+  const loadTrashedScribbles = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await notesService.getTrashedNotes();
+      const { data, error } = await scribblesService.getTrashedScribbles();
       if (error) {
-        console.error("Failed to load trashed notes:", error);
-        setTrashedNotes([]);
+        console.error("Failed to load trashed scribbles:", error);
+        setTrashedScribbles([]);
       } else {
-        setTrashedNotes(data || []);
+        setTrashedScribbles(data || []);
       }
     } catch (err) {
-      console.error("Error loading trashed notes:", err);
-      setTrashedNotes([]);
+      console.error("Error loading trashed scribbles:", err);
+      setTrashedScribbles([]);
     } finally {
       setIsLoading(false);
     }
@@ -43,11 +43,11 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
 
   const handleRestore = async (id: string) => {
     setRestoringId(id);
-    const { error } = await notesService.restoreNote(id);
+    const { error } = await scribblesService.restoreScribble(id);
     if (error) {
-      console.error("Failed to restore note:", error);
+      console.error("Failed to restore scribble:", error);
     } else {
-      setTrashedNotes((prev) => prev.filter((note) => note.id !== id));
+      setTrashedScribbles((prev) => prev.filter((scribble) => scribble.id !== id));
       onRestore?.();
     }
     setRestoringId(null);
@@ -56,17 +56,17 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
   const handlePermanentDelete = async (id: string) => {
     setDeletingId(id);
     setConfirmDeleteId(null);
-    const { error } = await notesService.permanentDelete(id);
+    const { error } = await scribblesService.permanentDelete(id);
     if (error) {
-      console.error("Failed to delete note:", error);
+      console.error("Failed to delete scribble:", error);
     } else {
-      setTrashedNotes((prev) => prev.filter((note) => note.id !== id));
+      setTrashedScribbles((prev) => prev.filter((scribble) => scribble.id !== id));
     }
     setDeletingId(null);
   };
 
-  const getPreview = (note: DBNote) => {
-    const text = note.edited_text || note.original_formatted_text;
+  const getPreview = (scribble: DBScribble) => {
+    const text = scribble.edited_text || scribble.original_formatted_text;
     return text.length > 100 ? text.substring(0, 100) + "..." : text;
   };
 
@@ -79,7 +79,7 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
           <div>
             <h2 className="trash-panel-title">Trash</h2>
             <p className="trash-panel-subtitle">
-              {trashedNotes.length} deleted {trashedNotes.length === 1 ? "note" : "notes"}
+              {trashedScribbles.length} deleted {trashedScribbles.length === 1 ? "scribble" : "scribbles"}
             </p>
           </div>
           <button className="trash-panel-close" onClick={onClose}>
@@ -92,45 +92,45 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
             <div className="trash-panel-loading">
               <Loader2 size={24} className="spin" />
             </div>
-          ) : trashedNotes.length === 0 ? (
+          ) : trashedScribbles.length === 0 ? (
             <div className="trash-panel-empty">
               <p>Trash is empty</p>
             </div>
           ) : (
-            <div className="trash-notes-list">
-              {trashedNotes.map((note) => (
-                <div key={note.id} className="trash-note-item">
-                  <div className="trash-note-header">
-                    <h3 className="trash-note-title">
-                      {note.title || "Untitled Note"}
+            <div className="trash-scribbles-list">
+              {trashedScribbles.map((scribble) => (
+                <div key={scribble.id} className="trash-scribble-item">
+                  <div className="trash-scribble-header">
+                    <h3 className="trash-scribble-title">
+                      {scribble.title || "Untitled Scribble"}
                     </h3>
-                    <span className="trash-note-date">
-                      {formatShortDate(note.deleted_at!)}
+                    <span className="trash-scribble-date">
+                      {formatShortDate(scribble.deleted_at!)}
                     </span>
                   </div>
-                  <p className="trash-note-preview">{getPreview(note)}</p>
-                  <div className="trash-note-actions">
+                  <p className="trash-scribble-preview">{getPreview(scribble)}</p>
+                  <div className="trash-scribble-actions">
                     <button
-                      onClick={() => handleRestore(note.id)}
-                      disabled={restoringId === note.id}
+                      onClick={() => handleRestore(scribble.id)}
+                      disabled={restoringId === scribble.id}
                       className="trash-action-btn restore"
                     >
-                      {restoringId === note.id ? (
+                      {restoringId === scribble.id ? (
                         <Loader2 size={14} className="spin" />
                       ) : (
                         <RotateCcw size={14} />
                       )}
                       Restore
                     </button>
-                    {confirmDeleteId === note.id ? (
+                    {confirmDeleteId === scribble.id ? (
                       <div className="trash-confirm-delete">
                         <span className="trash-confirm-label">Delete forever?</span>
                         <button
-                          onClick={() => handlePermanentDelete(note.id)}
-                          disabled={deletingId === note.id}
+                          onClick={() => handlePermanentDelete(scribble.id)}
+                          disabled={deletingId === scribble.id}
                           className="trash-action-btn delete"
                         >
-                          {deletingId === note.id ? (
+                          {deletingId === scribble.id ? (
                             <Loader2 size={14} className="spin" />
                           ) : (
                             <X size={14} />
@@ -146,8 +146,8 @@ export function TrashPanel({ isOpen, onClose, onRestore }: TrashPanelProps) {
                       </div>
                     ) : (
                       <button
-                        onClick={() => setConfirmDeleteId(note.id)}
-                        disabled={deletingId === note.id}
+                        onClick={() => setConfirmDeleteId(scribble.id)}
+                        disabled={deletingId === scribble.id}
                         className="trash-action-btn delete"
                       >
                         <X size={14} />
