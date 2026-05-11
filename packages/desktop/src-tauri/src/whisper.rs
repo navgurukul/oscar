@@ -231,9 +231,27 @@ pub(crate) fn transcribe_audio_inner(
     log::info!("[whisper] Inference complete — {} segments", num_segments);
     let mut full_text = String::new();
     let mut structured_segments = Vec::new();
+    let mut dropped_no_speech = 0usize;
+
+    // Whisper emits a per-segment probability that the segment contains no
+    // speech. Drop segments above this threshold to suppress stock-phrase
+    // hallucinations on silent audio ("you", "Thank you.", "...").
+    // 0.6 matches whisper.cpp's default no_speech_thold.
+    const NO_SPEECH_THRESHOLD: f32 = 0.6;
 
     for i in 0..num_segments {
         if let Some(segment) = state.get_segment(i) {
+            let no_speech_prob = segment.no_speech_probability();
+            if no_speech_prob > NO_SPEECH_THRESHOLD {
+                dropped_no_speech += 1;
+                log::debug!(
+                    "[whisper] Dropping segment {} (no_speech_prob={:.2})",
+                    i,
+                    no_speech_prob
+                );
+                continue;
+            }
+
             if let Ok(text) = segment.to_str() {
                 let trimmed = text.trim();
                 if trimmed.is_empty() {
@@ -256,6 +274,14 @@ pub(crate) fn transcribe_audio_inner(
                 }
             }
         }
+    }
+
+    if dropped_no_speech > 0 {
+        log::info!(
+            "[whisper] Dropped {} segment(s) above no_speech threshold {:.2}",
+            dropped_no_speech,
+            NO_SPEECH_THRESHOLD
+        );
     }
 
     let result_len = full_text.trim().len();
