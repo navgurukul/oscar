@@ -1047,6 +1047,16 @@ function App() {
       return;
     }
 
+    let sumSquares = 0;
+    for (let i = 0; i < audioData.length; i++) {
+      sumSquares += audioData[i] * audioData[i];
+    }
+    const rms = Math.sqrt(sumSquares / audioData.length);
+    if (rms < 0.01) {
+      invoke("hide_recording_pill").catch(console.warn);
+      return;
+    }
+
     const durationSec = (audioData.length / 16000).toFixed(1);
     setIsProcessing(true);
     setStatus(`Transcribing ${durationSec}s...`);
