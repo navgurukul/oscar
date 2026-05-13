@@ -1,3 +1,6 @@
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+
 // Extend standard browser types with non-standard APIs
 
 interface NavigatorUAData {
