@@ -133,8 +133,10 @@ export function ScribbleTab({
     setIsLoading(true);
     const { data, error } = await scribblesService.getScribbles();
     if (error) {
+      console.error("[ScribbleTab] load failed:", error);
       setError("Failed to load scribbles. Please try again.");
     } else {
+      setError(null);
       setAllScribbles(data || []);
     }
     setIsLoading(false);
