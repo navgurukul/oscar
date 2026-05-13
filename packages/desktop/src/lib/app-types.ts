@@ -45,6 +45,18 @@ export interface HotkeyContextEventPayload {
 export type TonePreset = "none" | "professional" | "casual" | "friendly";
 export type MicrophonePermissionState = "granted" | "denied" | "prompt" | "unknown";
 export type WhisperModelRole = "dictation" | "minutes";
+
+// Re-export the canonical model variant union from whisper-models.ts. Keeping
+// the old name alive so settings persisted under the previous schema
+// (`MinutesModelVariant`) still type-check on load.
+export type {
+  WhisperModelVariant,
+  ModelPreset as WhisperModelPreset,
+  ModelSpec as WhisperModelSpec,
+  ModelRecommendation as WhisperModelRecommendation,
+  HardwareProfile,
+  GpuBackend,
+} from "./whisper-models";
 export type MinutesModelVariant = "large-v3-turbo-q5_0";
 export type MinutesModelDownloadState = "idle" | "downloading" | "installed";
 

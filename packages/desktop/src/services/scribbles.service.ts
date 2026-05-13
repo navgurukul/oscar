@@ -5,6 +5,48 @@ import type {
   DBScribbleUpdate,
 } from "../types/scribble.types";
 
+const PRIMARY_TABLE = "scribbles";
+const LEGACY_TABLE = "notes";
+
+type ScribbleTable = typeof PRIMARY_TABLE | typeof LEGACY_TABLE;
+type SupabaseResult<T> = { data: T | null; error: unknown };
+
+let resolvedTable: ScribbleTable | null = null;
+
+function isMissingPrimaryTable(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const { code, message } = error as { code?: string; message?: string };
+  return (
+    code === "PGRST205" &&
+    typeof message === "string" &&
+    message.includes("public.scribbles")
+  );
+}
+
+async function runScribbleQuery<T>(
+  query: (table: ScribbleTable) => PromiseLike<SupabaseResult<T>>
+): Promise<{ data: T | null; error: Error | null }> {
+  const table = resolvedTable ?? PRIMARY_TABLE;
+  const result = await query(table);
+
+  if (table === PRIMARY_TABLE && result.error && isMissingPrimaryTable(result.error)) {
+    const legacyResult = await query(LEGACY_TABLE);
+    if (!legacyResult.error) {
+      resolvedTable = LEGACY_TABLE;
+    }
+    return {
+      data: legacyResult.data,
+      error: legacyResult.error as Error | null,
+    };
+  }
+
+  if (!result.error) {
+    resolvedTable = table;
+  }
+
+  return { data: result.data, error: result.error as Error | null };
+}
+
 export const scribblesService = {
   /**
    * Create a new scribble in the database
@@ -12,26 +54,22 @@ export const scribblesService = {
   async createScribble(
     scribble: DBScribbleInsert
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const { data, error } = await supabase
-      .from("scribbles")
-      .insert(scribble)
-      .select()
-      .single();
-
-    return { data, error: error as Error | null };
+    return runScribbleQuery((table) =>
+      supabase.from(table).insert(scribble).select().single()
+    );
   },
 
   /**
    * Get all scribbles for the current user (excluding soft-deleted)
    */
   async getScribbles(): Promise<{ data: DBScribble[] | null; error: Error | null }> {
-    const { data, error } = await supabase
-      .from("scribbles")
-      .select("*")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
-
-    return { data, error: error as Error | null };
+    return runScribbleQuery((table) =>
+      supabase
+        .from(table)
+        .select("*")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+    );
   },
 
   /**
@@ -40,14 +78,14 @@ export const scribblesService = {
   async getScribbleById(
     id: string
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const { data, error } = await supabase
-      .from("scribbles")
-      .select("*")
-      .eq("id", id)
-      .is("deleted_at", null)
-      .single();
-
-    return { data, error: error as Error | null };
+    return runScribbleQuery((table) =>
+      supabase
+        .from(table)
+        .select("*")
+        .eq("id", id)
+        .is("deleted_at", null)
+        .single()
+    );
   },
 
   /**
@@ -57,27 +95,29 @@ export const scribblesService = {
     id: string,
     updates: DBScribbleUpdate
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const { data, error } = await supabase
-      .from("scribbles")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .select()
-      .single();
-
-    return { data, error: error as Error | null };
+    return runScribbleQuery((table) =>
+      supabase
+        .from(table)
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single()
+    );
   },
 
   /**
    * Soft delete a scribble by setting deleted_at
    */
   async deleteScribble(id: string): Promise<{ error: Error | null }> {
-    const { data, error } = await supabase
-      .from("scribbles")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", id)
-      .select();
+    const { data, error } = await runScribbleQuery<DBScribble[]>((table) =>
+      supabase
+        .from(table)
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+    );
 
-    if (error) return { error: error as Error };
+    if (error) return { error };
     // RLS may silently block the update → 0 rows returned
     if (!data || data.length === 0) {
       return { error: new Error("Delete failed: scribble not found or permission denied") };
@@ -92,13 +132,15 @@ export const scribblesService = {
     id: string,
     isStarred: boolean
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const { data, error } = await supabase
-      .from("scribbles")
-      .update({ is_starred: isStarred })
-      .eq("id", id)
-      .select();
+    const { data, error } = await runScribbleQuery<DBScribble[]>((table) =>
+      supabase
+        .from(table)
+        .update({ is_starred: isStarred })
+        .eq("id", id)
+        .select()
+    );
 
-    if (error) return { data: null, error: error as Error };
+    if (error) return { data: null, error };
 
     // .select() returns an array; if empty, RLS blocked the update
     const updated = data?.[0] ?? null;
@@ -119,13 +161,13 @@ export const scribblesService = {
     data: DBScribble[] | null;
     error: Error | null;
   }> {
-    const { data, error } = await supabase
-      .from("scribbles")
-      .select("*")
-      .not("deleted_at", "is", null)
-      .order("deleted_at", { ascending: false });
-
-    return { data, error: error as Error | null };
+    return runScribbleQuery((table) =>
+      supabase
+        .from(table)
+        .select("*")
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false })
+    );
   },
 
   /**
@@ -134,22 +176,27 @@ export const scribblesService = {
   async restoreScribble(
     id: string
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const { data, error } = await supabase
-      .from("scribbles")
-      .update({ deleted_at: null, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .select()
-      .single();
-
-    return { data, error: error as Error | null };
+    return runScribbleQuery((table) =>
+      supabase
+        .from(table)
+        .update({ deleted_at: null, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single()
+    );
   },
 
   /**
    * Permanently delete a scribble (hard delete)
    */
   async permanentDelete(id: string): Promise<{ error: Error | null }> {
-    const { error } = await supabase.from("scribbles").delete().eq("id", id);
+    const { error } = await runScribbleQuery<null>((table) =>
+      supabase.from(table).delete().eq("id", id).then((result) => ({
+        data: null,
+        error: result.error,
+      }))
+    );
 
-    return { error: error as Error | null };
+    return { error };
   },
 };

@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/accordion";
 
 const FREE_FEATURES = [
-  `${SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} Streams per month`,
+  `${SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} Scribble recordings per month`,
   `Up to ${SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES} total Scribbles`,
   `Custom vocabulary (up to ${SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} entries)`,
   "AI-powered text formatting",
@@ -34,7 +34,7 @@ const FREE_FEATURES = [
 ];
 
 const PRO_FEATURES = [
-  "Unlimited Streams",
+  "Unlimited Scribble recordings",
   "Unlimited Scribbles",
   "Unlimited vocabulary entries",
   "AI-powered text formatting",
@@ -186,7 +186,7 @@ export default function PricingPage() {
               </thead>
               <tbody className="text-sm">
                 <tr className="border-b border-gray-800/50">
-                  <td className="py-4 text-gray-300">Streams per month</td>
+                  <td className="py-4 text-gray-300">Scribble recordings per month</td>
                   <td className="py-4 text-center text-gray-400">
                     {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS}
                   </td>

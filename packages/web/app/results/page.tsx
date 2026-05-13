@@ -589,7 +589,7 @@ export default function ResultsPage() {
             {title || UI_STRINGS.RESULTS_TITLE}
           </h1>
           <p className="text-sm uppercase tracking-[0.22em] text-cyan-300/80">
-            Stream to Scribble
+            Voice to Scribble
           </p>
 
           {/* Folder Management Section - Only show after saving */}

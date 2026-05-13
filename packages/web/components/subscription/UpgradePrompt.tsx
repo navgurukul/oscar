@@ -63,7 +63,7 @@ export function UpgradePrompt({
           {/* Title */}
           <h2 className="text-xl font-bold text-white">
             {limitType === "recordings"
-              ? "Recording Limit Reached"
+              ? "Scribble Recording Limit Reached"
               : limitType === "scribbles"
               ? "Scribble Limit Reached"
               : "Vocabulary Limit Reached"}
@@ -74,7 +74,7 @@ export function UpgradePrompt({
             You&apos;ve used all{" "}
             <span className="text-white font-medium">{limit}</span>{" "}
             {limitType === "recordings"
-              ? "recordings this month"
+              ? "Scribble recordings this month"
               : limitType === "scribbles"
               ? "Scribble slots"
               : "vocabulary entries"}
@@ -101,7 +101,7 @@ export function UpgradePrompt({
             </p>
             <ul className="text-sm text-gray-300 space-y-1">
               <li className="flex items-center gap-2">
-                <span className="text-cyan-400">✓</span> Unlimited recordings
+                <span className="text-cyan-400">✓</span> Unlimited Scribble recordings
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-cyan-400">✓</span> Unlimited Scribbles

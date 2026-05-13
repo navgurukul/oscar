@@ -614,7 +614,7 @@ export default function ScribbleDetailPage() {
                   : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              Stream Transcript
+              Raw Transcript
             </button>
             <button
               onClick={() => setActiveTab("ai-scribbles")}
@@ -663,10 +663,10 @@ export default function ScribbleDetailPage() {
                 router.push("/recording");
               }}
               className="bg-cyan-500/5 hover:bg-cyan-500/15 gap-2 text-cyan-400 px-4 py-2 rounded-lg font-medium text-xs transition-all duration-300 flex items-center border border-cyan-500/10 group"
-              title="Continue in Stream and append to this Scribble"
+              title="Continue recording and append to this Scribble"
             >
               <Mic className="w-3 h-3" />
-              <span>Continue in Stream</span>
+              <span>Continue Recording</span>
             </button>
           </div>
         </div>

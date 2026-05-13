@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import { applyTranscriptPostProcessing } from "@oscar/shared/prompts";
 import type {
   EnhancedMeetingNoteRequest,
   EnhancedMeetingNoteResponse,
@@ -244,6 +245,10 @@ async function invokeAIProcess(
   // caller can skip the paste step.
   if (!processedText && request.mode !== "transcribe_cleanup") {
     throw new Error(data?.error || "AI returned an empty response.");
+  }
+
+  if (request.mode === "transcribe_cleanup" || request.mode === "cleanup") {
+    return applyTranscriptPostProcessing(processedText);
   }
 
   return processedText;

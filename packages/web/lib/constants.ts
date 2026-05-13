@@ -36,14 +36,14 @@ export const API_CONFIG = {
   TRANSLATE_MAX_TOKENS: 1024,
 } as const;
 
-// UI_STRINGS — web overrides branding for Stream/Scribble terminology
+// UI_STRINGS — web recording creates Scribbles. Stream is desktop dictation only.
 export const UI_STRINGS = {
   ..._UI_STRINGS,
-  RECORDING_TITLE: "Start a Stream",
+  RECORDING_TITLE: "Record a Scribble",
   RESULTS_TITLE: "Fresh Scribble",
-  HOME_TAGLINE: "Start a Stream.",
+  HOME_TAGLINE: "Record a Scribble.",
   RECORDING_INSTRUCTION:
-    "Press the microphone button and start speaking. Oscar will turn your Stream into a Scribble.",
+    "Press the microphone button and start speaking. Oscar will clean up your note and save it as a Scribble.",
 } as const;
 
 // ROUTES — web adds DOWNLOAD, MEETINGS

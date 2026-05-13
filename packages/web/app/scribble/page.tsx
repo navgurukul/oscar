@@ -57,7 +57,7 @@ const SYSTEM_VIEWS: Array<{
     id: "all",
     label: "All Scribbles",
     icon: Sparkles,
-    description: "Everything captured from Stream in one place.",
+    description: "Every saved voice note in one place.",
   },
   {
     id: "recent",
@@ -296,7 +296,7 @@ export default function ScribblePage() {
 
     return (
       SYSTEM_VIEWS.find((view) => view.id === currentView)?.description ??
-      "Everything captured from Stream in one place."
+      "Every saved voice note in one place."
     );
   }, [currentView, folderCounts]);
 
@@ -585,7 +585,7 @@ export default function ScribblePage() {
               Scribble
             </h1>
             <p className="max-w-2xl text-sm leading-6 text-slate-400">
-              Organize every Stream in one calm workspace - jump between recent, starred, and folder views, 
+              Organize every Scribble in one calm workspace - jump between recent, starred, and folder views,
               then tidy multiple Scribbles at once without leaving the page.
             </p>
           </div>
@@ -615,7 +615,7 @@ export default function ScribblePage() {
               className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
             >
               <Sparkles className="h-4 w-4" />
-              Start a Stream
+              New Scribble
             </button>
           </div>
         </header>
@@ -879,14 +879,14 @@ export default function ScribblePage() {
                   <Sparkles className="mb-4 h-12 w-12 text-cyan-400/70" />
                   <h3 className="text-2xl font-semibold text-white">No Scribbles yet</h3>
                   <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
-                    Start a Stream and OSCAR will clean it up, title it, and file it
+                    Record a Scribble and OSCAR will clean it up, title it, and file it
                     here for you.
                   </p>
                   <button
                     onClick={() => router.push("/recording")}
                     className="mt-6 rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
                   >
-                    Start a Stream
+                    New Scribble
                   </button>
                 </div>
               ) : filteredScribbles.length === 0 ? (

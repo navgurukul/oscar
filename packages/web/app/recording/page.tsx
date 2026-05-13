@@ -153,8 +153,8 @@ function RecordingPageInner() {
           // Limit exceeded
           setShowUpgradePrompt(true);
           toast({
-            title: "Recording Limit Reached",
-            description: data.message || "Please upgrade to Pro for unlimited recordings.",
+            title: "Scribble Recording Limit Reached",
+            description: data.message || "Please upgrade to Pro for unlimited Scribble recordings.",
             variant: "destructive",
           });
           return;
@@ -447,7 +447,7 @@ function RecordingPageInner() {
         {/* Header */}
         <div className="text-center space-y-1">
           <h1 className="text-2xl sm:text-4xl font-bold">
-            Start a <span className="text-cyan-500">Stream</span>
+            Record a <span className="text-cyan-500">Scribble</span>
           </h1>
         </div>
 
@@ -495,7 +495,7 @@ function RecordingPageInner() {
               </p>
             ) : (
               <p className="text-gray-400 text-base sm:text-lg text-center px-2">
-                Speak naturally. OSCAR will turn this Stream into a clean Scribble.
+                Speak naturally. OSCAR will clean this note into a Scribble.
               </p>
             )}
           </div>

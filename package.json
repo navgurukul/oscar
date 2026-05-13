@@ -1,10 +1,11 @@
 {
   "name": "oscar",
-  "version": "0.3.50",
+  "version": "0.3.54",
   "private": true,
   "scripts": {
     "dev:web": "cd packages/web && pnpm dev",
-    "dev:desktop": "cd packages/desktop && pnpm dev"
+    "dev:desktop": "cd packages/desktop && pnpm dev",
+    "test:format-regressions": "pnpm --filter @oscar/shared test:format-regressions"
   },
   "packageManager": "pnpm@9.0.0",
   "dependencies": {

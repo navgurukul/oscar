@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { meetingsService } from "./services/meetings.service";
 import { aiService } from "./services/ai.service";
+import { scribblesService } from "./services/scribbles.service";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
@@ -71,8 +72,22 @@ import {
   toAbsoluteMeetingTranscriptSegments,
 } from "./lib/transcript-utils";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
+import {
+  detectHardware,
+  type HardwareProfile,
+  type ModelPreset as WhisperModelPreset,
+  type WhisperModelVariant,
+} from "./lib/whisper-models";
+import { resolveModelForRole } from "./lib/whisper-model-manager";
 import { getStore, loadSetting, saveSetting } from "./lib/store";
 import "./App.css";
+
+function buildFallbackScribbleTitle(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const firstSentence = normalized.split(/[.!?\n]/)[0]?.trim() || normalized;
+  const title = firstSentence.slice(0, 60).trim();
+  return title || "Untitled Scribble";
+}
 
 function App() {
   const defaultContextAwareDictationEnabled = isContextAwarePlatform(
@@ -91,11 +106,14 @@ function App() {
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
 
   // Recording & processing (global hotkey functionality)
-  const [isRecording, setIsRecording] = useState(false);
+  const [_isRecording, setIsRecording] = useState(false);
   const [_transcript, setTranscript] = useState("");
   const [localTranscripts, setLocalTranscripts] = useState<LocalTranscript[]>(
     [],
   );
+  const [isScribbleRecording, setIsScribbleRecording] = useState(false);
+  const [scribbleRecordingTime, setScribbleRecordingTime] = useState(0);
+  const [scribbleRefreshKey, setScribbleRefreshKey] = useState(0);
   const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
   const [_isProcessing, setIsProcessing] = useState(false);
@@ -113,6 +131,18 @@ function App() {
     useState<MinutesModelDownloadState>("idle");
   const [minutesModelDownloadProgress, setMinutesModelDownloadProgress] =
     useState(0);
+
+  // Hardware-aware model selection. Preset persists across sessions; variant
+  // is resolved on demand by the manager so it always matches what's on disk.
+  const [dictationModelPreset, setDictationModelPreset] =
+    useState<WhisperModelPreset>("auto");
+  const [minutesModelPreset, setMinutesModelPreset] =
+    useState<WhisperModelPreset>("auto");
+  const [hardwareProfile, setHardwareProfile] =
+    useState<HardwareProfile | null>(null);
+  const [activeDictationVariant, setActiveDictationVariant] =
+    useState<WhisperModelVariant | null>(null);
+  const dictationModelPresetRef = useRef<WhisperModelPreset>("auto");
 
   // AI editing (legacy — kept for settings migration)
   const [_aiEditing, setAiEditing] = useState(false);
@@ -160,6 +190,7 @@ function App() {
   const [minutesSegmentsCompleted, setMinutesSegmentsCompleted] = useState(0);
   const [minutesSegmentsTotal, setMinutesSegmentsTotal] = useState(0);
   const meetingMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const isMeetingRecordingRef = useRef(false);
   const meetingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const meetingSegmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const meetingSegmentStopRef =
@@ -188,8 +219,14 @@ function App() {
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const scribbleMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const scribbleAudioChunksRef = useRef<Blob[]>([]);
+  const scribbleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isScribbleRecordingRef = useRef(false);
+  const isScribbleProcessingRef = useRef(false);
   const whisperLoadedRef = useRef(false);
   const isRecordingRef = useRef(false);
+  const hotkeyStartInFlightRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
   const autoPasteRef = useRef(true);
   const targetAppRef = useRef<string>("");
@@ -209,6 +246,14 @@ function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const updater = useUpdater();
   const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    isScribbleRecordingRef.current = isScribbleRecording;
+  }, [isScribbleRecording]);
+
+  useEffect(() => {
+    isMeetingRecordingRef.current = isMeetingRecording;
+  }, [isMeetingRecording]);
 
   // Fetch app version on mount
   useEffect(() => {
@@ -506,6 +551,8 @@ function App() {
         savedMinutesModelEnabled,
         savedMinutesModelPath,
         savedMinutesModelVariant,
+        savedDictationPreset,
+        savedMinutesPreset,
         savedCalToken,
         savedCalRefreshToken,
         savedCalConnectedUserId,
@@ -531,6 +578,8 @@ function App() {
         loadSetting<boolean>("minutesModelEnabled", false),
         loadSetting<string>("minutesModelPath", ""),
         loadSetting<MinutesModelVariant>("minutesModelVariant", MINUTES_MODEL_VARIANT),
+        loadSetting<WhisperModelPreset>("dictationModelPreset", "auto"),
+        loadSetting<WhisperModelPreset>("minutesModelPreset", "auto"),
         loadSetting<string>("googleCalendarToken", ""),
         loadSetting<string>("googleCalendarRefreshToken", ""),
         loadSetting<string>("googleCalendarConnectedUserId", ""),
@@ -609,6 +658,14 @@ function App() {
         void saveSetting("minutesModelEnabled", false);
         void saveSetting("minutesModelPath", "");
       }
+      setDictationModelPreset(savedDictationPreset);
+      dictationModelPresetRef.current = savedDictationPreset;
+      setMinutesModelPreset(savedMinutesPreset);
+      // Run hardware detection in the background — it's only used to label the
+      // UI; resolveModelForRole calls into Rust directly each time.
+      void detectHardware()
+        .then(setHardwareProfile)
+        .catch((err) => console.warn("[hardware] detect failed:", err));
       setSystemAudioEnabled(savedSystemAudioEnabled);
       const hasLegacyCalendarConnection =
         Boolean(savedCalToken || savedCalRefreshToken) && !savedCalConnectedUserId;
@@ -661,6 +718,16 @@ function App() {
       (ev) => {
         const appName = ev.payload?.appName?.trim() || "";
         const isSelfApp = SELF_APP_NAMES.includes(appName.toLowerCase());
+        if (
+          isSelfApp ||
+          isScribbleRecordingRef.current ||
+          isScribbleProcessingRef.current ||
+          isMeetingRecordingRef.current
+        ) {
+          pendingStopRef.current = false;
+          return;
+        }
+
         targetAppRef.current = isSelfApp
           ? ""
           : ev.payload?.targetAppName?.trim() || "";
@@ -668,25 +735,24 @@ function App() {
           ? null
           : buildDictationContextSnapshot(ev.payload);
         pendingStopRef.current = false;
-        if (whisperLoadedRef.current && !isRecordingRef.current)
-          startHotkeyRecording();
+        if (whisperLoadedRef.current && !isRecordingRef.current) {
+          hotkeyStartInFlightRef.current = true;
+          void startHotkeyRecording().finally(() => {
+            hotkeyStartInFlightRef.current = false;
+          });
+        }
       },
     );
     const unlistenStop = listen("hotkey-recording-stop", () => {
       // ALWAYS set pending stop — this is the safety net for the race condition
       // where STOP arrives before getUserMedia resolves in startHotkeyRecording
-      pendingStopRef.current = true;
+      pendingStopRef.current = hotkeyStartInFlightRef.current;
       // Also try the normal stop path
       if (
         mediaRecorderRef.current &&
         mediaRecorderRef.current.state === "recording"
       ) {
-        isRecordingRef.current = false;
-        setIsRecording(false);
-        mediaRecorderRef.current.stop();
-        // Switch to processing dots — pill hides after processAudio finishes
-        invoke("set_pill_processing").catch(console.warn);
-      } else {
+        stopHotkeyRecording();
       }
     });
     const unlistenErr = listen<string>("hotkey-permission-error", (ev) => {
@@ -821,32 +887,38 @@ function App() {
   };
 
   const resolveDictationModelPath = useCallback(async (): Promise<string | null> => {
-    let home: string;
     try {
-      home = await homeDir();
-    } catch {
-      setStatus("Failed to get home directory.");
-      return null;
-    }
-
-    const paths = [
-      `${home}/.oscar/models/ggml-small.bin`,
-      `${home}/.whisper/ggml-small.bin`,
-      "./models/ggml-small.bin",
-      "/usr/local/share/whisper/ggml-small.bin",
-    ];
-
-    for (const path of paths) {
-      try {
-        const exists = await invoke<boolean>("check_file_exists", { path });
-        if (exists) return path;
-      } catch {
-        continue;
+      const { resolved } = await resolveModelForRole(
+        "dictation",
+        dictationModelPresetRef.current,
+      );
+      if (resolved) {
+        setActiveDictationVariant(resolved.variant);
+        return resolved.path;
       }
+    } catch (err) {
+      console.warn("[whisper] dictation resolve failed:", err);
+      setStatus("Failed to resolve speech model.");
     }
-
     return null;
   }, []);
+
+  const handleDictationPresetChange = useCallback(
+    async (preset: WhisperModelPreset) => {
+      setDictationModelPreset(preset);
+      dictationModelPresetRef.current = preset;
+      await saveSetting("dictationModelPreset", preset);
+    },
+    [],
+  );
+
+  const handleMinutesPresetChange = useCallback(
+    async (preset: WhisperModelPreset) => {
+      setMinutesModelPreset(preset);
+      await saveSetting("minutesModelPreset", preset);
+    },
+    [],
+  );
 
   const resolveMinutesModelPath = useCallback(async (): Promise<string | null> => {
     if (!minutesModelEnabled) {
@@ -925,6 +997,14 @@ function App() {
   // ── Hotkey recording ───────────────────────────────────────────────────────
 
   const startHotkeyRecording = async () => {
+    if (
+      isScribbleRecordingRef.current ||
+      isScribbleProcessingRef.current ||
+      isMeetingRecordingRef.current
+    ) {
+      return;
+    }
+
     // Show the pill immediately so users see instant feedback
     invoke("show_recording_pill").catch(console.warn);
 
@@ -1209,6 +1289,196 @@ function App() {
     }
 
     // Don't stop the stream — keep it warm for next recording
+  };
+
+  // ── Scribble recording (click to start/stop, saves a Scribble) ───────────
+
+  const processScribbleAudio = async () => {
+    if (!user?.id) {
+      setStatus("Sign in to save Scribbles.");
+      isScribbleProcessingRef.current = false;
+      return;
+    }
+
+    const chunkCount = scribbleAudioChunksRef.current.length;
+    const totalBytes = scribbleAudioChunksRef.current.reduce((s, b) => s + b.size, 0);
+
+    if (chunkCount === 0 || totalBytes === 0) {
+      setStatus("No audio captured. Check microphone permission.");
+      isScribbleProcessingRef.current = false;
+      return;
+    }
+
+    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
+      ? "audio/mp4"
+      : "audio/webm";
+    const audioBlob = new Blob(scribbleAudioChunksRef.current, { type: mimeType });
+
+    if (audioBlob.size < 500) {
+      setStatus("Scribble recording was too short. Try again.");
+      isScribbleProcessingRef.current = false;
+      return;
+    }
+
+    setIsProcessing(true);
+    setStatus("Transcribing Scribble...");
+
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const audioContext = new AudioContext({ sampleRate: 16000 });
+    let audioData: Float32Array;
+
+    try {
+      const decoded = await audioContext.decodeAudioData(arrayBuffer);
+      const numChannels = decoded.numberOfChannels;
+      const length = decoded.length;
+      const mono = new Float32Array(length);
+      for (let ch = 0; ch < numChannels; ch++) {
+        const channel = decoded.getChannelData(ch);
+        for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
+      }
+      audioData = mono;
+    } catch (e) {
+      setStatus(`Scribble decode failed (${mimeType}): ${e}`);
+      setIsProcessing(false);
+      isScribbleProcessingRef.current = false;
+      return;
+    } finally {
+      audioContext.close();
+    }
+
+    if (audioData.length < 1600) {
+      setStatus("Scribble recording was too short. Try again.");
+      setIsProcessing(false);
+      isScribbleProcessingRef.current = false;
+      return;
+    }
+
+    try {
+      await ensureWhisperModelLoaded("dictation");
+      const result = await invoke<Transcription>("transcribe_audio", {
+        audioData: Array.from(audioData),
+        initialPrompt: buildInitialPrompt(
+          transcriptionLanguage,
+          dictWordsRef.current,
+        ),
+        language: getWhisperLanguage(transcriptionLanguage, "dictation"),
+      });
+
+      const rawText = result.text?.trim() ?? "";
+      if (!rawText) {
+        setStatus("No speech detected. Try speaking louder or closer.");
+        return;
+      }
+
+      let formattedText = rawText;
+      if (aiImprovementEnabledRef.current) {
+        setStatus("Cleaning up Scribble...");
+        try {
+          const cleaned = await aiService.processText(rawText, "transcribe_cleanup");
+          if (cleaned.trim()) {
+            formattedText = cleaned.trim();
+          }
+        } catch (aiErr) {
+          console.warn("[scribble] cleanup failed, saving raw transcript:", aiErr);
+        }
+      }
+
+      setStatus("Saving Scribble...");
+      const { error } = await scribblesService.createScribble({
+        user_id: user.id,
+        title: buildFallbackScribbleTitle(formattedText),
+        raw_text: rawText,
+        original_formatted_text: formattedText,
+        edited_text: null,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setScribbleRefreshKey((key) => key + 1);
+      setStatus("Scribble saved.");
+    } catch (e) {
+      console.error("[scribble] failed:", e);
+      setStatus(`Scribble failed: ${e}`);
+    } finally {
+      setIsProcessing(false);
+      isScribbleProcessingRef.current = false;
+    }
+  };
+
+  const startScribbleRecording = async () => {
+    if (
+      isRecordingRef.current ||
+      isMeetingRecordingRef.current ||
+      isScribbleRecordingRef.current ||
+      isScribbleProcessingRef.current
+    ) {
+      return;
+    }
+
+    let stream: MediaStream;
+    if (
+      warmStreamRef.current &&
+      warmStreamRef.current.getAudioTracks().some((t) => t.readyState === "live")
+    ) {
+      stream = warmStreamRef.current;
+    } else {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: getAudioConstraints(),
+        });
+        warmStreamRef.current = stream;
+      } catch (e) {
+        console.error("[scribble] getUserMedia failed:", e);
+        setStatus(`Could not access microphone: ${e}`);
+        isScribbleProcessingRef.current = false;
+        return;
+      }
+    }
+
+    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
+      ? "audio/mp4"
+      : "audio/webm";
+    const mediaRecorder = new MediaRecorder(stream, { mimeType });
+    scribbleMediaRecorderRef.current = mediaRecorder;
+    scribbleAudioChunksRef.current = [];
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        scribbleAudioChunksRef.current.push(event.data);
+      }
+    };
+    mediaRecorder.onstop = () => {
+      void processScribbleAudio();
+    };
+
+    mediaRecorder.start(100);
+    isScribbleRecordingRef.current = true;
+    setIsScribbleRecording(true);
+    setScribbleRecordingTime(0);
+    scribbleTimerRef.current = setInterval(() => {
+      setScribbleRecordingTime((previous) => previous + 1);
+    }, 1000);
+    setStatus("Recording Scribble...");
+  };
+
+  const stopScribbleRecording = () => {
+    isScribbleRecordingRef.current = false;
+    setIsScribbleRecording(false);
+    if (scribbleTimerRef.current) {
+      clearInterval(scribbleTimerRef.current);
+      scribbleTimerRef.current = null;
+    }
+    if (
+      scribbleMediaRecorderRef.current &&
+      scribbleMediaRecorderRef.current.state === "recording"
+    ) {
+      isScribbleProcessingRef.current = true;
+      scribbleMediaRecorderRef.current.stop();
+    } else {
+      isScribbleProcessingRef.current = false;
+    }
   };
 
   // ── Google Calendar OAuth (direct Google PKCE — no Supabase auth) ───────
@@ -1571,6 +1841,14 @@ function App() {
   };
 
   const startMeetingRecording = async () => {
+    if (
+      isRecordingRef.current ||
+      isScribbleRecordingRef.current ||
+      isScribbleProcessingRef.current
+    ) {
+      return;
+    }
+
     setSystemAudioWarning("");
     resetMeetingPipelineState();
 
@@ -1630,6 +1908,7 @@ function App() {
       setSystemAudioWarning("");
     }
 
+    isMeetingRecordingRef.current = true;
     setIsMeetingRecording(true);
     setMeetingRecordingTime(0);
     setMeetingTranscript("");
@@ -1641,6 +1920,7 @@ function App() {
   };
 
   const stopMeetingRecording = () => {
+    isMeetingRecordingRef.current = false;
     setIsMeetingRecording(false);
     meetingStopRequestedRef.current = true;
     setMinutesTranscriptionStatus("finalizing");
@@ -1739,6 +2019,7 @@ function App() {
       await invoke("download_whisper_model", {
         url: MINUTES_MODEL_URL,
         path: fullPath,
+        sha256: null,
       });
 
       setMinutesModelEnabled(true);
@@ -2011,15 +2292,16 @@ function App() {
               {activeTab === "scribble" && user && (
                 <ScribbleTab
                   userId={user.id}
-                  isRecording={isRecording}
+                  refreshKey={scribbleRefreshKey}
+                  isRecording={isScribbleRecording}
                   onToggleRecording={() => {
-                    if (isRecording) {
-                      stopHotkeyRecording();
+                    if (isScribbleRecording) {
+                      stopScribbleRecording();
                     } else {
-                      startHotkeyRecording();
+                      void startScribbleRecording();
                     }
                   }}
-                  recordingTime={0}
+                  recordingTime={scribbleRecordingTime}
                 />
               )}
 
@@ -2109,6 +2391,12 @@ function App() {
                   minutesModelVariant={minutesModelVariant}
                   onDownloadMinutesModel={handleDownloadMinutesModel}
                   onRemoveMinutesModel={handleRemoveMinutesModel}
+                  hardwareProfile={hardwareProfile}
+                  activeDictationVariant={activeDictationVariant}
+                  dictationModelPreset={dictationModelPreset}
+                  onDictationPresetChange={handleDictationPresetChange}
+                  minutesModelPreset={minutesModelPreset}
+                  onMinutesPresetChange={handleMinutesPresetChange}
                 />
               )}
             </div>

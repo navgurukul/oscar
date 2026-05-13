@@ -2,13 +2,23 @@
 //! pipeline shared between dictation and meeting flows.
 
 use serde::Serialize;
-use std::sync::{Arc, Mutex};
+use sha2::{Digest, Sha256};
+use std::sync::{Arc, Mutex, OnceLock};
 use tauri::Emitter;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+use crate::hardware::HardwareProfile;
 use crate::state::{
     AppState, TranscriptSegmentResult, TranscriptSpeaker, TranscriptionResult,
 };
+
+/// Cached hardware profile — detection is cheap but we still want a single
+/// source of truth for things like `whisper_thread_count` across all
+/// transcription calls in a session.
+fn hardware_profile() -> &'static HardwareProfile {
+    static PROFILE: OnceLock<HardwareProfile> = OnceLock::new();
+    PROFILE.get_or_init(HardwareProfile::detect)
+}
 
 #[derive(Clone, Serialize)]
 struct DownloadProgress {
@@ -21,18 +31,22 @@ struct DownloadProgress {
 pub async fn download_whisper_model(
     url: String,
     path: String,
+    sha256: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
     use tokio::io::AsyncWriteExt;
 
-    // Create parent directories if they don't exist
     if let Some(parent) = std::path::Path::new(&path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
     }
 
-    // Download the file using async client with progress
+    // Atomic write: stream to `{path}.partial`, fsync, then rename. Crash or
+    // network drop leaves only the .partial sidecar — the final path is never
+    // half-written, so the existence check in JS doubles as a validity check.
+    let partial_path = format!("{}.partial", path);
+
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(600))
+        .timeout(std::time::Duration::from_secs(1800))
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -48,14 +62,14 @@ pub async fn download_whisper_model(
 
     let total_size = response.content_length().unwrap_or(0);
 
-    // Create the file for async writing
-    let mut file = tokio::fs::File::create(&path)
+    let mut file = tokio::fs::File::create(&partial_path)
         .await
         .map_err(|e| format!("Failed to create file: {}", e))?;
 
-    // Stream the response and write chunks with progress
+    let mut hasher = sha256.as_ref().map(|_| Sha256::new());
     let mut downloaded: u64 = 0;
     let mut stream = response.bytes_stream();
+    let mut last_emit_pct: u8 = 0;
 
     use futures_util::StreamExt;
 
@@ -66,26 +80,52 @@ pub async fn download_whisper_model(
             .await
             .map_err(|e| format!("Failed to write file: {}", e))?;
 
+        if let Some(h) = hasher.as_mut() {
+            h.update(&chunk);
+        }
+
         downloaded += chunk.len() as u64;
 
-        // Emit progress event
         let percentage = if total_size > 0 {
             ((downloaded as f64 / total_size as f64) * 100.0) as u8
         } else {
             0
         };
 
-        let _ = app.emit(
-            "download-progress",
-            DownloadProgress {
-                downloaded,
-                total: total_size,
-                percentage,
-            },
-        );
+        // Throttle emit to whole-percent changes — avoids flooding the
+        // webview IPC channel on fast networks.
+        if percentage != last_emit_pct {
+            last_emit_pct = percentage;
+            let _ = app.emit(
+                "download-progress",
+                DownloadProgress {
+                    downloaded,
+                    total: total_size,
+                    percentage,
+                },
+            );
+        }
     }
 
     file.flush().await.map_err(|e| format!("Failed to flush file: {}", e))?;
+    file.sync_all()
+        .await
+        .map_err(|e| format!("Failed to fsync file: {}", e))?;
+    drop(file);
+
+    if let (Some(expected), Some(h)) = (sha256.as_ref(), hasher) {
+        let actual = format!("{:x}", h.finalize());
+        if !actual.eq_ignore_ascii_case(expected) {
+            let _ = std::fs::remove_file(&partial_path);
+            return Err(format!(
+                "Checksum mismatch: expected {}, got {}",
+                expected, actual
+            ));
+        }
+    }
+
+    std::fs::rename(&partial_path, &path)
+        .map_err(|e| format!("Failed to finalise download: {}", e))?;
 
     Ok(format!("Downloaded {} bytes to {}", downloaded, path))
 }
@@ -125,7 +165,7 @@ fn load_whisper_model_inner(
             e.to_string()
         })?;
     let mut app_state = state.lock().map_err(|e| e.to_string())?;
-    app_state.whisper_context = Some(context);
+    app_state.whisper_context = Some(Arc::new(context));
     app_state.loaded_model_role = Some(role.to_string());
     app_state.loaded_model_path = Some(path.to_string());
     log::info!("[whisper] Model loaded successfully");
@@ -145,11 +185,14 @@ pub fn ensure_whisper_model_loaded(
 pub fn warm_whisper_runtime(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
-    let locked = state.lock().map_err(|e| e.to_string())?;
-    let context = locked
-        .whisper_context
-        .as_ref()
-        .ok_or_else(|| "Whisper model not loaded".to_string())?;
+    let context = {
+        let locked = state.lock().map_err(|e| e.to_string())?;
+        locked
+            .whisper_context
+            .as_ref()
+            .ok_or_else(|| "Whisper model not loaded".to_string())?
+            .clone()
+    };
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     params.set_language(Some("en"));
@@ -157,6 +200,7 @@ pub fn warm_whisper_runtime(
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
+    params.set_n_threads(hardware_profile().whisper_thread_count());
 
     let mut whisper_state = context.create_state().map_err(|e| e.to_string())?;
     let silence = vec![0.0f32; 16_000];
@@ -190,15 +234,21 @@ pub(crate) fn transcribe_audio_inner(
         audio_data.len() as f64 / 16000.0,
         language
     );
-    let locked = app_state.lock().map_err(|e| e.to_string())?;
 
-    let context = locked
-        .whisper_context
-        .as_ref()
-        .ok_or_else(|| {
-            log::error!("[whisper] Model not loaded when transcribe was called");
-            "Whisper model not loaded".to_string()
-        })?;
+    // Lock briefly to grab a handle to the shared context, then release —
+    // otherwise the AppState mutex is held for the whole inference (multiple
+    // seconds on long meetings) and other commands stall behind it.
+    let context = {
+        let locked = app_state.lock().map_err(|e| e.to_string())?;
+        locked
+            .whisper_context
+            .as_ref()
+            .ok_or_else(|| {
+                log::error!("[whisper] Model not loaded when transcribe was called");
+                "Whisper model not loaded".to_string()
+            })?
+            .clone()
+    };
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     // "auto" or None → let Whisper auto-detect the language from the audio
@@ -208,6 +258,7 @@ pub(crate) fn transcribe_audio_inner(
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
+    params.set_n_threads(hardware_profile().whisper_thread_count());
 
     // Inject personal dictionary words as Whisper initial prompt
     if let Some(prompt) = initial_prompt {
@@ -347,17 +398,26 @@ pub(crate) fn merge_transcription_results(
 }
 
 #[tauri::command]
-pub fn transcribe_audio(
+pub async fn transcribe_audio(
     audio_data: Vec<f32>,
     initial_prompt: Option<String>,
     language: Option<String>,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
-    transcribe_audio_inner(
-        &audio_data,
-        initial_prompt.as_deref(),
-        language.as_deref(),
-        &state,
-        None,
-    )
+    // Whisper inference is CPU-bound and can run for many seconds on large
+    // models. Run on the blocking thread pool so the Tauri IPC executor stays
+    // free to service UI commands (otherwise the webview locks up on long
+    // transcripts).
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        transcribe_audio_inner(
+            &audio_data,
+            initial_prompt.as_deref(),
+            language.as_deref(),
+            &state,
+            None,
+        )
+    })
+    .await
+    .map_err(|e| format!("Transcription task failed: {}", e))?
 }

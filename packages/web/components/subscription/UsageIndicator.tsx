@@ -26,7 +26,7 @@ export function UsageIndicator({
           <span className="text-sm text-gray-400">
             {current}{" "}
             {type === "recordings"
-              ? "Streams"
+              ? "Scribble recordings"
               : type === "scribbles"
               ? "Scribbles"
               : "vocabulary entries"}{" "}
@@ -75,7 +75,7 @@ export function UsageIndicator({
       <div className="flex items-center justify-between text-sm">
         <span className="text-gray-400">
           {type === "recordings"
-            ? "Streams this month"
+            ? "Scribble recordings this month"
             : type === "scribbles"
             ? "Total Scribbles"
             : "Vocabulary entries"}
@@ -93,10 +93,10 @@ export function UsageIndicator({
       <p className="text-xs text-gray-500">
         {remaining === 0
           ? `Limit reached. Upgrade to Pro for unlimited ${
-              type === "recordings" ? "Streams" : type === "scribbles" ? "Scribbles" : type
+              type === "recordings" ? "Scribble recordings" : type === "scribbles" ? "Scribbles" : type
             }.`
           : `${remaining} ${
-              type === "recordings" ? "Streams" : type === "scribbles" ? "Scribbles" : type
+              type === "recordings" ? "Scribble recordings" : type === "scribbles" ? "Scribbles" : type
             } remaining`}
       </p>
     </div>

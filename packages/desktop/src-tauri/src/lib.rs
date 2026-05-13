@@ -14,7 +14,9 @@ mod audio_decode;
 mod calendar;
 mod filesystem;
 mod frontmost;
+mod hardware;
 mod hotkey;
+mod models;
 #[cfg(target_os = "macos")]
 mod mac_tray;
 #[cfg(target_os = "macos")]
@@ -97,6 +99,9 @@ pub fn run() {
             filesystem::check_file_exists,
             filesystem::delete_file,
             calendar::get_calendar_events,
+            hardware::detect_hardware,
+            hardware::recommend_whisper_model,
+            hardware::list_whisper_models,
         ])
         .setup(move |app| {
             log::info!("[setup] Tauri setup started");

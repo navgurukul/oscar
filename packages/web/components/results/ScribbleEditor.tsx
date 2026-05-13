@@ -116,7 +116,7 @@ export function ScribbleEditor({
                   : "text-gray-500 hover:text-gray-300"
               }`}
             >
-              Stream Transcript
+              Raw Transcript
             </button>
             <button
               onClick={() => setActiveTab("scribble")}

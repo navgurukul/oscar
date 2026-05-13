@@ -1,6 +1,7 @@
 // Local text formatter for fallback when AI is unavailable
 
 import { LOCAL_FORMATTER_CONFIG } from "../constants";
+import { applyTranscriptPostProcessing } from "../prompts";
 
 /**
  * Local formatter service provides basic text cleanup when AI formatting fails.
@@ -34,7 +35,7 @@ export const localFormatterService = {
     // 5. Add paragraph breaks for long text
     text = this.addParagraphBreaks(text);
 
-    return text.trim();
+    return applyTranscriptPostProcessing(text.trim());
   },
 
   /**

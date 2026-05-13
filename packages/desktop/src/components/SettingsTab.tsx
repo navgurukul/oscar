@@ -18,6 +18,12 @@ import { BillingSection } from "./BillingSection";
 import { VocabularySection } from "./VocabularySection";
 import { getInitials } from "../lib/utils";
 import { isContextAwarePlatform } from "../lib/dictation-context";
+import {
+  modelDisplayName,
+  type HardwareProfile,
+  type ModelPreset,
+  type WhisperModelVariant,
+} from "../lib/whisper-models";
 
 /* ── Types ── */
 
@@ -158,6 +164,12 @@ interface SettingsTabProps {
   minutesModelVariant?: string;
   onDownloadMinutesModel?: () => void;
   onRemoveMinutesModel?: () => void;
+  hardwareProfile?: HardwareProfile | null;
+  activeDictationVariant?: WhisperModelVariant | null;
+  dictationModelPreset?: ModelPreset;
+  onDictationPresetChange?: (preset: ModelPreset) => void;
+  minutesModelPreset?: ModelPreset;
+  onMinutesPresetChange?: (preset: ModelPreset) => void;
 }
 
 /* ── Component ── */
@@ -185,6 +197,12 @@ export function SettingsTab({
   minutesModelDownloadProgress = 0,
   onDownloadMinutesModel,
   onRemoveMinutesModel,
+  hardwareProfile = null,
+  activeDictationVariant = null,
+  dictationModelPreset = "auto",
+  onDictationPresetChange,
+  minutesModelPreset = "auto",
+  onMinutesPresetChange,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>(
     resolveTab(initialSection),
@@ -404,6 +422,43 @@ export function SettingsTab({
 
               <div className="st-row">
                 <div className="st-row-text">
+                  <div className="st-row-label">Speech Model</div>
+                  <div className="st-row-desc">
+                    {hardwareProfile
+                      ? `${hardwareProfile.ramGb} GB RAM · ${hardwareProfile.cpuCores} cores${
+                          hardwareProfile.gpuBackend !== "none"
+                            ? ` · ${hardwareProfile.gpuBackend.toUpperCase()}`
+                            : ""
+                        }`
+                      : "Detecting hardware…"}
+                  </div>
+                  {activeDictationVariant && (
+                    <div className="st-row-status st-row-status--installed">
+                      Active: {modelDisplayName(activeDictationVariant)}
+                    </div>
+                  )}
+                </div>
+                <div className="st-row-action">
+                  <select
+                    className="st-select"
+                    value={dictationModelPreset}
+                    onChange={(e) =>
+                      onDictationPresetChange?.(e.target.value as ModelPreset)
+                    }
+                    aria-label="Dictation quality"
+                  >
+                    <option value="auto">Auto (recommended)</option>
+                    <option value="fast">Fast</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="best">Best quality</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="st-divider" />
+
+              <div className="st-row">
+                <div className="st-row-text">
                   <div className="st-row-label">Accuracy Pack</div>
                   <div className="st-row-desc">
                     Better Hindi, Hinglish, and long-meeting transcription
@@ -455,6 +510,37 @@ export function SettingsTab({
                   )}
                 </div>
               </div>
+
+              {minutesPackInstalled && (
+                <>
+                  <div className="st-divider" />
+                  <div className="st-row st-row--sub">
+                    <div className="st-row-text">
+                      <div className="st-row-label">Meeting quality</div>
+                      <div className="st-row-desc">
+                        Trade off transcription accuracy versus CPU/GPU load.
+                      </div>
+                    </div>
+                    <div className="st-row-action">
+                      <select
+                        className="st-select"
+                        value={minutesModelPreset}
+                        onChange={(e) =>
+                          onMinutesPresetChange?.(
+                            e.target.value as ModelPreset,
+                          )
+                        }
+                        aria-label="Meeting quality"
+                      >
+                        <option value="auto">Auto (recommended)</option>
+                        <option value="fast">Fast</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="best">Best quality</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
