@@ -6,4 +6,11 @@ export {
   SYSTEM_PROMPTS,
   USER_PROMPTS,
   buildFormatPromptWithVocabulary,
+  applyTranscriptPostProcessing,
+  applyTranscriptPostProcessingWithChanges,
+} from "@oscar/shared/prompts";
+export type {
+  TranscriptPostProcessChange,
+  TranscriptPostProcessIssue,
+  TranscriptPostProcessResult,
 } from "@oscar/shared/prompts";

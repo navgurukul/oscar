@@ -170,12 +170,12 @@ export default function Home() {
               className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/50 border border-cyan-500/30 text-cyan-400 text-xs font-medium mb-8 backdrop-blur-sm"
             >
               <Sparkles className="w-3 h-3" />
-              <span>AI-Powered Streams</span>
+              <span>AI-Powered Scribbles</span>
             </motion.div>
 
             {/* App Name / Logo */}
             <h1 className="text-6xl md:text-7xl font-bold font-serif text-white mb-6 tracking-tight">
-              Start a Stream
+              Record a Scribble
             </h1>
             
             <div className="flex items-center justify-center gap-3 mb-8">
@@ -207,7 +207,7 @@ export default function Home() {
                 Scribble is empty for now.
               </h3>
               <p className="text-gray-500 text-lg md:text-xl max-w-md mx-auto leading-relaxed">
-                Tap the mic button below to start your first Stream. Your first Scribble will land here automatically.
+                Tap the mic button below to record your first Scribble.
               </p>
             </div>
           </motion.div>
@@ -237,7 +237,7 @@ export default function Home() {
           <div className="text-center mb-12">
             <p className="text-cyan-400 font-medium mb-2">Welcome back, {firstName}</p>
             <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight">
-              Start a Stream
+              Record a Scribble
             </h1>
           </div>
 
@@ -277,7 +277,7 @@ export default function Home() {
                 ))
               ) : (
                 <div className="text-center py-10 bg-slate-900/20 rounded-2xl border border-dashed border-white/10">
-                  <p className="text-gray-500 italic">No Scribbles yet. Start a Stream and capture your first idea.</p>
+                  <p className="text-gray-500 italic">No Scribbles yet. Record one and capture your first idea.</p>
                 </div>
               )}
             </div>
@@ -315,7 +315,7 @@ export default function Home() {
               />
             </div>
             <p className="mt-10 text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
-              Stream into any app. Capture every meeting. Build your knowledge base.
+              Desktop Stream for any app. Minutes for meetings. Scribbles for notes.
             </p>
            
             {!session && (
@@ -543,7 +543,7 @@ export default function Home() {
                       Your voice scribbles, <span className="text-cyan-400">beautifully organized.</span>
                     </h3>
                     <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                      Saved Stream dictations become Scribbles. They are searchable, editable, and synced across devices. Build your personal knowledge base without ever typing a thing.
+                      Saved voice notes become Scribbles. They are searchable, editable, and synced across devices. Build your personal knowledge base without typing.
                     </p>
                     <motion.ul
                       variants={listVariants}
@@ -614,7 +614,7 @@ export default function Home() {
                       You speak at 150+ words per minute. You type at 40. Stop wasting time transcribing your own thoughts.
                     </p>
                     <p className="text-cyan-200 text-sm">
-                      Stream directly into Slack, email, docs. Zero copy-paste.
+                      Desktop Stream inserts into Slack, email, docs. Zero copy-paste.
                     </p>
                   </div>
                 </FadeIn>
@@ -759,7 +759,7 @@ export default function Home() {
                   <ul className="space-y-3 mb-8">
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">{SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} Streams per month</span>
+                      <span className="text-gray-300 text-sm">{SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} Scribble recordings per month</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
@@ -828,7 +828,7 @@ export default function Home() {
                   <ul className="space-y-3 mb-8">
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Unlimited Streams</span>
+                      <span className="text-gray-300 text-sm">Unlimited Scribble recordings</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
@@ -885,7 +885,7 @@ export default function Home() {
                 </Button>
               </div>
               <p className="text-gray-500 text-sm mt-6">
-                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free Streams/month • No credit card • Upgrade anytime
+                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free Scribble recordings/month • No credit card • Upgrade anytime
               </p>
             </FadeIn>
           </section>

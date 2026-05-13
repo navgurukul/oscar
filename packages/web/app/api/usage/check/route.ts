@@ -62,9 +62,9 @@ export async function GET(request: NextRequest) {
     if (!allowed) {
       return NextResponse.json(
         {
-          error: "Recording limit reached",
-          message:
-            "You've reached your monthly recording limit. Upgrade to Pro for unlimited recordings.",
+            error: "Scribble recording limit reached",
+            message:
+              "You've reached your monthly Scribble recording limit. Upgrade to Pro for unlimited Scribble recordings.",
           canRecord: false,
           current,
           remaining: 0,

@@ -11,6 +11,7 @@ type SortOption = "created" | "updated" | "length";
 interface ScribbleTabProps {
   // userId available for future use (e.g., filtering by user)
   userId: string;
+  refreshKey?: number;
   isRecording: boolean;
   onToggleRecording: () => void;
   recordingTime: number;
@@ -34,6 +35,7 @@ const SCRIBBLE_CTA_GLASS_STYLE = { WebkitBackdropFilter: "blur(10px)" } as const
 
 export function ScribbleTab({
   userId,
+  refreshKey = 0,
   isRecording,
   onToggleRecording,
   recordingTime,
@@ -57,7 +59,7 @@ export function ScribbleTab({
   useEffect(() => {
     loadScribbles();
     loadTrashCount();
-  }, [userId]);
+  }, [userId, refreshKey]);
 
   const loadTrashCount = async () => {
     const { data, error } = await scribblesService.getTrashedScribbles();
@@ -372,7 +374,7 @@ export function ScribbleTab({
                 Scribbles that stay searchable and synced.
               </h2>
               <p className="mt-3 text-[0.82rem] leading-[1.6] text-sky-50/90">
-                Saved scribbles sync here across devices. Stream transcripts stay local to this device.
+                Record voice notes here and save them as searchable Scribbles across devices.
               </p>
             </div>
 
@@ -381,7 +383,7 @@ export function ScribbleTab({
                 { label: "Search", icon: <Search size={20} /> },
                 { label: "Star", icon: <Star size={20} /> },
                 { label: "Scribble", icon: <FileText size={20} /> },
-                { label: "Stream", icon: <Mic size={20} /> },
+                { label: "Record", icon: <Mic size={20} /> },
               ].map(({ label, icon }, index) => (
                 <div
                   key={label}
@@ -545,6 +547,7 @@ export function ScribbleTab({
             )}
             <button
               onClick={onToggleRecording}
+              title={isRecording ? "Stop Scribble recording" : "Record a new Scribble"}
               className={`w-16 h-16 flex items-center justify-center sm:w-20 sm:h-20 rounded-full text-white shadow-lg hover:shadow-xl transition-all duration-200 ${
                 isRecording
                   ? "bg-rose-600 hover:bg-rose-700 animate-pulse"

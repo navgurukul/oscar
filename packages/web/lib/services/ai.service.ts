@@ -7,6 +7,7 @@ import type {
   GroqTitleResponse,
 } from "../types/api.types";
 import { API_CONFIG, ERROR_MESSAGES, UI_STRINGS } from "../constants";
+import { applyTranscriptPostProcessing } from "../prompts";
 import { localFormatterService } from "./localFormatter.service";
 
 const RETRY_CONFIG = {
@@ -129,10 +130,12 @@ async function parseFormatResponse(
   }
 
   // Strip markdown code fences (safety net — backend already strips these)
-  return formattedText
+  const cleaned = formattedText
     .replace(/^```[\w]*\n/, "")
     .replace(/\n```$/, "")
     .trim();
+
+  return applyTranscriptPostProcessing(cleaned);
 }
 
 /**

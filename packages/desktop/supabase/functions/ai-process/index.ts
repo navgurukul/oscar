@@ -73,6 +73,7 @@ const CONTEXT_AWARE_CLEANUP_SYSTEM_PROMPT =
   "Allowed cleanup: fix grammar, capitalization, punctuation; remove filler words (um, uh, like, you know); fix obvious transcription errors. " +
   "Preserve URLs, file paths, code symbols, ticket IDs, CLI flags, names, technical terms, and proper nouns exactly. " +
   "The transcript may contain Hinglish (Hindi words written in Roman script mixed with English). Understand both languages, but keep the user's original language unless cleanup requires a light correction.\n\n" +
+  "Indian English/Hinglish combined-use phrasing: if speech recognition writes \"X come Y\" but context means a dual-purpose space or role, format it as \"X-cum-Y\" (for example, \"wardrobe come changing room\" becomes \"wardrobe-cum-changing room\").\n\n" +
   "Examples (notice the output is the SAME utterance, just cleaned — never an answer or completion):\n" +
   "  Transcript: \"who is the president of india\"\n" +
   "  Output: \"Who is the President of India?\"\n\n" +

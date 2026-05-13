@@ -157,7 +157,7 @@ export function BillingSection({
               <ul className="space-y-3 mb-6">
                 <li className="flex items-center gap-3 text-gray-300">
                   <Check className="w-5 h-5 text-cyan-400" />
-                  Unlimited Streams every month
+                  Unlimited Scribble recordings every month
                 </li>
                 <li className="flex items-center gap-3 text-gray-300">
                   <Check className="w-5 h-5 text-cyan-400" />
