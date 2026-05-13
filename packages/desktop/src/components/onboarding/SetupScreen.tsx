@@ -1,12 +1,17 @@
-import { homeDir } from "@tauri-apps/api/path";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  MODEL_PATH,
-  MODEL_URL,
-  OLD_MODEL_PATH,
-} from "../../lib/desktop-constants";
+  detectHardware,
+  formatModelSize,
+  modelDisplayName,
+  type HardwareProfile,
+  type ModelRecommendation,
+} from "../../lib/whisper-models";
+import {
+  cleanupLegacyModels,
+  downloadModel,
+  resolveModelForRole,
+} from "../../lib/whisper-model-manager";
 import type { DownloadProgress } from "../../lib/app-types";
 import { CoverShowcase } from "./CoverShowcase";
 import { StepIndicator } from "./StepIndicator";
@@ -15,100 +20,147 @@ interface SetupScreenProps {
   onComplete: () => Promise<void> | void;
 }
 
+type Phase = "detecting" | "ready" | "downloading" | "error";
+
 export function SetupScreen({ onComplete }: SetupScreenProps) {
-  const [step, setStep] = useState<"download" | "loading">("download");
+  const [phase, setPhase] = useState<Phase>("detecting");
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
+  const [hardware, setHardware] = useState<HardwareProfile | null>(null);
+  const [recommendation, setRecommendation] =
+    useState<ModelRecommendation | null>(null);
 
-  const downloadModel = async () => {
-    setStep("loading");
-    setProgress({ downloaded: 0, total: 1, percentage: 0 });
+  // Detect hardware + compute recommendation up front so the download prompt
+  // can show the user a size and a one-line "why this model" before they
+  // commit to the download.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [hw, { recommendation: rec, resolved }] = await Promise.all([
+          detectHardware(),
+          resolveModelForRole("dictation", "auto"),
+        ]);
+        if (cancelled) return;
+        setHardware(hw);
+        setRecommendation(rec);
 
-    const unlisten = await listen<DownloadProgress>("download-progress", (event) => {
-      setProgress(event.payload);
-    });
+        // Already installed — skip download entirely.
+        if (resolved) {
+          await onComplete();
+          return;
+        }
+
+        setPhase("ready");
+      } catch (e) {
+        if (cancelled) return;
+        setError(`Hardware detection failed: ${e}`);
+        setPhase("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onComplete]);
+
+  const downloadAndComplete = async () => {
+    if (!recommendation) return;
+    setPhase("downloading");
+    setError("");
+    setProgress({ downloaded: 0, total: recommendation.spec.sizeBytes, percentage: 0 });
+
+    const unlisten = await listen<DownloadProgress>(
+      "download-progress",
+      (event) => {
+        setProgress(event.payload);
+      },
+    );
 
     try {
-      const home = await homeDir();
-      const fullPath = `${home}/${MODEL_PATH}`;
-
-      await invoke("download_whisper_model", {
-        url: MODEL_URL,
-        path: fullPath,
-      });
-
+      await downloadModel(recommendation.spec);
       unlisten();
-
-      try {
-        const oldModelPath = `${home}/${OLD_MODEL_PATH}`;
-        const oldExists = await invoke<boolean>("check_file_exists", {
-          path: oldModelPath,
-        });
-        if (oldExists) {
-          await invoke("delete_file", { path: oldModelPath });
-          console.log("Cleaned up old model file:", oldModelPath);
-        }
-      } catch (cleanupError) {
-        console.warn("Failed to clean up old model:", cleanupError);
-      }
-
+      // Opportunistic — never block setup on cleanup.
+      void cleanupLegacyModels([recommendation.spec.variant]);
       await onComplete();
     } catch (downloadError) {
       unlisten();
-      setError(`Something went wrong: ${downloadError}`);
-      setStep("download");
+      setError(`Download failed: ${downloadError}`);
+      setPhase("ready");
     }
   };
 
-  if (step === "loading") {
-    return (
-      <div className="split-layout">
-        <StepIndicator currentStep="setup" />
-        <div className="split-layout-inner">
-          <div className="split-left">
-            <div className="split-content">
-              <div className="brand-header">
-                <img
-                  src="/OSCAR_LIGHT_LOGO.png"
-                  alt="OSCAR"
-                  width="36"
-                  height="36"
+  const renderLeftPane = () => {
+    if (phase === "detecting") {
+      return (
+        <>
+          <h1 className="split-title">Detecting your hardware…</h1>
+          <p className="split-description">
+            Picking the best speech model for your machine.
+          </p>
+        </>
+      );
+    }
+
+    if (phase === "downloading" && recommendation) {
+      const pct = progress?.percentage ?? 0;
+      return (
+        <>
+          <h1 className="split-title">Warming up the engines…</h1>
+          <p className="split-description">
+            Downloading {modelDisplayName(recommendation.spec.variant)} (
+            {formatModelSize(recommendation.spec.sizeBytes)}). Processed
+            entirely on your device — this only happens once.
+          </p>
+          <div className="setup-loading">
+            <div className="download-progress-container">
+              <div className="download-progress-bar">
+                <div
+                  className="download-progress-fill"
+                  style={{ width: `${pct}%` }}
                 />
-                <span className="brand-name">OSCAR</span>
               </div>
-
-              <h1 className="split-title">Warming up the engines...</h1>
-              <p className="split-description">
-                Downloading the speech recognition model (~140 MB). Processed
-                entirely on your device — this only happens once.
+              <p className="mt-1.5 text-right text-[0.8rem] text-slate-500">
+                {pct ? `${Math.round(pct)}%` : "Starting..."}
               </p>
-
-              <div className="setup-loading">
-                <div className="download-progress-container">
-                  <div className="download-progress-bar">
-                    <div
-                      className="download-progress-fill"
-                      style={{ width: `${progress?.percentage || 0}%` }}
-                    />
-                  </div>
-                  <p className="mt-1.5 text-right text-[0.8rem] text-slate-500">
-                    {progress?.percentage
-                      ? `${Math.round(progress.percentage)}%`
-                      : "Starting..."}
-                  </p>
-                </div>
-
-                {error && <p className="setup-error">{error}</p>}
-              </div>
             </div>
+            {error && <p className="setup-error">{error}</p>}
           </div>
-          <div className="split-right">
-            <CoverShowcase />
-          </div>
-        </div>
-      </div>
+        </>
+      );
+    }
+
+    // ready | error
+    return (
+      <>
+        <h1 className="split-title">Getting your voice ready</h1>
+        <p className="split-description">
+          OSCAR runs speech recognition locally on your device.
+          {recommendation
+            ? ` We picked ${modelDisplayName(recommendation.spec.variant)} (${formatModelSize(recommendation.spec.sizeBytes)}) for your hardware.`
+            : ""}
+        </p>
+        {hardware && (
+          <p
+            className="split-description"
+            style={{ marginTop: 8, opacity: 0.7, fontSize: "0.85rem" }}
+          >
+            Detected: {hardware.ramGb} GB RAM · {hardware.cpuCores} CPU cores
+            {hardware.gpuBackend !== "none" &&
+              ` · ${hardware.gpuBackend.toUpperCase()} acceleration`}
+          </p>
+        )}
+        {error && <p className="setup-error">{error}</p>}
+        <button
+          type="button"
+          className="perm-continue-btn-modern active"
+          onClick={downloadAndComplete}
+          disabled={!recommendation}
+        >
+          Download Model
+        </button>
+      </>
     );
-  }
+  };
 
   return (
     <div className="split-layout">
@@ -125,22 +177,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
               />
               <span className="brand-name">OSCAR</span>
             </div>
-
-            <h1 className="split-title">Getting your voice ready</h1>
-            <p className="split-description">
-              OSCAR downloads a local speech model so your recordings can be
-              transcribed directly on your Mac.
-            </p>
-
-            {error && <p className="setup-error">{error}</p>}
-
-            <button
-              type="button"
-              className="perm-continue-btn-modern active"
-              onClick={downloadModel}
-            >
-              Download Model
-            </button>
+            {renderLeftPane()}
           </div>
         </div>
         <div className="split-right">

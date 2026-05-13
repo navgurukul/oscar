@@ -72,6 +72,13 @@ import {
   toAbsoluteMeetingTranscriptSegments,
 } from "./lib/transcript-utils";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
+import {
+  detectHardware,
+  type HardwareProfile,
+  type ModelPreset as WhisperModelPreset,
+  type WhisperModelVariant,
+} from "./lib/whisper-models";
+import { resolveModelForRole } from "./lib/whisper-model-manager";
 import { getStore, loadSetting, saveSetting } from "./lib/store";
 import "./App.css";
 
@@ -124,6 +131,18 @@ function App() {
     useState<MinutesModelDownloadState>("idle");
   const [minutesModelDownloadProgress, setMinutesModelDownloadProgress] =
     useState(0);
+
+  // Hardware-aware model selection. Preset persists across sessions; variant
+  // is resolved on demand by the manager so it always matches what's on disk.
+  const [dictationModelPreset, setDictationModelPreset] =
+    useState<WhisperModelPreset>("auto");
+  const [minutesModelPreset, setMinutesModelPreset] =
+    useState<WhisperModelPreset>("auto");
+  const [hardwareProfile, setHardwareProfile] =
+    useState<HardwareProfile | null>(null);
+  const [activeDictationVariant, setActiveDictationVariant] =
+    useState<WhisperModelVariant | null>(null);
+  const dictationModelPresetRef = useRef<WhisperModelPreset>("auto");
 
   // AI editing (legacy — kept for settings migration)
   const [_aiEditing, setAiEditing] = useState(false);
@@ -532,6 +551,8 @@ function App() {
         savedMinutesModelEnabled,
         savedMinutesModelPath,
         savedMinutesModelVariant,
+        savedDictationPreset,
+        savedMinutesPreset,
         savedCalToken,
         savedCalRefreshToken,
         savedCalConnectedUserId,
@@ -557,6 +578,8 @@ function App() {
         loadSetting<boolean>("minutesModelEnabled", false),
         loadSetting<string>("minutesModelPath", ""),
         loadSetting<MinutesModelVariant>("minutesModelVariant", MINUTES_MODEL_VARIANT),
+        loadSetting<WhisperModelPreset>("dictationModelPreset", "auto"),
+        loadSetting<WhisperModelPreset>("minutesModelPreset", "auto"),
         loadSetting<string>("googleCalendarToken", ""),
         loadSetting<string>("googleCalendarRefreshToken", ""),
         loadSetting<string>("googleCalendarConnectedUserId", ""),
@@ -635,6 +658,14 @@ function App() {
         void saveSetting("minutesModelEnabled", false);
         void saveSetting("minutesModelPath", "");
       }
+      setDictationModelPreset(savedDictationPreset);
+      dictationModelPresetRef.current = savedDictationPreset;
+      setMinutesModelPreset(savedMinutesPreset);
+      // Run hardware detection in the background — it's only used to label the
+      // UI; resolveModelForRole calls into Rust directly each time.
+      void detectHardware()
+        .then(setHardwareProfile)
+        .catch((err) => console.warn("[hardware] detect failed:", err));
       setSystemAudioEnabled(savedSystemAudioEnabled);
       const hasLegacyCalendarConnection =
         Boolean(savedCalToken || savedCalRefreshToken) && !savedCalConnectedUserId;
@@ -856,32 +887,38 @@ function App() {
   };
 
   const resolveDictationModelPath = useCallback(async (): Promise<string | null> => {
-    let home: string;
     try {
-      home = await homeDir();
-    } catch {
-      setStatus("Failed to get home directory.");
-      return null;
-    }
-
-    const paths = [
-      `${home}/.oscar/models/ggml-small.bin`,
-      `${home}/.whisper/ggml-small.bin`,
-      "./models/ggml-small.bin",
-      "/usr/local/share/whisper/ggml-small.bin",
-    ];
-
-    for (const path of paths) {
-      try {
-        const exists = await invoke<boolean>("check_file_exists", { path });
-        if (exists) return path;
-      } catch {
-        continue;
+      const { resolved } = await resolveModelForRole(
+        "dictation",
+        dictationModelPresetRef.current,
+      );
+      if (resolved) {
+        setActiveDictationVariant(resolved.variant);
+        return resolved.path;
       }
+    } catch (err) {
+      console.warn("[whisper] dictation resolve failed:", err);
+      setStatus("Failed to resolve speech model.");
     }
-
     return null;
   }, []);
+
+  const handleDictationPresetChange = useCallback(
+    async (preset: WhisperModelPreset) => {
+      setDictationModelPreset(preset);
+      dictationModelPresetRef.current = preset;
+      await saveSetting("dictationModelPreset", preset);
+    },
+    [],
+  );
+
+  const handleMinutesPresetChange = useCallback(
+    async (preset: WhisperModelPreset) => {
+      setMinutesModelPreset(preset);
+      await saveSetting("minutesModelPreset", preset);
+    },
+    [],
+  );
 
   const resolveMinutesModelPath = useCallback(async (): Promise<string | null> => {
     if (!minutesModelEnabled) {
@@ -1982,6 +2019,7 @@ function App() {
       await invoke("download_whisper_model", {
         url: MINUTES_MODEL_URL,
         path: fullPath,
+        sha256: null,
       });
 
       setMinutesModelEnabled(true);
@@ -2353,6 +2391,12 @@ function App() {
                   minutesModelVariant={minutesModelVariant}
                   onDownloadMinutesModel={handleDownloadMinutesModel}
                   onRemoveMinutesModel={handleRemoveMinutesModel}
+                  hardwareProfile={hardwareProfile}
+                  activeDictationVariant={activeDictationVariant}
+                  dictationModelPreset={dictationModelPreset}
+                  onDictationPresetChange={handleDictationPresetChange}
+                  minutesModelPreset={minutesModelPreset}
+                  onMinutesPresetChange={handleMinutesPresetChange}
                 />
               )}
             </div>
