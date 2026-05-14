@@ -787,6 +787,16 @@
 
 .st-row-status--downloading {
   color: #0891b2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.st-row-error {
+  color: #dc2626;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  margin-top: 4px;
 }
 
 /* ── Divider ── */

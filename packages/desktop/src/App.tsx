@@ -40,9 +40,8 @@ import type {
   DownloadProgress,
   HotkeyContextEventPayload,
   MeetingSegmentJob,
-  MinutesModelDownloadState,
-  MinutesModelVariant,
   MicrophonePermissionState,
+  RoleModelState,
   TabType,
   TonePreset,
   Transcription,
@@ -51,11 +50,6 @@ import type {
 import {
   MEETING_SEGMENT_DURATION_MS,
   MINUTES_DATA_RESET_VERSION,
-  MINUTES_MODEL_PATH,
-  MINUTES_MODEL_URL,
-  MINUTES_MODEL_VARIANT,
-  MODEL_PATH,
-  OLD_MODEL_PATH,
 } from "./lib/desktop-constants";
 import {
   buildDictationContextSnapshot,
@@ -74,11 +68,17 @@ import {
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
 import {
   detectHardware,
+  FALLBACK_MODELS,
+  relativeModelPath,
   type HardwareProfile,
+  type ModelSpec,
   type ModelPreset as WhisperModelPreset,
   type WhisperModelVariant,
 } from "./lib/whisper-models";
-import { resolveModelForRole } from "./lib/whisper-model-manager";
+import {
+  downloadModel,
+  resolveModelForRole,
+} from "./lib/whisper-model-manager";
 import { getStore, loadSetting, saveSetting } from "./lib/store";
 import "./App.css";
 
@@ -87,6 +87,23 @@ function buildFallbackScribbleTitle(text: string): string {
   const firstSentence = normalized.split(/[.!?\n]/)[0]?.trim() || normalized;
   const title = firstSentence.slice(0, 60).trim();
   return title || "Untitled Scribble";
+}
+
+function createRoleModelState(
+  role: WhisperModelRole,
+  preset: WhisperModelPreset = "auto",
+): RoleModelState {
+  return {
+    role,
+    preset,
+    recommendation: null,
+    activeVariant: null,
+    resolvedPath: null,
+    fallbackUsed: false,
+    downloadState: "idle",
+    progress: 0,
+    error: null,
+  };
 }
 
 function App() {
@@ -123,26 +140,23 @@ function App() {
   // Settings panel
   const [_whisperModelPath, setWhisperModelPath] = useState("");
   const [_autoPaste, setAutoPaste] = useState(true);
-  const [minutesModelEnabled, setMinutesModelEnabled] = useState(false);
-  const [minutesModelPath, setMinutesModelPath] = useState("");
-  const [minutesModelVariant, setMinutesModelVariant] =
-    useState<MinutesModelVariant>(MINUTES_MODEL_VARIANT);
-  const [minutesModelDownloadState, setMinutesModelDownloadState] =
-    useState<MinutesModelDownloadState>("idle");
-  const [minutesModelDownloadProgress, setMinutesModelDownloadProgress] =
-    useState(0);
 
   // Hardware-aware model selection. Preset persists across sessions; variant
   // is resolved on demand by the manager so it always matches what's on disk.
-  const [dictationModelPreset, setDictationModelPreset] =
-    useState<WhisperModelPreset>("auto");
-  const [minutesModelPreset, setMinutesModelPreset] =
-    useState<WhisperModelPreset>("auto");
+  const [dictationModel, setDictationModel] = useState<RoleModelState>(() =>
+    createRoleModelState("dictation"),
+  );
+  const [meetingModel, setMeetingModel] = useState<RoleModelState>(() =>
+    createRoleModelState("minutes"),
+  );
   const [hardwareProfile, setHardwareProfile] =
     useState<HardwareProfile | null>(null);
-  const [activeDictationVariant, setActiveDictationVariant] =
-    useState<WhisperModelVariant | null>(null);
   const dictationModelPresetRef = useRef<WhisperModelPreset>("auto");
+  const minutesModelPresetRef = useRef<WhisperModelPreset>("auto");
+  const modelDownloadPromisesRef = useRef(
+    new Map<WhisperModelVariant, Promise<string>>(),
+  );
+  const modelDownloadQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // AI editing (legacy — kept for settings migration)
   const [_aiEditing, setAiEditing] = useState(false);
@@ -548,9 +562,6 @@ function App() {
         savedMicId,
         savedAiImprovement,
         savedContextAwareDictation,
-        savedMinutesModelEnabled,
-        savedMinutesModelPath,
-        savedMinutesModelVariant,
         savedDictationPreset,
         savedMinutesPreset,
         savedCalToken,
@@ -575,9 +586,6 @@ function App() {
           "contextAwareDictationEnabled",
           defaultContextAwareDictationEnabled,
         ),
-        loadSetting<boolean>("minutesModelEnabled", false),
-        loadSetting<string>("minutesModelPath", ""),
-        loadSetting<MinutesModelVariant>("minutesModelVariant", MINUTES_MODEL_VARIANT),
         loadSetting<WhisperModelPreset>("dictationModelPreset", "auto"),
         loadSetting<WhisperModelPreset>("minutesModelPreset", "auto"),
         loadSetting<string>("googleCalendarToken", ""),
@@ -640,27 +648,10 @@ function App() {
       aiImprovementEnabledRef.current = savedAiImprovement;
       setContextAwareDictationEnabled(savedContextAwareDictation);
       contextAwareDictationEnabledRef.current = savedContextAwareDictation;
-      const normalizedMinutesModelPath = savedMinutesModelPath || "";
-      let hasMinutesModel = false;
-      if (normalizedMinutesModelPath) {
-        hasMinutesModel = await invoke<boolean>("check_file_exists", {
-          path: normalizedMinutesModelPath,
-        }).catch(() => false);
-      }
-      setMinutesModelEnabled(savedMinutesModelEnabled && hasMinutesModel);
-      setMinutesModelPath(savedMinutesModelEnabled && hasMinutesModel ? normalizedMinutesModelPath : "");
-      setMinutesModelVariant(savedMinutesModelVariant || MINUTES_MODEL_VARIANT);
-      setMinutesModelDownloadState(
-        savedMinutesModelEnabled && hasMinutesModel ? "installed" : "idle",
-      );
-      setMinutesModelDownloadProgress(0);
-      if (savedMinutesModelEnabled && !hasMinutesModel) {
-        void saveSetting("minutesModelEnabled", false);
-        void saveSetting("minutesModelPath", "");
-      }
-      setDictationModelPreset(savedDictationPreset);
+      setDictationModel((prev) => ({ ...prev, preset: savedDictationPreset }));
       dictationModelPresetRef.current = savedDictationPreset;
-      setMinutesModelPreset(savedMinutesPreset);
+      setMeetingModel((prev) => ({ ...prev, preset: savedMinutesPreset }));
+      minutesModelPresetRef.current = savedMinutesPreset;
       // Run hardware detection in the background — it's only used to label the
       // UI; resolveModelForRole calls into Rust directly each time.
       void detectHardware()
@@ -886,106 +877,208 @@ function App() {
     }
   };
 
-  const resolveDictationModelPath = useCallback(async (): Promise<string | null> => {
-    try {
-      const { resolved } = await resolveModelForRole(
-        "dictation",
-        dictationModelPresetRef.current,
+  const updateRoleModel = useCallback(
+    (role: WhisperModelRole, patch: Partial<RoleModelState>) => {
+      const update = (prev: RoleModelState): RoleModelState => ({
+        ...prev,
+        ...patch,
+      });
+      if (role === "dictation") {
+        setDictationModel(update);
+      } else {
+        setMeetingModel(update);
+      }
+    },
+    [],
+  );
+
+  const syncDownloadProgress = useCallback(
+    (variant: WhisperModelVariant, progress: number) => {
+      const update = (prev: RoleModelState): RoleModelState =>
+        prev.recommendation?.spec.variant === variant
+          ? { ...prev, progress }
+          : prev;
+      setDictationModel(update);
+      setMeetingModel(update);
+    },
+    [],
+  );
+
+  const downloadRecommendedModel = useCallback(
+    async (spec: ModelSpec): Promise<string> => {
+      const existing = modelDownloadPromisesRef.current.get(spec.variant);
+      if (existing) return existing;
+
+      const queuedDownload = modelDownloadQueueRef.current.then(async () => {
+        const unlisten = await listen<DownloadProgress>(
+          "download-progress",
+          (event) => {
+            syncDownloadProgress(spec.variant, event.payload.percentage);
+          },
+        );
+
+        try {
+          const path = await downloadModel(spec);
+          syncDownloadProgress(spec.variant, 100);
+          return path;
+        } finally {
+          unlisten();
+        }
+      });
+
+      const trackedDownload = queuedDownload.finally(() => {
+        modelDownloadPromisesRef.current.delete(spec.variant);
+      });
+
+      modelDownloadQueueRef.current = trackedDownload
+        .then(() => undefined)
+        .catch(() => undefined);
+
+      modelDownloadPromisesRef.current.set(spec.variant, trackedDownload);
+      return trackedDownload;
+    },
+    [syncDownloadProgress],
+  );
+
+  const prepareWhisperModel = useCallback(
+    async (
+      role: WhisperModelRole,
+      options: { load?: boolean; autoDownload?: boolean } = {},
+    ) => {
+      const preset =
+        role === "dictation"
+          ? dictationModelPresetRef.current
+          : minutesModelPresetRef.current;
+
+      updateRoleModel(role, {
+        preset,
+        downloadState: "checking",
+        progress: 0,
+        error: null,
+      });
+
+      const { recommendation, resolved } = await resolveModelForRole(
+        role,
+        preset,
       );
-      if (resolved) {
-        setActiveDictationVariant(resolved.variant);
-        return resolved.path;
-      }
-    } catch (err) {
-      console.warn("[whisper] dictation resolve failed:", err);
-      setStatus("Failed to resolve speech model.");
-    }
-    return null;
-  }, []);
 
-  const handleDictationPresetChange = useCallback(
-    async (preset: WhisperModelPreset) => {
-      setDictationModelPreset(preset);
-      dictationModelPresetRef.current = preset;
-      await saveSetting("dictationModelPreset", preset);
+      updateRoleModel(role, {
+        recommendation,
+        activeVariant: resolved?.variant ?? null,
+        resolvedPath: resolved?.path ?? null,
+        fallbackUsed: resolved?.fallbackUsed ?? false,
+        downloadState: resolved ? "ready" : "idle",
+      });
+
+      let path = resolved?.path ?? null;
+      const shouldDownloadRecommended =
+        options.autoDownload !== false && (!path || resolved?.fallbackUsed);
+
+      if (shouldDownloadRecommended) {
+        updateRoleModel(role, {
+          downloadState: "downloading",
+          progress: 0,
+          error: null,
+        });
+
+        try {
+          path = await downloadRecommendedModel(recommendation.spec);
+          updateRoleModel(role, {
+            activeVariant: recommendation.spec.variant,
+            resolvedPath: path,
+            fallbackUsed: false,
+            downloadState: "ready",
+            progress: 100,
+          });
+        } catch (err) {
+          const message = `Model download failed: ${err}`;
+          console.warn(`[whisper] ${role} model download failed:`, err);
+          updateRoleModel(role, {
+            downloadState: "error",
+            error: message,
+            progress: 0,
+          });
+
+          const retry = await resolveModelForRole(role, preset);
+          if (retry.resolved) {
+            path = retry.resolved.path;
+            updateRoleModel(role, {
+              recommendation: retry.recommendation,
+              activeVariant: retry.resolved.variant,
+              resolvedPath: retry.resolved.path,
+              fallbackUsed: retry.resolved.fallbackUsed,
+              downloadState: "ready",
+              error: message,
+            });
+          }
+        }
+      }
+
+      if (!path) {
+        if (!options.load && options.autoDownload === false) {
+          return { role, path: null };
+        }
+        throw new Error(
+          role === "minutes"
+            ? "Meeting model not found."
+            : "Dictation model not found.",
+        );
+      }
+
+      if (!options.load) {
+        return { role, path };
+      }
+
+      await invoke("ensure_whisper_model_loaded", { role, path });
+      const nextKey = `${role}:${path}`;
+      if (currentWhisperKeyRef.current !== nextKey) {
+        currentWhisperKeyRef.current = nextKey;
+        currentWhisperRoleRef.current = role;
+        voiceEngineWarmupRef.current = false;
+      }
+
+      setWhisperLoadedAndRef(true);
+      setWhisperModelPath(path);
+      return { role, path };
     },
-    [],
+    [downloadRecommendedModel, updateRoleModel],
   );
 
-  const handleMinutesPresetChange = useCallback(
-    async (preset: WhisperModelPreset) => {
-      setMinutesModelPreset(preset);
-      await saveSetting("minutesModelPreset", preset);
-    },
-    [],
+  const ensureWhisperModelLoaded = useCallback(
+    async (preferredRole: WhisperModelRole) =>
+      prepareWhisperModel(preferredRole, { load: true, autoDownload: true }),
+    [prepareWhisperModel],
   );
 
-  const resolveMinutesModelPath = useCallback(async (): Promise<string | null> => {
-    if (!minutesModelEnabled) {
-      return null;
-    }
-
-    let home: string;
-    try {
-      home = await homeDir();
-    } catch {
-      return null;
-    }
-
-    const candidates = [
-      minutesModelPath,
-      `${home}/${MINUTES_MODEL_PATH}`,
-    ].filter(Boolean);
-
-    for (const path of candidates) {
-      try {
-        const exists = await invoke<boolean>("check_file_exists", { path });
-        if (exists) return path;
-      } catch {
-        continue;
+  const handleModelPresetChange = useCallback(
+    async (role: WhisperModelRole, preset: WhisperModelPreset) => {
+      if (role === "dictation") {
+        dictationModelPresetRef.current = preset;
+        setDictationModel((prev) => ({ ...prev, preset }));
+        await saveSetting("dictationModelPreset", preset);
+      } else {
+        minutesModelPresetRef.current = preset;
+        setMeetingModel((prev) => ({ ...prev, preset }));
+        await saveSetting("minutesModelPreset", preset);
       }
-    }
 
-    return null;
-  }, [minutesModelEnabled, minutesModelPath]);
-
-  const ensureWhisperModelLoaded = useCallback(async (preferredRole: WhisperModelRole) => {
-    let role: WhisperModelRole = preferredRole;
-    let path =
-      preferredRole === "minutes"
-        ? await resolveMinutesModelPath()
-        : await resolveDictationModelPath();
-
-    if (!path && preferredRole === "minutes") {
-      role = "dictation";
-      path = await resolveDictationModelPath();
-    }
-
-    if (!path) {
-      throw new Error("Whisper model not found.");
-    }
-
-    await invoke("ensure_whisper_model_loaded", { role, path });
-    const nextKey = `${role}:${path}`;
-    if (currentWhisperKeyRef.current !== nextKey) {
-      currentWhisperKeyRef.current = nextKey;
-      currentWhisperRoleRef.current = role;
-      voiceEngineWarmupRef.current = false;
-    }
-
-    setWhisperLoadedAndRef(true);
-    setWhisperModelPath(path);
-    return { role, path };
-  }, [resolveDictationModelPath, resolveMinutesModelPath]);
+      void prepareWhisperModel(role, {
+        load: currentWhisperRoleRef.current === role,
+        autoDownload: true,
+      }).catch((err) => {
+        console.warn(`[whisper] failed to prepare ${role} model:`, err);
+      });
+    },
+    [prepareWhisperModel],
+  );
 
   const initWhisper = async () => {
     try {
-      const { path } = await ensureWhisperModelLoaded("dictation");
+      await ensureWhisperModelLoaded("dictation");
       setStatus("Preparing voice engine...");
       void warmVoiceEngine().finally(() => {
         setStatus("Ready! Hold Ctrl+Space anywhere to record.");
       });
-      setWhisperModelPath(path);
       return true;
     } catch {
       setWhisperLoadedAndRef(false);
@@ -993,6 +1086,15 @@ function App() {
       return false;
     }
   };
+
+  useEffect(() => {
+    if (!setupComplete) return;
+
+    void prepareWhisperModel("dictation", { autoDownload: false })
+      .catch((err) => console.warn("[whisper] failed to inspect dictation model:", err));
+    void prepareWhisperModel("minutes", { autoDownload: false })
+      .catch((err) => console.warn("[whisper] failed to inspect meeting model:", err));
+  }, [prepareWhisperModel, setupComplete]);
 
   // ── Hotkey recording ───────────────────────────────────────────────────────
 
@@ -1999,91 +2101,6 @@ function App() {
     }
   }, []);
 
-  const handleDownloadMinutesModel = useCallback(async () => {
-    if (minutesModelDownloadState === "downloading") return;
-
-    setMinutesModelDownloadState("downloading");
-    setMinutesModelDownloadProgress(0);
-
-    const unlisten = await listen<DownloadProgress>(
-      "download-progress",
-      (event) => {
-        setMinutesModelDownloadProgress(event.payload.percentage);
-      },
-    );
-
-    try {
-      const home = await homeDir();
-      const fullPath = `${home}/${MINUTES_MODEL_PATH}`;
-
-      await invoke("download_whisper_model", {
-        url: MINUTES_MODEL_URL,
-        path: fullPath,
-        sha256: null,
-      });
-
-      setMinutesModelEnabled(true);
-      setMinutesModelPath(fullPath);
-      setMinutesModelVariant(MINUTES_MODEL_VARIANT);
-      setMinutesModelDownloadState("installed");
-      setMinutesModelDownloadProgress(100);
-      await Promise.all([
-        saveSetting("minutesModelEnabled", true),
-        saveSetting("minutesModelPath", fullPath),
-        saveSetting("minutesModelVariant", MINUTES_MODEL_VARIANT),
-      ]);
-
-      if (activeTab === "meetings") {
-        await ensureWhisperModelLoaded("minutes");
-        await warmVoiceEngine();
-      }
-    } catch (err) {
-      console.error("[minutes-model] download failed:", err);
-      setMinutesModelDownloadState(minutesModelEnabled ? "installed" : "idle");
-      setMinutesModelDownloadProgress(0);
-    } finally {
-      unlisten();
-    }
-  }, [
-    activeTab,
-    ensureWhisperModelLoaded,
-    minutesModelDownloadState,
-    minutesModelEnabled,
-  ]);
-
-  const handleRemoveMinutesModel = useCallback(async () => {
-    if (!minutesModelPath) return;
-
-    try {
-      const exists = await invoke<boolean>("check_file_exists", {
-        path: minutesModelPath,
-      });
-      if (exists) {
-        await invoke("delete_file", { path: minutesModelPath });
-      }
-    } catch (err) {
-      console.warn("[minutes-model] remove failed:", err);
-    }
-
-    setMinutesModelEnabled(false);
-    setMinutesModelPath("");
-    setMinutesModelDownloadProgress(0);
-    setMinutesModelDownloadState("idle");
-    await Promise.all([
-      saveSetting("minutesModelEnabled", false),
-      saveSetting("minutesModelPath", ""),
-    ]);
-
-    if (currentWhisperRoleRef.current === "minutes") {
-      try {
-        await ensureWhisperModelLoaded("dictation");
-        await warmVoiceEngine();
-      } catch (err) {
-        console.warn("[minutes-model] failed to fall back to dictation model:", err);
-      }
-    }
-  }, [ensureWhisperModelLoaded, minutesModelPath]);
-
   useEffect(() => {
     if (!setupComplete) return;
 
@@ -2332,9 +2349,9 @@ function App() {
                       // Delete downloaded model files
                       const home = await homeDir();
                       const filesToDelete = [
-                        `${home}/${MODEL_PATH}`,
-                        `${home}/${OLD_MODEL_PATH}`,
-                        `${home}/${MINUTES_MODEL_PATH}`,
+                        ...Object.values(FALLBACK_MODELS).map(
+                          (spec) => `${home}/${relativeModelPath(spec.variant)}`,
+                        ),
                         // Legacy local AI model files (removed in favour of Groq)
                         `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
                         `${home}/.oscar/models/phi-3.5-tokenizer.json`,
@@ -2385,18 +2402,10 @@ function App() {
                   systemAudioSupported={systemAudioSupported}
                   systemAudioEnabled={systemAudioEnabled}
                   onSystemAudioToggle={handleSystemAudioToggle}
-                  minutesModelEnabled={minutesModelEnabled}
-                  minutesModelDownloadState={minutesModelDownloadState}
-                  minutesModelDownloadProgress={minutesModelDownloadProgress}
-                  minutesModelVariant={minutesModelVariant}
-                  onDownloadMinutesModel={handleDownloadMinutesModel}
-                  onRemoveMinutesModel={handleRemoveMinutesModel}
                   hardwareProfile={hardwareProfile}
-                  activeDictationVariant={activeDictationVariant}
-                  dictationModelPreset={dictationModelPreset}
-                  onDictationPresetChange={handleDictationPresetChange}
-                  minutesModelPreset={minutesModelPreset}
-                  onMinutesPresetChange={handleMinutesPresetChange}
+                  dictationModel={dictationModel}
+                  meetingModel={meetingModel}
+                  onModelPresetChange={handleModelPresetChange}
                 />
               )}
             </div>
