@@ -60,7 +60,6 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(Arc::new(Mutex::new(AppState {
             whisper_context: None,
-            loaded_model_role: None,
             loaded_model_path: None,
             meeting_system_audio_segments: HashMap::new(),
         })))

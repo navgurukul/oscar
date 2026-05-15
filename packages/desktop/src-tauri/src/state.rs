@@ -53,7 +53,6 @@ pub(crate) struct AppState {
     /// Held as `Arc` so transcription can grab a cheap handle, drop the
     /// AppState mutex, and run inference without blocking other commands.
     pub(crate) whisper_context: Option<Arc<WhisperContext>>,
-    pub(crate) loaded_model_role: Option<String>,
     pub(crate) loaded_model_path: Option<String>,
     pub(crate) meeting_system_audio_segments: HashMap<usize, Vec<f32>>,
 }

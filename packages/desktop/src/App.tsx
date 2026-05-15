@@ -1021,12 +1021,12 @@ function App() {
       }
 
       await invoke("ensure_whisper_model_loaded", { role, path });
-      const nextKey = `${role}:${path}`;
-      if (currentWhisperKeyRef.current !== nextKey) {
-        currentWhisperKeyRef.current = nextKey;
-        currentWhisperRoleRef.current = role;
+      const pathChanged = currentWhisperKeyRef.current !== path;
+      if (pathChanged) {
+        currentWhisperKeyRef.current = path;
         voiceEngineWarmupRef.current = false;
       }
+      currentWhisperRoleRef.current = role;
 
       setWhisperLoadedAndRef(true);
       setWhisperModelPath(path);
@@ -1175,6 +1175,11 @@ function App() {
     shouldPaste: boolean,
     _targetApp?: string,   // used in paste_transcription for NSRunningApplication re-focus
   ) => {
+    // ── Timing instrumentation (stream/dictation flow) ───────────────────────
+    // Logs a single summary line at the end so we can spot which stage is slow.
+    const tStart = performance.now();
+    const timings: Record<string, number> = {};
+
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
 
@@ -1197,6 +1202,7 @@ function App() {
     }
 
     setStatus(`Decoding ${(audioBlob.size / 1024).toFixed(0)}KB audio...`);
+    const tDecode0 = performance.now();
     const arrayBuffer = await audioBlob.arrayBuffer();
     const audioContext = new AudioContext({ sampleRate: 16000 });
     let audioData: Float32Array;
@@ -1248,9 +1254,14 @@ function App() {
     const durationSec = (audioData.length / 16000).toFixed(1);
     setIsProcessing(true);
     setStatus(`Transcribing ${durationSec}s...`);
+    timings["decode+mixdown"] = Math.round(performance.now() - tDecode0);
 
     try {
+      const tWhisperLoad0 = performance.now();
       await ensureWhisperModelLoaded("dictation");
+      timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
+
+      const tWhisper0 = performance.now();
       const result = await invoke<Transcription>("transcribe_audio", {
         audioData: Array.from(audioData),
         initialPrompt: buildInitialPrompt(
@@ -1259,6 +1270,7 @@ function App() {
         ),
         language: getWhisperLanguage(transcriptionLanguage, "dictation"),
       });
+      timings["whisper-transcribe"] = Math.round(performance.now() - tWhisper0);
 
       if (!result.text) {
         console.warn("[process] ABORT: no speech detected (whisper empty)");
@@ -1285,17 +1297,22 @@ function App() {
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
       if (aiCleanupEnabled) {
         setStatus("Improving with AI...");
+        const tAi0 = performance.now();
         try {
           const cleaned = await aiService.processText(
             finalText,
             "transcribe_cleanup",
-            activeDictationContext && dictationRouting
-              ? {
-                  context: activeDictationContext,
-                  routing: dictationRouting,
-                }
-              : undefined,
+            {
+              promptProfile: "stream",
+              ...(activeDictationContext && dictationRouting
+                ? {
+                    context: activeDictationContext,
+                    routing: dictationRouting,
+                  }
+                : {}),
+            },
           );
+          timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
           if (cleaned && cleaned.trim().length > 0) {
             finalText = cleaned;
           } else {
@@ -1305,6 +1322,7 @@ function App() {
             cleanupReturnedEmpty = true;
           }
         } catch (aiErr) {
+          timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
           // Silently fall back to raw transcript — user never sees this
           console.warn(
             "[ai] silent cleanup failed, using raw transcript:",
@@ -1323,6 +1341,7 @@ function App() {
       // Now that AI cleanup is complete, paste the improved text to the target app.
       if (shouldPaste) {
         const isMac = navigator.platform.toLowerCase().includes("mac");
+        const tPaste0 = performance.now();
         try {
           // Pass targetApp so the Rust command can re-activate it via
           // NSRunningApplication before posting Cmd+V.  This handles the case
@@ -1333,6 +1352,7 @@ function App() {
             text: finalText,
             targetApp: _targetApp || undefined,
           });
+          timings["paste"] = Math.round(performance.now() - tPaste0);
           if (pasteResult === "CLIPBOARD_ONLY") {
             // Accessibility not granted — text is in clipboard, guide user
             setStatus(
@@ -1344,6 +1364,7 @@ function App() {
             setStatus("Pasted! ✓");
           }
         } catch (pe) {
+          timings["paste"] = Math.round(performance.now() - tPaste0);
           console.error("[paste] FAILED:", pe);
           setStatus(
             isMac
@@ -1353,6 +1374,7 @@ function App() {
         }
       }
 
+      const tPersist0 = performance.now();
       setTranscript((prev) => (prev ? prev + "\n\n" + finalText : finalText));
 
       // Add to local transcripts list for the HomeTab UI
@@ -1369,6 +1391,7 @@ function App() {
         saveSetting("localTranscripts", updatedTranscripts);
         return updatedTranscripts;
       });
+      timings["persist"] = Math.round(performance.now() - tPersist0);
 
       if (!shouldPaste) {
         setStatus("Done! ✓");
@@ -1379,6 +1402,11 @@ function App() {
       setIsProcessing(false);
       // Hide the pill now that processing is complete
       invoke("hide_recording_pill").catch(console.warn);
+      const totalMs = Math.round(performance.now() - tStart);
+      const parts = Object.entries(timings)
+        .map(([k, v]) => `${k}=${v}ms`)
+        .join(" ");
+      console.info(`[stream-timing] total=${totalMs}ms ${parts}`);
     }
 
     // Don't stop the stream — keep it warm for next recording
@@ -2094,20 +2122,12 @@ function App() {
 
   useEffect(() => {
     if (!setupComplete) return;
-
-    if (activeTab === "meetings") {
-      void ensureWhisperModelLoaded("minutes")
-        .then(() => warmVoiceEngine())
-        .catch((err) => console.warn("[whisper] failed to prepare Minutes model:", err));
-      return;
-    }
-
-    if (currentWhisperRoleRef.current === "minutes") {
-      void ensureWhisperModelLoaded("dictation")
-        .then(() => warmVoiceEngine())
-        .catch((err) => console.warn("[whisper] failed to restore dictation model:", err));
-    }
-  }, [activeTab, ensureWhisperModelLoaded, setupComplete]);
+    if (activeTab !== "meetings") return;
+    if (currentWhisperRoleRef.current !== "minutes") return;
+    void warmVoiceEngine().catch((err) =>
+      console.warn("[whisper] failed to warm voice engine:", err),
+    );
+  }, [activeTab, setupComplete]);
 
   // ── Subscription state ─────────────────────────────────────────────────────
   const [isProUser, setIsProUser] = useState(false);

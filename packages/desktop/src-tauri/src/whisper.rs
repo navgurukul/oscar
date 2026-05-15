@@ -143,17 +143,18 @@ fn load_whisper_model_inner(
     path: &str,
     state: &Arc<Mutex<AppState>>,
 ) -> Result<String, String> {
-    let should_reload = {
+    let already_loaded = {
         let app_state = state.lock().map_err(|e| e.to_string())?;
-        !(
-            app_state.whisper_context.is_some()
-                && app_state.loaded_model_role.as_deref() == Some(role)
-                && app_state.loaded_model_path.as_deref() == Some(path)
-        )
+        app_state.whisper_context.is_some()
+            && app_state.loaded_model_path.as_deref() == Some(path)
     };
 
-    if !should_reload {
-        log::info!("[whisper] Model already loaded for role={} path={}", role, path);
+    if already_loaded {
+        log::info!(
+            "[whisper] Model already loaded (role={} path={})",
+            role,
+            path,
+        );
         return Ok("Whisper model already loaded".to_string());
     }
 
@@ -166,7 +167,6 @@ fn load_whisper_model_inner(
         })?;
     let mut app_state = state.lock().map_err(|e| e.to_string())?;
     app_state.whisper_context = Some(Arc::new(context));
-    app_state.loaded_model_role = Some(role.to_string());
     app_state.loaded_model_path = Some(path.to_string());
     log::info!("[whisper] Model loaded successfully");
     Ok("Whisper model loaded successfully".to_string())

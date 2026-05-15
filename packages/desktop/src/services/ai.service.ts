@@ -18,6 +18,7 @@ export type DesktopAIMode =
   | "bullets"
   | "email"
   | "meeting_notes";
+type AIProcessPromptProfile = "stream";
 
 interface AIProcessResponse {
   text?: string;
@@ -29,6 +30,7 @@ interface AIProcessRequest {
   mode: DesktopAIMode;
   context?: DictationContextSnapshot;
   routing?: DictationRoutingResult;
+  promptProfile?: AIProcessPromptProfile;
 }
 
 const EDGE_FUNCTION_FETCH_ERROR = "Failed to send a request to the Edge Function";
@@ -408,6 +410,7 @@ export const aiService = {
     options?: {
       context?: DictationContextSnapshot;
       routing?: DictationRoutingResult;
+      promptProfile?: AIProcessPromptProfile;
     },
   ): Promise<string> {
     if (!text.trim()) {
@@ -422,6 +425,7 @@ export const aiService = {
         mode,
         context: options?.context,
         routing: options?.routing,
+        promptProfile: options?.promptProfile,
       },
     );
   },
