@@ -19,8 +19,6 @@ import { getInitials } from "../lib/utils";
 import { isContextAwarePlatform } from "../lib/dictation-context";
 import {
   formatModelSize,
-  modelDisplayName,
-  type HardwareProfile,
   type ModelPreset,
 } from "../lib/whisper-models";
 import type { RoleModelState, WhisperModelRole } from "../lib/app-types";
@@ -158,7 +156,6 @@ interface SettingsTabProps {
   systemAudioSupported?: boolean;
   systemAudioEnabled?: boolean;
   onSystemAudioToggle?: (enabled: boolean) => void;
-  hardwareProfile?: HardwareProfile | null;
   dictationModel: RoleModelState;
   meetingModel: RoleModelState;
   onModelPresetChange: (role: WhisperModelRole, preset: ModelPreset) => void;
@@ -184,7 +181,6 @@ export function SettingsTab({
   systemAudioSupported = false,
   systemAudioEnabled = true,
   onSystemAudioToggle,
-  hardwareProfile = null,
   dictationModel,
   meetingModel,
   onModelPresetChange,
@@ -247,7 +243,7 @@ export function SettingsTab({
       return (
         <div className="st-row-status st-row-status--downloading">
           <Loader2 size={12} className="animate-spin" />
-          Checking model
+          Preparing
         </div>
       );
     }
@@ -255,8 +251,7 @@ export function SettingsTab({
     if (model.activeVariant) {
       return (
         <div className="st-row-status st-row-status--installed">
-          {model.fallbackUsed ? "Using installed" : "Ready"}:{" "}
-          {modelDisplayName(model.activeVariant)}
+          Ready
         </div>
       );
     }
@@ -264,7 +259,7 @@ export function SettingsTab({
     if (model.recommendation) {
       return (
         <div className="st-row-status">
-          Will download: {modelDisplayName(model.recommendation.spec.variant)}
+          Will download · {formatModelSize(model.recommendation.spec.sizeBytes)}
         </div>
       );
     }
@@ -277,18 +272,11 @@ export function SettingsTab({
     description: string,
     model: RoleModelState,
   ) => {
-    const recommendation = model.recommendation;
     return (
       <div className="st-row">
         <div className="st-row-text">
           <div className="st-row-label">{label}</div>
           <div className="st-row-desc">{description}</div>
-          {recommendation && (
-            <div className="st-row-desc">
-              Recommended: {modelDisplayName(recommendation.spec.variant)} ·{" "}
-              {formatModelSize(recommendation.spec.sizeBytes)}
-            </div>
-          )}
           {renderModelStatus(model)}
           {model.error && <div className="st-row-error">{model.error}</div>}
         </div>
@@ -484,30 +472,16 @@ export function SettingsTab({
             {/* — Voice Models — */}
             <div className="st-section-label">Voice Models</div>
             <div className="st-card st-card--grouped">
-              <div className="st-row st-row--col">
-                <div className="st-row-label">Hardware</div>
-                <div className="st-row-desc">
-                  {hardwareProfile
-                    ? `${hardwareProfile.ramGb} GB RAM · ${hardwareProfile.cpuCores} cores${
-                        hardwareProfile.gpuBackend !== "none"
-                          ? ` · ${hardwareProfile.gpuBackend.toUpperCase()}`
-                          : ""
-                      }`
-                    : "Detecting hardware…"}
-                </div>
-              </div>
-
-              <div className="st-divider" />
               {renderModelRow(
-                "Dictation model",
-                "Used for Scribbles, Stream, and Ctrl+Space.",
+                "Dictation",
+                "For Scribbles, Stream, and Ctrl+Space.",
                 dictationModel,
               )}
 
               <div className="st-divider" />
               {renderModelRow(
-                "Meeting model",
-                "Used for Minutes and long meeting transcription.",
+                "Meetings",
+                "For Minutes and long meeting transcription.",
                 meetingModel,
               )}
             </div>

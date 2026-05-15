@@ -28,17 +28,38 @@ export function MarkdownNotesView({
   markdown,
   className,
 }: MarkdownNotesViewProps) {
+  type ListItem = { text: string; task: "none" | "open" | "done" };
   const blocks: ReactNode[] = [];
   const lines = stripEvidenceComments(markdown).split(/\r?\n/);
-  let listItems: string[] = [];
+  let listItems: ListItem[] = [];
 
   const flushList = () => {
     if (listItems.length === 0) return;
     const key = `list-${blocks.length}`;
+    const allTasks = listItems.every((item) => item.task !== "none");
     blocks.push(
-      <ul key={key} className="ml-5 list-disc space-y-2">
+      <ul
+        key={key}
+        className={
+          allTasks ? "ml-1 space-y-2" : "ml-5 list-disc space-y-2"
+        }
+      >
         {listItems.map((item, index) => (
-          <li key={`${key}-${index}`}>{item}</li>
+          <li
+            key={`${key}-${index}`}
+            className={item.task !== "none" ? "flex items-start gap-2 list-none" : undefined}
+          >
+            {item.task !== "none" && (
+              <input
+                type="checkbox"
+                checked={item.task === "done"}
+                readOnly
+                className="mt-[5px] h-3.5 w-3.5 shrink-0 accent-cyan-500"
+                aria-label={item.task === "done" ? "Done" : "To do"}
+              />
+            )}
+            <span>{item.text}</span>
+          </li>
         ))}
       </ul>,
     );
@@ -79,7 +100,16 @@ export function MarkdownNotesView({
 
     const bulletMatch = line.match(/^\s*[-*]\s+(.+)$/);
     if (bulletMatch) {
-      listItems.push(bulletMatch[1].trim());
+      const body = bulletMatch[1].trim();
+      const taskMatch = body.match(/^\[([ xX])\]\s+(.+)$/);
+      if (taskMatch) {
+        listItems.push({
+          text: taskMatch[2].trim(),
+          task: taskMatch[1].toLowerCase() === "x" ? "done" : "open",
+        });
+      } else {
+        listItems.push({ text: body, task: "none" });
+      }
       continue;
     }
 

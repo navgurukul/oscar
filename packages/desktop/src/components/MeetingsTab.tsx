@@ -20,6 +20,7 @@ import {
   X,
   Trash2,
   History,
+  RefreshCw,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import googleMeetLogo from "../assets/meeting-logos/google-meet.png";
@@ -513,62 +514,73 @@ export function MeetingsTab({
     }
   };
 
-  useEffect(() => {
-    if (!googleCalendarToken) {
-      setCalendarEvents([]);
-      setCalendarError(null);
-      lastCalendarFetchRef.current = "";
-      return;
-    }
-
-    const now = new Date();
-    const dateKey = now.toISOString().slice(0, 10);
-    const cacheKey = `${googleCalendarToken.slice(0, 16)}:${dateKey}`;
-    if (cacheKey === lastCalendarFetchRef.current && calendarEvents.length > 0) {
-      return;
-    }
-
-    setCalendarLoading(true);
-    setCalendarError(null);
-    const timeMin = new Date(now);
-    timeMin.setHours(0, 0, 0, 0);
-    const timeMax = new Date(now);
-    timeMax.setDate(timeMax.getDate() + 14);
-    timeMax.setHours(23, 59, 59, 999);
-
-    invoke<CalendarEvent[]>("get_calendar_events", {
-      token: googleCalendarToken,
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
-    })
-      .then((events) => {
-        setCalendarEvents(events);
+  const fetchCalendarEvents = useCallback(
+    (options?: { force?: boolean }) => {
+      if (!googleCalendarToken) {
+        setCalendarEvents([]);
         setCalendarError(null);
-        lastCalendarFetchRef.current = cacheKey;
+        lastCalendarFetchRef.current = "";
+        return;
+      }
+
+      const now = new Date();
+      const dateKey = now.toISOString().slice(0, 10);
+      const cacheKey = `${googleCalendarToken.slice(0, 16)}:${dateKey}`;
+      if (
+        !options?.force &&
+        cacheKey === lastCalendarFetchRef.current &&
+        calendarEvents.length > 0
+      ) {
+        return;
+      }
+
+      setCalendarLoading(true);
+      setCalendarError(null);
+      const timeMin = new Date(now);
+      timeMin.setHours(0, 0, 0, 0);
+      const timeMax = new Date(now);
+      timeMax.setDate(timeMax.getDate() + 14);
+      timeMax.setHours(23, 59, 59, 999);
+
+      invoke<CalendarEvent[]>("get_calendar_events", {
+        token: googleCalendarToken,
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
       })
-      .catch(async (invokeError: unknown) => {
-        const message = String(invokeError);
-        if (message.includes("NEEDS_RECONNECT")) {
-          setCalendarErrorMsg("");
-          const recoveryState = await onCalendarTokenInvalid();
-          if (recoveryState === "refreshed") {
-            setCalendarError(null);
-          } else if (recoveryState === "retry_later") {
-            setCalendarError("fetch_error");
-            setCalendarErrorMsg(
-              "Calendar access is being refreshed in the background. Please try again in a moment.",
-            );
+        .then((events) => {
+          setCalendarEvents(events);
+          setCalendarError(null);
+          lastCalendarFetchRef.current = cacheKey;
+        })
+        .catch(async (invokeError: unknown) => {
+          const message = String(invokeError);
+          if (message.includes("NEEDS_RECONNECT")) {
+            setCalendarErrorMsg("");
+            const recoveryState = await onCalendarTokenInvalid();
+            if (recoveryState === "refreshed") {
+              setCalendarError(null);
+            } else if (recoveryState === "retry_later") {
+              setCalendarError("fetch_error");
+              setCalendarErrorMsg(
+                "Calendar access is being refreshed in the background. Please try again in a moment.",
+              );
+            } else {
+              setCalendarError("needs_reconnect");
+            }
           } else {
-            setCalendarError("needs_reconnect");
+            console.warn("[meetings] calendar fetch failed:", invokeError);
+            setCalendarError("fetch_error");
+            setCalendarErrorMsg(message.replace(/^Error:\s*/i, "").slice(0, 200));
           }
-        } else {
-          console.warn("[meetings] calendar fetch failed:", invokeError);
-          setCalendarError("fetch_error");
-          setCalendarErrorMsg(message.replace(/^Error:\s*/i, "").slice(0, 200));
-        }
-      })
-      .finally(() => setCalendarLoading(false));
-  }, [calendarEvents.length, googleCalendarToken, onCalendarTokenInvalid]);
+        })
+        .finally(() => setCalendarLoading(false));
+    },
+    [calendarEvents.length, googleCalendarToken, onCalendarTokenInvalid],
+  );
+
+  useEffect(() => {
+    fetchCalendarEvents();
+  }, [fetchCalendarEvents]);
 
   useEffect(() => {
     const id = setInterval(() => setCurrentTime(Date.now()), 60_000);
@@ -841,6 +853,21 @@ export function MeetingsTab({
               <CalendarDays size={14} />
               <span>Coming up</span>
               {calendarLoading && <Loader2 size={12} className="animate-spin" />}
+              {googleCalendarToken && (
+                <button
+                  type="button"
+                  onClick={() => fetchCalendarEvents({ force: true })}
+                  disabled={calendarLoading}
+                  className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Refresh upcoming meetings"
+                  title="Refresh"
+                >
+                  <RefreshCw
+                    size={12}
+                    className={calendarLoading ? "animate-spin" : ""}
+                  />
+                </button>
+              )}
             </div>
 
             {!googleCalendarToken && !calendarLoading && (

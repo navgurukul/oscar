@@ -67,10 +67,8 @@ import {
 } from "./lib/transcript-utils";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
 import {
-  detectHardware,
   FALLBACK_MODELS,
   relativeModelPath,
-  type HardwareProfile,
   type ModelSpec,
   type ModelPreset as WhisperModelPreset,
   type WhisperModelVariant,
@@ -149,8 +147,6 @@ function App() {
   const [meetingModel, setMeetingModel] = useState<RoleModelState>(() =>
     createRoleModelState("minutes"),
   );
-  const [hardwareProfile, setHardwareProfile] =
-    useState<HardwareProfile | null>(null);
   const dictationModelPresetRef = useRef<WhisperModelPreset>("auto");
   const minutesModelPresetRef = useRef<WhisperModelPreset>("auto");
   const modelDownloadPromisesRef = useRef(
@@ -652,11 +648,6 @@ function App() {
       dictationModelPresetRef.current = savedDictationPreset;
       setMeetingModel((prev) => ({ ...prev, preset: savedMinutesPreset }));
       minutesModelPresetRef.current = savedMinutesPreset;
-      // Run hardware detection in the background — it's only used to label the
-      // UI; resolveModelForRole calls into Rust directly each time.
-      void detectHardware()
-        .then(setHardwareProfile)
-        .catch((err) => console.warn("[hardware] detect failed:", err));
       setSystemAudioEnabled(savedSystemAudioEnabled);
       const hasLegacyCalendarConnection =
         Boolean(savedCalToken || savedCalRefreshToken) && !savedCalConnectedUserId;
@@ -2402,7 +2393,6 @@ function App() {
                   systemAudioSupported={systemAudioSupported}
                   systemAudioEnabled={systemAudioEnabled}
                   onSystemAudioToggle={handleSystemAudioToggle}
-                  hardwareProfile={hardwareProfile}
                   dictationModel={dictationModel}
                   meetingModel={meetingModel}
                   onModelPresetChange={handleModelPresetChange}
