@@ -5,11 +5,11 @@ export const API_CONFIG = {
   TITLE_ENDPOINT: "/api/groq/title",
   TRANSLATE_ENDPOINT: "/api/groq/translate",
 
-  // External APIs
-  GROQ_API_URL: "https://api.groq.com/openai/v1/chat/completions",
+  // External APIs (Cerebras Cloud, OpenAI-compatible endpoint)
+  GROQ_API_URL: "https://api.cerebras.ai/v1/chat/completions",
 
-  // Groq model
-  GROQ_MODEL: "llama-3.1-8b-instant",
+  // Inference model
+  GROQ_MODEL: "llama3.1-8b",
 
   // Format API settings
   FORMAT_TEMPERATURE: 0.0,

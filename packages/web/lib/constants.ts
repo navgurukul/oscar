@@ -25,7 +25,7 @@ export type { Currency } from "@oscar/shared/constants";
 export const API_CONFIG = {
   ..._API_CONFIG,
   TRANSFORM_ENDPOINT: "/api/groq/transform",
-  GROQ_MODEL_FAST: "llama-3.1-8b-instant",
+  GROQ_MODEL_FAST: "llama3.1-8b",
   FORMAT_TOP_P: 1.0,
   FORMAT_EMAIL_MAX_TOKENS: 2048,
   FORMAT_TRANSFORM_MAX_TOKENS: 1536,

@@ -453,6 +453,8 @@ export function MeetingsTab({
   const [copied, setCopied] = useState(false);
   const [resultTab, setResultTab] = useState<"notes" | "transcript">("notes");
   const [viewingSaved, setViewingSaved] = useState<SavedMeetingRecord | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState("");
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [showAttendeeEditor, setShowAttendeeEditor] = useState(false);
@@ -617,6 +619,40 @@ export function MeetingsTab({
     selectedCalendarEvent,
     transcriptSegments,
   ]);
+
+  const handleRegenerateSaved = useCallback(
+    async (saved: SavedMeetingRecord) => {
+      if (regenerating) return;
+      setRegenerateError("");
+      setRegenerating(true);
+      try {
+        const request: EnhancedMeetingNoteRequest = {
+          meeting_title: saved.meetingTitle,
+          meeting_local_datetime: saved.meetingLocalDatetime,
+          attendees_compact: saved.attendeesCompact,
+          attendees_full: saved.attendeesFull,
+          calendar_context: saved.calendarContext,
+          my_notes_markdown: saved.myNotesMarkdown,
+          transcript_segments: saved.transcriptSegments,
+          meeting_type_hint: saved.meetingTypeHint,
+        };
+        const newMarkdown = await aiService.generateEnhancedMeetingNote(request);
+        const updated: SavedMeetingRecord = {
+          ...saved,
+          notesMarkdown: newMarkdown,
+        };
+        onSaveMeeting(updated);
+        setViewingSaved(updated);
+      } catch (err) {
+        setRegenerateError(
+          err instanceof Error ? err.message : String(err),
+        );
+      } finally {
+        setRegenerating(false);
+      }
+    },
+    [onSaveMeeting, regenerating],
+  );
 
   const processTranscript = useCallback(async () => {
     if (!transcriptSegments.length && !manualNotes.trim()) return;
@@ -1075,28 +1111,57 @@ export function MeetingsTab({
               <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-slate-700">
                 <MarkdownNotesView markdown={viewingSaved.notesMarkdown} />
               </div>
-              <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
-                <button
-                  className={cn(FOOTER_BUTTON_CLASS_NAME, "border-cyan-600 bg-cyan-600 text-white hover:border-cyan-700 hover:bg-cyan-700")}
-                  onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
-                  type="button"
-                >
-                  {copied ? <Check size={12} /> : <Copy size={12} />}
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-                <button
-                  className={FOOTER_BUTTON_CLASS_NAME}
-                  onClick={() =>
-                    void handleShareByEmail({
-                      subjectTitle: viewingSaved.meetingTitle,
-                      attendeesFull: viewingSaved.attendeesFull,
-                      markdown: viewingSaved.notesMarkdown,
-                    })
-                  }
-                  type="button"
-                >
-                  <Mail size={12} /> Email
-                </button>
+              <div className="flex flex-col gap-2 border-t border-slate-100 px-4 py-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className={cn(FOOTER_BUTTON_CLASS_NAME, "border-cyan-600 bg-cyan-600 text-white hover:border-cyan-700 hover:bg-cyan-700")}
+                    onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
+                    type="button"
+                  >
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                  <button
+                    className={FOOTER_BUTTON_CLASS_NAME}
+                    onClick={() =>
+                      void handleShareByEmail({
+                        subjectTitle: viewingSaved.meetingTitle,
+                        attendeesFull: viewingSaved.attendeesFull,
+                        markdown: viewingSaved.notesMarkdown,
+                      })
+                    }
+                    type="button"
+                  >
+                    <Mail size={12} /> Email
+                  </button>
+                  <button
+                    className={cn(
+                      FOOTER_BUTTON_CLASS_NAME,
+                      regenerating &&
+                        "cursor-not-allowed opacity-60",
+                    )}
+                    onClick={() => void handleRegenerateSaved(viewingSaved)}
+                    disabled={
+                      regenerating ||
+                      (viewingSaved.transcriptSegments.length === 0 &&
+                        !viewingSaved.myNotesMarkdown.trim())
+                    }
+                    type="button"
+                    title="Re-run the AI to regenerate notes from the transcript"
+                  >
+                    {regenerating ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={12} />
+                    )}
+                    {regenerating ? "Regenerating…" : "Regenerate"}
+                  </button>
+                </div>
+                {regenerateError && (
+                  <p className="m-0 text-[0.75rem] text-rose-500">
+                    {regenerateError}
+                  </p>
+                )}
               </div>
             </div>
           )}
