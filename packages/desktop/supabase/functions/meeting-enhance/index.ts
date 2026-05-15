@@ -61,8 +61,8 @@ interface FinalMarkdownResult {
   transcriptBulletCount: number;
 }
 
-const GROQ_API_URL = "https://api.cerebras.ai/v1/chat/completions";
-const GROQ_MODEL = "gpt-oss-120b";
+const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+const GEMINI_MODEL = "gemini-2.5-flash-lite";
 const MAX_SEGMENT_BATCH_CHARS = 12_000;
 const MAX_SEGMENT_BATCH_SIZE = 80;
 
@@ -336,37 +336,43 @@ function splitSegmentBatches(
   return batches;
 }
 
-async function callGroq(
-  groqApiKey: string,
+async function callGemini(
+  geminiApiKey: string,
   system: string,
   user: string,
   maxTokens: number,
 ): Promise<string> {
-  const upstream = await fetch(GROQ_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${groqApiKey}`,
-      "Content-Type": "application/json",
+  const upstream = await fetch(
+    `${GEMINI_API_BASE_URL}/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": geminiApiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [
+          { role: "user", parts: [{ text: user }] },
+        ],
+        generationConfig: {
+          maxOutputTokens: maxTokens,
+          temperature: 0.2,
+        },
+      }),
     },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.2,
-      stream: false,
-    }),
-  });
+  );
 
   if (!upstream.ok) {
     const errBody = await upstream.text();
-    throw new Error(`Groq API error ${upstream.status}: ${errBody}`);
+    throw new Error(`Gemini API error ${upstream.status}: ${errBody}`);
   }
 
   const data = await upstream.json();
-  const output = data?.choices?.[0]?.message?.content?.trim();
+  const parts = data?.candidates?.[0]?.content?.parts;
+  const output = Array.isArray(parts)
+    ? parts.map((p: { text?: string }) => (typeof p?.text === "string" ? p.text : "")).join("").trim()
+    : "";
   if (!output) {
     throw new Error("Empty response from AI service.");
   }
@@ -375,7 +381,7 @@ async function callGroq(
 }
 
 async function reduceTranscriptBatches(
-  groqApiKey: string,
+  geminiApiKey: string,
   request: EnhancedMeetingNoteRequest,
   sections: string[],
   meetingType: InferredMeetingType,
@@ -408,7 +414,7 @@ async function reduceTranscriptBatches(
       .filter(Boolean)
       .join("\n\n");
 
-    reductions.push(await callGroq(groqApiKey, systemPrompt, userPrompt, 1_100));
+    reductions.push(await callGemini(geminiApiKey, systemPrompt, userPrompt, 1_100));
   }
 
   return reductions
@@ -647,14 +653,14 @@ function buildFinalMarkdown(
 }
 
 async function generateFinalMarkdown(
-  groqApiKey: string,
+  geminiApiKey: string,
   request: EnhancedMeetingNoteRequest,
   expectedSections: ParsedSections,
   meetingType: InferredMeetingType,
 ): Promise<string> {
   const sections = expectedSections.orderedHeadings;
   const transcriptMaterial = await reduceTranscriptBatches(
-    groqApiKey,
+    geminiApiKey,
     request,
     sections,
     meetingType,
@@ -690,7 +696,7 @@ async function generateFinalMarkdown(
     .filter(Boolean)
     .join("\n\n");
 
-  let firstPass = await callGroq(groqApiKey, systemPrompt, userPrompt, 1_800);
+  let firstPass = await callGemini(geminiApiKey, systemPrompt, userPrompt, 1_800);
   let finalOutput = buildFinalMarkdown(request, expectedSections, firstPass);
 
   if (
@@ -704,7 +710,7 @@ async function generateFinalMarkdown(
       `Previous answer:\n${sanitizeModelMarkdown(firstPass)}`,
     ].join("\n\n");
 
-    firstPass = await callGroq(groqApiKey, systemPrompt, repairPrompt, 1_800);
+    firstPass = await callGemini(geminiApiKey, systemPrompt, repairPrompt, 1_800);
     finalOutput = buildFinalMarkdown(request, expectedSections, firstPass);
   }
 
@@ -808,9 +814,9 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const groqApiKey = Deno.env.get("GROQ_API_KEY");
-    if (!groqApiKey) {
-      return new Response(JSON.stringify({ error: "GROQ_API_KEY is not configured on the server." }), {
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!geminiApiKey) {
+      return new Response(JSON.stringify({ error: "GEMINI_API_KEY is not configured on the server." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -834,7 +840,7 @@ Deno.serve(async (req: Request) => {
     );
 
     const markdown = await generateFinalMarkdown(
-      groqApiKey,
+      geminiApiKey,
       normalizedRequest,
       expectedSections,
       meetingType,

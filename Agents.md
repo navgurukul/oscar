@@ -4,7 +4,7 @@ Overview of AI agents and services in OSCAR.
 
 ## Overview
 
-OSCAR uses Groq-powered AI agents to transform voice recordings into clean formatted text. Two primary agents process and organize Stream transcripts into Scribbles.
+OSCAR uses Google Gemini AI agents to transform voice recordings into clean formatted text. Two primary agents process and organize Stream transcripts into Scribbles.
 
 ## Architecture
 
@@ -18,7 +18,7 @@ Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent �
 
 **Purpose**: Converts raw speech-to-text transcripts into clean, well-formatted text.
 
-**Location**: [`/app/api/groq/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/format/route.ts)
+**Location**: [`/app/api/ai/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/format/route.ts)
 
 **Key Responsibilities**:
 
@@ -37,7 +37,7 @@ Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent �
 
 **Configuration**:
 
-- Model: Groq (configured in `API_CONFIG.GROQ_MODEL`)
+- Model: Google Gemini (configured in `API_CONFIG.GEMINI_MODEL`)
 - Temperature: Configured via `API_CONFIG.FORMAT_TEMPERATURE`
 - Top P: Configured via `API_CONFIG.FORMAT_TOP_P`
 - Max Tokens: Configured via `API_CONFIG.FORMAT_MAX_TOKENS`
@@ -53,7 +53,7 @@ Output: "How to create a React app."
 
 **Purpose**: Generates concise, descriptive titles for formatted Scribbles.
 
-**Location**: [`/app/api/groq/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/title/route.ts)
+**Location**: [`/app/api/ai/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/title/route.ts)
 
 **Key Responsibilities**:
 
@@ -71,7 +71,7 @@ If AI title generation fails, system uses heuristic:
 
 **Configuration**:
 
-- Model: Groq (configured in `API_CONFIG.GROQ_MODEL`)
+- Model: Google Gemini (configured in `API_CONFIG.GEMINI_MODEL`)
 - Temperature: Configured via `API_CONFIG.TITLE_TEMPERATURE`
 - Top P: Configured via `API_CONFIG.TITLE_TOP_P`
 - Max Tokens: Configured via `API_CONFIG.TITLE_MAX_TOKENS`
@@ -142,8 +142,8 @@ All AI agent configs centralized in [`/lib/constants.ts`](file:///Users/souvik/D
 
 ```typescript
 API_CONFIG = {
-  GROQ_API_URL: "https://api.groq.com/openai/v1/chat/completions",
-  GROQ_MODEL: "llama-3.1-8b-instant",
+  GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1beta",
+  GEMINI_MODEL: "gemini-2.5-flash-lite",
   FORMAT_TEMPERATURE: // Configured value
   FORMAT_TOP_P: // Configured value
   FORMAT_MAX_TOKENS: // Configured value
@@ -159,7 +159,7 @@ API_CONFIG = {
 Required:
 
 ```
-GROQ_API_KEY=your_api_key_here
+GEMINI_API_KEY=your_api_key_here
 ```
 
 ## Error Handling
@@ -348,8 +348,8 @@ Potential improvements:
 - [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts) - Configuration constants
 - [`/lib/types/scribble.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/scribble.types.ts) - Type definitions
 - [`/lib/types/api.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/api.types.ts) - API type definitions
-- [`/app/api/groq/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/format/route.ts) - Format endpoint
-- [`/app/api/groq/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/title/route.ts) - Title endpoint
+- [`/app/api/ai/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/format/route.ts) - Format endpoint
+- [`/app/api/ai/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/title/route.ts) - Title endpoint
 - [`/components/results/FeedbackWidget.tsx`](file:///Users/souvik/Desktop/oscar/components/results/FeedbackWidget.tsx) - Feedback UI component
 
 ## Support
@@ -358,5 +358,5 @@ For issues with AI agents:
 
 1. Check error messages in browser console
 2. Review API logs in terminal
-3. Verify `GROQ_API_KEY` set correctly
+3. Verify `GEMINI_API_KEY` set correctly
 4. Test with fallback mechanisms disabled to isolate issues

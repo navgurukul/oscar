@@ -49,8 +49,8 @@ interface AIProcessResponse {
   text: string;
 }
 
-const GROQ_API_URL = "https://api.cerebras.ai/v1/chat/completions";
-const GROQ_MODEL = "gpt-oss-120b";
+const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+const GEMINI_MODEL = "gemini-2.5-flash-lite";
 const DICTATION_PROMPT_VERSION = "context-v1";
 const DICTATION_CATEGORIES = [
   "default",
@@ -104,9 +104,9 @@ function looksLikeRefusal(value: string): boolean {
   return REFUSAL_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
-// Rough pre-Groq guard for transcribe_cleanup: very short or punctuation-only
+// Rough pre-AI guard for transcribe_cleanup: very short or punctuation-only
 // transcripts almost always come from silent audio + Whisper hallucinations.
-// Returning empty here saves a Groq round-trip and guarantees no chatty reply.
+// Returning empty here saves an AI round-trip and guarantees no chatty reply.
 const TRIVIAL_HALLUCINATION_RE =
   /^(\.{1,3}|[\p{P}\p{S}\s]+|you|thanks?|thank you|bye|bye-?bye)\.?$/iu;
 
@@ -372,9 +372,9 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const groqApiKey = Deno.env.get("GROQ_API_KEY");
-    if (!groqApiKey) {
-      return new Response(JSON.stringify({ error: "GROQ_API_KEY is not configured on the server." }), {
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!geminiApiKey) {
+      return new Response(JSON.stringify({ error: "GEMINI_API_KEY is not configured on the server." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -382,28 +382,31 @@ Deno.serve(async (req: Request) => {
 
     const { system, user: prompt } = buildPrompt(mode, text, context, routing);
 
-    const upstream = await fetch(GROQ_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${groqApiKey}`,
-        "Content-Type": "application/json",
+    const upstream = await fetch(
+      `${GEMINI_API_BASE_URL}/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": geminiApiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [
+            { role: "user", parts: [{ text: prompt }] },
+          ],
+          generationConfig: {
+            maxOutputTokens: 2048,
+            temperature: 0.3,
+          },
+        }),
       },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: prompt },
-        ],
-        max_tokens: 2048,
-        temperature: 0.3,
-        stream: false,
-      }),
-    });
+    );
 
     if (!upstream.ok) {
       const errBody = await upstream.text();
       return new Response(
-        JSON.stringify({ error: `Groq API error ${upstream.status}: ${errBody}` }),
+        JSON.stringify({ error: `Gemini API error ${upstream.status}: ${errBody}` }),
         {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -412,7 +415,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const data = await upstream.json();
-    const output = data?.choices?.[0]?.message?.content?.trim() ?? "";
+    const parts = data?.candidates?.[0]?.content?.parts;
+    const output = Array.isArray(parts)
+      ? parts.map((p: { text?: string }) => (typeof p?.text === "string" ? p.text : "")).join("").trim()
+      : "";
 
     if (mode === "transcribe_cleanup") {
       if (!output || looksLikeRefusal(output)) {

@@ -8,11 +8,11 @@ import {
 } from "@/lib/middleware/rate-limit";
 import {
   createPlainTextStreamResponse,
-  fetchGroqChatCompletion,
-  getGroqApiKey,
+  fetchGeminiGenerateContent,
+  getGeminiApiKey,
   getOptionalTrimmedString,
   parseJsonBody,
-  pipeGroqStreamToController,
+  pipeGeminiStreamToController,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
 
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
   let apiKey: string;
   try {
-    apiKey = getGroqApiKey();
+    apiKey = getGeminiApiKey();
   } catch {
     return NextResponse.json(
       { error: ERROR_MESSAGES.SERVER_MISSING_API_KEY },
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
   );
 
   try {
-    const response = await fetchGroqChatCompletion({
+    const response = await fetchGeminiGenerateContent({
       apiKey,
       messages: [
         {
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       const errorText = await response.text();
       return NextResponse.json(
         {
-          error: ERROR_MESSAGES.GROQ_API_ERROR,
+          error: ERROR_MESSAGES.AI_API_ERROR,
           details: errorText,
           status: response.status,
         },
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          await pipeGroqStreamToController(response, controller, encoder);
+          await pipeGeminiStreamToController(response, controller, encoder);
         } finally {
           controller.close();
         }
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
     const error = err as Error;
     return NextResponse.json(
       {
-        error: ERROR_MESSAGES.GROQ_REQUEST_FAILED,
+        error: ERROR_MESSAGES.AI_REQUEST_FAILED,
         details: error?.message || String(err),
       },
       { status: 500 }

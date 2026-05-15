@@ -158,7 +158,7 @@ function App() {
   const [_aiEditing, setAiEditing] = useState(false);
   const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
-  // AI Improvement toggle (user-controllable — controls Groq AI cleanup)
+  // AI Improvement toggle (user-controllable — controls Gemini AI cleanup)
   const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
   const aiImprovementEnabledRef = useRef(true);
   const [contextAwareDictationEnabled, setContextAwareDictationEnabled] =
@@ -2343,7 +2343,7 @@ function App() {
                         ...Object.values(FALLBACK_MODELS).map(
                           (spec) => `${home}/${relativeModelPath(spec.variant)}`,
                         ),
-                        // Legacy local AI model files (removed in favour of Groq)
+                        // Legacy local AI model files (removed in favour of cloud AI)
                         `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
                         `${home}/.oscar/models/phi-3.5-tokenizer.json`,
                       ];

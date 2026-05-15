@@ -1,18 +1,18 @@
 // API-related type definitions
 
-export interface GroqFormatRequest {
+export interface FormatRequest {
   rawText: string;
 }
 
-export interface GroqFormatResponse {
+export interface FormatResponse {
   formattedText: string;
 }
 
-export interface GroqTitleRequest {
+export interface TitleRequest {
   text: string;
 }
 
-export interface GroqTitleResponse {
+export interface TitleResponse {
   title: string;
 }
 

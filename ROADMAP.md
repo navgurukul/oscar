@@ -29,7 +29,7 @@ Record → [active app / tab context captured] → STT → Format Agent (context
 - Shared context type in `@oscar/shared/types`
 - `AI_CONFIG` / prompt selection logic in `lib/services/ai.service.ts`
 - New prompt variants in `lib/prompts.ts` keyed by app category (ide, browser, email, docs, chat)
-- Pass context through recording hook → format API route → Groq call
+- Pass context through recording hook → format API route → Gemini call
 
 ---
 
@@ -61,7 +61,7 @@ Record (Vibe Coding mode) → STT → Prompt Enhancement Agent → Ready-to-past
 ```
 
 **Implementation touch points**:
-- New API route: `app/api/groq/vibe-code/route.ts`
+- New API route: `app/api/ai/vibe-code/route.ts`
 - New system prompt in `lib/prompts.ts`: `SYSTEM_PROMPTS.VIBE_CODE` — aggressive prompt engineering, coding-aware
 - New hook: `useVibeCoding.ts` in `lib/hooks/`
 - Mode selector UI on recording screen (web + desktop)

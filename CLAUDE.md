@@ -6,7 +6,7 @@ Reference for AI assistants in Oscar codebase.
 
 ## Project Overview
 
-Oscar = AI voice note app. Users record audio → transcribed (Whisper on desktop, browser STT on web) → formatted + titled by Groq AI agents.
+Oscar = AI voice note app. Users record audio → transcribed (Whisper on desktop, browser STT on web) → formatted + titled by Google Gemini AI agents.
 
 **Monorepo layout (pnpm workspaces):**
 
@@ -36,7 +36,7 @@ oscar/
 | Styling | Tailwind CSS 3.3, CVA | Tailwind CSS |
 | UI primitives | Radix UI + shadcn/ui (New York style) | Radix UI + shadcn/ui |
 | Auth & DB | Supabase (PostgreSQL + Auth) | — |
-| AI | Groq API (llama-3 variants) | whisper-rs (local Whisper) |
+| AI | Google Gemini API (Flash 2.5 Lite) | whisper-rs (local Whisper) |
 | Payments | Razorpay | — |
 | STT | ONNX Runtime Web + speech-to-speech | whisper-rs (CUDA/Vulkan) |
 | Animation | motion, tsparticles | — |
@@ -59,7 +59,7 @@ pnpm dev:desktop      # launches native window
 **Required environment variables** (create `packages/web/.env.local`):
 
 ```
-GROQ_API_KEY=
+GEMINI_API_KEY=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_WEB_APP_URL=
@@ -86,7 +86,7 @@ app/
 ├── meetings/           # Meeting Minutes
 ├── download/           # Desktop download handler
 └── api/
-    ├── groq/
+    ├── ai/
     │   ├── format/       # Stream-format transcript → clean Scribble
     │   ├── format-email/ # Email-specific formatting
     │   ├── title/        # Generate 4-10 word title
@@ -104,7 +104,7 @@ app/
 ```
 
 **Services** (`lib/services/`):
-- `ai.service.ts` — Groq API calls (formatting, title, streaming)
+- `ai.service.ts` — Gemini API calls (formatting, title, streaming)
 - `stt.service.ts` — Browser STT pipeline
 - `scribbles.service.ts` — Scribble CRUD (Supabase)
 - `subscription.service.ts` — Subscription state & checks
@@ -194,7 +194,7 @@ Import: `import { Note } from '@oscar/shared/types'`
 
 ### API Routes (web)
 
-- All Groq routes use streaming (`ReadableStream`) where possible
+- All AI routes use streaming (`ReadableStream`) where possible
 - Rate-limiting middleware wraps AI endpoints — check `lib/rate-limit.ts` before adding new AI routes
 - No server actions; mutations go through Supabase client SDK or API routes
 
@@ -223,8 +223,8 @@ See [Agents.md](./Agents.md) for full pipeline spec. Summary:
 Audio → STT (Whisper/browser) → Text Formatting Agent → Title Agent → Stored Note
 ```
 
-- **Formatting agent**: `app/api/groq/format/route.ts` — removes filler words, fixes grammar, streams output
-- **Title agent**: `app/api/groq/title/route.ts` — generates 4-10 word titles; heuristic fallback on failure
+- **Formatting agent**: `app/api/ai/format/route.ts` — removes filler words, fixes grammar, streams output
+- **Title agent**: `app/api/ai/title/route.ts` — generates 4-10 word titles; heuristic fallback on failure
 - **Config**: `API_CONFIG` object in `ai.service.ts` (model, temperature, top_p, max_tokens)
 - **Feedback loop**: Yes/No + reason tags → `feedback.service.ts` → Supabase → prompt iteration
 

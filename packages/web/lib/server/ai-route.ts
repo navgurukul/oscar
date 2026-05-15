@@ -2,11 +2,36 @@ import { NextResponse } from "next/server";
 import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
 import { validateUserInput, wrapUserInput } from "@/lib/prompts";
 
-type GroqRole = "system" | "user" | "assistant";
+type AIRole = "system" | "user" | "assistant";
 
-export interface GroqMessage {
-  role: GroqRole;
+export interface AIMessage {
+  role: AIRole;
   content: string;
+}
+
+interface GeminiPart {
+  text: string;
+}
+
+interface GeminiContent {
+  role: "user" | "model";
+  parts: GeminiPart[];
+}
+
+interface GeminiSystemInstruction {
+  parts: GeminiPart[];
+}
+
+interface GeminiGenerationConfig {
+  temperature?: number;
+  topP?: number;
+  maxOutputTokens?: number;
+}
+
+interface GeminiRequestBody {
+  systemInstruction?: GeminiSystemInstruction;
+  contents: GeminiContent[];
+  generationConfig?: GeminiGenerationConfig;
 }
 
 export async function fetchWithTimeout(
@@ -63,8 +88,8 @@ export function getOptionalTrimmedString(value: unknown): string | undefined {
   return text || undefined;
 }
 
-export function getGroqApiKey(): string {
-  const apiKey = process.env.GROQ_API_KEY?.trim();
+export function getGeminiApiKey(): string {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   if (!apiKey) {
     throw new Error(ERROR_MESSAGES.SERVER_MISSING_API_KEY);
@@ -119,7 +144,32 @@ export function validateAndWrapInput(
   };
 }
 
-export async function fetchGroqChatCompletion({
+function buildGeminiBody(
+  messages: AIMessage[],
+  generationConfig: GeminiGenerationConfig
+): GeminiRequestBody {
+  const systemParts: GeminiPart[] = [];
+  const contents: GeminiContent[] = [];
+
+  for (const msg of messages) {
+    if (msg.role === "system") {
+      systemParts.push({ text: msg.content });
+      continue;
+    }
+    contents.push({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }],
+    });
+  }
+
+  const body: GeminiRequestBody = { contents, generationConfig };
+  if (systemParts.length > 0) {
+    body.systemInstruction = { parts: systemParts };
+  }
+  return body;
+}
+
+export async function fetchGeminiGenerateContent({
   apiKey,
   messages,
   maxTokens,
@@ -127,10 +177,10 @@ export async function fetchGroqChatCompletion({
   topP,
   stream,
   timeoutMs,
-  model = API_CONFIG.GROQ_MODEL_FAST,
+  model = API_CONFIG.GEMINI_MODEL_FAST,
 }: {
   apiKey: string;
-  messages: GroqMessage[];
+  messages: AIMessage[];
   maxTokens: number;
   temperature?: number;
   topP?: number;
@@ -138,28 +188,38 @@ export async function fetchGroqChatCompletion({
   timeoutMs: number;
   model?: string;
 }): Promise<Response> {
+  const endpoint = stream ? "streamGenerateContent?alt=sse" : "generateContent";
+  const url = `${API_CONFIG.GEMINI_API_BASE_URL}/models/${model}:${endpoint}`;
+
+  const body = buildGeminiBody(messages, {
+    temperature,
+    topP,
+    maxOutputTokens: maxTokens,
+  });
+
   return fetchWithTimeout(
-    API_CONFIG.GROQ_API_URL,
+    url,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        "x-goog-api-key": apiKey,
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature,
-        top_p: topP,
-        max_tokens: maxTokens,
-        stream,
-      }),
+      body: JSON.stringify(body),
     },
     timeoutMs
   );
 }
 
-export async function pipeGroqStreamToController(
+interface GeminiStreamChunk {
+  candidates?: Array<{
+    content?: {
+      parts?: GeminiPart[];
+    };
+  }>;
+}
+
+export async function pipeGeminiStreamToController(
   response: Response,
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder
@@ -167,7 +227,7 @@ export async function pipeGroqStreamToController(
   const reader = response.body?.getReader();
 
   if (!reader) {
-    throw new Error(ERROR_MESSAGES.INVALID_GROQ_RESPONSE);
+    throw new Error(ERROR_MESSAGES.INVALID_AI_RESPONSE);
   }
 
   const decoder = new TextDecoder();
@@ -176,16 +236,22 @@ export async function pipeGroqStreamToController(
   const processLine = (line: string) => {
     const trimmed = line.trim();
 
-    if (!trimmed || trimmed === "data: [DONE]" || !trimmed.startsWith("data: ")) {
+    if (!trimmed || !trimmed.startsWith("data: ")) {
       return;
     }
 
-    try {
-      const json = JSON.parse(trimmed.slice(6));
-      const chunk = json?.choices?.[0]?.delta?.content;
+    const payload = trimmed.slice(6);
+    if (payload === "[DONE]") return;
 
-      if (typeof chunk === "string" && chunk) {
-        controller.enqueue(encoder.encode(chunk));
+    try {
+      const json = JSON.parse(payload) as GeminiStreamChunk;
+      const parts = json?.candidates?.[0]?.content?.parts;
+      if (!Array.isArray(parts)) return;
+
+      for (const part of parts) {
+        if (typeof part?.text === "string" && part.text) {
+          controller.enqueue(encoder.encode(part.text));
+        }
       }
     } catch {
       // Ignore malformed SSE chunks from the upstream provider.
@@ -216,17 +282,24 @@ export async function pipeGroqStreamToController(
   }
 }
 
-export async function readGroqTextResponse(response: Response): Promise<string> {
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = data?.choices?.[0]?.message?.content;
-  const cleaned = stripMarkdownCodeFences(
-    typeof content === "string" ? content : ""
-  );
+interface GeminiNonStreamResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: GeminiPart[];
+    };
+  }>;
+}
+
+export async function readGeminiTextResponse(response: Response): Promise<string> {
+  const data = (await response.json()) as GeminiNonStreamResponse;
+  const parts = data?.candidates?.[0]?.content?.parts;
+  const text = Array.isArray(parts)
+    ? parts.map((p) => (typeof p?.text === "string" ? p.text : "")).join("")
+    : "";
+  const cleaned = stripMarkdownCodeFences(text);
 
   if (!cleaned) {
-    throw new Error(ERROR_MESSAGES.INVALID_GROQ_RESPONSE);
+    throw new Error(ERROR_MESSAGES.INVALID_AI_RESPONSE);
   }
 
   return cleaned;
