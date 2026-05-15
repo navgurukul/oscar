@@ -61,8 +61,8 @@ interface FinalMarkdownResult {
   transcriptBulletCount: number;
 }
 
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+const GROQ_API_URL = "https://api.cerebras.ai/v1/chat/completions";
+const GROQ_MODEL = "gpt-oss-120b";
 const MAX_SEGMENT_BATCH_CHARS = 12_000;
 const MAX_SEGMENT_BATCH_SIZE = 80;
 
