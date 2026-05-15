@@ -195,10 +195,10 @@ function defaultSectionsForType(meetingType: InferredMeetingType): string[] {
     case "general":
     default:
       return [
-        "Overview",
-        "Key takeaways",
+        "Action items",
         "Decisions",
-        "Open questions / Risks",
+        "Key topics",
+        "Open questions",
         "Next steps",
       ];
   }
@@ -291,6 +291,7 @@ function formatMeetingContext(
     `Meeting type hint: ${request.meeting_type_hint}`,
     `Inferred meeting type: ${meetingType}`,
     `Required section order: ${sections.join(" | ")}`,
+    "Speaker source semantics: segments tagged 'microphone' come from the meeting host (the person recording); segments tagged 'speaker' come from other participants captured via system audio. Use this to attribute claims, decisions, and action items to the right side.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -388,6 +389,10 @@ async function reduceTranscriptBatches(
   const systemPrompt =
     "You reduce long meeting transcript batches into citation-preserving fact bullets. " +
     "Return only markdown bullets. Every bullet must end with exactly one citation token in the form [[seg:SEGMENT_ID]]. " +
+    "Each bullet must capture one concrete fact, blocker, decision, open question, action item, or follow-up. " +
+    "Preserve verbatim: people's names, product names, tool names, file names, URLs, project IDs, numbers, durations, dates, error strings, and exact technical terms. " +
+    "Attribute claims using speaker source: 'microphone' = the meeting host, 'speaker' = other participants. When a participant's name is identifiable from context, prefer it over generic pronouns. " +
+    "BANNED phrasing: 'the user', 'the conversation', 'it was discussed', 'discussion around', 'they talked about', 'the meeting covered'. Write the substance directly instead. " +
     "Do not invent facts. Do not output headings or prose.";
 
   for (let index = 0; index < segmentBatches.length; index += 1) {
@@ -480,6 +485,14 @@ function appendEvidenceMarker(
   return `- ${bulletText} <!-- ev:start=${segment.start_time} end=${segment.end_time} src=${segment.speaker.source} -->`;
 }
 
+function fallbackBulletForEmptySection(heading: string): string | null {
+  if (normalizeHeadingKey(heading) === "mutual feedback") {
+    return "No specific feedback captured.";
+  }
+
+  return null;
+}
+
 function parseModelSections(markdown: string): ParsedSections {
   const sanitized = sanitizeModelMarkdown(markdown);
   const lines = sanitized.split("\n");
@@ -529,10 +542,20 @@ function buildFinalMarkdown(
   const modelSections = parseModelSections(modelMarkdown);
   const manualSectionBullets = expectedSections.bulletsByHeading;
   const expectedHeadings = expectedSections.orderedHeadings;
+  const modelBulletsByHeadingKey = new Map<string, string[]>();
   const segmentsById = new Map(
     request.transcript_segments.map((segment) => [segment.id, segment] as const),
   );
   const manualBulletSet = new Set<string>();
+
+  for (const [heading, bullets] of modelSections.bulletsByHeading.entries()) {
+    const key = normalizeHeadingKey(heading);
+    if (!key) continue;
+    modelBulletsByHeadingKey.set(key, [
+      ...(modelBulletsByHeadingKey.get(key) ?? []),
+      ...bullets,
+    ]);
+  }
 
   for (const bullets of manualSectionBullets.values()) {
     for (const bullet of bullets) {
@@ -551,7 +574,7 @@ function buildFinalMarkdown(
       merged.push({ source: "manual", raw: bullet.trim() });
     }
 
-    for (const bullet of modelSections.bulletsByHeading.get(heading) ?? []) {
+    for (const bullet of modelBulletsByHeadingKey.get(normalizeHeadingKey(heading)) ?? []) {
       const normalized = normalizeText(stripCitationToken(bullet));
       if (!normalized || seen.has(normalized)) continue;
       seen.add(normalized);
@@ -574,6 +597,7 @@ function buildFinalMarkdown(
   for (const heading of expectedHeadings) {
     outputLines.push(`### ${heading}`);
     const mergedBullets = mergeBulletsForHeading(heading);
+    let headingBulletCount = 0;
 
     for (const { source, raw: rawBullet } of mergedBullets) {
       if (!rawBullet) continue;
@@ -581,6 +605,7 @@ function buildFinalMarkdown(
       if (source === "manual") {
         outputLines.push(`- ${rawBullet}`);
         generatedBulletCount += 1;
+        headingBulletCount += 1;
         continue;
       }
 
@@ -600,6 +625,15 @@ function buildFinalMarkdown(
       );
       generatedBulletCount += 1;
       transcriptBulletCount += 1;
+      headingBulletCount += 1;
+    }
+
+    if (headingBulletCount === 0) {
+      const fallbackBullet = fallbackBulletForEmptySection(heading);
+      if (fallbackBullet) {
+        outputLines.push(`- ${fallbackBullet}`);
+        generatedBulletCount += 1;
+      }
     }
 
     outputLines.push("");
@@ -627,11 +661,18 @@ async function generateFinalMarkdown(
   );
 
   const systemPrompt =
-    "You are generating Granola-style enhanced meeting notes. " +
-    "Output only markdown. Use headings and bullets only. " +
+    "You are generating high-signal meeting notes that capture substance, not narration. " +
+    "Output only markdown. Use the required section headings exactly as given; do not rename, reorder, add, or omit headings. " +
+    "Under each heading, use markdown bullets only. No prose paragraphs, code fences, preamble, or visible timestamps. " +
     "Every bullet derived from transcript content must end with exactly one citation token in the form [[seg:SEGMENT_ID]]. " +
-    "Do not use fences, preamble, or visible timestamps. " +
-    "Never invent facts. Preserve the structure and intent of any manual notes.";
+    "ATTRIBUTION: segments tagged 'microphone' come from the meeting host; 'speaker' segments come from other participants. Attribute action items, decisions, commitments, and quotes to the correct side. Use participant names from the attendees list when identifiable from context. " +
+    "BANNED phrasing — never write: 'the user', 'the conversation', 'it was discussed', 'discussion around', 'they talked about', 'the meeting covered', 'the speaker', 'the participant'. State the substance directly. " +
+    "PRESERVE VERBATIM: people's names, product/feature names (Stream, Scribble, Minutes, etc.), tool names, file names, URLs, project IDs, numbers, durations, dates, error messages, and exact technical terms. Never paraphrase a named entity. " +
+    "ACTION ITEMS section (when present): format each bullet as '- [ ] <action> — <Owner>' with the owner's name when identifiable, or 'Owner: unassigned' otherwise. Include a deadline only if explicitly stated. " +
+    "DECISIONS section (when present): one bullet per decision, stating what was decided and who decided. " +
+    "Use 1-4 bullets per section by default. Action items and Decisions may have up to 8 bullets each if the meeting warrants it. " +
+    "Never invent facts. Never restate the section name inside its bullets. Preserve the structure and intent of any manual notes. " +
+    "If a required section truly has no content from the transcript or manual notes, write exactly one bullet: None captured.";
 
   const userPrompt = [
     formatMeetingContext(request, sections, meetingType),

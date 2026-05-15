@@ -13,6 +13,14 @@ function getSupabase() {
   return createClient();
 }
 
+function emptyWriteError(action: string) {
+  return new Error(`${action} failed: scribble not found or permission denied`);
+}
+
+function partialWriteError(action: string) {
+  return new Error(`${action} partially failed: one or more scribbles were not found or permission denied`);
+}
+
 export const scribblesService = {
   /**
    * Create a new scribble in the database
@@ -97,7 +105,15 @@ export const scribblesService = {
       .in("id", ids)
       .select("*");
 
-    return { data, error: error as Error | null };
+    if (error) return { data: null, error: error as Error };
+    if (!data || data.length === 0) {
+      return { data: null, error: emptyWriteError("Update") };
+    }
+    if (data.length !== ids.length) {
+      return { data: null, error: partialWriteError("Update") };
+    }
+
+    return { data, error: null };
   },
 
   /**
@@ -105,12 +121,18 @@ export const scribblesService = {
    */
   async deleteScribble(id: string): Promise<{ error: Error | null }> {
     const supabase = getSupabase();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("scribbles")
       .update({ deleted_at: new Date().toISOString() })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id");
 
-    return { error: error as Error | null };
+    if (error) return { error: error as Error };
+    if (!data || data.length === 0) {
+      return { error: emptyWriteError("Delete") };
+    }
+
+    return { error: null };
   },
 
   /**
@@ -133,7 +155,15 @@ export const scribblesService = {
       .in("id", ids)
       .select("*");
 
-    return { data, error: error as Error | null };
+    if (error) return { data: null, error: error as Error };
+    if (!data || data.length === 0) {
+      return { data: null, error: emptyWriteError("Delete") };
+    }
+    if (data.length !== ids.length) {
+      return { data: null, error: partialWriteError("Delete") };
+    }
+
+    return { data, error: null };
   },
 
   /**
@@ -221,9 +251,18 @@ export const scribblesService = {
    */
   async permanentDelete(id: string): Promise<{ error: Error | null }> {
     const supabase = getSupabase();
-    const { error } = await supabase.from("scribbles").delete().eq("id", id);
+    const { data, error } = await supabase
+      .from("scribbles")
+      .delete()
+      .eq("id", id)
+      .select("id");
 
-    return { error: error as Error | null };
+    if (error) return { error: error as Error };
+    if (!data || data.length === 0) {
+      return { error: emptyWriteError("Delete") };
+    }
+
+    return { error: null };
   },
 
   /**

@@ -16,7 +16,8 @@ export type DesktopAIMode =
   | "cleanup"
   | "summary"
   | "bullets"
-  | "email";
+  | "email"
+  | "meeting_notes";
 
 interface AIProcessResponse {
   text?: string;
@@ -180,6 +181,40 @@ function normalizeBullets(value: string): string[] {
     .map((line) => (line.startsWith("- ") ? line : `- ${line.replace(/^[*-]\s*/, "")}`));
 }
 
+function sanitizeMarkdown(value: string): string {
+  return value
+    .replace(/```markdown|```md|```/gi, "")
+    .replace(/\r\n/g, "\n")
+    .trim();
+}
+
+function buildFallbackMeetingInput(
+  request: EnhancedMeetingNoteRequest,
+  transcriptSource: string,
+): string {
+  return [
+    `Meeting title: ${request.meeting_title.trim() || "Untitled Meeting"}`,
+    `Local meeting datetime: ${request.meeting_local_datetime.trim()}`,
+    `Attendees: ${request.attendees_compact.trim() || "Not captured"}`,
+    request.attendees_full.length > 0
+      ? `Attendee details: ${request.attendees_full
+          .map((attendee) =>
+            attendee.email ? `${attendee.name} <${attendee.email}>` : attendee.name)
+          .join(", ")}`
+      : "",
+    request.calendar_context
+      ? `Calendar context: ${JSON.stringify(request.calendar_context)}`
+      : "",
+    `Meeting type hint: ${request.meeting_type_hint}`,
+    request.my_notes_markdown.trim()
+      ? `Manual notes:\n${request.my_notes_markdown.trim()}`
+      : "",
+    transcriptSource ? `Transcript excerpt:\n${transcriptSource}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 async function extractInvokeError(error: unknown): Promise<string> {
   const fallback =
     error instanceof Error ? error.message : "AI request failed.";
@@ -299,6 +334,34 @@ async function buildFallbackMeetingMarkdown(
   let summaryBullets = "";
   if (sourceForSummary) {
     try {
+      const structuredNotes = await invokeAIProcess(
+        accessToken,
+        {
+          text: buildFallbackMeetingInput(request, transcriptSource),
+          mode: "meeting_notes",
+        },
+      );
+
+      if (structuredNotes.trim()) {
+        return sanitizeMarkdown(structuredNotes);
+      }
+    } catch {
+      try {
+        summaryBullets = await invokeAIProcess(
+          accessToken,
+          {
+            text: sourceForSummary,
+            mode: "bullets",
+          },
+        );
+      } catch {
+        summaryBullets = "";
+      }
+    }
+  }
+
+  if (!summaryBullets.trim() && sourceForSummary) {
+    try {
       summaryBullets = await invokeAIProcess(
         accessToken,
         {
@@ -325,7 +388,7 @@ async function buildFallbackMeetingMarkdown(
   }
 
   if (summaryBullets.trim()) {
-    lines.push("### Transcript Highlights");
+    lines.push("### Top of mind");
     lines.push(...normalizeBullets(summaryBullets));
     return lines.join("\n").trimEnd();
   }

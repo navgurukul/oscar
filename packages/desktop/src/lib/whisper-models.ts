@@ -134,9 +134,9 @@ export function modelDisplayName(variant: WhisperModelVariant): string {
     case "medium":
       return "Medium";
     case "large-v3-turbo-q5_0":
-      return "Turbo (quantised)";
+      return "Turbo";
     case "large-v3-turbo":
-      return "Turbo (full)";
+      return "Turbo HD";
   }
 }
 

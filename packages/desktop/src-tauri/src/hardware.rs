@@ -286,6 +286,26 @@ mod tests {
     }
 
     #[test]
+    fn balanced_meetings_prefer_more_accuracy_than_dictation() {
+        let p = profile(8, 4, GpuBackend::None);
+        let dictation = recommend(WhisperRole::Dictation, ModelPreset::Balanced, &p);
+        let minutes = recommend(WhisperRole::Minutes, ModelPreset::Balanced, &p);
+
+        assert_eq!(dictation.spec.variant, WhisperModelVariant::Small);
+        assert_eq!(minutes.spec.variant, WhisperModelVariant::LargeV3TurboQ5);
+    }
+
+    #[test]
+    fn best_dictation_caps_below_full_turbo() {
+        let p = profile(32, 10, GpuBackend::Metal);
+        let dictation = recommend(WhisperRole::Dictation, ModelPreset::Best, &p);
+        let minutes = recommend(WhisperRole::Minutes, ModelPreset::Best, &p);
+
+        assert_eq!(dictation.spec.variant, WhisperModelVariant::LargeV3TurboQ5);
+        assert_eq!(minutes.spec.variant, WhisperModelVariant::LargeV3Turbo);
+    }
+
+    #[test]
     fn fast_always_returns_small_model() {
         let p = profile(64, 16, GpuBackend::Metal);
         let r = recommend(WhisperRole::Minutes, ModelPreset::Fast, &p);

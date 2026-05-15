@@ -6,7 +6,8 @@ type Mode =
   | "cleanup"
   | "summary"
   | "bullets"
-  | "email";
+  | "email"
+  | "meeting_notes";
 
 type DictationCategory =
   | "default"
@@ -137,6 +138,7 @@ const VALID_MODES = new Set<Mode>([
   "summary",
   "bullets",
   "email",
+  "meeting_notes",
 ]);
 
 const VALID_CATEGORIES = new Set<DictationCategory>(DICTATION_CATEGORIES);
@@ -224,10 +226,16 @@ function buildPrompt(
   }
 
   const system =
-    "You are a precise transcript assistant. Follow instructions exactly. " +
-    "Output only the requested content with no preamble, no explanations, no meta-commentary. " +
-    "The transcript may contain Hinglish (Hindi words written in Roman script mixed with English). " +
-    "Understand both languages and always produce the output in clear English.";
+    mode === "meeting_notes"
+      ? "You are a precise meeting-notes writer. Generate Granola-style notes from rough transcripts. " +
+        "Output only markdown with headings and bullets. No preamble, no explanations, no meta-commentary. " +
+        "Never invent facts. Preserve names, dates, file names, tools, project IDs, and action items when present. " +
+        "The transcript may contain Hinglish (Hindi words written in Roman script mixed with English). " +
+        "Understand both languages and produce clear English unless a Hinglish term is important context."
+      : "You are a precise transcript assistant. Follow instructions exactly. " +
+        "Output only the requested content with no preamble, no explanations, no meta-commentary. " +
+        "The transcript may contain Hinglish (Hindi words written in Roman script mixed with English). " +
+        "Understand both languages and always produce the output in clear English.";
 
   const user = (() => {
     switch (mode) {
@@ -259,6 +267,33 @@ function buildPrompt(
         return (
           "Rewrite the following text as a clear, professional, ready-to-send email. " +
           "Output only the email body:\n\n" +
+          text
+        );
+      case "meeting_notes":
+        return (
+          "Create structured meeting notes from the content below.\n\n" +
+          "Use this exact markdown structure:\n" +
+          "## {meeting title}\n" +
+          "{local meeting datetime}\n" +
+          "{attendees}\n\n" +
+          "### Top of mind\n" +
+          "- ...\n\n" +
+          "### Updates and wins\n" +
+          "- ...\n\n" +
+          "### Challenges and blockers\n" +
+          "- ...\n\n" +
+          "### Mutual feedback\n" +
+          "- ...\n\n" +
+          "### Next Milestone\n" +
+          "- ...\n\n" +
+          "Rules:\n" +
+          "- Replace every placeholder with the matching value from the provided meeting context. Never output braces or placeholder text.\n" +
+          "- Prefer specific bullets over generic summaries. Name people, files, tools, services, IDs, and decisions when present.\n" +
+          "- Capture concrete blockers, open questions, requested clarifications, and next steps.\n" +
+          "- Avoid vague phrases like \"discussion around\" or \"technical implementation questions\" when details exist.\n" +
+          "- Use 1-4 bullets per section. If a section has no explicit content, write one honest absence bullet such as \"No specific feedback captured.\"\n" +
+          "- Keep bullets concise, high-signal, and non-redundant.\n" +
+          "- Do not add facts outside the provided content.\n\n" +
           text
         );
       default:

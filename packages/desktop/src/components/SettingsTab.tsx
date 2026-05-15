@@ -5,7 +5,6 @@ import {
   User,
   Search,
   Loader2,
-  Download,
   ExternalLink,
   LogOut,
   Trash2,
@@ -19,11 +18,10 @@ import { VocabularySection } from "./VocabularySection";
 import { getInitials } from "../lib/utils";
 import { isContextAwarePlatform } from "../lib/dictation-context";
 import {
-  modelDisplayName,
-  type HardwareProfile,
+  formatModelSize,
   type ModelPreset,
-  type WhisperModelVariant,
 } from "../lib/whisper-models";
+import type { RoleModelState, WhisperModelRole } from "../lib/app-types";
 
 /* ── Types ── */
 
@@ -158,18 +156,9 @@ interface SettingsTabProps {
   systemAudioSupported?: boolean;
   systemAudioEnabled?: boolean;
   onSystemAudioToggle?: (enabled: boolean) => void;
-  minutesModelEnabled?: boolean;
-  minutesModelDownloadState?: "idle" | "downloading" | "installed";
-  minutesModelDownloadProgress?: number;
-  minutesModelVariant?: string;
-  onDownloadMinutesModel?: () => void;
-  onRemoveMinutesModel?: () => void;
-  hardwareProfile?: HardwareProfile | null;
-  activeDictationVariant?: WhisperModelVariant | null;
-  dictationModelPreset?: ModelPreset;
-  onDictationPresetChange?: (preset: ModelPreset) => void;
-  minutesModelPreset?: ModelPreset;
-  onMinutesPresetChange?: (preset: ModelPreset) => void;
+  dictationModel: RoleModelState;
+  meetingModel: RoleModelState;
+  onModelPresetChange: (role: WhisperModelRole, preset: ModelPreset) => void;
 }
 
 /* ── Component ── */
@@ -192,17 +181,9 @@ export function SettingsTab({
   systemAudioSupported = false,
   systemAudioEnabled = true,
   onSystemAudioToggle,
-  minutesModelEnabled = false,
-  minutesModelDownloadState = "idle",
-  minutesModelDownloadProgress = 0,
-  onDownloadMinutesModel,
-  onRemoveMinutesModel,
-  hardwareProfile = null,
-  activeDictationVariant = null,
-  dictationModelPreset = "auto",
-  onDictationPresetChange,
-  minutesModelPreset = "auto",
-  onMinutesPresetChange,
+  dictationModel,
+  meetingModel,
+  onModelPresetChange,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>(
     resolveTab(initialSection),
@@ -240,8 +221,6 @@ export function SettingsTab({
       l.native.toLowerCase().includes(langSearch.toLowerCase()),
   );
 
-  const minutesPackInstalled =
-    minutesModelDownloadState === "installed" || minutesModelEnabled;
   const contextAwareSupported = isContextAwarePlatform(contextAwarePlatform);
   const contextAwareDisabled = !aiImprovementEnabled || !contextAwareSupported;
   const contextAwareDescription = !contextAwareSupported
@@ -249,6 +228,77 @@ export function SettingsTab({
     : aiImprovementEnabled
       ? "Adapt cleanup style to active app"
       : "Requires AI Cleanup";
+
+  const renderModelStatus = (model: RoleModelState) => {
+    if (model.downloadState === "downloading") {
+      return (
+        <div className="st-row-status st-row-status--downloading">
+          <Loader2 size={12} className="animate-spin" />
+          Downloading {Math.round(model.progress)}%
+        </div>
+      );
+    }
+
+    if (model.downloadState === "checking") {
+      return (
+        <div className="st-row-status st-row-status--downloading">
+          <Loader2 size={12} className="animate-spin" />
+          Preparing
+        </div>
+      );
+    }
+
+    if (model.activeVariant) {
+      return (
+        <div className="st-row-status st-row-status--installed">
+          Ready
+        </div>
+      );
+    }
+
+    if (model.recommendation) {
+      return (
+        <div className="st-row-status">
+          Will download · {formatModelSize(model.recommendation.spec.sizeBytes)}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const renderModelRow = (
+    label: string,
+    description: string,
+    model: RoleModelState,
+  ) => {
+    return (
+      <div className="st-row">
+        <div className="st-row-text">
+          <div className="st-row-label">{label}</div>
+          <div className="st-row-desc">{description}</div>
+          {renderModelStatus(model)}
+          {model.error && <div className="st-row-error">{model.error}</div>}
+        </div>
+        <div className="st-row-action">
+          <select
+            className="st-select"
+            value={model.preset}
+            onChange={(e) =>
+              onModelPresetChange(model.role, e.target.value as ModelPreset)
+            }
+            aria-label={label}
+            disabled={model.downloadState === "downloading"}
+          >
+            <option value="auto">Auto (recommended)</option>
+            <option value="fast">Fast</option>
+            <option value="balanced">Balanced</option>
+            <option value="best">Best quality</option>
+          </select>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="st-layout">
@@ -417,129 +467,22 @@ export function SettingsTab({
                   disabled={contextAwareDisabled}
                 />
               </div>
+            </div>
+
+            {/* — Voice Models — */}
+            <div className="st-section-label">Voice Models</div>
+            <div className="st-card st-card--grouped">
+              {renderModelRow(
+                "Dictation",
+                "For Scribbles, Stream, and Ctrl+Space.",
+                dictationModel,
+              )}
 
               <div className="st-divider" />
-
-              <div className="st-row">
-                <div className="st-row-text">
-                  <div className="st-row-label">Speech Model</div>
-                  <div className="st-row-desc">
-                    {hardwareProfile
-                      ? `${hardwareProfile.ramGb} GB RAM · ${hardwareProfile.cpuCores} cores${
-                          hardwareProfile.gpuBackend !== "none"
-                            ? ` · ${hardwareProfile.gpuBackend.toUpperCase()}`
-                            : ""
-                        }`
-                      : "Detecting hardware…"}
-                  </div>
-                  {activeDictationVariant && (
-                    <div className="st-row-status st-row-status--installed">
-                      Active: {modelDisplayName(activeDictationVariant)}
-                    </div>
-                  )}
-                </div>
-                <div className="st-row-action">
-                  <select
-                    className="st-select"
-                    value={dictationModelPreset}
-                    onChange={(e) =>
-                      onDictationPresetChange?.(e.target.value as ModelPreset)
-                    }
-                    aria-label="Dictation quality"
-                  >
-                    <option value="auto">Auto (recommended)</option>
-                    <option value="fast">Fast</option>
-                    <option value="balanced">Balanced</option>
-                    <option value="best">Best quality</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="st-divider" />
-
-              <div className="st-row">
-                <div className="st-row-text">
-                  <div className="st-row-label">Accuracy Pack</div>
-                  <div className="st-row-desc">
-                    Better Hindi, Hinglish, and long-meeting transcription
-                  </div>
-                  {minutesModelDownloadState === "downloading" && (
-                    <div className="st-row-status st-row-status--downloading">
-                      Downloading…{" "}
-                      {Math.max(
-                        0,
-                        Math.min(
-                          100,
-                          Math.round(minutesModelDownloadProgress),
-                        ),
-                      )}
-                      %
-                    </div>
-                  )}
-                  {minutesPackInstalled &&
-                    minutesModelDownloadState !== "downloading" && (
-                      <div className="st-row-status st-row-status--installed">
-                        Installed
-                      </div>
-                    )}
-                </div>
-                <div className="st-row-action">
-                  {minutesPackInstalled ? (
-                    <button
-                      className="st-btn-ghost-sm"
-                      onClick={() => onRemoveMinutesModel?.()}
-                      disabled={minutesModelDownloadState === "downloading"}
-                    >
-                      Remove
-                    </button>
-                  ) : (
-                    <button
-                      className="st-btn-primary-sm"
-                      onClick={() => onDownloadMinutesModel?.()}
-                      disabled={minutesModelDownloadState === "downloading"}
-                    >
-                      {minutesModelDownloadState === "downloading" ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <Download size={14} />
-                      )}
-                      {minutesModelDownloadState === "downloading"
-                        ? "Downloading…"
-                        : "Download"}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {minutesPackInstalled && (
-                <>
-                  <div className="st-divider" />
-                  <div className="st-row st-row--sub">
-                    <div className="st-row-text">
-                      <div className="st-row-label">Meeting quality</div>
-                      <div className="st-row-desc">
-                        Trade off transcription accuracy versus CPU/GPU load.
-                      </div>
-                    </div>
-                    <div className="st-row-action">
-                      <select
-                        className="st-select"
-                        value={minutesModelPreset}
-                        onChange={(e) =>
-                          onMinutesPresetChange?.(
-                            e.target.value as ModelPreset,
-                          )
-                        }
-                        aria-label="Meeting quality"
-                      >
-                        <option value="auto">Auto (recommended)</option>
-                        <option value="fast">Fast</option>
-                        <option value="balanced">Balanced</option>
-                        <option value="best">Best quality</option>
-                      </select>
-                    </div>
-                  </div>
-                </>
+              {renderModelRow(
+                "Meetings",
+                "For Minutes and long meeting transcription.",
+                meetingModel,
               )}
             </div>
           </div>

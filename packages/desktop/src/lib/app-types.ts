@@ -1,4 +1,9 @@
 import type { DictationContextSnapshot } from "../types/scribble.types";
+import type {
+  ModelPreset as WhisperModelPreset,
+  ModelRecommendation as WhisperModelRecommendation,
+  WhisperModelVariant,
+} from "./whisper-models";
 
 export type TabType =
   | "home"
@@ -46,9 +51,7 @@ export type TonePreset = "none" | "professional" | "casual" | "friendly";
 export type MicrophonePermissionState = "granted" | "denied" | "prompt" | "unknown";
 export type WhisperModelRole = "dictation" | "minutes";
 
-// Re-export the canonical model variant union from whisper-models.ts. Keeping
-// the old name alive so settings persisted under the previous schema
-// (`MinutesModelVariant`) still type-check on load.
+// Re-export canonical model types from the Whisper registry.
 export type {
   WhisperModelVariant,
   ModelPreset as WhisperModelPreset,
@@ -57,8 +60,19 @@ export type {
   HardwareProfile,
   GpuBackend,
 } from "./whisper-models";
-export type MinutesModelVariant = "large-v3-turbo-q5_0";
-export type MinutesModelDownloadState = "idle" | "downloading" | "installed";
+export type RoleModelDownloadState = "idle" | "checking" | "downloading" | "ready" | "error";
+
+export interface RoleModelState {
+  role: WhisperModelRole;
+  preset: WhisperModelPreset;
+  recommendation: WhisperModelRecommendation | null;
+  activeVariant: WhisperModelVariant | null;
+  resolvedPath: string | null;
+  fallbackUsed: boolean;
+  downloadState: RoleModelDownloadState;
+  progress: number;
+  error: string | null;
+}
 
 export interface DownloadProgress {
   downloaded: number;
