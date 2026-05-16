@@ -260,13 +260,11 @@ function buildPrompt(
   text: string,
   context?: DictationContextSnapshot,
   routing?: DictationRoutingResult,
-  promptProfile?: PromptProfile,
 ): { system: string; user: string } {
   if (mode === "transcribe_cleanup") {
-    if (promptProfile === "stream") {
-      return buildStreamCleanupPrompt(text, routing);
-    }
-    return buildContextAwareCleanupPrompt(text, context, routing);
+    // Hot path for Stream and Scribble dictation. Keep this prompt tiny so
+    // paste is not blocked behind hundreds of fixed prompt tokens.
+    return buildStreamCleanupPrompt(text, routing);
   }
 
   const system =
@@ -349,6 +347,8 @@ function buildPrompt(
 }
 
 Deno.serve(async (req: Request) => {
+  const tRequest0 = performance.now();
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -368,8 +368,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { text, mode, context, routing, promptProfile }: AIProcessRequest =
-      await req.json();
+    const { text, mode, context, routing }: AIProcessRequest = await req.json();
     if (!text || typeof text !== "string" || !text.trim()) {
       return new Response(JSON.stringify({ error: "Missing or empty 'text' field." }), {
         status: 400,
@@ -407,27 +406,23 @@ Deno.serve(async (req: Request) => {
     }
 
     const effectivePromptProfile =
-      mode === "transcribe_cleanup" && promptProfile === "stream"
-        ? promptProfile
-        : undefined;
+      mode === "transcribe_cleanup" ? "stream" : undefined;
     const { system, user: prompt } = buildPrompt(
       mode,
       text,
       context,
       routing,
-      effectivePromptProfile,
     );
 
-    // Cap output tokens proportional to input. Cleanup output is almost never
-    // longer than input × 1.5. A loose cap prevents runaway generation that
-    // ignores the prompt and writes paragraphs of commentary (which previously
-    // pushed latency to 15-20s on Gemini Flash Lite).
-    // ~4 chars per token rough estimate; floor of 256 for very short inputs.
-    const inputTokenEstimate = Math.ceil(text.length / 4);
-    const maxOutputTokens = Math.min(
-      2048,
-      Math.max(256, Math.ceil(inputTokenEstimate * 1.5) + 64),
-    );
+    // Cleanup output should be close to input length. Stream dictation gets a
+    // tighter cap because it blocks paste; longer modes keep the safer ceiling.
+    const maxOutputTokens =
+      effectivePromptProfile === "stream"
+        ? Math.min(512, Math.max(96, Math.ceil(text.length / 3) + 32))
+        : Math.min(
+            2048,
+            Math.max(256, Math.ceil(text.length / 4 * 1.5) + 64),
+          );
 
     const tGemini0 = performance.now();
     const upstream = await fetch(
@@ -480,6 +475,7 @@ Deno.serve(async (req: Request) => {
         `geminiHeaders=${Math.round(tGeminiFirstByte - tGemini0)}ms ` +
         `geminiBody=${Math.round(tGeminiDone - tGeminiFirstByte)}ms ` +
         `total=${Math.round(tGeminiDone - tGemini0)}ms ` +
+        `edgeTotal=${Math.round(tGeminiDone - tRequest0)}ms ` +
         `finish=${finishReason} ` +
         `usage=${JSON.stringify(usage)}`,
     );
