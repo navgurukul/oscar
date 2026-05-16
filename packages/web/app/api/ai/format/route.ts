@@ -77,7 +77,8 @@ export async function POST(req: NextRequest) {
     const { data: vocabRaw } = await supabase
       .from("user_vocabulary")
       .select("term, pronunciation, context")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(500);
     const vocabList = Array.isArray(vocabRaw)
       ? vocabRaw.map((v) => ({
           term: v.term,

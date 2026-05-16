@@ -30,19 +30,6 @@ impl WhisperModelVariant {
         &[Tiny, Base, Small, Medium, LargeV3TurboQ5, LargeV3Turbo]
     }
 
-    pub fn from_filename(filename: &str) -> Option<Self> {
-        use WhisperModelVariant::*;
-        match filename {
-            "ggml-tiny.bin" => Some(Tiny),
-            "ggml-base.bin" => Some(Base),
-            "ggml-small.bin" => Some(Small),
-            "ggml-medium.bin" => Some(Medium),
-            "ggml-large-v3-turbo.bin" => Some(LargeV3Turbo),
-            "ggml-large-v3-turbo-q5_0.bin" => Some(LargeV3TurboQ5),
-            _ => None,
-        }
-    }
-
     pub fn spec(&self) -> ModelSpec {
         use WhisperModelVariant::*;
         match self {
@@ -124,7 +111,3 @@ pub struct ModelSpec {
     pub supports_multilingual: bool,
 }
 
-/// Relative path within `$HOME` where a given variant is stored.
-pub fn relative_path_for(variant: WhisperModelVariant) -> String {
-    format!(".oscar/models/{}", variant.spec().filename)
-}

@@ -33,7 +33,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.562.0",
-    "matter-js": "^0.20.0",
     "motion": "^12.26.2",
     "next": "^15.5.12",
     "onnxruntime-web": "^1.24.1",
@@ -45,7 +44,6 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "@types/matter-js": "^0.20.2",
     "@types/node": "^20.0.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "^19.2.3",

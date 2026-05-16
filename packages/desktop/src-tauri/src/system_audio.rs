@@ -15,7 +15,6 @@ mod platform {
     // and compiled into a static library by build.rs.
     extern "C" {
         fn sck_is_supported() -> bool;
-        fn sck_is_capturing() -> bool;
         fn sck_start_capture() -> i32;
         fn sck_stop_capture();
         fn sck_get_audio_data(out_count: *mut i32) -> *mut f32;
@@ -24,10 +23,6 @@ mod platform {
 
     pub fn is_supported() -> bool {
         unsafe { sck_is_supported() }
-    }
-
-    pub fn is_capturing() -> bool {
-        unsafe { sck_is_capturing() }
     }
 
     pub fn start_capture() -> Result<(), String> {
@@ -113,10 +108,6 @@ mod platform {
 
     pub fn is_supported() -> bool {
         true // WASAPI is present on Windows Vista and later
-    }
-
-    pub fn is_capturing() -> bool {
-        STATE.lock().map_or(false, |s| s.is_some())
     }
 
     pub fn start_capture() -> Result<(), String> {
@@ -316,10 +307,6 @@ mod platform {
             && Command::new("pactl").arg("info").output().is_ok()
     }
 
-    pub fn is_capturing() -> bool {
-        STATE.lock().map_or(false, |s| s.is_some())
-    }
-
     pub fn start_capture() -> Result<(), String> {
         let mut state = STATE.lock().map_err(|_| "State lock poisoned".to_string())?;
         if state.is_some() {
@@ -411,7 +398,6 @@ mod platform {
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 mod platform {
     pub fn is_supported() -> bool { false }
-    pub fn is_capturing() -> bool { false }
     pub fn start_capture() -> Result<(), String> {
         Err("System audio capture is not supported on this platform".to_string())
     }
