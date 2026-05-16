@@ -250,14 +250,22 @@ For UI, UX, styling, layout, navigation, motion, or shared component work:
    - favor strong hierarchy over lots of components
    - avoid generic SaaS card grids unless cards are the interaction
    - one dominant idea per section or screen
-   - preserve OSCAR's cyan-and-cream editorial identity (`#06B6D4` cyan, `#FCFBF2` cream, `#BDADFF` lavender)
+   - preserve OSCAR's cyan editorial identity
    - mobile layout and first-screen clarity intentional
    - motion sparse and purposeful (150-300ms transitions)
 
-**Typography:**
-- Headlines: Figtree 500-600
-- Body: Inter 400-500
-- Mono: JetBrains Mono
+**Typography (actually loaded in code):**
+- Headlines (`h1/h2/h3`, `font-serif`): **EB Garamond** — weights 400/500/600/700, loaded via `next/font/google` in [packages/web/app/layout.tsx](./packages/web/app/layout.tsx). Auto-applied via [globals.css](./packages/web/app/globals.css).
+- Body / UI / sans default (`font-sans`, `<body>`): **Figtree** — weights 400/500/600/700, also via `next/font/google`.
+- Mono (`font-mono`): system stack only — `ui-monospace, monospace` (Tailwind). Desktop CSS uses `SF Mono, Fira Code, Consolas`.
+- Desktop app mirrors the web fonts via Google Fonts `@import` in [packages/desktop/src/styles/app-base.css](./packages/desktop/src/styles/app-base.css).
+- DESIGN.md still references **Inter** (body) and **JetBrains Mono** — these are aspirational spec only; neither is loaded anywhere in code. Treat Figtree as the body font and the system mono stack as the mono font when shipping changes.
+
+**Colors (actually in code):**
+- **Brand cyan** ramp ([packages/web/tailwind.config.js](./packages/web/tailwind.config.js)): `#22D3EE` (400), `#06B6D4` (500, primary), `#0891B2` (600), `#0E7490` (700). `#A5F3FC` (cyan-200) used for `::selection`.
+- **App surface:** dark by default — `<body>` uses `bg-slate-950` (Tailwind default `#020617`). shadcn HSL theme tokens (`--background`, `--foreground`, etc.) defined for both `:root` (light) and `.dark` in [globals.css](./packages/web/app/globals.css); neutral grayscale.
+- **PWA theme color:** `#06B6D4` ([layout.tsx:85](./packages/web/app/layout.tsx)).
+- **Aspirational, not yet in code:** `#FCFBF2` cream and `#BDADFF` lavender appear in [DESIGN.md](./DESIGN.md) but are not referenced anywhere in `packages/`. Do not assume they're applied — check the file you're editing.
 
 **Spacing:** 4px base unit (`xs=4`, `sm=8`, `md=16`, `lg=24`, `xl=32`, `2xl=48`, `3xl=64`)
 

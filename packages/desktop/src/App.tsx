@@ -87,6 +87,111 @@ function buildFallbackScribbleTitle(text: string): string {
   return title || "Untitled Scribble";
 }
 
+interface AudioTrimResult {
+  audio: Float32Array;
+  originalSamples: number;
+  trimmedSamples: number;
+  leadingTrimMs: number;
+  trailingTrimMs: number;
+  voicedFrames: number;
+  thresholdRms: number;
+  thresholdPeak: number;
+}
+
+const STREAM_SAMPLE_RATE = 16_000;
+const STREAM_TRIM_FRAME_MS = 20;
+const STREAM_TRIM_PADDING_MS = 250;
+const STREAM_MIN_TRIM_MS = 120;
+const STREAM_MIN_RETAINED_MS = 800;
+const STREAM_TRIM_RMS_THRESHOLD = 0.006;
+const STREAM_TRIM_PEAK_THRESHOLD = 0.025;
+
+function durationMsForSamples(samples: number): number {
+  return Math.round((samples / STREAM_SAMPLE_RATE) * 1000);
+}
+
+function trimStreamSilence(audio: Float32Array): AudioTrimResult {
+  const frameSize = Math.max(
+    1,
+    Math.round((STREAM_SAMPLE_RATE * STREAM_TRIM_FRAME_MS) / 1000),
+  );
+  const paddingSamples = Math.round(
+    (STREAM_SAMPLE_RATE * STREAM_TRIM_PADDING_MS) / 1000,
+  );
+  const minRetainedSamples = Math.round(
+    (STREAM_SAMPLE_RATE * STREAM_MIN_RETAINED_MS) / 1000,
+  );
+
+  let firstVoiced = -1;
+  let lastVoiced = -1;
+  let voicedFrames = 0;
+
+  for (let frameStart = 0; frameStart < audio.length; frameStart += frameSize) {
+    const frameEnd = Math.min(audio.length, frameStart + frameSize);
+    let sumSq = 0;
+    let peak = 0;
+
+    for (let i = frameStart; i < frameEnd; i++) {
+      const sample = audio[i];
+      sumSq += sample * sample;
+      const abs = sample < 0 ? -sample : sample;
+      if (abs > peak) peak = abs;
+    }
+
+    const rms = Math.sqrt(sumSq / Math.max(1, frameEnd - frameStart));
+    if (rms >= STREAM_TRIM_RMS_THRESHOLD || peak >= STREAM_TRIM_PEAK_THRESHOLD) {
+      voicedFrames += 1;
+      if (firstVoiced === -1) firstVoiced = frameStart;
+      lastVoiced = frameEnd;
+    }
+  }
+
+  if (firstVoiced === -1 || lastVoiced === -1) {
+    return {
+      audio,
+      originalSamples: audio.length,
+      trimmedSamples: audio.length,
+      leadingTrimMs: 0,
+      trailingTrimMs: 0,
+      voicedFrames,
+      thresholdRms: STREAM_TRIM_RMS_THRESHOLD,
+      thresholdPeak: STREAM_TRIM_PEAK_THRESHOLD,
+    };
+  }
+
+  const start = Math.max(0, firstVoiced - paddingSamples);
+  const end = Math.min(audio.length, lastVoiced + paddingSamples);
+  const trimmedSamples = end - start;
+  const removedSamples = audio.length - trimmedSamples;
+
+  if (
+    trimmedSamples < minRetainedSamples ||
+    durationMsForSamples(removedSamples) < STREAM_MIN_TRIM_MS
+  ) {
+    return {
+      audio,
+      originalSamples: audio.length,
+      trimmedSamples: audio.length,
+      leadingTrimMs: 0,
+      trailingTrimMs: 0,
+      voicedFrames,
+      thresholdRms: STREAM_TRIM_RMS_THRESHOLD,
+      thresholdPeak: STREAM_TRIM_PEAK_THRESHOLD,
+    };
+  }
+
+  return {
+    audio: audio.slice(start, end),
+    originalSamples: audio.length,
+    trimmedSamples,
+    leadingTrimMs: durationMsForSamples(start),
+    trailingTrimMs: durationMsForSamples(audio.length - end),
+    voicedFrames,
+    thresholdRms: STREAM_TRIM_RMS_THRESHOLD,
+    thresholdPeak: STREAM_TRIM_PEAK_THRESHOLD,
+  };
+}
+
 function createRoleModelState(
   role: WhisperModelRole,
   preset: WhisperModelPreset = "auto",
@@ -246,6 +351,7 @@ function App() {
   const voiceEngineWarmupRef = useRef(false);
   const aiEditingRef = useRef(false);
   const tonePresetRef = useRef<TonePreset>("none");
+  const transcriptionLanguageRef = useRef<string>("hi-en");
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
   const authInitRef = useRef(false);
@@ -638,6 +744,7 @@ function App() {
       dictWordsRef.current = savedDict;
       setLocalTranscripts(savedTranscripts);
       setTranscriptionLanguage(savedLanguage);
+      transcriptionLanguageRef.current = savedLanguage;
       setSelectedMicId(savedMicId);
       selectedMicIdRef.current = savedMicId;
       setAiImprovementEnabled(savedAiImprovement);
@@ -742,11 +849,53 @@ function App() {
     });
     const unlistenReg = listen("hotkey-registered", () => setHotkeyWarning(""));
 
+    // ── Edge-handle pill events ───────────────────────────────────────────
+    // Settings updates from the pill's popover — persist + sync state.
+    const unlistenPillSettings = listen<{
+      transform?: TonePreset;
+      language?: string;
+      autoApply?: boolean;
+    }>("pill-settings-update", (ev) => {
+      const p = ev.payload || {};
+      if (p.transform !== undefined) {
+        setTonePreset(p.transform);
+        tonePresetRef.current = p.transform;
+        void saveSetting("tonePreset", p.transform);
+      }
+      if (p.language !== undefined) {
+        setTranscriptionLanguage(p.language);
+        transcriptionLanguageRef.current = p.language;
+        void saveSetting("transcriptionLanguage", p.language);
+      }
+      if (p.autoApply !== undefined) {
+        setAutoPaste(p.autoApply);
+        autoPasteRef.current = p.autoApply;
+        void saveSetting("autoPaste", p.autoApply);
+      }
+    });
+
+    // Note button on the pill jumps to the Scribble tab.
+    const unlistenPillNote = listen("pill-open-scribble", () => {
+      setActiveTab("scribble");
+    });
+
+    // When the pill window has wired its listeners, push current settings.
+    const unlistenPillReady = listen("pill-ready", () => {
+      invoke("pill_push_settings", {
+        transform: tonePresetRef.current,
+        language: transcriptionLanguageRef.current,
+        autoApply: autoPasteRef.current,
+      }).catch(console.warn);
+    });
+
     return () => {
       unlistenStart.then((f) => f());
       unlistenStop.then((f) => f());
       unlistenErr.then((f) => f());
       unlistenReg.then((f) => f());
+      unlistenPillSettings.then((f) => f());
+      unlistenPillNote.then((f) => f());
+      unlistenPillReady.then((f) => f());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads settings, registers hotkey listeners; uses refs for mutable state
   }, []);
@@ -1179,6 +1328,8 @@ function App() {
     // Logs a single summary line at the end so we can spot which stage is slow.
     const tStart = performance.now();
     const timings: Record<string, number> = {};
+    const metrics: Record<string, string | number> = {};
+    let hadError = false;
 
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
@@ -1251,6 +1402,18 @@ function App() {
       return;
     }
 
+    const tTrim0 = performance.now();
+    const trimResult = trimStreamSilence(audioData);
+    audioData = trimResult.audio;
+    timings["audio-trim"] = Math.round(performance.now() - tTrim0);
+    metrics["audio-ms"] =
+      `${durationMsForSamples(trimResult.originalSamples)}->${durationMsForSamples(trimResult.trimmedSamples)}`;
+    metrics["trim-ms"] =
+      `${trimResult.leadingTrimMs}+${trimResult.trailingTrimMs}`;
+    metrics["voice-frames"] = trimResult.voicedFrames;
+    metrics["trim-threshold"] =
+      `${trimResult.thresholdRms.toFixed(3)}/${trimResult.thresholdPeak.toFixed(3)}`;
+
     const durationSec = (audioData.length / 16000).toFixed(1);
     setIsProcessing(true);
     setStatus(`Transcribing ${durationSec}s...`);
@@ -1261,9 +1424,13 @@ function App() {
       await ensureWhisperModelLoaded("dictation");
       timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
 
+      const tAudioArray0 = performance.now();
+      const audioDataForIpc = Array.from(audioData);
+      timings["audio-array"] = Math.round(performance.now() - tAudioArray0);
+
       const tWhisper0 = performance.now();
       const result = await invoke<Transcription>("transcribe_audio", {
-        audioData: Array.from(audioData),
+        audioData: audioDataForIpc,
         initialPrompt: buildInitialPrompt(
           transcriptionLanguage,
           dictWordsRef.current,
@@ -1397,14 +1564,29 @@ function App() {
         setStatus("Done! ✓");
       }
     } catch (e) {
+      hadError = true;
       setStatus(`❌ Error: ${e}`);
+      // Surface an error glyph on the pill briefly, then collapse to rest.
+      invoke("set_pill_phase", { phase: "error" }).catch(console.warn);
+      setTimeout(() => {
+        invoke("hide_recording_pill").catch(console.warn);
+      }, 1500);
     } finally {
       setIsProcessing(false);
-      // Hide the pill now that processing is complete
-      invoke("hide_recording_pill").catch(console.warn);
+      // Success path: show the "Inserted" toast for the design dwell, then
+      // collapse the pill back to its resting edge handle.
+      if (!hadError) {
+        invoke("set_pill_phase", { phase: "inserted" }).catch(console.warn);
+        setTimeout(() => {
+          invoke("hide_recording_pill").catch(console.warn);
+        }, 1500);
+      }
       const totalMs = Math.round(performance.now() - tStart);
-      const parts = Object.entries(timings)
-        .map(([k, v]) => `${k}=${v}ms`)
+      const timingParts = Object.entries(timings)
+        .map(([k, v]) => `${k}=${v}ms`);
+      const metricParts = Object.entries(metrics)
+        .map(([k, v]) => `${k}=${v}`);
+      const parts = [...timingParts, ...metricParts]
         .join(" ");
       console.info(`[stream-timing] total=${totalMs}ms ${parts}`);
     }
@@ -2338,7 +2520,13 @@ function App() {
                   transcriptionLanguage={transcriptionLanguage}
                   onLanguageChange={(lang) => {
                     setTranscriptionLanguage(lang);
+                    transcriptionLanguageRef.current = lang;
                     saveSetting("transcriptionLanguage", lang);
+                    invoke("pill_push_settings", {
+                      transform: tonePresetRef.current,
+                      language: lang,
+                      autoApply: autoPasteRef.current,
+                    }).catch(console.warn);
                   }}
                   selectedMicId={selectedMicId}
                   onMicChange={(id) => {
