@@ -184,6 +184,47 @@ Error messages defined in [`/lib/constants.ts`](file:///Users/souvik/Desktop/osc
 6. **Display**: User can view, edit, copy, or download
 7. **Feedback Collection**: User provides quality feedback on AI formatting
 
+## Desktop Stream (Dictation) Pill
+
+On desktop, the stream / dictation flow has its own dedicated entry point — the always-visible edge-handle pill — distinct from Scribble and Minutes recordings.
+
+**Entry points**:
+
+- **Edge handle (hover)**: a 72×5 px handle docked flush to the bottom of the primary monitor. Cursor enters the bottom 56 px hit zone → handle widens with a cyan glow → after a 180 ms hold the full Paper pill rises from the edge → click to start recording.
+- **Global hotkey `Ctrl+Space`** ([`packages/desktop/src-tauri/src/hotkey.rs`](./packages/desktop/src-tauri/src/hotkey.rs)): hold to record, release to stop. Captures frontmost-app context at press time.
+
+**Pipeline (different from the Scribble/Minutes path)**:
+
+```
+Pill click / Ctrl+Space
+  → capture frontmost app  (frontmost.rs)
+  → MediaRecorder (mp4 / webm, 100 ms chunks)
+  → whisper-rs transcription  (whisper.rs, local model)
+  → aiService.processText(text, "transcribe_cleanup")  — micro Gemini prompt
+  → paste_transcription  (clipboard + synthetic Cmd/Ctrl+V via paste.rs)
+  → pill shows "Inserted into document" toast (1500 ms)
+  → pill collapses back to the edge handle
+```
+
+The AI cleanup uses the `transcribe_cleanup` mode in [`packages/desktop/src/services/ai.service.ts`](./packages/desktop/src/services/ai.service.ts) — a smaller, faster prompt than the Scribble formatter because stream inserts go directly into the user's focused field. The Title Agent is **not** invoked for stream inserts (there is no scribble to title).
+
+**Pill state machine** (driven by `set_pill_phase` Tauri command + `pill-set-phase` event in [`packages/desktop/public/pill.html`](./packages/desktop/public/pill.html)):
+
+| Phase | Visual | Window height |
+|---|---|---|
+| `rest` | 72×5 handle flush at edge | 56 px |
+| `ready` | 96×6 handle, cyan-400 glow, "Click to dictate" hint | 56 px |
+| `expanded` | full Paper pill with idle dots | 200 px |
+| `recording` | 15-bar cyan waveform | 200 px |
+| `processing` | 13 pulsing dots (1.1 s stagger × 0.07 s) | 200 px |
+| `inserted` | cyan-500 "Inserted into document" toast (1500 ms dwell) | 200 px |
+| `error` | rose-700 triangle + "no input" (1500 ms) | 200 px |
+| `settings` | popover open above the pill | 380 px |
+
+The pill's settings popover (Polish / Prompt Engineer / Email Reply transforms, Language, Auto-apply) is wired to the same persisted settings the Settings tab writes (`tonePreset`, `transcriptionLanguage`, `autoPaste`). The pill emits `pill-settings-update` events; the host in [`packages/desktop/src/App.tsx`](./packages/desktop/src/App.tsx) listens and calls `saveSetting`.
+
+**Linux**: secondary webview windows crash tao's event loop, so the pill is not created. Recording state surfaces on the tray-icon tooltip instead (`crate::state::LINUX_TRAY`).
+
 ## AI Quality Feedback System
 
 ### Overview

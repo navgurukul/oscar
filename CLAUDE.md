@@ -23,7 +23,7 @@ oscar/
 └── CLAUDE.md       # This file
 ```
 
-**Version:** 0.3.23 | **Node:** v22 (`.nvmrc`) | **Package manager:** pnpm 9
+**Version:** 0.4.0 | **Node:** v22 (`.nvmrc`) | **Package manager:** pnpm 9
 
 ---
 
@@ -151,8 +151,19 @@ Rust backend + Vite/React frontend, shares UI components with web package.
 - System: WASAPI (Windows), global shortcuts, deep links, auto-updater
 - Tauri plugins: `global-shortcut`, `deep-link`, `updater`, `store`, `process`, `opener`
 
+**Stream / dictation pill (`recording-pill` window):**
+
+Always-visible edge-handle overlay docked flush to the bottom of the screen — the entry point for the desktop stream/dictation feature (not used for Scribbles or Minutes).
+
+- Rust window setup: [packages/desktop/src-tauri/src/pill.rs](./packages/desktop/src-tauri/src/pill.rs). Transparent, decoration-free `NSPanel` (macOS) / always-on-top floating window (Windows). 360px wide; height resizes between 56 px (rest), 200 px (expanded/recording/processing/inserted/error) and 380 px (settings open) so clicks pass through to apps below outside the active surface. macOS NSPanel level 1000 is re-applied after every resize so the pill stays above the Dock and fullscreen Spaces.
+- UI: [packages/desktop/public/pill.html](./packages/desktop/public/pill.html) — vanilla JS/CSS, Figtree font, Paper-pill tokens (white gradient, cyan-400 accent, cyan-500 toast). State machine: `rest → ready → expanded → recording → processing → inserted → rest` plus `error`.
+- Triggers: hover the bottom 56 px hit zone (180 ms hold → expand → click to record), or press the global hotkey `Ctrl+Space` (`hotkey.rs`). Both paths capture frontmost-app context so paste lands on the correct OS app.
+- Tauri commands: `show_recording_pill`, `hide_recording_pill`, `set_pill_phase`, `set_pill_listening`, `set_pill_processing`, `pill_push_settings`, `pill_request_record_start`, `pill_request_record_stop` (registered in [src-tauri/src/lib.rs](./packages/desktop/src-tauri/src/lib.rs)). Linux falls back to a tray-icon tooltip — secondary webview windows crash tao's event loop.
+- Settings popover (chevron button on the pill) wires Polish / Prompt Engineer / Email Reply / Auto-apply / Language to the same persisted settings the Settings tab uses (`tonePreset`, `transcriptionLanguage`, `autoPaste`). The pill emits `pill-settings-update` events; [packages/desktop/src/App.tsx](./packages/desktop/src/App.tsx) listens, updates state, and calls `saveSetting`. On startup the pill emits `pill-ready` and the host pushes current values back via `pill_push_settings`.
+- Inserted-toast dwell: 1500 ms after paste completes, then the pill collapses back to the handle. Errors during processing surface as the error glyph for 1500 ms before collapsing.
+
 **Build scripts:**
-- `pnpm dev` — Tauri + Vite dev (hot reload)
+- `pnpm dev` — Tauri + Vite dev (hot reload). Note: a dev binary is signed differently than the release; macOS Accessibility / Input Monitoring permissions must be granted to the dev binary separately before the global hotkey will fire.
 - `pnpm build` — Full production build (TypeScript → Vite → Rust → binary)
 - `pnpm tauri` — Direct Tauri CLI passthrough
 
@@ -203,7 +214,7 @@ Import: `import { Note } from '@oscar/shared/types'`
 - Semantic prefixes: `feat:`, `fix:`, `style:`, `refactor:`, `chore:`, `docs:`
 - Feature branches → PR → merge to main
 - Tag-based releases: `vMAJOR.MINOR.PATCH` triggers GitHub Actions release pipeline
-- Current working branch for AI: `claude/add-claude-documentation-1CYnF`
+- Active release branch: `release_Dev` (feature commits and `chore(release): vX.Y.Z` bumps land here; tags are cut from this branch)
 
 ### No Testing Framework
 
