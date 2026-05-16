@@ -68,6 +68,7 @@ pub(crate) fn create_pill_window(app: &tauri::AppHandle) {
     .position(pos_x, pos_y)
     .decorations(false)
     .transparent(true)
+    .shadow(false) // disable NSWindow shadow — we draw our own on the pill
     .resizable(false)
     .skip_taskbar(true)
     .focused(false)

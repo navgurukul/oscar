@@ -85,11 +85,15 @@
       transform: translateX(-50%) translateY(0);
     }
 
-    /* ─── Invisible hit zone along the bottom edge ─────────────────────── */
+    /* ─── Invisible hit zone ───────────────────────────────────────────────
+       At rest the window is only 56 px tall — the hit zone fills the whole
+       window. When expanded/recording/processing the window grows up to
+       200 px; the hit zone still fills the whole window so the cursor that
+       triggered the expand stays "inside" through the resize, preventing a
+       resize → cursor-out → collapse → resize loop (the flicker). */
     .hit-zone {
       position: absolute;
-      left: 0; right: 0; bottom: 0;
-      height: 56px;
+      inset: 0;
       pointer-events: auto;
       z-index: 5;
     }
@@ -630,6 +634,14 @@
     function applyPhase(next) {
       phase = next;
       document.body.setAttribute('data-phase', next);
+      // Any pending hover-driven transitions must not stomp an externally-set
+      // phase (e.g. Ctrl+Space → recording). Clear timers when entering any
+      // non-hover phase.
+      if (next !== 'ready') clearTimeout(readyHoldTimer);
+      if (next === 'recording' || next === 'processing' ||
+          next === 'inserted' || next === 'error') {
+        clearTimeout(leaveTimer);
+      }
       // Closing pill collapses settings too.
       if (next === 'rest' || next === 'ready' || next === 'inserted') {
         setSettingsOpen(false);
