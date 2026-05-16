@@ -137,3 +137,21 @@ export function toAbsoluteMeetingTranscriptSegments(
     })
     .filter((segment) => Boolean(segment.text));
 }
+
+export function toFallbackMeetingTranscriptSegment(
+  job: MeetingSegmentJob,
+  text: string,
+): MeetingTranscriptSegment | null {
+  const trimmedText = text.trim();
+  if (!trimmedText) return null;
+
+  const source = job.useSystemAudio ? "speaker" : "microphone";
+
+  return {
+    id: `seg-${job.segmentIndex}-0-${source}`,
+    speaker: { source },
+    text: trimmedText,
+    start_time: new Date(job.startedAtMs).toISOString(),
+    end_time: new Date(Math.max(job.endedAtMs, job.startedAtMs + 1)).toISOString(),
+  };
+}

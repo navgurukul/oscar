@@ -64,6 +64,7 @@ import {
   getTranscriptTailWords,
   mergeMeetingTranscriptSegments,
   toAbsoluteMeetingTranscriptSegments,
+  toFallbackMeetingTranscriptSegment,
 } from "./lib/transcript-utils";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
 import {
@@ -2001,12 +2002,31 @@ function App() {
           meetingTranscriptRef.current = nextTranscript;
           setMeetingTranscript(nextTranscript);
         } else if (result.text) {
-          const nextTranscript = appendTranscriptSegment(
-            meetingTranscriptRef.current,
+          const fallbackSegment = toFallbackMeetingTranscriptSegment(
+            job,
             result.text,
           );
-          meetingTranscriptRef.current = nextTranscript;
-          setMeetingTranscript(nextTranscript);
+
+          if (fallbackSegment) {
+            const mergedSegments = mergeMeetingTranscriptSegments(
+              meetingTranscriptSegmentsRef.current,
+              [fallbackSegment],
+            );
+            meetingTranscriptSegmentsRef.current = mergedSegments;
+            setMeetingTranscriptSegments(mergedSegments);
+
+            const nextTranscript =
+              buildTranscriptFromStructuredSegments(mergedSegments);
+            meetingTranscriptRef.current = nextTranscript;
+            setMeetingTranscript(nextTranscript);
+          } else {
+            const nextTranscript = appendTranscriptSegment(
+              meetingTranscriptRef.current,
+              result.text,
+            );
+            meetingTranscriptRef.current = nextTranscript;
+            setMeetingTranscript(nextTranscript);
+          }
         }
       } catch (e) {
         console.error("[meeting] segment transcription failed:", e);

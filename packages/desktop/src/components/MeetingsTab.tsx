@@ -247,6 +247,27 @@ function buildCalendarContext(
   };
 }
 
+function buildFallbackTranscriptSegments(
+  transcript: string,
+  startedAt: string,
+): MeetingTranscriptSegment[] {
+  const text = transcript.trim();
+  if (!text) return [];
+
+  const start = Date.parse(startedAt);
+  const startTime = Number.isFinite(start) ? start : Date.now();
+
+  return [
+    {
+      id: "seg-fallback-0-microphone",
+      speaker: { source: "microphone" },
+      text,
+      start_time: new Date(startTime).toISOString(),
+      end_time: new Date(Math.max(Date.now(), startTime + 1)).toISOString(),
+    },
+  ];
+}
+
 function getScribblesLoadingLabel(
   status: MinutesTranscriptionStatus,
   transcript: string,
@@ -589,6 +610,9 @@ export function MeetingsTab({
     return () => clearInterval(id);
   }, []);
 
+  const hasTranscriptInput =
+    transcriptSegments.length > 0 || transcript.trim().length > 0;
+
   const buildNoteRequest = useCallback((): EnhancedMeetingNoteRequest => {
     const title =
       meetingTitle.trim() ||
@@ -599,6 +623,10 @@ export function MeetingsTab({
       selectedCalendarEvent?.start_at ||
       meetingStartedAt ||
       new Date().toISOString();
+    const effectiveTranscriptSegments =
+      transcriptSegments.length > 0
+        ? transcriptSegments
+        : buildFallbackTranscriptSegments(transcript, startedAt);
 
     return {
       meeting_title: title,
@@ -607,7 +635,7 @@ export function MeetingsTab({
       attendees_full: attendees,
       calendar_context: buildCalendarContext(selectedCalendarEvent),
       my_notes_markdown: manualNotes.trim(),
-      transcript_segments: transcriptSegments,
+      transcript_segments: effectiveTranscriptSegments,
       meeting_type_hint: meetingTypeHint,
     };
   }, [
@@ -617,6 +645,7 @@ export function MeetingsTab({
     meetingTitle,
     meetingTypeHint,
     selectedCalendarEvent,
+    transcript,
     transcriptSegments,
   ]);
 
@@ -633,7 +662,10 @@ export function MeetingsTab({
           attendees_full: saved.attendeesFull,
           calendar_context: saved.calendarContext,
           my_notes_markdown: saved.myNotesMarkdown,
-          transcript_segments: saved.transcriptSegments,
+          transcript_segments:
+            saved.transcriptSegments.length > 0
+              ? saved.transcriptSegments
+              : buildFallbackTranscriptSegments(saved.transcript, saved.startedAt),
           meeting_type_hint: saved.meetingTypeHint,
         };
         const newMarkdown = await aiService.generateEnhancedMeetingNote(request);
@@ -655,7 +687,7 @@ export function MeetingsTab({
   );
 
   const processTranscript = useCallback(async () => {
-    if (!transcriptSegments.length && !manualNotes.trim()) return;
+    if (!hasTranscriptInput && !manualNotes.trim()) return;
 
     setStreaming(true);
     setResult("");
@@ -677,13 +709,13 @@ export function MeetingsTab({
     } finally {
       setStreaming(false);
     }
-  }, [buildNoteRequest, manualNotes, transcriptSegments.length]);
+  }, [buildNoteRequest, hasTranscriptInput, manualNotes]);
 
   useEffect(() => {
     if (
       phase === "processing" &&
       minutesTranscriptionStatus === "notes" &&
-      (transcriptSegments.length > 0 || manualNotes.trim())
+      (hasTranscriptInput || manualNotes.trim())
     ) {
       void processTranscript();
     }
@@ -692,6 +724,7 @@ export function MeetingsTab({
     minutesTranscriptionStatus,
     phase,
     processTranscript,
+    hasTranscriptInput,
     transcriptSegments.length,
   ]);
 
@@ -719,7 +752,7 @@ export function MeetingsTab({
       calendarContext: request.calendar_context,
       meetingTypeHint: request.meeting_type_hint,
       transcript,
-      transcriptSegments,
+      transcriptSegments: request.transcript_segments,
       myNotesMarkdown: request.my_notes_markdown,
       notesMarkdown: result,
       createdAt: now,

@@ -65,6 +65,8 @@ const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_MODEL = "gemini-2.5-flash-lite";
 const MAX_SEGMENT_BATCH_CHARS = 12_000;
 const MAX_SEGMENT_BATCH_SIZE = 80;
+const NO_USABLE_MEETING_NOTES_ERROR =
+  "NO_USABLE_MEETING_NOTES: model output contained no transcript-backed bullets.";
 
 const STOP_WORDS = new Set([
   "a",
@@ -496,7 +498,7 @@ function fallbackBulletForEmptySection(heading: string): string | null {
     return "No specific feedback captured.";
   }
 
-  return null;
+  return "None captured.";
 }
 
 function parseModelSections(markdown: string): ParsedSections {
@@ -714,6 +716,13 @@ async function generateFinalMarkdown(
     finalOutput = buildFinalMarkdown(request, expectedSections, firstPass);
   }
 
+  if (
+    request.transcript_segments.length > 0 &&
+    finalOutput.transcriptBulletCount === 0
+  ) {
+    throw new Error(NO_USABLE_MEETING_NOTES_ERROR);
+  }
+
   return finalOutput.markdown;
 }
 
@@ -854,10 +863,15 @@ Deno.serve(async (req: Request) => {
     );
   } catch (err) {
     console.error("[meeting-enhance] unhandled error:", err);
+    const message = (err as Error).message;
+    const noUsableNotes = message.startsWith("NO_USABLE_MEETING_NOTES");
+
     return new Response(
-      JSON.stringify({ error: `Internal error: ${(err as Error).message}` }),
+      JSON.stringify({
+        error: noUsableNotes ? message : `Internal error: ${message}`,
+      }),
       {
-        status: 500,
+        status: noUsableNotes ? 422 : 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );
