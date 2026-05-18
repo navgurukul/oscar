@@ -8,11 +8,10 @@ import {
 } from "@/lib/middleware/rate-limit";
 import {
   createPlainTextStreamResponse,
-  fetchGeminiGenerateContent,
   getGeminiApiKey,
   getOptionalTrimmedString,
   parseJsonBody,
-  pipeGeminiStreamToController,
+  startGeminiStream,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
 
@@ -29,66 +28,43 @@ function getSystemPrompt(mode: TransformMode) {
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
   }
 
   const clientId = getClientIdentifier(user.id, req);
-  const rateLimitResult = await applyRateLimit(
-    clientId,
-    "ai-transform",
-    RATE_LIMITS.AI_TRANSFORM
-  );
+  const rateLimitResult = await applyRateLimit(clientId, "ai-transform", RATE_LIMITS.AI_TRANSFORM);
   if (rateLimitResult) return rateLimitResult;
 
   let apiKey: string;
   try {
     apiKey = getGeminiApiKey();
   } catch {
-    return NextResponse.json(
-      { error: ERROR_MESSAGES.SERVER_MISSING_API_KEY },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 });
   }
 
-  const bodyResult = await parseJsonBody<{
-    text?: unknown;
-    mode?: unknown;
-    title?: unknown;
-  }>(req);
-  if (!bodyResult.success) {
-    return bodyResult.response;
-  }
+  const bodyResult = await parseJsonBody<{ text?: unknown; mode?: unknown; title?: unknown }>(req);
+  if (!bodyResult.success) return bodyResult.response;
 
-  const rawMode =
-    typeof bodyResult.data.mode === "string" ? bodyResult.data.mode.trim() : "";
+  const rawMode = typeof bodyResult.data.mode === "string" ? bodyResult.data.mode.trim() : "";
   if (!TRANSFORM_MODES.has(rawMode)) {
-    return NextResponse.json(
-      { error: "Invalid transform mode." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Invalid transform mode." }, { status: 400 });
   }
-
   const mode = rawMode as TransformMode;
 
   const inputResult = validateAndWrapInput(bodyResult.data.text, {
     requiredError: ERROR_MESSAGES.TEXT_REQUIRED,
     tagName: "content",
   });
-  if (!inputResult.success) {
-    return inputResult.response;
-  }
+  if (!inputResult.success) return inputResult.response;
 
   const sanitizedTitle = sanitizeUserInput(
     getOptionalTrimmedString(bodyResult.data.title) ?? ""
   );
 
   try {
-    const response = await fetchGeminiGenerateContent({
+    const pending = startGeminiStream({
       apiKey,
       messages: [
         {
@@ -107,27 +83,14 @@ export async function POST(req: NextRequest) {
       temperature: API_CONFIG.FORMAT_TEMPERATURE,
       topP: API_CONFIG.FORMAT_TOP_P,
       maxTokens: API_CONFIG.FORMAT_TRANSFORM_MAX_TOKENS,
-      stream: true,
       timeoutMs: REQUEST_TIMEOUT_MS,
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return NextResponse.json(
-        {
-          error: ERROR_MESSAGES.AI_API_ERROR,
-          details: errorText,
-          status: response.status,
-        },
-        { status: response.status }
-      );
-    }
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          await pipeGeminiStreamToController(response, controller, encoder);
+          await pending.pipe(controller, encoder);
         } finally {
           controller.close();
         }
@@ -138,10 +101,7 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const error = err as Error;
     return NextResponse.json(
-      {
-        error: ERROR_MESSAGES.AI_REQUEST_FAILED,
-        details: error?.message || String(err),
-      },
+      { error: ERROR_MESSAGES.AI_REQUEST_FAILED, details: error?.message || String(err) },
       { status: 500 }
     );
   }

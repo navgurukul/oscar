@@ -7,99 +7,58 @@ import {
   getClientIdentifier,
 } from "@/lib/middleware/rate-limit";
 import {
-  fetchGeminiGenerateContent,
+  generateText,
   getGeminiApiKey,
   parseJsonBody,
-  readGeminiTextResponse,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
 
-const REQUEST_TIMEOUT_MS = 12000; // title responses are tiny; fail fast
+const REQUEST_TIMEOUT_MS = 12000;
 
 export async function POST(req: NextRequest) {
-  // Check authentication
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
   }
 
-  // Apply rate limiting
   const clientId = getClientIdentifier(user.id, req);
-  const rateLimitResult = await applyRateLimit(
-    clientId,
-    "ai-title",
-    RATE_LIMITS.AI_TITLE
-  );
+  const rateLimitResult = await applyRateLimit(clientId, "ai-title", RATE_LIMITS.AI_TITLE);
   if (rateLimitResult) return rateLimitResult;
 
   let apiKey: string;
   try {
     apiKey = getGeminiApiKey();
   } catch {
-    return NextResponse.json(
-      { error: ERROR_MESSAGES.SERVER_MISSING_API_KEY },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 });
   }
 
   const bodyResult = await parseJsonBody<{ text?: unknown }>(req);
-  if (!bodyResult.success) {
-    return bodyResult.response;
-  }
+  if (!bodyResult.success) return bodyResult.response;
 
   const inputResult = validateAndWrapInput(bodyResult.data.text, {
     requiredError: ERROR_MESSAGES.TEXT_REQUIRED,
     tagName: "content",
   });
-  if (!inputResult.success) {
-    return inputResult.response;
-  }
+  if (!inputResult.success) return inputResult.response;
 
   try {
-    const response = await fetchGeminiGenerateContent({
+    const title = await generateText({
       apiKey,
       messages: [
-        {
-          role: "system",
-          content: SYSTEM_PROMPTS.TITLE,
-        },
-        {
-          role: "user",
-          content: `${USER_PROMPTS.TITLE_TEMPLATE}${inputResult.wrappedText}`,
-        },
+        { role: "system", content: SYSTEM_PROMPTS.TITLE },
+        { role: "user", content: `${USER_PROMPTS.TITLE_TEMPLATE}${inputResult.wrappedText}` },
       ],
       temperature: API_CONFIG.TITLE_TEMPERATURE,
       topP: API_CONFIG.TITLE_TOP_P,
       maxTokens: API_CONFIG.TITLE_MAX_TOKENS,
-      stream: false,
       timeoutMs: REQUEST_TIMEOUT_MS,
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return NextResponse.json(
-        {
-          error: ERROR_MESSAGES.AI_API_ERROR,
-          details: errorText,
-          status: response.status,
-        },
-        { status: response.status }
-      );
-    }
-
-    const title = await readGeminiTextResponse(response);
     return NextResponse.json({ title });
   } catch (err: unknown) {
     const error = err as Error;
     return NextResponse.json(
-      {
-        error: ERROR_MESSAGES.AI_REQUEST_FAILED,
-        details: error?.message || String(err),
-      },
+      { error: ERROR_MESSAGES.AI_REQUEST_FAILED, details: error?.message || String(err) },
       { status: 500 }
     );
   }
