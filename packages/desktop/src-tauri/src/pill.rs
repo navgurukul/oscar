@@ -24,7 +24,7 @@ fn normalize_phase(phase: &str) -> &'static str {
     match phase {
         "rest" => "rest",
         "ready" => "ready",
-        "expanded" => "expanded",
+        "expanded" => "ready",
         "recording" => "recording",
         "processing" => "processing",
         "inserted" => "inserted",
@@ -50,7 +50,7 @@ fn current_pill_phase() -> &'static str {
 }
 
 fn store_pill_phase(phase: &'static str) {
-    if phase == "settings" {
+    if matches!(phase, "ready" | "expanded" | "settings") {
         return;
     }
 
@@ -71,23 +71,19 @@ fn apply_phase_script<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, phase
 }
 
 fn sync_pill_phase(app: &tauri::AppHandle, phase: &'static str) {
-    let visual_phase = if phase == "settings" {
-        current_pill_phase()
-    } else {
-        store_pill_phase(phase);
-        phase
-    };
-
     create_pill_window(app);
 
     if let Some(w) = app.get_webview_window("recording-pill") {
         resize_pill(&w, phase_height(phase));
         let _ = w.show();
-        apply_phase_script(&w, visual_phase);
+        if phase != "settings" {
+            apply_phase_script(&w, phase);
+        }
     }
 
     if phase != "settings" {
-        OscarEvent::PillSetPhase(visual_phase.into()).dispatch(app);
+        store_pill_phase(phase);
+        OscarEvent::PillSetPhase(phase.into()).dispatch(app);
     }
 }
 

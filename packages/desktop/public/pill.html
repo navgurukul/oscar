@@ -110,7 +110,6 @@
       cursor: pointer;
       z-index: 7;
     }
-    body[data-phase="expanded"] .pill-wrap,
     body[data-phase="recording"] .pill-wrap,
     body[data-phase="processing"] .pill-wrap,
     body[data-phase="inserted"] .pill-wrap,
@@ -232,7 +231,6 @@
     /* Only show the active state body */
     .pill-body > [data-body] { display: none; }
     body[data-phase="idle"]      .pill-body [data-body="idle"],
-    body[data-phase="expanded"]  .pill-body [data-body="idle"]    { display: flex; }
     body[data-phase="recording"] .pill-body [data-body="recording"] { display: flex; }
     body[data-phase="processing"] .pill-body [data-body="processing"] { display: flex; }
     body[data-phase="inserted"]  .pill-body [data-body="idle"]    { display: flex; }
@@ -635,12 +633,13 @@
       switch (next) {
         case 'rest':
         case 'ready':
-        case 'expanded':
         case 'recording':
         case 'processing':
         case 'inserted':
         case 'error':
           return next;
+        case 'expanded':
+          return 'ready';
         default:
           return phase || 'rest';
       }
@@ -659,7 +658,7 @@
         clearTimeout(leaveTimer);
       }
       // Closing pill collapses settings too.
-      if (next === 'rest' || next === 'ready' || next === 'inserted') {
+      if (next !== 'expanded') {
         setSettingsOpen(false);
       }
     }
@@ -727,14 +726,11 @@
       if (phase === 'rest') {
         applyPhase('ready');
         callTauri('set_pill_phase', { phase: 'ready' });
-        // After a 180ms hold inside the zone, expand to full pill.
-        clearTimeout(readyHoldTimer);
-        readyHoldTimer = setTimeout(() => {
-          if (phase === 'ready') {
-            applyPhase('expanded');
-            callTauri('set_pill_phase', { phase: 'expanded' });
-          }
-        }, 180);
+      }
+    });
+    hitZone.addEventListener('click', () => {
+      if (phase === 'rest' || phase === 'ready') {
+        callTauri('pill_request_record_start');
       }
     });
     hitZone.addEventListener('mouseleave', () => {
