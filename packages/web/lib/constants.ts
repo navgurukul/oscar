@@ -25,7 +25,7 @@ export type { Currency } from "@oscar/shared/constants";
 export const API_CONFIG = {
   ..._API_CONFIG,
   TRANSFORM_ENDPOINT: "/api/ai/transform",
-  GEMINI_MODEL_FAST: "gemini-2.5-flash-lite",
+  GEMINI_MODEL_FAST: "gemini-2.5-flash",
   FORMAT_TOP_P: 1.0,
   FORMAT_EMAIL_MAX_TOKENS: 2048,
   FORMAT_TRANSFORM_MAX_TOKENS: 1536,
