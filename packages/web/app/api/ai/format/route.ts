@@ -12,17 +12,17 @@ import {
 } from "@/lib/middleware/rate-limit";
 import {
   createPlainTextStreamResponse,
-  fetchGroqChatCompletion,
-  getGroqApiKey,
+  fetchGeminiGenerateContent,
+  getGeminiApiKey,
   parseJsonBody,
-  pipeGroqStreamToController,
+  pipeGeminiStreamToController,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
 
 const REQUEST_TIMEOUT_MS = 12000;
 
 // Chunking thresholds for long transcripts.
-// Transcripts above LONG_TEXT_THRESHOLD characters are split so each Groq
+// Transcripts above LONG_TEXT_THRESHOLD characters are split so each AI
 // request stays within token limits and latency stays predictable.
 const LONG_TEXT_THRESHOLD = 2500; // chars — below this, send as one request
 const CHUNK_SIZE = 1600;          // chars per chunk when splitting by length
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   let apiKey: string;
   try {
-    apiKey = getGroqApiKey();
+    apiKey = getGeminiApiKey();
   } catch {
     return NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 });
   }
@@ -77,7 +77,8 @@ export async function POST(req: NextRequest) {
     const { data: vocabRaw } = await supabase
       .from("user_vocabulary")
       .select("term, pronunciation, context")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(500);
     const vocabList = Array.isArray(vocabRaw)
       ? vocabRaw.map((v) => ({
           term: v.term,
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest) {
 
     const chunkResponses: Promise<Response>[] = chunkRequests.map(
       ({ wrapped, maxToks }) =>
-        fetchGroqChatCompletion({
+        fetchGeminiGenerateContent({
           apiKey,
           messages: [
             {
@@ -139,7 +140,7 @@ export async function POST(req: NextRequest) {
               continue;
             }
 
-            await pipeGroqStreamToController(response, controller, encoder);
+            await pipeGeminiStreamToController(response, controller, encoder);
 
             if (i < chunkResponses.length - 1) {
               controller.enqueue(encoder.encode("\n\n"));
@@ -158,7 +159,7 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const error = err as Error;
     return NextResponse.json(
-      { error: ERROR_MESSAGES.GROQ_REQUEST_FAILED, details: error?.message || String(err) },
+      { error: ERROR_MESSAGES.AI_REQUEST_FAILED, details: error?.message || String(err) },
       { status: 500 }
     );
   }

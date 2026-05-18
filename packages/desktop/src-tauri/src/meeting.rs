@@ -12,20 +12,20 @@ use crate::whisper::{merge_transcription_results, transcribe_audio_inner};
 
 #[tauri::command]
 pub fn is_system_audio_supported() -> bool {
-    system_audio::is_supported()
+    system_audio::backend().is_supported()
 }
 
 #[tauri::command]
 pub fn start_system_audio_capture() -> Result<String, String> {
     log::info!("[system-audio] start_system_audio_capture called");
-    system_audio::start_capture()?;
+    system_audio::backend().start_capture()?;
     Ok("System audio capture started".to_string())
 }
 
 #[tauri::command]
 pub fn stop_system_audio_capture() -> Result<String, String> {
     log::info!("[system-audio] stop_system_audio_capture called");
-    system_audio::stop_capture();
+    system_audio::backend().stop_capture();
     Ok("System audio capture stopped".to_string())
 }
 
@@ -42,8 +42,9 @@ pub fn transcribe_meeting_audio(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
     // Stop system audio capture and retrieve buffered samples
-    system_audio::stop_capture();
-    let system_audio_data = system_audio::get_audio_data();
+    let backend = system_audio::backend();
+    backend.stop_capture();
+    let system_audio_data = backend.drain();
 
     log::info!(
         "[meeting] mic samples={}, system audio samples={}",
@@ -118,8 +119,9 @@ pub fn rotate_meeting_system_audio_segment(
     restart_capture: bool,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
-    system_audio::stop_capture();
-    let segment = system_audio::get_audio_data();
+    let backend = system_audio::backend();
+    backend.stop_capture();
+    let segment = backend.drain();
     let sample_count = segment.len();
 
     {
@@ -130,7 +132,7 @@ pub fn rotate_meeting_system_audio_segment(
     }
 
     if restart_capture {
-        system_audio::start_capture()?;
+        backend.start_capture()?;
     }
 
     Ok(format!(
@@ -235,10 +237,11 @@ pub fn transcribe_meeting_audio_b64(
     log::info!("[meeting_b64] decoded {} mic samples", mic_pcm.len());
 
     // Stop system audio capture and retrieve buffered samples
+    let backend = system_audio::backend();
     if use_system_audio {
-        system_audio::stop_capture();
+        backend.stop_capture();
     }
-    let system_audio_data = system_audio::get_audio_data();
+    let system_audio_data = backend.drain();
 
     let mut results = Vec::new();
 

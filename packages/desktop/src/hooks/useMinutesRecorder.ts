@@ -1,0 +1,655 @@
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
+import { invoke } from "@tauri-apps/api/core";
+import type { MinutesTranscriptionStatus } from "../components/MeetingsTab";
+import type { MeetingTranscriptSegment } from "../types/meeting.types";
+import type {
+  MeetingSegmentJob,
+  Transcription,
+  WhisperModelRole,
+} from "../lib/app-types";
+import {
+  MEETING_MIN_SEGMENT_DURATION_MS,
+  MEETING_MIN_SPEECH_MS,
+  MEETING_SEGMENT_DURATION_MS,
+  MEETING_SILENCE_ROTATE_AFTER_MS,
+  MEETING_VAD_PEAK_THRESHOLD,
+  MEETING_VAD_RMS_THRESHOLD,
+  MEETING_VAD_SAMPLE_RATE,
+} from "../lib/desktop-constants";
+import {
+  appendTranscriptSegment,
+  buildTranscriptFromStructuredSegments,
+  getTranscriptTailWords,
+  mergeMeetingTranscriptSegments,
+  toAbsoluteMeetingTranscriptSegments,
+  toFallbackMeetingTranscriptSegment,
+} from "../lib/transcript-utils";
+import { buildInitialPrompt, getWhisperLanguage } from "../lib/whisper";
+
+type AudioContextConstructor = new (
+  contextOptions?: AudioContextOptions,
+) => AudioContext;
+
+interface UseMinutesRecorderOptions {
+  canStartRecordingRef: MutableRefObject<() => boolean>;
+  ensureWhisperModelLoadedRef: MutableRefObject<
+    (role: WhisperModelRole) => Promise<unknown>
+  >;
+  warmVoiceEngineRef: MutableRefObject<() => Promise<void>>;
+  getAudioConstraintsRef: MutableRefObject<
+    () => MediaTrackConstraints | boolean
+  >;
+  warmStreamRef: MutableRefObject<MediaStream | null>;
+  dictWordsRef: MutableRefObject<string[]>;
+  transcriptionLanguageRef: MutableRefObject<string>;
+  systemAudioEnabled: boolean;
+  systemAudioSupported: boolean;
+}
+
+export function useMinutesRecorder({
+  canStartRecordingRef,
+  ensureWhisperModelLoadedRef,
+  warmVoiceEngineRef,
+  getAudioConstraintsRef,
+  warmStreamRef,
+  dictWordsRef,
+  transcriptionLanguageRef,
+  systemAudioEnabled,
+  systemAudioSupported,
+}: UseMinutesRecorderOptions) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [transcript, setTranscript] = useState("");
+  const [transcriptSegments, setTranscriptSegments] = useState<
+    MeetingTranscriptSegment[]
+  >([]);
+  const [startedAt, setStartedAt] = useState("");
+  const [transcriptionStatus, setTranscriptionStatus] =
+    useState<MinutesTranscriptionStatus>("idle");
+  const [segmentQueue, setSegmentQueue] = useState(0);
+  const [segmentsCompleted, setSegmentsCompleted] = useState(0);
+  const [segmentsTotal, setSegmentsTotal] = useState(0);
+  const [systemAudioWarning, setSystemAudioWarning] = useState("");
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const isRecordingRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const segmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const segmentStopRef =
+    useRef<((mode?: "rotate" | "final") => void) | null>(null);
+  const sessionIdRef = useRef(0);
+  const stopRequestedRef = useRef(false);
+  const nextSegmentIndexRef = useRef(0);
+  const segmentQueueRef = useRef<MeetingSegmentJob[]>([]);
+  const segmentWorkerRunningRef = useRef(false);
+  const transcriptRef = useRef("");
+  const transcriptSegmentsRef = useRef<MeetingTranscriptSegment[]>([]);
+  const startedAtRef = useRef("");
+  const sessionUsesSystemAudioRef = useRef(false);
+  const systemAudioActiveRef = useRef(false);
+
+  const vadAudioContextRef = useRef<AudioContext | null>(null);
+  const vadSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const vadProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const vadGainRef = useRef<GainNode | null>(null);
+  const segmentStartedAtMsRef = useRef(0);
+  const segmentSpeechMsRef = useRef(0);
+  const segmentTrailingSilenceMsRef = useRef(0);
+  const segmentLastVadAtRef = useRef(0);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  const stopVadMonitor = useCallback(() => {
+    vadProcessorRef.current?.disconnect();
+    vadSourceRef.current?.disconnect();
+    vadGainRef.current?.disconnect();
+    const audioContext = vadAudioContextRef.current;
+    vadProcessorRef.current = null;
+    vadSourceRef.current = null;
+    vadGainRef.current = null;
+    vadAudioContextRef.current = null;
+    segmentSpeechMsRef.current = 0;
+    segmentTrailingSilenceMsRef.current = 0;
+    segmentLastVadAtRef.current = 0;
+
+    if (audioContext && audioContext.state !== "closed") {
+      void audioContext.close().catch((err) => {
+        console.warn("[meeting-vad] failed to close audio context:", err);
+      });
+    }
+  }, []);
+
+  const resetSegmentVadState = (startedAtMs: number) => {
+    segmentStartedAtMsRef.current = startedAtMs;
+    segmentSpeechMsRef.current = 0;
+    segmentTrailingSilenceMsRef.current = 0;
+    segmentLastVadAtRef.current = performance.now();
+  };
+
+  const maybeRotateForSpeechBoundary = useCallback(() => {
+    const stopSegment = segmentStopRef.current;
+    if (!stopSegment || stopRequestedRef.current) return;
+
+    const segmentAgeMs = Date.now() - segmentStartedAtMsRef.current;
+    if (segmentAgeMs < MEETING_MIN_SEGMENT_DURATION_MS) return;
+    if (segmentSpeechMsRef.current < MEETING_MIN_SPEECH_MS) return;
+    if (
+      segmentTrailingSilenceMsRef.current < MEETING_SILENCE_ROTATE_AFTER_MS
+    ) {
+      return;
+    }
+
+    stopSegment("rotate");
+  }, []);
+
+  const startVadMonitor = useCallback(
+    (stream: MediaStream) => {
+      stopVadMonitor();
+
+      try {
+        const AudioContextCtor =
+          window.AudioContext ??
+          (window as Window & { webkitAudioContext?: AudioContextConstructor })
+            .webkitAudioContext;
+
+        if (!AudioContextCtor) return;
+
+        const audioContext = new AudioContextCtor({
+          sampleRate: MEETING_VAD_SAMPLE_RATE,
+        });
+        if (audioContext.state === "suspended") {
+          void audioContext.resume().catch((err) => {
+            console.warn("[meeting-vad] failed to resume audio context:", err);
+          });
+        }
+        const source = audioContext.createMediaStreamSource(stream);
+        const processor = audioContext.createScriptProcessor(2048, 1, 1);
+        const gain = audioContext.createGain();
+        gain.gain.value = 0;
+        segmentLastVadAtRef.current = performance.now();
+
+        processor.onaudioprocess = (event) => {
+          const input = event.inputBuffer.getChannelData(0);
+          if (input.length === 0) return;
+
+          let sumSq = 0;
+          let peak = 0;
+          for (let i = 0; i < input.length; i += 1) {
+            const sample = input[i];
+            sumSq += sample * sample;
+            const abs = sample < 0 ? -sample : sample;
+            if (abs > peak) peak = abs;
+          }
+
+          const rms = Math.sqrt(sumSq / input.length);
+          const now = performance.now();
+          const elapsedMs = Math.max(0, now - segmentLastVadAtRef.current);
+          segmentLastVadAtRef.current = now;
+
+          if (
+            rms >= MEETING_VAD_RMS_THRESHOLD ||
+            peak >= MEETING_VAD_PEAK_THRESHOLD
+          ) {
+            segmentSpeechMsRef.current += elapsedMs;
+            segmentTrailingSilenceMsRef.current = 0;
+          } else {
+            segmentTrailingSilenceMsRef.current += elapsedMs;
+          }
+
+          maybeRotateForSpeechBoundary();
+        };
+
+        source.connect(processor);
+        processor.connect(gain);
+        gain.connect(audioContext.destination);
+
+        vadAudioContextRef.current = audioContext;
+        vadSourceRef.current = source;
+        vadProcessorRef.current = processor;
+        vadGainRef.current = gain;
+      } catch (err) {
+        console.warn("[meeting-vad] failed to start monitor:", err);
+        stopVadMonitor();
+      }
+    },
+    [maybeRotateForSpeechBoundary, stopVadMonitor],
+  );
+
+  const resetPipelineState = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (segmentTimerRef.current) {
+      clearTimeout(segmentTimerRef.current);
+      segmentTimerRef.current = null;
+    }
+    stopVadMonitor();
+    segmentQueueRef.current = [];
+    segmentWorkerRunningRef.current = false;
+    transcriptRef.current = "";
+    transcriptSegmentsRef.current = [];
+    startedAtRef.current = "";
+    nextSegmentIndexRef.current = 0;
+    stopRequestedRef.current = false;
+    segmentStopRef.current = null;
+    sessionUsesSystemAudioRef.current = false;
+    systemAudioActiveRef.current = false;
+    mediaRecorderRef.current = null;
+    setTranscript("");
+    setTranscriptSegments([]);
+    setStartedAt("");
+    setRecordingTime(0);
+    setSegmentQueue(0);
+    setSegmentsCompleted(0);
+    setSegmentsTotal(0);
+    setTranscriptionStatus("idle");
+  }, [stopVadMonitor]);
+
+  const maybeCompleteFinalization = () => {
+    if (!stopRequestedRef.current) return;
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state === "recording"
+    ) {
+      return;
+    }
+    if (segmentQueueRef.current.length > 0) return;
+    if (segmentWorkerRunningRef.current) return;
+
+    systemAudioActiveRef.current = false;
+    setSegmentQueue(0);
+    setTranscriptionStatus("notes");
+  };
+
+  const processSegmentQueue = async () => {
+    if (segmentWorkerRunningRef.current) return;
+    segmentWorkerRunningRef.current = true;
+
+    while (segmentQueueRef.current.length > 0) {
+      const job = segmentQueueRef.current.shift();
+      if (!job) break;
+
+      setSegmentQueue(segmentQueueRef.current.length);
+      if (!stopRequestedRef.current) {
+        setTranscriptionStatus("transcribing");
+      }
+
+      try {
+        const bytes = Array.from(new Uint8Array(await job.blob.arrayBuffer()));
+        const result = await invoke<Transcription>(
+          "transcribe_meeting_segment_bytes",
+          {
+            bytes,
+            ext: job.ext,
+            useSystemAudio: job.useSystemAudio,
+            initialPrompt: buildInitialPrompt(
+              transcriptionLanguageRef.current,
+              dictWordsRef.current,
+            ),
+            language: getWhisperLanguage(
+              transcriptionLanguageRef.current,
+              "minutes",
+            ),
+            segmentIndex: job.segmentIndex,
+            previousTailText: getTranscriptTailWords(transcriptRef.current, 30),
+          },
+        );
+
+        if (result.segments && result.segments.length > 0) {
+          const absoluteSegments = toAbsoluteMeetingTranscriptSegments(
+            job,
+            result.segments,
+          );
+          const mergedSegments = mergeMeetingTranscriptSegments(
+            transcriptSegmentsRef.current,
+            absoluteSegments,
+          );
+          transcriptSegmentsRef.current = mergedSegments;
+          setTranscriptSegments(mergedSegments);
+
+          const nextTranscript =
+            buildTranscriptFromStructuredSegments(mergedSegments);
+          transcriptRef.current = nextTranscript;
+          setTranscript(nextTranscript);
+        } else if (result.text) {
+          const fallbackSegment = toFallbackMeetingTranscriptSegment(
+            job,
+            result.text,
+          );
+
+          if (fallbackSegment) {
+            const mergedSegments = mergeMeetingTranscriptSegments(
+              transcriptSegmentsRef.current,
+              [fallbackSegment],
+            );
+            transcriptSegmentsRef.current = mergedSegments;
+            setTranscriptSegments(mergedSegments);
+
+            const nextTranscript =
+              buildTranscriptFromStructuredSegments(mergedSegments);
+            transcriptRef.current = nextTranscript;
+            setTranscript(nextTranscript);
+          } else {
+            const nextTranscript = appendTranscriptSegment(
+              transcriptRef.current,
+              result.text,
+            );
+            transcriptRef.current = nextTranscript;
+            setTranscript(nextTranscript);
+          }
+        }
+      } catch (err) {
+        console.error("[meeting] segment transcription failed:", err);
+      } finally {
+        setSegmentsCompleted((prev) => prev + 1);
+      }
+    }
+
+    segmentWorkerRunningRef.current = false;
+
+    if (stopRequestedRef.current) {
+      maybeCompleteFinalization();
+      return;
+    }
+
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state === "recording"
+    ) {
+      setTranscriptionStatus("recording");
+    } else {
+      setTranscriptionStatus("idle");
+    }
+  };
+
+  const queueSegment = (job: MeetingSegmentJob) => {
+    segmentQueueRef.current.push(job);
+    setSegmentQueue(segmentQueueRef.current.length);
+    setSegmentsTotal((prev) => prev + 1);
+    if (!stopRequestedRef.current) {
+      setTranscriptionStatus("transcribing");
+    }
+    void processSegmentQueue();
+  };
+
+  const startSegmentRecorder = (sessionId: number) => {
+    const stream = warmStreamRef.current;
+    if (!stream) return;
+
+    const useMp4 = MediaRecorder.isTypeSupported("audio/mp4");
+    const mimeType = useMp4 ? "audio/mp4" : "audio/webm";
+    const ext = useMp4 ? "mp4" : "webm";
+    const segmentIndex = nextSegmentIndexRef.current;
+    const segmentUsesSystemAudio = sessionUsesSystemAudioRef.current;
+    nextSegmentIndexRef.current += 1;
+    const segmentStartedAtMs = Date.now();
+    resetSegmentVadState(segmentStartedAtMs);
+
+    if (segmentIndex === 0) {
+      const nextStartedAt = new Date(segmentStartedAtMs).toISOString();
+      startedAtRef.current = nextStartedAt;
+      setStartedAt(nextStartedAt);
+    }
+
+    const chunks: Blob[] = [];
+    let stopMode: "rotate" | "final" | null = null;
+    let rotationPromise: Promise<void> = Promise.resolve();
+    let segmentEndedAtMs = segmentStartedAtMs;
+    let segmentSpeechMs = 0;
+    let segmentHasDetectedSpeech = false;
+
+    const mediaRecorder = new MediaRecorder(stream, { mimeType });
+    mediaRecorderRef.current = mediaRecorder;
+    segmentStopRef.current = (mode = "final") => {
+      if (mediaRecorder.state !== "recording") return;
+      if (segmentTimerRef.current) {
+        clearTimeout(segmentTimerRef.current);
+        segmentTimerRef.current = null;
+      }
+
+      stopMode = mode;
+      segmentEndedAtMs = Date.now();
+      segmentSpeechMs = Math.round(segmentSpeechMsRef.current);
+      segmentHasDetectedSpeech = segmentSpeechMs >= MEETING_MIN_SPEECH_MS;
+      rotationPromise = segmentUsesSystemAudio
+        ? invoke("rotate_meeting_system_audio_segment", {
+            segmentIndex,
+            restartCapture: mode === "rotate",
+          })
+            .then(() => undefined)
+            .catch((err) => {
+              console.warn(
+                "[meeting] system audio segment rotation failed:",
+                err,
+              );
+              sessionUsesSystemAudioRef.current = false;
+              systemAudioActiveRef.current = false;
+            })
+        : Promise.resolve();
+
+      mediaRecorder.stop();
+    };
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      window.setTimeout(async () => {
+        await rotationPromise;
+
+        const shouldContinue =
+          stopMode === "rotate" &&
+          !stopRequestedRef.current &&
+          sessionIdRef.current === sessionId;
+
+        if (shouldContinue) {
+          startSegmentRecorder(sessionId);
+        }
+
+        if (mediaRecorderRef.current === mediaRecorder) {
+          mediaRecorderRef.current = null;
+        }
+        if (segmentStopRef.current && stopMode === "final") {
+          segmentStopRef.current = null;
+        }
+
+        const audioBlob = new Blob(chunks, { type: mimeType });
+        const shouldQueue =
+          audioBlob.size >= 500 &&
+          (segmentUsesSystemAudio || segmentHasDetectedSpeech);
+
+        if (shouldQueue) {
+          queueSegment({
+            blob: audioBlob,
+            ext,
+            segmentIndex,
+            useSystemAudio: segmentUsesSystemAudio,
+            startedAtMs: segmentStartedAtMs,
+            endedAtMs: Math.max(segmentEndedAtMs, segmentStartedAtMs + 1),
+            speechMs: segmentSpeechMs,
+            hasDetectedSpeech: segmentHasDetectedSpeech,
+          });
+        } else if (audioBlob.size >= 500) {
+          console.info("[meeting-vad] skipped silent mic segment", {
+            segmentIndex,
+            speechMs: segmentSpeechMs,
+          });
+        }
+
+        maybeCompleteFinalization();
+      }, 0);
+    };
+
+    mediaRecorder.start();
+    setTranscriptionStatus("recording");
+    segmentTimerRef.current = setTimeout(() => {
+      if (sessionIdRef.current !== sessionId || stopRequestedRef.current) {
+        return;
+      }
+      segmentStopRef.current?.("rotate");
+    }, MEETING_SEGMENT_DURATION_MS);
+  };
+
+  const startRecording = async () => {
+    if (!canStartRecordingRef.current()) return;
+
+    setSystemAudioWarning("");
+    resetPipelineState();
+
+    try {
+      await ensureWhisperModelLoadedRef.current("minutes");
+      await warmVoiceEngineRef.current();
+    } catch (err) {
+      console.error("[meeting-record] failed to prepare Whisper model:", err);
+      return;
+    }
+
+    let stream: MediaStream;
+    if (
+      warmStreamRef.current &&
+      warmStreamRef.current.getAudioTracks().some((t) => t.readyState === "live")
+    ) {
+      stream = warmStreamRef.current;
+    } else {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: getAudioConstraintsRef.current(),
+        });
+        warmStreamRef.current = stream;
+      } catch (err) {
+        console.error("[meeting-record] getUserMedia failed:", err);
+        return;
+      }
+    }
+
+    sessionIdRef.current += 1;
+    const sessionId = sessionIdRef.current;
+    stopRequestedRef.current = false;
+    transcriptRef.current = "";
+    await invoke("clear_meeting_segment_buffers").catch((err) => {
+      console.warn("[meeting-record] failed to clear segment buffers:", err);
+    });
+
+    if (systemAudioEnabled && systemAudioSupported) {
+      try {
+        await invoke("start_system_audio_capture");
+        systemAudioActiveRef.current = true;
+        sessionUsesSystemAudioRef.current = true;
+        setSystemAudioWarning("");
+        console.log("[meeting-record] System audio capture started");
+      } catch (err) {
+        console.warn(
+          "[meeting-record] System audio capture failed, mic only:",
+          err,
+        );
+        systemAudioActiveRef.current = false;
+        sessionUsesSystemAudioRef.current = false;
+        const reason = String(err).replace(/^Error:\s*/i, "");
+        setSystemAudioWarning(
+          `${reason} Meeting recording will continue with your microphone only.`,
+        );
+      }
+    } else {
+      systemAudioActiveRef.current = false;
+      sessionUsesSystemAudioRef.current = false;
+      setSystemAudioWarning("");
+    }
+
+    startVadMonitor(stream);
+    isRecordingRef.current = true;
+    setIsRecording(true);
+    setRecordingTime(0);
+    setTranscript("");
+    setTranscriptionStatus("recording");
+    timerRef.current = setInterval(() => {
+      setRecordingTime((prev) => prev + 1);
+    }, 1000);
+    startSegmentRecorder(sessionId);
+  };
+
+  const stopRecording = () => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    stopRequestedRef.current = true;
+    setTranscriptionStatus("finalizing");
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (segmentTimerRef.current) {
+      clearTimeout(segmentTimerRef.current);
+      segmentTimerRef.current = null;
+    }
+
+    if (segmentStopRef.current) {
+      segmentStopRef.current("final");
+      stopVadMonitor();
+      return;
+    }
+
+    stopVadMonitor();
+    if (systemAudioActiveRef.current) {
+      void invoke("stop_system_audio_capture").catch((err) => {
+        console.warn("[meeting] failed to stop system audio capture:", err);
+      });
+      systemAudioActiveRef.current = false;
+    }
+    maybeCompleteFinalization();
+  };
+
+  const clearTranscript = () => {
+    transcriptRef.current = "";
+    transcriptSegmentsRef.current = [];
+    startedAtRef.current = "";
+    setTranscript("");
+    setTranscriptSegments([]);
+    setStartedAt("");
+    setSegmentQueue(0);
+    setSegmentsCompleted(0);
+    setSegmentsTotal(0);
+    setTranscriptionStatus("idle");
+  };
+
+  const clearSystemAudioWarning = () => {
+    setSystemAudioWarning("");
+  };
+
+  useEffect(() => {
+    return () => {
+      stopVadMonitor();
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (segmentTimerRef.current) clearTimeout(segmentTimerRef.current);
+    };
+  }, [stopVadMonitor]);
+
+  return {
+    isRecording,
+    isRecordingRef,
+    recordingTime,
+    transcript,
+    transcriptSegments,
+    startedAt,
+    transcriptionStatus,
+    segmentQueue,
+    segmentsCompleted,
+    segmentsTotal,
+    systemAudioWarning,
+    clearSystemAudioWarning,
+    startRecording,
+    stopRecording,
+    clearTranscript,
+  };
+}

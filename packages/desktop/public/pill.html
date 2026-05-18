@@ -2,118 +2,881 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=48, height=32">
-  <title>Recording</title>
+  <title>Murmur — dictation pill</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    /* ─── Reset & root ─────────────────────────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      width: 48px;
-      height: 32px;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
       background: transparent;
+      font-family: "Figtree", system-ui, -apple-system, sans-serif;
+      color: #0f172a;
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: default;
+    }
+
+    /* The stage fills the window; pill sits flush at the bottom. */
+    .stage {
+      position: absolute; inset: 0;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    /* ─── Handle (rest / ready) ────────────────────────────────────────── */
+    .handle {
+      position: absolute;
+      left: 50%; bottom: 0;
+      transform: translateX(-50%);
+      width: 72px; height: 5px;
+      background: #ffffff;
+      background-image: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-bottom: none;
+      border-radius: 999px 999px 0 0;
+      box-shadow: 0 -1px 6px rgba(0, 0, 0, 0.35);
+      transition:
+        width .2s cubic-bezier(.2,.7,.3,1),
+        height .2s,
+        box-shadow .2s,
+        opacity .15s;
+      opacity: 1;
+      pointer-events: none;
+      z-index: 6;
+    }
+    body[data-phase="ready"] .handle {
+      width: 96px; height: 6px;
+      box-shadow:
+        0 -2px 12px rgba(34, 211, 238, 0.35),
+        0 -1px 4px rgba(0, 0, 0, 0.4);
+    }
+    body[data-phase="expanded"] .handle,
+    body[data-phase="recording"] .handle,
+    body[data-phase="processing"] .handle,
+    body[data-phase="inserted"] .handle,
+    body[data-phase="error"] .handle {
+      opacity: 0;
+    }
+
+    /* "Click to dictate" hint above ready handle */
+    .ready-hint {
+      position: absolute;
+      left: 50%; bottom: 14px;
+      transform: translateX(-50%) translateY(4px);
+      opacity: 0;
+      transition: opacity .15s, transform .15s;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: #22d3ee;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 6;
+    }
+    body[data-phase="ready"] .ready-hint {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ─── Invisible hit zone ───────────────────────────────────────────────
+       At rest the window is only 56 px tall — the hit zone fills the whole
+       window. When expanded/recording/processing the window grows up to
+       200 px; the hit zone still fills the whole window so the cursor that
+       triggered the expand stays "inside" through the resize, preventing a
+       resize → cursor-out → collapse → resize loop (the flicker). */
+    .hit-zone {
+      position: absolute;
+      inset: 0;
+      pointer-events: auto;
+      z-index: 5;
+    }
+
+    /* ─── Full Paper pill (expanded states) ────────────────────────────── */
+    .pill-wrap {
+      position: absolute;
+      left: 50%; bottom: 22px;
+      transform: translateX(-50%) translateY(28px) scale(0.7);
+      transform-origin: center bottom;
+      opacity: 0;
+      transition: opacity .22s, transform .26s cubic-bezier(.2,.8,.25,1);
+      pointer-events: none;
+      cursor: pointer;
+      z-index: 7;
+    }
+    body[data-phase="expanded"] .pill-wrap,
+    body[data-phase="recording"] .pill-wrap,
+    body[data-phase="processing"] .pill-wrap,
+    body[data-phase="inserted"] .pill-wrap,
+    body[data-phase="error"] .pill-wrap {
+      transform: translateX(-50%) translateY(0) scale(1);
+      opacity: 1;
+      pointer-events: auto;
     }
 
     .pill {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      justify-content: center;
-      width: 48px;
-      height: 32px;
-      background: rgba(15, 23, 42, 0.85);
-      border-radius: 16px;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255,255,255,0.08);
-      backdrop-filter: blur(16px) saturate(180%);
-      -webkit-backdrop-filter: blur(16px) saturate(180%);
+      gap: 0;
+      padding: 0 6px 0 18px;
+      height: 44px;
+      border-radius: 999px;
+      background: #ffffff;
+      background-image: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow:
+        0 16px 40px rgba(2, 6, 23, 0.55),
+        0 2px 8px rgba(2, 6, 23, 0.35),
+        inset 0 1px 0 #ffffff;
+      color: #0f172a;
     }
 
-    /* ── LISTENING STATE: waveform bars + red pulse ring ─── */
-    .listening-state {
+    .pill-body {
+      display: flex;
+      align-items: center;
+      min-width: 110px;
+      padding-right: 10px;
+      height: 22px;
+    }
+
+    .pill-divider {
+      width: 1px; height: 22px;
+      background: rgba(15, 23, 42, 0.08);
+    }
+
+    .pill-actions {
       display: flex;
       align-items: center;
       gap: 2px;
-      height: 16px;
+      padding: 0 2px 0 6px;
     }
 
-    .bar {
-      width: 2px;
-      background: linear-gradient(180deg, #f8fafc 0%, #94a3b8 100%);
-      border-radius: 1px;
-      animation: wave 1s ease-in-out infinite;
-    }
-
-    .bar:nth-child(1)  { height: 6px;  animation-delay: 0s; }
-    .bar:nth-child(2)  { height: 10px; animation-delay: 0.08s; }
-    .bar:nth-child(3)  { height: 14px; animation-delay: 0.16s; }
-    .bar:nth-child(4)  { height: 8px;  animation-delay: 0.24s; }
-    .bar:nth-child(5)  { height: 12px; animation-delay: 0.32s; }
-
-    @keyframes wave {
-      0%, 100% { transform: scaleY(1); opacity: 0.7; }
-      50%      { transform: scaleY(0.4); opacity: 1; }
-    }
-
-    /* ── PROCESSING STATE: refined spinner ──────────────── */
-    .processing-state {
-      display: none;
+    .pill-btn {
+      width: 28px; height: 28px;
+      border-radius: 999px;
+      border: none;
+      background: transparent;
+      color: #0f172a;
+      cursor: pointer;
+      display: flex;
       align-items: center;
       justify-content: center;
-      width: 18px;
-      height: 18px;
+      padding: 0;
+      transition: background .15s;
+    }
+    .pill-btn:hover { background: rgba(15, 23, 42, 0.05); }
+    .pill-btn.active { background: rgba(15, 23, 42, 0.05); }
+
+    /* ─── State bodies ─────────────────────────────────────────────────── */
+    /* Idle: 13 small dots */
+    .idle-dots, .loading-dots {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      height: 22px;
+    }
+    .idle-dots .dot, .loading-dots .dot {
+      width: 2.5px; height: 2.5px;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1px;
+    }
+    .loading-dots .dot {
+      background: #0f172a;
+      animation: mm-pulse 1.1s ease-in-out infinite;
+    }
+    @keyframes mm-pulse {
+      0%, 100% { opacity: .25; transform: scale(.8); }
+      50%      { opacity: 1;   transform: scale(1.4); }
     }
 
-    .spinner {
-      width: 14px;
-      height: 14px;
-      border: 1.5px solid rgba(248, 250, 252, 0.15);
-      border-top-color: #22d3ee;
-      border-radius: 50%;
-      animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    /* Recording waveform (15 bars, cyan-500 accent) */
+    .waveform {
+      display: flex;
+      align-items: center;
+      gap: 2.5px;
+      height: 22px;
+    }
+    .waveform .bar {
+      width: 2.5px;
+      background: #06b6d4;
+      border-radius: 2px;
+      transform-origin: center;
+      animation: mm-wave 0.9s ease-in-out infinite alternate;
+    }
+    @keyframes mm-wave {
+      0%   { transform: scaleY(0.35); }
+      100% { transform: scaleY(1); }
     }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
+    /* Error glyph */
+    .error-body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 22px;
+      color: #be123c;
+    }
+    .error-body span {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: .02em;
     }
 
-    /* State toggling */
-    body.processing .listening-state { display: none; }
-    body.processing .processing-state { display: flex; }
+    /* Only show the active state body */
+    .pill-body > [data-body] { display: none; }
+    body[data-phase="idle"]      .pill-body [data-body="idle"],
+    body[data-phase="expanded"]  .pill-body [data-body="idle"]    { display: flex; }
+    body[data-phase="recording"] .pill-body [data-body="recording"] { display: flex; }
+    body[data-phase="processing"] .pill-body [data-body="processing"] { display: flex; }
+    body[data-phase="inserted"]  .pill-body [data-body="idle"]    { display: flex; }
+    body[data-phase="error"]     .pill-body [data-body="error"]   { display: flex; }
+
+    /* ─── Inserted toast ───────────────────────────────────────────────── */
+    .toast {
+      position: absolute;
+      left: 50%; bottom: 82px;
+      transform: translateX(-50%) translateY(8px);
+      opacity: 0;
+      transition: opacity .2s, transform .2s;
+      background: #06b6d4;
+      color: #022c33;
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .02em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 8px 24px rgba(8, 145, 178, 0.4);
+      pointer-events: none;
+      z-index: 8;
+    }
+    body[data-phase="inserted"] .toast {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ─── Keyboard hint ────────────────────────────────────────────────── */
+    .kbd-hint {
+      position: absolute;
+      left: 50%; bottom: 76px;
+      transform: translateX(-50%) translateY(4px);
+      opacity: 0;
+      transition: opacity .18s, transform .18s;
+      background: #ffffff;
+      background-image: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 8px;
+      padding: 6px 10px;
+      box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #0f172a;
+      pointer-events: none;
+      z-index: 8;
+    }
+    .kbd-hint .label { color: rgba(15, 23, 42, 0.5); }
+    .kbd-hint kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(15, 23, 42, 0.05);
+      color: #0f172a;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      min-width: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 500;
+    }
+    body[data-phase="expanded"]:not([data-settings-open="true"]) .kbd-hint {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ─── Settings popover ─────────────────────────────────────────────── */
+    .settings-pop {
+      position: absolute;
+      left: 50%;
+      bottom: 76px;
+      transform: translateX(-30%) translateY(8px);
+      width: 260px;
+      background: #ffffff;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 14px;
+      box-shadow:
+        0 16px 40px rgba(2, 6, 23, 0.55),
+        0 2px 8px rgba(2, 6, 23, 0.35),
+        inset 0 1px 0 #ffffff;
+      padding: 6px;
+      color: #0f172a;
+      font-size: 13px;
+      text-align: left;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s, transform .18s;
+      z-index: 9;
+    }
+    body[data-settings-open="true"] .settings-pop {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(-30%) translateY(0);
+    }
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+    }
+    .settings-divider {
+      height: 1px;
+      background: rgba(15, 23, 42, 0.08);
+      margin: 2px 0;
+    }
+    .toggle {
+      width: 32px; height: 18px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      background: rgba(15, 23, 42, 0.08);
+      position: relative;
+      padding: 0;
+      transition: background .15s;
+    }
+    .toggle .knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px; height: 14px;
+      border-radius: 999px;
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+      transition: left .15s;
+    }
+    .toggle.on { background: #06b6d4; }
+    .toggle.on .knob { left: 16px; }
+    .transform-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 10px 12px;
+      border: none;
+      cursor: pointer;
+      background: transparent;
+      color: #0f172a;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      text-align: left;
+    }
+    .transform-item:hover,
+    .transform-item.sel { background: rgba(15, 23, 42, 0.05); }
+    .lang-row {
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+    .lang-row .label { flex: 1; color: rgba(15, 23, 42, 0.5); font-size: 12px; }
+    .lang-row .val { color: #0f172a; display: inline-flex; align-items: center; gap: 4px; }
+    .config-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 12px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: #0f172a;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+      text-align: left;
+    }
+    .config-row:hover { background: rgba(15, 23, 42, 0.05); }
+
+    /* Language sub-menu (slides in from right within popover) */
+    .lang-list {
+      position: absolute;
+      inset: 6px;
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 2px;
+      display: none;
+    }
+    .settings-pop[data-page="lang"] .lang-list { display: block; }
+    .settings-pop[data-page="lang"] > :not(.lang-list) { display: none; }
+    .lang-back {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: rgba(15, 23, 42, 0.55);
+      font-size: 12px;
+      font-family: inherit;
+      border-radius: 6px;
+      width: 100%;
+      text-align: left;
+    }
+    .lang-back:hover { background: rgba(15, 23, 42, 0.05); }
+    .lang-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 9px 12px;
+      cursor: pointer;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .lang-item:hover,
+    .lang-item.sel { background: rgba(15, 23, 42, 0.05); }
   </style>
 </head>
-<body>
-  <div class="pill">
-    <div class="listening-state">
-      <div class="bar"></div>
-      <div class="bar"></div>
-      <div class="bar"></div>
-      <div class="bar"></div>
-      <div class="bar"></div>
+<body data-phase="rest" data-settings-open="false">
+  <div class="stage">
+    <!-- Hit zone for hover detection -->
+    <div class="hit-zone" id="hit-zone"></div>
+
+    <!-- Edge handle (rest/ready) -->
+    <div class="handle"></div>
+    <div class="ready-hint">Click to dictate</div>
+
+    <!-- Inserted toast -->
+    <div class="toast" id="toast">
+      <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+        <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#022c33" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      <span id="toast-text">Inserted into document</span>
     </div>
-    <div class="processing-state">
-      <div class="spinner"></div>
+
+    <!-- Keyboard hint -->
+    <div class="kbd-hint">
+      <span class="label">Hold to record</span>
+      <span style="display:flex;gap:3px;">
+        <kbd>⌃</kbd><kbd>Space</kbd>
+      </span>
+    </div>
+
+    <!-- Settings popover -->
+    <div class="settings-pop" id="settings-pop" data-page="main">
+      <div class="settings-row">
+        <span>Auto-apply after dictation</span>
+        <button class="toggle" id="toggle-auto" aria-label="Auto apply">
+          <span class="knob"></span>
+        </button>
+      </div>
+      <div class="settings-divider"></div>
+      <button class="transform-item" data-transform="none">
+        <span>None</span>
+        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
+          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+      <button class="transform-item" data-transform="professional">
+        <span>Polish</span>
+        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
+          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+      <button class="transform-item" data-transform="casual">
+        <span>Prompt Engineer</span>
+        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
+          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+      <button class="transform-item" data-transform="friendly">
+        <span>Email Reply</span>
+        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
+          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+      <div class="settings-divider"></div>
+      <div class="lang-row" id="lang-row">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="5.5" stroke="rgba(15,23,42,.5)" stroke-width="1.3" />
+          <ellipse cx="7" cy="7" rx="2.5" ry="5.5" stroke="rgba(15,23,42,.5)" stroke-width="1.3" />
+          <path d="M1.5 7H12.5" stroke="rgba(15,23,42,.5)" stroke-width="1.3" />
+        </svg>
+        <span class="label">Language</span>
+        <span class="val">
+          <span id="lang-label">English (US)</span>
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <path d="M2.5 4.2L5.5 7.2L8.5 4.2" stroke="rgba(15,23,42,.5)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+      </div>
+
+      <!-- Language sub-page -->
+      <div class="lang-list">
+        <button class="lang-back" id="lang-back">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M6 2L3 5L6 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Back
+        </button>
+        <div class="lang-item" data-lang="auto"><span>Auto-detect</span></div>
+        <div class="lang-item" data-lang="en"><span>English (US)</span></div>
+        <div class="lang-item" data-lang="hi-en"><span>Hinglish</span></div>
+        <div class="lang-item" data-lang="hi"><span>Hindi</span></div>
+        <div class="lang-item" data-lang="es"><span>Español</span></div>
+      </div>
+    </div>
+
+    <!-- The full pill -->
+    <div class="pill-wrap" id="pill-wrap">
+      <div class="pill" id="pill">
+        <div class="pill-body">
+          <!-- Idle dots -->
+          <div class="idle-dots" data-body="idle">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+          <!-- Recording waveform -->
+          <div class="waveform" data-body="recording" id="waveform"></div>
+          <!-- Processing pulse dots -->
+          <div class="loading-dots" data-body="processing" id="loading-dots"></div>
+          <!-- Error -->
+          <div class="error-body" data-body="error">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1.5L13 12H1L7 1.5Z" stroke="#be123c" stroke-width="1.4" stroke-linejoin="round" />
+              <path d="M7 5.5V8" stroke="#be123c" stroke-width="1.4" stroke-linecap="round" />
+              <circle cx="7" cy="10" r=".8" fill="#be123c" />
+            </svg>
+            <span id="error-text">no input</span>
+          </div>
+        </div>
+
+        <div class="pill-divider"></div>
+
+        <div class="pill-actions">
+          <button class="pill-btn" id="btn-transform" aria-label="Transform">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M5 1L5.9 3.6L8.5 4.5L5.9 5.4L5 8L4.1 5.4L1.5 4.5L4.1 3.6L5 1Z" fill="#0f172a" />
+              <path d="M10.5 7L11 8.5L12.5 9L11 9.5L10.5 11L10 9.5L8.5 9L10 8.5L10.5 7Z" fill="#0f172a" />
+            </svg>
+          </button>
+          <button class="pill-btn" id="btn-settings" aria-label="Settings">
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+              <path d="M2.5 4.2L5.5 7.2L8.5 4.2" stroke="#0f172a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button class="pill-btn" id="btn-note" aria-label="Note">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <rect x="2.5" y="1.5" width="8" height="10" rx="1.2" stroke="#0f172a" stroke-width="1.3" />
+              <path d="M4.5 4.5H8.5M4.5 6.5H8.5M4.5 8.5H7" stroke="#0f172a" stroke-width="1.3" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
+
   <script>
-    // Listen for state changes from the Tauri backend
-    function setupListeners() {
-      const tauriEvent = window.__TAURI__ && window.__TAURI__.event;
-      if (!tauriEvent) {
-        // Retry — Tauri injects the global after DOMContentLoaded in some cases
-        setTimeout(setupListeners, 50);
-        return;
+    /* ─── Build waveform & loading-dots bars dynamically ───────────────── */
+    const WAVE_HEIGHTS = [0.35, 0.55, 0.85, 0.45, 0.7, 0.95, 0.6, 0.4, 0.75, 0.55, 0.3, 0.6, 0.85, 0.5, 0.7];
+    const wf = document.getElementById('waveform');
+    WAVE_HEIGHTS.forEach((h, i) => {
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.style.height = `${Math.max(h * 22, 3)}px`;
+      bar.style.animationDelay = `${i * 0.06}s`;
+      wf.appendChild(bar);
+    });
+    const ld = document.getElementById('loading-dots');
+    for (let i = 0; i < 13; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.animationDelay = `${i * 0.07}s`;
+      ld.appendChild(dot);
+    }
+
+    /* ─── State machine ────────────────────────────────────────────────── */
+    let phase = 'rest';           // 'rest' | 'ready' | 'expanded' | 'recording' | 'processing' | 'inserted' | 'error'
+    let settingsOpen = false;
+    let langPage = false;
+    let leaveTimer = null;
+    let readyHoldTimer = null;
+    let settings = {
+      transform: 'none',
+      language: 'hi-en',
+      autoApply: false,
+    };
+
+    const LANG_LABELS = {
+      'auto': 'Auto-detect',
+      'en': 'English (US)',
+      'hi-en': 'Hinglish',
+      'hi': 'Hindi',
+      'es': 'Español',
+    };
+
+    function normalizePhase(next) {
+      switch (next) {
+        case 'rest':
+        case 'ready':
+        case 'expanded':
+        case 'recording':
+        case 'processing':
+        case 'inserted':
+        case 'error':
+          return next;
+        default:
+          return phase || 'rest';
       }
-      tauriEvent.listen("pill-set-processing", () => {
-        document.body.classList.add("processing");
+    }
+
+    function applyPhase(next) {
+      next = normalizePhase(next);
+      phase = next;
+      document.body.setAttribute('data-phase', next);
+      // Any pending hover-driven transitions must not stomp an externally-set
+      // phase (e.g. Ctrl+Space → recording). Clear timers when entering any
+      // non-hover phase.
+      if (next !== 'ready') clearTimeout(readyHoldTimer);
+      if (next === 'recording' || next === 'processing' ||
+          next === 'inserted' || next === 'error') {
+        clearTimeout(leaveTimer);
+      }
+      // Closing pill collapses settings too.
+      if (next === 'rest' || next === 'ready' || next === 'inserted') {
+        setSettingsOpen(false);
+      }
+    }
+
+    function setSettingsOpen(open) {
+      if (settingsOpen === open) return;
+      settingsOpen = open;
+      document.body.setAttribute('data-settings-open', open ? 'true' : 'false');
+      const btn = document.getElementById('btn-settings');
+      btn.classList.toggle('active', open);
+      const phaseForWindow = open ? 'settings' : phase;
+      callTauri('set_pill_phase', { phase: phaseForWindow });
+      if (!open) {
+        // Reset to main page
+        document.getElementById('settings-pop').setAttribute('data-page', 'main');
+        langPage = false;
+      }
+    }
+
+    function renderSettingsUI() {
+      // Transform selection
+      document.querySelectorAll('.transform-item').forEach((el) => {
+        const sel = el.dataset.transform === settings.transform;
+        el.classList.toggle('sel', sel);
+        const check = el.querySelector('.check');
+        if (check) check.style.display = sel ? 'block' : 'none';
       });
-      tauriEvent.listen("pill-set-listening", () => {
-        document.body.classList.remove("processing");
+      // Toggle
+      const toggle = document.getElementById('toggle-auto');
+      toggle.classList.toggle('on', !!settings.autoApply);
+      // Language label
+      document.getElementById('lang-label').textContent =
+        LANG_LABELS[settings.language] || settings.language;
+      // Language list selection
+      document.querySelectorAll('.lang-item').forEach((el) => {
+        el.classList.toggle('sel', el.dataset.lang === settings.language);
       });
     }
+
+    window.__oscarSetPillPhase = applyPhase;
+    window.__oscarGetPillPhase = () => phase;
+
+    /* ─── Tauri IPC helpers ────────────────────────────────────────────── */
+    function callTauri(cmd, args) {
+      const core = window.__TAURI__ && window.__TAURI__.core;
+      if (!core || !core.invoke) return Promise.resolve(undefined);
+      return core.invoke(cmd, args || {}).catch((err) => {
+        console.warn('[pill] invoke failed', cmd, err);
+        return undefined;
+      });
+    }
+    function emitTauri(name, payload) {
+      const ev = window.__TAURI__ && window.__TAURI__.event;
+      if (!ev || !ev.emit) return Promise.resolve(undefined);
+      return ev.emit(name, payload).catch((err) => {
+        console.warn('[pill] emit failed', name, err);
+        return undefined;
+      });
+    }
+
+    /* ─── Hit zone / handle hover ──────────────────────────────────────── */
+    const hitZone = document.getElementById('hit-zone');
+    hitZone.addEventListener('mouseenter', () => {
+      clearTimeout(leaveTimer);
+      if (phase === 'rest') {
+        applyPhase('ready');
+        callTauri('set_pill_phase', { phase: 'ready' });
+        // After a 180ms hold inside the zone, expand to full pill.
+        clearTimeout(readyHoldTimer);
+        readyHoldTimer = setTimeout(() => {
+          if (phase === 'ready') {
+            applyPhase('expanded');
+            callTauri('set_pill_phase', { phase: 'expanded' });
+          }
+        }, 180);
+      }
+    });
+    hitZone.addEventListener('mouseleave', () => {
+      clearTimeout(readyHoldTimer);
+      leaveTimer = setTimeout(() => {
+        if (phase === 'ready' || phase === 'expanded') {
+          applyPhase('rest');
+          callTauri('set_pill_phase', { phase: 'rest' });
+        }
+      }, 220);
+    });
+
+    /* The pill itself extends the hover region so moving from zone to pill
+       doesn't trigger a collapse. */
+    const pillWrap = document.getElementById('pill-wrap');
+    pillWrap.addEventListener('mouseenter', () => {
+      clearTimeout(leaveTimer);
+    });
+    pillWrap.addEventListener('mouseleave', () => {
+      leaveTimer = setTimeout(() => {
+        if (phase === 'expanded') {
+          applyPhase('rest');
+          callTauri('set_pill_phase', { phase: 'rest' });
+        }
+      }, 220);
+    });
+
+    /* ─── Click pill: start/stop recording ─────────────────────────────── */
+    document.getElementById('pill').addEventListener('click', (e) => {
+      // Ignore clicks on the right-side action buttons.
+      if (e.target.closest('.pill-actions')) return;
+      if (phase === 'expanded' || phase === 'ready') {
+        callTauri('pill_request_record_start');
+      } else if (phase === 'recording') {
+        callTauri('pill_request_record_stop');
+      }
+    });
+
+    /* ─── Action buttons ───────────────────────────────────────────────── */
+    document.getElementById('btn-settings').addEventListener('click', (e) => {
+      e.stopPropagation();
+      setSettingsOpen(!settingsOpen);
+    });
+    document.getElementById('btn-transform').addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Cycle through transforms — quick affordance from main pill
+      const order = ['none', 'professional', 'casual', 'friendly'];
+      const idx = order.indexOf(settings.transform);
+      const next = order[(idx + 1) % order.length];
+      settings.transform = next;
+      renderSettingsUI();
+      emitTauri('pill-settings-update', { transform: next });
+    });
+    document.getElementById('btn-note').addEventListener('click', (e) => {
+      e.stopPropagation();
+      emitTauri('pill-open-scribble', {});
+    });
+
+    /* Settings popover interactions */
+    document.querySelectorAll('.transform-item').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const t = el.dataset.transform;
+        settings.transform = t;
+        renderSettingsUI();
+        emitTauri('pill-settings-update', { transform: t });
+      });
+    });
+    document.getElementById('toggle-auto').addEventListener('click', (e) => {
+      e.stopPropagation();
+      settings.autoApply = !settings.autoApply;
+      renderSettingsUI();
+      emitTauri('pill-settings-update', { autoApply: settings.autoApply });
+    });
+    document.getElementById('lang-row').addEventListener('click', (e) => {
+      e.stopPropagation();
+      langPage = true;
+      document.getElementById('settings-pop').setAttribute('data-page', 'lang');
+    });
+    document.getElementById('lang-back').addEventListener('click', (e) => {
+      e.stopPropagation();
+      langPage = false;
+      document.getElementById('settings-pop').setAttribute('data-page', 'main');
+    });
+    document.querySelectorAll('.lang-item').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const lang = el.dataset.lang;
+        settings.language = lang;
+        renderSettingsUI();
+        emitTauri('pill-settings-update', { language: lang });
+        langPage = false;
+        document.getElementById('settings-pop').setAttribute('data-page', 'main');
+      });
+    });
+
+    /* Click outside settings closes the popover. */
+    document.addEventListener('click', (e) => {
+      if (!settingsOpen) return;
+      const pop = document.getElementById('settings-pop');
+      const btn = document.getElementById('btn-settings');
+      if (!pop.contains(e.target) && !btn.contains(e.target)) {
+        setSettingsOpen(false);
+      }
+    });
+
+    /* ─── Backend → frontend events ────────────────────────────────────── */
+    async function setupListeners() {
+      const ev = window.__TAURI__ && window.__TAURI__.event;
+      if (!ev) { setTimeout(setupListeners, 50); return; }
+
+      try {
+        await Promise.all([
+          ev.listen('pill-set-phase', (evt) => {
+            const next = evt.payload || 'rest';
+            if (typeof next === 'string') applyPhase(next);
+          }),
+
+          ev.listen('pill-settings-init', (evt) => {
+            const p = evt.payload || {};
+            if (p.transform) settings.transform = p.transform;
+            if (p.language) settings.language = p.language;
+            if (typeof p.autoApply === 'boolean') settings.autoApply = p.autoApply;
+            renderSettingsUI();
+          }),
+
+          // Back-compat with old events; map to new phase
+          ev.listen('pill-set-processing', () => applyPhase('processing')),
+          ev.listen('pill-set-listening', () => applyPhase('recording')),
+        ]);
+      } catch (err) {
+        console.warn('[pill] listen setup failed', err);
+      }
+
+      const latestPhase = await callTauri('get_pill_phase');
+      if (typeof latestPhase === 'string') applyPhase(latestPhase);
+
+      // Signal we're ready so the host can push initial settings.
+      emitTauri('pill-ready', {});
+    }
     setupListeners();
+    renderSettingsUI();
   </script>
 </body>
 </html>

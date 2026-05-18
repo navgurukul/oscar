@@ -19,10 +19,10 @@ Run deterministic checks:
 pnpm test:format-regressions
 ```
 
-Run optional live Groq checks:
+Run optional live Gemini checks:
 
 ```bash
-GROQ_API_KEY=... pnpm --filter @oscar/shared test:format-regressions:live
+GEMINI_API_KEY=... pnpm --filter @oscar/shared test:format-regressions:live
 ```
 
 Use live checks before prompt/model changes. Use deterministic checks in normal development and CI.

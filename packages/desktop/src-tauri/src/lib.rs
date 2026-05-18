@@ -6,12 +6,13 @@
 
 use std::collections::HashMap;
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_store::StoreExt;
 
 mod audio_decode;
 mod calendar;
+mod events;
 mod filesystem;
 mod frontmost;
 mod hardware;
@@ -27,8 +28,10 @@ mod permissions;
 mod pill;
 mod state;
 mod system_audio;
+mod vad;
 mod whisper;
 
+use crate::events::OscarEvent;
 use crate::hotkey::register_recording_hotkey;
 use crate::pill::create_pill_window;
 use crate::state::{set_pending_deep_link, AppState, HotkeyState, PENDING_DEEP_LINK};
@@ -60,7 +63,6 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(Arc::new(Mutex::new(AppState {
             whisper_context: None,
-            loaded_model_role: None,
             loaded_model_path: None,
             meeting_system_audio_segments: HashMap::new(),
         })))
@@ -89,6 +91,11 @@ pub fn run() {
             pill::hide_recording_pill,
             pill::set_pill_processing,
             pill::set_pill_listening,
+            pill::set_pill_phase,
+            pill::get_pill_phase,
+            pill::pill_push_settings,
+            pill::pill_request_record_start,
+            pill::pill_request_record_stop,
             permissions::check_accessibility_permission,
             permissions::request_accessibility_permission,
             permissions::check_dictation_ctrl_conflict,
@@ -138,7 +145,7 @@ pub fn run() {
                         }
 
                         // Emit to frontend
-                        let _ = app_handle.emit("deep-link", url_str);
+                        OscarEvent::DeepLink(url_str).dispatch(&app_handle);
                     }
                 });
             })) {
@@ -206,7 +213,7 @@ pub fn run() {
             if let tauri::WindowEvent::Focused(true) = event {
                 if let Ok(mut pending) = PENDING_DEEP_LINK.lock() {
                     if let Some(url) = pending.take() {
-                        let _ = window.emit("deep-link", url);
+                        OscarEvent::DeepLink(url).dispatch(window.app_handle());
                     }
                 }
             }

@@ -2,8 +2,12 @@
 
 import { useState, useEffect, useMemo, useDeferredValue, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { meetingsService } from "@/lib/services/meetings.service";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import {
+  useMeetings,
+  useUpdateMeeting,
+  useDeleteMeeting,
+} from "@/lib/hooks/queries/useMeetings";
 import { Spinner } from "@/components/ui/spinner";
 import { MeetingCard } from "@/components/meetings/MeetingCard";
 import { MeetingSearchBar } from "@/components/meetings/MeetingSearchBar";
@@ -17,31 +21,22 @@ export default function MeetingsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [meetings, setMeetings] = useState<SavedMeetingRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!authLoading && !user) router.push("/auth");
+  }, [user, authLoading, router]);
+
+  const {
+    data: meetings = [],
+    isLoading: meetingsLoading,
+    isError,
+  } = useMeetings(!authLoading && !!user);
+  const updateMutation = useUpdateMeeting();
+  const deleteMutation = useDeleteMeeting();
 
   // Search & filter
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearch = useDeferredValue(searchQuery);
   const [typeFilter, setTypeFilter] = useState<MeetingTypeHint | "all">("all");
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      router.push("/auth");
-      return;
-    }
-
-    meetingsService.getMeetings().then(({ data, error: err }) => {
-      if (err) {
-        setError("Failed to load meetings. Please try again.");
-      } else {
-        setMeetings(data ?? []);
-      }
-      setIsLoading(false);
-    });
-  }, [user, authLoading, router]);
 
   const filteredMeetings = useMemo(() => {
     let result = meetings;
@@ -63,22 +58,21 @@ export default function MeetingsPage() {
 
   const handleUpdate = useCallback(
     async (id: string, updates: Partial<SavedMeetingRecord>) => {
-      const { data, error: err } = await meetingsService.updateMeeting(id, updates);
-      if (err) throw err;
-      if (data) {
-        setMeetings((prev) => prev.map((m) => (m.id === id ? data : m)));
-      }
+      await updateMutation.mutateAsync({ id, updates });
     },
-    []
+    [updateMutation]
   );
 
-  const handleDelete = useCallback(async (id: string) => {
-    const { error: err } = await meetingsService.deleteMeeting(id);
-    if (err) throw err;
-    setMeetings((prev) => prev.filter((m) => m.id !== id));
-  }, []);
+  const handleDelete = useCallback(
+    async (id: string) => {
+      await deleteMutation.mutateAsync(id);
+    },
+    [deleteMutation]
+  );
 
-  if (authLoading || isLoading) {
+  const error = isError ? "Failed to load meetings. Please try again." : null;
+
+  if (authLoading || meetingsLoading) {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <Spinner className="text-cyan-500" />

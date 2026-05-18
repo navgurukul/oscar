@@ -61,10 +61,16 @@ interface FinalMarkdownResult {
   transcriptBulletCount: number;
 }
 
-const GROQ_API_URL = "https://api.cerebras.ai/v1/chat/completions";
-const GROQ_MODEL = "gpt-oss-120b";
+const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+const GEMINI_MODEL = "gemini-2.5-flash-lite";
 const MAX_SEGMENT_BATCH_CHARS = 12_000;
 const MAX_SEGMENT_BATCH_SIZE = 80;
+const MAX_CLEANUP_BATCH_CHARS = 8_000;
+const MAX_CLEANUP_BATCH_SIZE = 50;
+const NO_USABLE_MEETING_NOTES_ERROR =
+  "NO_USABLE_MEETING_NOTES: model output contained no transcript-backed bullets.";
+const NON_SUBSTANTIVE_BULLET_RE =
+  /^(none captured|no (specific )?.*captured|not captured|n\/a)\.?$/i;
 
 const STOP_WORDS = new Set([
   "a",
@@ -297,17 +303,23 @@ function formatMeetingContext(
     .join("\n");
 }
 
+function speakerDisplayLabel(source: MeetingTranscriptSource): string {
+  return source === "microphone" ? "Me" : "Them";
+}
+
 function formatSegmentsForPrompt(segments: MeetingTranscriptSegment[]): string {
   return segments
     .map(
       (segment) =>
-        `${segment.id} | ${segment.start_time} | ${segment.end_time} | ${segment.speaker.source} | ${segment.text}`,
+        `${segment.id} | ${segment.start_time} | ${segment.end_time} | ${segment.speaker.source} (${speakerDisplayLabel(segment.speaker.source)}) | ${segment.text}`,
     )
     .join("\n");
 }
 
-function splitSegmentBatches(
+function splitSegmentBatchesWithLimits(
   segments: MeetingTranscriptSegment[],
+  maxChars: number,
+  maxSize: number,
 ): MeetingTranscriptSegment[][] {
   const batches: MeetingTranscriptSegment[][] = [];
   let currentBatch: MeetingTranscriptSegment[] = [];
@@ -316,8 +328,8 @@ function splitSegmentBatches(
   for (const segment of segments) {
     const segmentChars = segment.text.length + 80;
     const wouldOverflow =
-      currentBatch.length >= MAX_SEGMENT_BATCH_SIZE ||
-      currentChars + segmentChars > MAX_SEGMENT_BATCH_CHARS;
+      currentBatch.length >= maxSize ||
+      currentChars + segmentChars > maxChars;
 
     if (wouldOverflow && currentBatch.length > 0) {
       batches.push(currentBatch);
@@ -336,37 +348,53 @@ function splitSegmentBatches(
   return batches;
 }
 
-async function callGroq(
-  groqApiKey: string,
+function splitSegmentBatches(
+  segments: MeetingTranscriptSegment[],
+): MeetingTranscriptSegment[][] {
+  return splitSegmentBatchesWithLimits(
+    segments,
+    MAX_SEGMENT_BATCH_CHARS,
+    MAX_SEGMENT_BATCH_SIZE,
+  );
+}
+
+async function callGemini(
+  geminiApiKey: string,
   system: string,
   user: string,
   maxTokens: number,
 ): Promise<string> {
-  const upstream = await fetch(GROQ_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${groqApiKey}`,
-      "Content-Type": "application/json",
+  const upstream = await fetch(
+    `${GEMINI_API_BASE_URL}/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": geminiApiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [
+          { role: "user", parts: [{ text: user }] },
+        ],
+        generationConfig: {
+          maxOutputTokens: maxTokens,
+          temperature: 0.2,
+        },
+      }),
     },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.2,
-      stream: false,
-    }),
-  });
+  );
 
   if (!upstream.ok) {
     const errBody = await upstream.text();
-    throw new Error(`Groq API error ${upstream.status}: ${errBody}`);
+    throw new Error(`Gemini API error ${upstream.status}: ${errBody}`);
   }
 
   const data = await upstream.json();
-  const output = data?.choices?.[0]?.message?.content?.trim();
+  const parts = data?.candidates?.[0]?.content?.parts;
+  const output = Array.isArray(parts)
+    ? parts.map((p: { text?: string }) => (typeof p?.text === "string" ? p.text : "")).join("").trim()
+    : "";
   if (!output) {
     throw new Error("Empty response from AI service.");
   }
@@ -374,8 +402,187 @@ async function callGroq(
   return output;
 }
 
+function parseCleanedSegmentLines(
+  output: string,
+  originalSegments: MeetingTranscriptSegment[],
+): MeetingTranscriptSegment[] {
+  const byId = new Map(
+    originalSegments.map((segment) => [segment.id, segment] as const),
+  );
+  const cleanedById = new Map<string, string>();
+  const sanitized = sanitizeModelMarkdown(output);
+
+  for (const rawLine of sanitized.split("\n")) {
+    const line = rawLine.trim().replace(/^\s*[-*]\s+/, "");
+    if (!line) continue;
+
+    const match = line.match(/^([A-Za-z0-9._:-]+)\s*\|\s*(?:(microphone|speaker|me|them)\s*\|\s*)?(.*?)\s*$/i);
+    if (!match) continue;
+
+    const id = match[1].trim();
+    if (!byId.has(id)) continue;
+
+    const cleanedText = match[3]
+      .replace(/^["']|["']$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    cleanedById.set(id, cleanedText);
+  }
+
+  return originalSegments.map((segment) => {
+    if (!cleanedById.has(segment.id)) return segment;
+    const cleanedText = cleanedById.get(segment.id) ?? "";
+    if (!cleanedText) {
+      return {
+        ...segment,
+        text: "",
+      };
+    }
+
+    const normalizedCleaned = normalizeText(cleanedText);
+    const normalizedOriginal = normalizeText(segment.text);
+    if (!normalizedCleaned) return segment;
+    if (
+      normalizedCleaned.length < 8 &&
+      normalizedOriginal.length > normalizedCleaned.length * 4
+    ) {
+      return segment;
+    }
+
+    return {
+      ...segment,
+      text: cleanedText,
+    };
+  });
+}
+
+const HALLUCINATION_EXACT_PHRASES: ReadonlySet<string> = new Set([
+  "thank you.",
+  "thank you",
+  "thanks for watching.",
+  "thanks for watching",
+  "thanks for watching!",
+  "subscribe to the channel.",
+  "please subscribe.",
+  "please subscribe to the channel.",
+  "you",
+  "...",
+  "bye.",
+  "bye",
+  "bye!",
+  "i'm not going to read the text",
+  "i'm not going to read the text.",
+  "ruins fat is here!",
+  "ruins fat is here",
+]);
+
+const CJK_RE = /[぀-ヿ㐀-䶿一-鿿가-힯]/;
+
+function isHallucinationText(rawText: string): boolean {
+  const text = rawText.trim();
+  if (!text) return true;
+  const lower = text.toLowerCase();
+
+  if (HALLUCINATION_EXACT_PHRASES.has(lower)) return true;
+
+  const words = lower.split(/\s+/).filter(Boolean);
+  if (words.length > 0 && words.every((w) => w === "foreign")) return true;
+  if (words.length >= 4 && words.every((w) => w === words[0])) return true;
+
+  const cjkChars = (text.match(new RegExp(CJK_RE, "g")) || []).length;
+  const latinChars = (text.match(/[A-Za-z]/g) || []).length;
+  if (cjkChars > 0 && cjkChars >= latinChars) return true;
+
+  const condensed = lower.replace(/[\s\p{P}]/gu, "");
+  if (condensed.length === 0) return true;
+
+  return false;
+}
+
+function preFilterHallucinations(
+  segments: MeetingTranscriptSegment[],
+): { kept: MeetingTranscriptSegment[]; droppedCount: number } {
+  const kept: MeetingTranscriptSegment[] = [];
+  let droppedCount = 0;
+  for (const segment of segments) {
+    if (isHallucinationText(segment.text)) {
+      droppedCount += 1;
+      continue;
+    }
+    kept.push(segment);
+  }
+  return { kept, droppedCount };
+}
+
+async function cleanTranscriptSegments(
+  geminiApiKey: string,
+  request: EnhancedMeetingNoteRequest,
+): Promise<MeetingTranscriptSegment[]> {
+  if (request.transcript_segments.length === 0) {
+    return request.transcript_segments;
+  }
+
+  const { kept: preFiltered, droppedCount } = preFilterHallucinations(
+    request.transcript_segments,
+  );
+  if (droppedCount > 0) {
+    console.info(
+      `[meeting-enhance] Pre-filter dropped ${droppedCount} hallucination segment(s) of ${request.transcript_segments.length}`,
+    );
+  }
+  if (preFiltered.length === 0) {
+    return preFiltered;
+  }
+
+  const batches = splitSegmentBatchesWithLimits(
+    preFiltered,
+    MAX_CLEANUP_BATCH_CHARS,
+    MAX_CLEANUP_BATCH_SIZE,
+  );
+  const cleanedSegments: MeetingTranscriptSegment[] = [];
+  const systemPrompt =
+    "You clean noisy meeting transcript segments before summarization. " +
+    "This is not a summary task. Preserve meaning, facts, numbers, names, branches, files, PRs, design references, dates, and action items. " +
+    "Fix obvious speech-recognition errors in English, Hindi, and Hinglish when the nearby context supports the correction. Restore punctuation and capitalization so each segment reads as a clean sentence; do not paraphrase or rewrite content. " +
+    "Aggressively drop hallucinations: blank the CLEANED_TEXT for any segment that is only filler (hmm, uh, aham, haan haan, mm-hmm), Whisper stock phrases (Thank you / Thanks for watching / Subscribe / Bye / 'I'm not going to read the text' / 'Ruins fat is here'), repetition loops where the same word or phrase repeats 3+ times with no content, the literal word 'foreign' repeated, or Korean / Japanese / Chinese characters appearing inside an English or Hindi meeting. " +
+    "Keep the speaker source intact: microphone means Me/host; speaker means Them/other participants. " +
+    "Output exactly one line per input segment in this format: SEGMENT_ID | SOURCE | CLEANED_TEXT. " +
+    "Use SOURCE as microphone or speaker exactly. Do not merge segments. Do not add headings, bullets, prose, timestamps, or citations. " +
+    "If a segment has no meaningful speech, output the segment id and source with an empty CLEANED_TEXT.";
+
+  for (let index = 0; index < batches.length; index += 1) {
+    const batch = batches[index];
+    const userPrompt = [
+      `Meeting title: ${request.meeting_title || "Untitled Meeting"}`,
+      request.attendees_compact
+        ? `Attendees: ${request.attendees_compact}`
+        : "",
+      `Transcript cleanup batch ${index + 1} of ${batches.length}:`,
+      formatSegmentsForPrompt(batch),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    try {
+      const cleanedOutput = await callGemini(
+        geminiApiKey,
+        systemPrompt,
+        userPrompt,
+        2_400,
+      );
+      cleanedSegments.push(...parseCleanedSegmentLines(cleanedOutput, batch));
+    } catch (error) {
+      console.warn("[meeting-enhance] transcript cleanup failed:", error);
+      cleanedSegments.push(...batch);
+    }
+  }
+
+  return cleanedSegments;
+}
+
 async function reduceTranscriptBatches(
-  groqApiKey: string,
+  geminiApiKey: string,
   request: EnhancedMeetingNoteRequest,
   sections: string[],
   meetingType: InferredMeetingType,
@@ -408,7 +615,7 @@ async function reduceTranscriptBatches(
       .filter(Boolean)
       .join("\n\n");
 
-    reductions.push(await callGroq(groqApiKey, systemPrompt, userPrompt, 1_100));
+    reductions.push(await callGemini(geminiApiKey, systemPrompt, userPrompt, 1_100));
   }
 
   return reductions
@@ -420,6 +627,30 @@ function sanitizeModelMarkdown(markdown: string): string {
   return markdown
     .replace(/```markdown|```md|```/gi, "")
     .replace(/\r\n/g, "\n")
+    .trim();
+}
+
+function countSubstantiveBullets(markdown: string): number {
+  return markdown
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^\s*[-*]\s+/.test(line))
+    .map((line) =>
+      line
+        .replace(/^\s*[-*]\s+/, "")
+        .replace(/^\[[ xX]\]\s+/, "")
+        .trim(),
+    )
+    .filter((bullet) => bullet && !NON_SUBSTANTIVE_BULLET_RE.test(bullet))
+    .length;
+}
+
+function transcriptText(request: EnhancedMeetingNoteRequest): string {
+  return request.transcript_segments
+    .map((segment) => segment.text.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -490,7 +721,7 @@ function fallbackBulletForEmptySection(heading: string): string | null {
     return "No specific feedback captured.";
   }
 
-  return null;
+  return "None captured.";
 }
 
 function parseModelSections(markdown: string): ParsedSections {
@@ -646,15 +877,77 @@ function buildFinalMarkdown(
   };
 }
 
+async function generateUncitedFallbackMarkdown(
+  geminiApiKey: string,
+  request: EnhancedMeetingNoteRequest,
+  expectedSections: ParsedSections,
+  meetingType: InferredMeetingType,
+  transcriptMaterial: string,
+  previousAnswer: string,
+): Promise<FinalMarkdownResult> {
+  const sections = expectedSections.orderedHeadings;
+  const systemPrompt =
+    "You are recovering useful meeting notes from a noisy transcript. " +
+    "Output only markdown. Use the required section headings exactly as given; do not rename, reorder, add, or omit headings. " +
+    "Use markdown bullets under every heading. Do not use citation tokens. " +
+    "Prefer concrete action items, technical details, decisions, open questions, numeric values, branch names, testing needs, and design follow-ups only when they appear in the transcript or manual notes. " +
+    "The transcript may mix English, Hindi, Hinglish, and speech-recognition errors. Recover likely meaning when several nearby words support it, but never import details from examples or prior meetings. " +
+    "Never write blank sections. If a section truly has no evidence, write one bullet: None captured. " +
+    "For Action items, use '- [ ] <action> — <Owner>' with the owner if identifiable, or 'Owner: unassigned'.";
+
+  const userPrompt = [
+    formatMeetingContext(request, sections, meetingType),
+    request.my_notes_markdown.trim()
+      ? `Manual notes:\n${request.my_notes_markdown.trim()}`
+      : "",
+    `No-citation recovery required. Previous citation-based answer produced no usable bullets:\n${sanitizeModelMarkdown(previousAnswer)}`,
+    `Transcript material:\n${transcriptMaterial}`,
+    "Produce useful meeting notes now.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const fallbackPass = await callGemini(geminiApiKey, systemPrompt, userPrompt, 2_200);
+  return buildFinalMarkdown(request, expectedSections, fallbackPass);
+}
+
+function buildTranscriptExcerptFallbackMarkdown(
+  request: EnhancedMeetingNoteRequest,
+  expectedSections: ParsedSections,
+): string {
+  const transcriptExcerpt = transcriptText(request)
+    .slice(0, 1_500)
+    .trim();
+
+  const lines = [
+    `## ${request.meeting_title || "Untitled Meeting"}`,
+    request.meeting_local_datetime,
+    request.attendees_compact,
+    "",
+  ];
+
+  for (const heading of expectedSections.orderedHeadings) {
+    lines.push(`### ${heading}`);
+    if (normalizeHeadingKey(heading) === "key topics" && transcriptExcerpt) {
+      lines.push(`- Transcript captured, but structured extraction failed. Excerpt: ${transcriptExcerpt}`);
+    } else {
+      lines.push("- None captured.");
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
 async function generateFinalMarkdown(
-  groqApiKey: string,
+  geminiApiKey: string,
   request: EnhancedMeetingNoteRequest,
   expectedSections: ParsedSections,
   meetingType: InferredMeetingType,
 ): Promise<string> {
   const sections = expectedSections.orderedHeadings;
   const transcriptMaterial = await reduceTranscriptBatches(
-    groqApiKey,
+    geminiApiKey,
     request,
     sections,
     meetingType,
@@ -690,7 +983,7 @@ async function generateFinalMarkdown(
     .filter(Boolean)
     .join("\n\n");
 
-  let firstPass = await callGroq(groqApiKey, systemPrompt, userPrompt, 1_800);
+  let firstPass = await callGemini(geminiApiKey, systemPrompt, userPrompt, 1_800);
   let finalOutput = buildFinalMarkdown(request, expectedSections, firstPass);
 
   if (
@@ -704,8 +997,32 @@ async function generateFinalMarkdown(
       `Previous answer:\n${sanitizeModelMarkdown(firstPass)}`,
     ].join("\n\n");
 
-    firstPass = await callGroq(groqApiKey, systemPrompt, repairPrompt, 1_800);
+    firstPass = await callGemini(geminiApiKey, systemPrompt, repairPrompt, 1_800);
     finalOutput = buildFinalMarkdown(request, expectedSections, firstPass);
+  }
+
+  if (
+    request.transcript_segments.length > 0 &&
+    finalOutput.transcriptBulletCount === 0
+  ) {
+    try {
+      const fallbackOutput = await generateUncitedFallbackMarkdown(
+        geminiApiKey,
+        request,
+        expectedSections,
+        meetingType,
+        transcriptMaterial,
+        firstPass,
+      );
+
+      if (countSubstantiveBullets(fallbackOutput.markdown) > 0) {
+        return fallbackOutput.markdown;
+      }
+    } catch (fallbackError) {
+      console.warn("[meeting-enhance] no-citation fallback failed:", fallbackError);
+    }
+
+    return buildTranscriptExcerptFallbackMarkdown(request, expectedSections);
   }
 
   return finalOutput.markdown;
@@ -808,9 +1125,9 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const groqApiKey = Deno.env.get("GROQ_API_KEY");
-    if (!groqApiKey) {
-      return new Response(JSON.stringify({ error: "GROQ_API_KEY is not configured on the server." }), {
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!geminiApiKey) {
+      return new Response(JSON.stringify({ error: "GEMINI_API_KEY is not configured on the server." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -827,15 +1144,25 @@ Deno.serve(async (req: Request) => {
         .filter((segment) => Boolean(segment.text)),
     };
 
-    const meetingType = inferMeetingType(normalizedRequest);
+    const cleanedRequest: EnhancedMeetingNoteRequest = {
+      ...normalizedRequest,
+      transcript_segments: (
+        await cleanTranscriptSegments(
+          geminiApiKey,
+          normalizedRequest,
+        )
+      ).filter((segment) => Boolean(segment.text.trim())),
+    };
+
+    const meetingType = inferMeetingType(cleanedRequest);
     const expectedSections = buildExpectedSections(
-      normalizedRequest,
+      cleanedRequest,
       meetingType,
     );
 
     const markdown = await generateFinalMarkdown(
-      groqApiKey,
-      normalizedRequest,
+      geminiApiKey,
+      cleanedRequest,
       expectedSections,
       meetingType,
     );
@@ -848,10 +1175,15 @@ Deno.serve(async (req: Request) => {
     );
   } catch (err) {
     console.error("[meeting-enhance] unhandled error:", err);
+    const message = (err as Error).message;
+    const noUsableNotes = message.startsWith("NO_USABLE_MEETING_NOTES");
+
     return new Response(
-      JSON.stringify({ error: `Internal error: ${(err as Error).message}` }),
+      JSON.stringify({
+        error: noUsableNotes ? message : `Internal error: ${message}`,
+      }),
       {
-        status: 500,
+        status: noUsableNotes ? 422 : 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
     );

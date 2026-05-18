@@ -24,8 +24,8 @@ export type { Currency } from "@oscar/shared/constants";
 // API_CONFIG — web adds streaming flags, transform endpoint, different top_p/title_max_length
 export const API_CONFIG = {
   ..._API_CONFIG,
-  TRANSFORM_ENDPOINT: "/api/groq/transform",
-  GROQ_MODEL_FAST: "llama3.1-8b",
+  TRANSFORM_ENDPOINT: "/api/ai/transform",
+  GEMINI_MODEL_FAST: "gemini-2.5-flash-lite",
   FORMAT_TOP_P: 1.0,
   FORMAT_EMAIL_MAX_TOKENS: 2048,
   FORMAT_TRANSFORM_MAX_TOKENS: 1536,

@@ -1,6 +1,6 @@
 [package]
 name = "oscar"
-version = "0.3.57"
+version = "0.5.0"
 description = "Voice to Text Desktop App"
 authors = ["you"]
 edition = "2021"
@@ -10,12 +10,10 @@ name = "oscar_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-# GPU acceleration — optional whisper-rs backends.
-# Windows: build with `--features cuda` when CUDA toolkit is installed (CUDA_PATH must be set).
-# Linux:   build with `--features vulkan` when Vulkan SDK is installed (VULKAN_SDK must be set).
-# CI omits these flags → CPU-only fallback, no extra toolchain deps.
+default = []
 cuda   = ["whisper-rs/cuda"]
 vulkan = ["whisper-rs/vulkan"]
+silero-vad = ["dep:voice_activity_detector"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -26,6 +24,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-store = "2"
 tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
@@ -44,21 +43,18 @@ opus = "0.3"
 sysinfo = { version = "0.32", default-features = false, features = ["system"] }
 sha2 = "0.10"
 num_cpus = "1.16"
+voice_activity_detector = { version = "0.2", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-# Win32 paste-target fix (GetForegroundWindow / SetForegroundWindow)
 windows-sys = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Threading"] }
-# WASAPI loopback capture for system audio
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_Media_Audio",
     "Win32_System_Com",
 ] }
-# CPU-only on CI. For GPU: install CUDA toolkit then build with `--features cuda`.
 whisper-rs = "0.15"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# CPU-only on CI. For GPU: install Vulkan SDK then build with `--features vulkan`.
 whisper-rs = "0.15"
 
 [target.'cfg(target_os = "macos")'.dependencies]

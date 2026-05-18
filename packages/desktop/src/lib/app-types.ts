@@ -27,6 +27,8 @@ export interface Transcription {
   }>;
 }
 
+
+
 export interface MeetingSegmentJob {
   blob: Blob;
   ext: string;
@@ -34,6 +36,8 @@ export interface MeetingSegmentJob {
   useSystemAudio: boolean;
   startedAtMs: number;
   endedAtMs: number;
+  speechMs: number;
+  hasDetectedSpeech: boolean;
 }
 
 export interface HotkeyContextEventPayload {

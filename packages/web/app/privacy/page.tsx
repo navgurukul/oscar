@@ -66,10 +66,10 @@ export default function PrivacyPolicyPage() {
             <ul className="space-y-5 list-disc pl-6">
               <li className="mb-4">
                 <h3 className="text-lg font-semibold text-white mb-2">
-                  Groq
+                  Google Gemini
                 </h3>
                 <p className="ml-6 text-base leading-relaxed">
-                  For processing your voice recordings and formatting the resulting text, OSCAR uses APIs provided by Groq. As a result, your transcribed text is transmitted to Groq&apos;s servers during processing. Groq is a US-based company providing fast AI inference. Your data is not used to train their models. Further information can be found on the Groq website. By using OSCAR, you consent to this transfer.
+                  For processing your voice recordings and formatting the resulting text, OSCAR uses the Google Gemini API. As a result, your transcribed text is transmitted to Google&apos;s servers during processing. When accessed through the Gemini API (paid tier), your data is not used to train Google&apos;s models. Further information can be found in the Google AI terms of service. By using OSCAR, you consent to this transfer.
                 </p>
               </li>
 

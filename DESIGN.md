@@ -140,6 +140,40 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 - Animation: Pulsing ring when recording
 - Shadow: `0 20px 40px rgba(6,182,212,0.3)`
 
+### Desktop Dictation Pill — Edge Handle (Paper variant)
+
+Always-visible overlay docked flush to the bottom edge of the screen. Used only by the desktop stream / dictation flow (not Scribbles or Minutes). Source: [packages/desktop/public/pill.html](./packages/desktop/public/pill.html), [packages/desktop/src-tauri/src/pill.rs](./packages/desktop/src-tauri/src/pill.rs).
+
+**Handle (rest / ready)**:
+- Rest: 72 × 5 px · radius `999px 999px 0 0` · white→`#F8FAFC` gradient · 1px border `rgba(15,23,42,.08)` · shadow `0 -1px 6px rgba(0,0,0,.35)`
+- Ready: 96 × 6 px with cyan glow `0 -2px 12px rgba(34,211,238,.35), 0 -1px 4px rgba(0,0,0,.4)`
+- "Click to dictate" hint: 10px / 500 weight / `.06em` tracking · uppercase · `#22D3EE`
+
+**Hit zone**: full window width × 56 px tall, anchored to bottom. 180 ms hold before expand. 220 ms leave-debounce before collapse.
+
+**Expand transition**: `opacity .22s, transform .26s cubic-bezier(.2,.8,.25,1)`. `transform-origin: center bottom`. Pill ends 22 px above bottom edge when expanded.
+
+**Full pill** (expanded states):
+- Height: 44 px · radius 999 px · padding `0 6px 0 18px`
+- Background: white → `#F8FAFC` linear gradient
+- Border: 1 px `rgba(15,23,42,.08)` · shadow `0 16px 40px rgba(2,6,23,.55), 0 2px 8px rgba(2,6,23,.35), inset 0 1px 0 #fff`
+- Body min-width 110 px; separated from action buttons by a 1 px × 22 px divider in `rgba(15,23,42,.08)`
+- Action buttons (28 × 28 px circles, hover background `rgba(15,23,42,.05)`): Transform (sparkle) · Settings (chevron) · Note
+
+**State bodies**:
+- Idle: 13 dots, 2.5 × 2.5 px, color `rgba(15,23,42,.5)`
+- Recording: 15-bar waveform, 2.5 px wide, color `#06B6D4` (cyan-500) — animation `mm-wave 0.9s ease-in-out infinite alternate`, staggered 0.06 s
+- Processing: 13 pulse dots — animation `mm-pulse 1.1s ease-in-out infinite`, staggered 0.07 s
+- Error: rose-700 (`#BE123C`) triangle glyph + "no input" label
+
+**Inserted toast**: positioned 82 px above bottom · `#06B6D4` bg · `#022C33` text · padding `7px 14px` · shadow `0 8px 24px rgba(8,145,178,.4)` · 1500 ms dwell before collapse.
+
+**Keyboard hint**: shown above the expanded pill (before settings opens). Light card, `#0F172A` text, kbd chips in `ui-monospace`.
+
+**Settings popover**: 260 px wide, radius 14 px, padded `6px`, white surface. Items at `13px / .02em`. Transform list uses the same hover/select style; selected row shows a cyan-500 check. Toggle: 32 × 18 px pill with 14 × 14 px knob; on state uses `#06B6D4`. Language opens a sub-page within the popover with a "Back" affordance.
+
+**Window heights** (Tauri `set_size` per phase): 56 px (rest / ready), 200 px (expanded / recording / processing / inserted / error), 380 px (settings open). Bottom edge stays flush with the primary monitor's bottom on every resize. macOS NSPanel level 1000 is re-applied after each resize so the pill floats above the Dock and fullscreen Spaces.
+
 ### Navigation
 
 - Sticky header on scroll

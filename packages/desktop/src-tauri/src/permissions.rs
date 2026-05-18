@@ -82,7 +82,7 @@ pub fn check_system_audio_permission() -> bool {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        !crate::system_audio::is_supported()
+        !crate::system_audio::backend().is_supported()
     }
 }
 
@@ -94,6 +94,6 @@ pub fn request_system_audio_permission() -> bool {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        !crate::system_audio::is_supported()
+        !crate::system_audio::backend().is_supported()
     }
 }

@@ -3,9 +3,9 @@
 //! emits `hotkey-recording-{start,stop}` events.
 
 use std::sync::atomic::Ordering;
-use tauri::Emitter;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+use crate::events::OscarEvent;
 use crate::frontmost::get_frontmost_context_payload;
 use crate::state::HotkeyState;
 
@@ -26,9 +26,9 @@ pub(crate) fn set_hotkey_error<R: tauri::Runtime>(
     }
 
     if let Some(msg) = message {
-        let _ = app.emit("hotkey-permission-error", msg);
+        OscarEvent::HotkeyPermissionError(msg).dispatch(app);
     } else {
-        let _ = app.emit("hotkey-registered", ());
+        OscarEvent::HotkeyRegistered.dispatch(app);
     }
 }
 
@@ -85,13 +85,13 @@ pub(crate) fn register_recording_hotkey<R: tauri::Runtime>(
                         frontmost_context.site_host.as_deref(),
                         frontmost_context.window_title.as_deref()
                     );
-                    let _ = app_handle.emit("hotkey-recording-start", frontmost_context);
+                    OscarEvent::HotkeyRecordingStart(frontmost_context).dispatch(&app_handle);
                 }
             }
             ShortcutState::Released => {
                 if is_rec.swap(false, Ordering::SeqCst) {
                     log::info!("[hotkey] Ctrl+Space RELEASED — emitting stop");
-                    let _ = app_handle.emit("hotkey-recording-stop", ());
+                    OscarEvent::HotkeyRecordingStop.dispatch(&app_handle);
                 }
             }
         })

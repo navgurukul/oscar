@@ -6,7 +6,7 @@ Reference for AI assistants in Oscar codebase.
 
 ## Project Overview
 
-Oscar = AI voice note app. Users record audio → transcribed (Whisper on desktop, browser STT on web) → formatted + titled by Groq AI agents.
+Oscar = AI voice note app. Users record audio → transcribed (Whisper on desktop, browser STT on web) → formatted + titled by Google Gemini AI agents.
 
 **Monorepo layout (pnpm workspaces):**
 
@@ -23,7 +23,7 @@ oscar/
 └── CLAUDE.md       # This file
 ```
 
-**Version:** 0.3.23 | **Node:** v22 (`.nvmrc`) | **Package manager:** pnpm 9
+**Version:** 0.4.0 | **Node:** v22 (`.nvmrc`) | **Package manager:** pnpm 9
 
 ---
 
@@ -36,7 +36,7 @@ oscar/
 | Styling | Tailwind CSS 3.3, CVA | Tailwind CSS |
 | UI primitives | Radix UI + shadcn/ui (New York style) | Radix UI + shadcn/ui |
 | Auth & DB | Supabase (PostgreSQL + Auth) | — |
-| AI | Groq API (llama-3 variants) | whisper-rs (local Whisper) |
+| AI | Google Gemini API (Flash 2.5 Lite) | whisper-rs (local Whisper) |
 | Payments | Razorpay | — |
 | STT | ONNX Runtime Web + speech-to-speech | whisper-rs (CUDA/Vulkan) |
 | Animation | motion, tsparticles | — |
@@ -59,7 +59,7 @@ pnpm dev:desktop      # launches native window
 **Required environment variables** (create `packages/web/.env.local`):
 
 ```
-GROQ_API_KEY=
+GEMINI_API_KEY=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_WEB_APP_URL=
@@ -86,7 +86,7 @@ app/
 ├── meetings/           # Meeting Minutes
 ├── download/           # Desktop download handler
 └── api/
-    ├── groq/
+    ├── ai/
     │   ├── format/       # Stream-format transcript → clean Scribble
     │   ├── format-email/ # Email-specific formatting
     │   ├── title/        # Generate 4-10 word title
@@ -104,7 +104,7 @@ app/
 ```
 
 **Services** (`lib/services/`):
-- `ai.service.ts` — Groq API calls (formatting, title, streaming)
+- `ai.service.ts` — Gemini API calls (formatting, title, streaming)
 - `stt.service.ts` — Browser STT pipeline
 - `scribbles.service.ts` — Scribble CRUD (Supabase)
 - `subscription.service.ts` — Subscription state & checks
@@ -151,8 +151,19 @@ Rust backend + Vite/React frontend, shares UI components with web package.
 - System: WASAPI (Windows), global shortcuts, deep links, auto-updater
 - Tauri plugins: `global-shortcut`, `deep-link`, `updater`, `store`, `process`, `opener`
 
+**Stream / dictation pill (`recording-pill` window):**
+
+Always-visible edge-handle overlay docked flush to the bottom of the screen — the entry point for the desktop stream/dictation feature (not used for Scribbles or Minutes).
+
+- Rust window setup: [packages/desktop/src-tauri/src/pill.rs](./packages/desktop/src-tauri/src/pill.rs). Transparent, decoration-free `NSPanel` (macOS) / always-on-top floating window (Windows). 360px wide; height resizes between 56 px (rest), 200 px (expanded/recording/processing/inserted/error) and 380 px (settings open) so clicks pass through to apps below outside the active surface. macOS NSPanel level 1000 is re-applied after every resize so the pill stays above the Dock and fullscreen Spaces.
+- UI: [packages/desktop/public/pill.html](./packages/desktop/public/pill.html) — vanilla JS/CSS, Figtree font, Paper-pill tokens (white gradient, cyan-400 accent, cyan-500 toast). State machine: `rest → ready → expanded → recording → processing → inserted → rest` plus `error`.
+- Triggers: hover the bottom 56 px hit zone (180 ms hold → expand → click to record), or press the global hotkey `Ctrl+Space` (`hotkey.rs`). Both paths capture frontmost-app context so paste lands on the correct OS app.
+- Tauri commands: `show_recording_pill`, `hide_recording_pill`, `set_pill_phase`, `set_pill_listening`, `set_pill_processing`, `pill_push_settings`, `pill_request_record_start`, `pill_request_record_stop` (registered in [src-tauri/src/lib.rs](./packages/desktop/src-tauri/src/lib.rs)). Linux falls back to a tray-icon tooltip — secondary webview windows crash tao's event loop.
+- Settings popover (chevron button on the pill) wires Polish / Prompt Engineer / Email Reply / Auto-apply / Language to the same persisted settings the Settings tab uses (`tonePreset`, `transcriptionLanguage`, `autoPaste`). The pill emits `pill-settings-update` events; [packages/desktop/src/App.tsx](./packages/desktop/src/App.tsx) listens, updates state, and calls `saveSetting`. On startup the pill emits `pill-ready` and the host pushes current values back via `pill_push_settings`.
+- Inserted-toast dwell: 1500 ms after paste completes, then the pill collapses back to the handle. Errors during processing surface as the error glyph for 1500 ms before collapsing.
+
 **Build scripts:**
-- `pnpm dev` — Tauri + Vite dev (hot reload)
+- `pnpm dev` — Tauri + Vite dev (hot reload). Note: a dev binary is signed differently than the release; macOS Accessibility / Input Monitoring permissions must be granted to the dev binary separately before the global hotkey will fire.
 - `pnpm build` — Full production build (TypeScript → Vite → Rust → binary)
 - `pnpm tauri` — Direct Tauri CLI passthrough
 
@@ -194,7 +205,7 @@ Import: `import { Note } from '@oscar/shared/types'`
 
 ### API Routes (web)
 
-- All Groq routes use streaming (`ReadableStream`) where possible
+- All AI routes use streaming (`ReadableStream`) where possible
 - Rate-limiting middleware wraps AI endpoints — check `lib/rate-limit.ts` before adding new AI routes
 - No server actions; mutations go through Supabase client SDK or API routes
 
@@ -203,7 +214,7 @@ Import: `import { Note } from '@oscar/shared/types'`
 - Semantic prefixes: `feat:`, `fix:`, `style:`, `refactor:`, `chore:`, `docs:`
 - Feature branches → PR → merge to main
 - Tag-based releases: `vMAJOR.MINOR.PATCH` triggers GitHub Actions release pipeline
-- Current working branch for AI: `claude/add-claude-documentation-1CYnF`
+- Active release branch: `release_Dev` (feature commits and `chore(release): vX.Y.Z` bumps land here; tags are cut from this branch)
 
 ### No Testing Framework
 
@@ -223,8 +234,8 @@ See [Agents.md](./Agents.md) for full pipeline spec. Summary:
 Audio → STT (Whisper/browser) → Text Formatting Agent → Title Agent → Stored Note
 ```
 
-- **Formatting agent**: `app/api/groq/format/route.ts` — removes filler words, fixes grammar, streams output
-- **Title agent**: `app/api/groq/title/route.ts` — generates 4-10 word titles; heuristic fallback on failure
+- **Formatting agent**: `app/api/ai/format/route.ts` — removes filler words, fixes grammar, streams output
+- **Title agent**: `app/api/ai/title/route.ts` — generates 4-10 word titles; heuristic fallback on failure
 - **Config**: `API_CONFIG` object in `ai.service.ts` (model, temperature, top_p, max_tokens)
 - **Feedback loop**: Yes/No + reason tags → `feedback.service.ts` → Supabase → prompt iteration
 
@@ -250,14 +261,22 @@ For UI, UX, styling, layout, navigation, motion, or shared component work:
    - favor strong hierarchy over lots of components
    - avoid generic SaaS card grids unless cards are the interaction
    - one dominant idea per section or screen
-   - preserve OSCAR's cyan-and-cream editorial identity (`#06B6D4` cyan, `#FCFBF2` cream, `#BDADFF` lavender)
+   - preserve OSCAR's cyan editorial identity
    - mobile layout and first-screen clarity intentional
    - motion sparse and purposeful (150-300ms transitions)
 
-**Typography:**
-- Headlines: Figtree 500-600
-- Body: Inter 400-500
-- Mono: JetBrains Mono
+**Typography (actually loaded in code):**
+- Headlines (`h1/h2/h3`, `font-serif`): **EB Garamond** — weights 400/500/600/700, loaded via `next/font/google` in [packages/web/app/layout.tsx](./packages/web/app/layout.tsx). Auto-applied via [globals.css](./packages/web/app/globals.css).
+- Body / UI / sans default (`font-sans`, `<body>`): **Figtree** — weights 400/500/600/700, also via `next/font/google`.
+- Mono (`font-mono`): system stack only — `ui-monospace, monospace` (Tailwind). Desktop CSS uses `SF Mono, Fira Code, Consolas`.
+- Desktop app mirrors the web fonts via Google Fonts `@import` in [packages/desktop/src/styles/app-base.css](./packages/desktop/src/styles/app-base.css).
+- DESIGN.md still references **Inter** (body) and **JetBrains Mono** — these are aspirational spec only; neither is loaded anywhere in code. Treat Figtree as the body font and the system mono stack as the mono font when shipping changes.
+
+**Colors (actually in code):**
+- **Brand cyan** ramp ([packages/web/tailwind.config.js](./packages/web/tailwind.config.js)): `#22D3EE` (400), `#06B6D4` (500, primary), `#0891B2` (600), `#0E7490` (700). `#A5F3FC` (cyan-200) used for `::selection`.
+- **App surface:** dark by default — `<body>` uses `bg-slate-950` (Tailwind default `#020617`). shadcn HSL theme tokens (`--background`, `--foreground`, etc.) defined for both `:root` (light) and `.dark` in [globals.css](./packages/web/app/globals.css); neutral grayscale.
+- **PWA theme color:** `#06B6D4` ([layout.tsx:85](./packages/web/app/layout.tsx)).
+- **Aspirational, not yet in code:** `#FCFBF2` cream and `#BDADFF` lavender appear in [DESIGN.md](./DESIGN.md) but are not referenced anywhere in `packages/`. Do not assume they're applied — check the file you're editing.
 
 **Spacing:** 4px base unit (`xs=4`, `sm=8`, `md=16`, `lg=24`, `xl=32`, `2xl=48`, `3xl=64`)
 

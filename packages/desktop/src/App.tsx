@@ -14,6 +14,7 @@ import { Header } from "./components/Header";
 import { ScribbleTab } from "./components/ScribbleTab";
 import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
+import { useMinutesRecorder } from "./hooks/useMinutesRecorder";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
 import { MeetingsTab } from "./components/MeetingsTab";
@@ -24,14 +25,8 @@ import {
   isContextAwarePlatform,
   routeDictationContext,
 } from "./lib/dictation-context";
-import type {
-  CalendarReconnectResult,
-  MinutesTranscriptionStatus,
-} from "./components/MeetingsTab";
-import type {
-  MeetingTranscriptSegment,
-  SavedMeetingRecord,
-} from "./types/meeting.types";
+import type { CalendarReconnectResult } from "./components/MeetingsTab";
+import type { SavedMeetingRecord } from "./types/meeting.types";
 import type {
   DictationContextSnapshot,
   LocalTranscript,
@@ -39,7 +34,6 @@ import type {
 import type {
   DownloadProgress,
   HotkeyContextEventPayload,
-  MeetingSegmentJob,
   MicrophonePermissionState,
   RoleModelState,
   TabType,
@@ -47,10 +41,7 @@ import type {
   Transcription,
   WhisperModelRole,
 } from "./lib/app-types";
-import {
-  MEETING_SEGMENT_DURATION_MS,
-  MINUTES_DATA_RESET_VERSION,
-} from "./lib/desktop-constants";
+import { MINUTES_DATA_RESET_VERSION } from "./lib/desktop-constants";
 import {
   buildDictationContextSnapshot,
   buildDictationMetadata,
@@ -58,13 +49,6 @@ import {
   getMicrophonePermissionState,
   isMacOS,
 } from "./lib/desktop-platform";
-import {
-  appendTranscriptSegment,
-  buildTranscriptFromStructuredSegments,
-  getTranscriptTailWords,
-  mergeMeetingTranscriptSegments,
-  toAbsoluteMeetingTranscriptSegments,
-} from "./lib/transcript-utils";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
 import {
   FALLBACK_MODELS,
@@ -85,6 +69,111 @@ function buildFallbackScribbleTitle(text: string): string {
   const firstSentence = normalized.split(/[.!?\n]/)[0]?.trim() || normalized;
   const title = firstSentence.slice(0, 60).trim();
   return title || "Untitled Scribble";
+}
+
+interface AudioTrimResult {
+  audio: Float32Array;
+  originalSamples: number;
+  trimmedSamples: number;
+  leadingTrimMs: number;
+  trailingTrimMs: number;
+  voicedFrames: number;
+  thresholdRms: number;
+  thresholdPeak: number;
+}
+
+const STREAM_SAMPLE_RATE = 16_000;
+const STREAM_TRIM_FRAME_MS = 20;
+const STREAM_TRIM_PADDING_MS = 250;
+const STREAM_MIN_TRIM_MS = 120;
+const STREAM_MIN_RETAINED_MS = 800;
+const STREAM_TRIM_RMS_THRESHOLD = 0.006;
+const STREAM_TRIM_PEAK_THRESHOLD = 0.025;
+
+function durationMsForSamples(samples: number): number {
+  return Math.round((samples / STREAM_SAMPLE_RATE) * 1000);
+}
+
+function trimStreamSilence(audio: Float32Array): AudioTrimResult {
+  const frameSize = Math.max(
+    1,
+    Math.round((STREAM_SAMPLE_RATE * STREAM_TRIM_FRAME_MS) / 1000),
+  );
+  const paddingSamples = Math.round(
+    (STREAM_SAMPLE_RATE * STREAM_TRIM_PADDING_MS) / 1000,
+  );
+  const minRetainedSamples = Math.round(
+    (STREAM_SAMPLE_RATE * STREAM_MIN_RETAINED_MS) / 1000,
+  );
+
+  let firstVoiced = -1;
+  let lastVoiced = -1;
+  let voicedFrames = 0;
+
+  for (let frameStart = 0; frameStart < audio.length; frameStart += frameSize) {
+    const frameEnd = Math.min(audio.length, frameStart + frameSize);
+    let sumSq = 0;
+    let peak = 0;
+
+    for (let i = frameStart; i < frameEnd; i++) {
+      const sample = audio[i];
+      sumSq += sample * sample;
+      const abs = sample < 0 ? -sample : sample;
+      if (abs > peak) peak = abs;
+    }
+
+    const rms = Math.sqrt(sumSq / Math.max(1, frameEnd - frameStart));
+    if (rms >= STREAM_TRIM_RMS_THRESHOLD || peak >= STREAM_TRIM_PEAK_THRESHOLD) {
+      voicedFrames += 1;
+      if (firstVoiced === -1) firstVoiced = frameStart;
+      lastVoiced = frameEnd;
+    }
+  }
+
+  if (firstVoiced === -1 || lastVoiced === -1) {
+    return {
+      audio,
+      originalSamples: audio.length,
+      trimmedSamples: audio.length,
+      leadingTrimMs: 0,
+      trailingTrimMs: 0,
+      voicedFrames,
+      thresholdRms: STREAM_TRIM_RMS_THRESHOLD,
+      thresholdPeak: STREAM_TRIM_PEAK_THRESHOLD,
+    };
+  }
+
+  const start = Math.max(0, firstVoiced - paddingSamples);
+  const end = Math.min(audio.length, lastVoiced + paddingSamples);
+  const trimmedSamples = end - start;
+  const removedSamples = audio.length - trimmedSamples;
+
+  if (
+    trimmedSamples < minRetainedSamples ||
+    durationMsForSamples(removedSamples) < STREAM_MIN_TRIM_MS
+  ) {
+    return {
+      audio,
+      originalSamples: audio.length,
+      trimmedSamples: audio.length,
+      leadingTrimMs: 0,
+      trailingTrimMs: 0,
+      voicedFrames,
+      thresholdRms: STREAM_TRIM_RMS_THRESHOLD,
+      thresholdPeak: STREAM_TRIM_PEAK_THRESHOLD,
+    };
+  }
+
+  return {
+    audio: audio.slice(start, end),
+    originalSamples: audio.length,
+    trimmedSamples,
+    leadingTrimMs: durationMsForSamples(start),
+    trailingTrimMs: durationMsForSamples(audio.length - end),
+    voicedFrames,
+    thresholdRms: STREAM_TRIM_RMS_THRESHOLD,
+    thresholdPeak: STREAM_TRIM_PEAK_THRESHOLD,
+  };
 }
 
 function createRoleModelState(
@@ -129,6 +218,8 @@ function App() {
   const [isScribbleRecording, setIsScribbleRecording] = useState(false);
   const [scribbleRecordingTime, setScribbleRecordingTime] = useState(0);
   const [scribbleRefreshKey, setScribbleRefreshKey] = useState(0);
+  const [isScribbleProcessing, setIsScribbleProcessing] = useState(false);
+  const [scribbleStatus, setScribbleStatus] = useState<string | null>(null);
   const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
   const [_isProcessing, setIsProcessing] = useState(false);
@@ -158,7 +249,7 @@ function App() {
   const [_aiEditing, setAiEditing] = useState(false);
   const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
-  // AI Improvement toggle (user-controllable — controls Groq AI cleanup)
+  // AI Improvement toggle (user-controllable — controls Gemini AI cleanup)
   const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
   const aiImprovementEnabledRef = useRef(true);
   const [contextAwareDictationEnabled, setContextAwareDictationEnabled] =
@@ -186,41 +277,9 @@ function App() {
   const [savedMeetings, setSavedMeetings] = useState<SavedMeetingRecord[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>("home");
 
-  // Meeting recording state (separate from hold-to-talk dictation)
-  const [isMeetingRecording, setIsMeetingRecording] = useState(false);
-  const [meetingRecordingTime, setMeetingRecordingTime] = useState(0);
-  const [meetingTranscript, setMeetingTranscript] = useState("");
-  const [meetingTranscriptSegments, setMeetingTranscriptSegments] = useState<
-    MeetingTranscriptSegment[]
-  >([]);
-  const [meetingStartedAt, setMeetingStartedAt] = useState("");
-  const [minutesTranscriptionStatus, setMinutesTranscriptionStatus] =
-    useState<MinutesTranscriptionStatus>("idle");
-  const [minutesSegmentQueue, setMinutesSegmentQueue] = useState(0);
-  const [minutesSegmentsCompleted, setMinutesSegmentsCompleted] = useState(0);
-  const [minutesSegmentsTotal, setMinutesSegmentsTotal] = useState(0);
-  const meetingMediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const isMeetingRecordingRef = useRef(false);
-  const meetingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const meetingSegmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const meetingSegmentStopRef =
-    useRef<((mode?: "rotate" | "final") => void) | null>(null);
-  const meetingSessionIdRef = useRef(0);
-  const meetingStopRequestedRef = useRef(false);
-  const meetingNextSegmentIndexRef = useRef(0);
-  const meetingSegmentQueueRef = useRef<MeetingSegmentJob[]>([]);
-  const meetingSegmentWorkerRunningRef = useRef(false);
-  const meetingTranscriptRef = useRef("");
-  const meetingTranscriptSegmentsRef = useRef<MeetingTranscriptSegment[]>([]);
-  const meetingStartedAtRef = useRef("");
-  const meetingFinalizationResolveRef = useRef<(() => void) | null>(null);
-  const meetingSessionUsesSystemAudioRef = useRef(false);
-
   // System audio capture (other participants' audio via ScreenCaptureKit)
   const [systemAudioSupported, setSystemAudioSupported] = useState(false);
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
-  const [systemAudioWarning, setSystemAudioWarning] = useState("");
-  const systemAudioActiveRef = useRef(false);
 
   // Personal dictionary (local state; synced to Supabase when logged in)
   const [_dictWords, setDictWords] = useState<string[]>([]);
@@ -246,11 +305,51 @@ function App() {
   const voiceEngineWarmupRef = useRef(false);
   const aiEditingRef = useRef(false);
   const tonePresetRef = useRef<TonePreset>("none");
+  const transcriptionLanguageRef = useRef<string>("hi-en");
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
   const authInitRef = useRef(false);
   const currentWhisperRoleRef = useRef<WhisperModelRole | null>(null);
   const currentWhisperKeyRef = useRef("");
+  const canStartMeetingRecordingRef = useRef<() => boolean>(() => true);
+  const ensureMinutesWhisperModelLoadedRef = useRef<
+    (role: WhisperModelRole) => Promise<unknown>
+  >(async () => {
+    throw new Error("Whisper loader unavailable.");
+  });
+  const warmMinutesVoiceEngineRef = useRef<() => Promise<void>>(async () => {});
+  const getMinutesAudioConstraintsRef = useRef<
+    () => MediaTrackConstraints | boolean
+  >(() => true);
+
+  const minutesRecorder = useMinutesRecorder({
+    canStartRecordingRef: canStartMeetingRecordingRef,
+    ensureWhisperModelLoadedRef: ensureMinutesWhisperModelLoadedRef,
+    warmVoiceEngineRef: warmMinutesVoiceEngineRef,
+    getAudioConstraintsRef: getMinutesAudioConstraintsRef,
+    warmStreamRef,
+    dictWordsRef,
+    transcriptionLanguageRef,
+    systemAudioEnabled,
+    systemAudioSupported,
+  });
+  const {
+    isRecording: isMeetingRecording,
+    isRecordingRef: isMeetingRecordingRef,
+    recordingTime: meetingRecordingTime,
+    transcript: meetingTranscript,
+    transcriptSegments: meetingTranscriptSegments,
+    startedAt: meetingStartedAt,
+    transcriptionStatus: minutesTranscriptionStatus,
+    segmentQueue: minutesSegmentQueue,
+    segmentsCompleted: minutesSegmentsCompleted,
+    segmentsTotal: minutesSegmentsTotal,
+    systemAudioWarning,
+    clearSystemAudioWarning,
+    startRecording: startMeetingRecording,
+    stopRecording: stopMeetingRecording,
+    clearTranscript: clearMeetingTranscript,
+  } = minutesRecorder;
 
   // Auto-updater
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -260,10 +359,6 @@ function App() {
   useEffect(() => {
     isScribbleRecordingRef.current = isScribbleRecording;
   }, [isScribbleRecording]);
-
-  useEffect(() => {
-    isMeetingRecordingRef.current = isMeetingRecording;
-  }, [isMeetingRecording]);
 
   // Fetch app version on mount
   useEffect(() => {
@@ -638,6 +733,7 @@ function App() {
       dictWordsRef.current = savedDict;
       setLocalTranscripts(savedTranscripts);
       setTranscriptionLanguage(savedLanguage);
+      transcriptionLanguageRef.current = savedLanguage;
       setSelectedMicId(savedMicId);
       selectedMicIdRef.current = savedMicId;
       setAiImprovementEnabled(savedAiImprovement);
@@ -700,8 +796,16 @@ function App() {
       (ev) => {
         const appName = ev.payload?.appName?.trim() || "";
         const isSelfApp = SELF_APP_NAMES.includes(appName.toLowerCase());
+
+        // Don't double-fire while another recording flow is in-flight.
+        // NOTE: previously this also bailed on `isSelfApp`, which silently
+        // dropped the hotkey whenever macOS reported Oscar as frontmost —
+        // e.g. when the always-visible pill window or the main window had
+        // recent focus. That made Ctrl+Space appear dead. We now always
+        // start the recording; if the frontmost truly is Oscar, the paste
+        // path falls back to clipboard-only (target stays empty) instead of
+        // pasting into Oscar itself.
         if (
-          isSelfApp ||
           isScribbleRecordingRef.current ||
           isScribbleProcessingRef.current ||
           isMeetingRecordingRef.current
@@ -742,11 +846,53 @@ function App() {
     });
     const unlistenReg = listen("hotkey-registered", () => setHotkeyWarning(""));
 
+    // ── Edge-handle pill events ───────────────────────────────────────────
+    // Settings updates from the pill's popover — persist + sync state.
+    const unlistenPillSettings = listen<{
+      transform?: TonePreset;
+      language?: string;
+      autoApply?: boolean;
+    }>("pill-settings-update", (ev) => {
+      const p = ev.payload || {};
+      if (p.transform !== undefined) {
+        setTonePreset(p.transform);
+        tonePresetRef.current = p.transform;
+        void saveSetting("tonePreset", p.transform);
+      }
+      if (p.language !== undefined) {
+        setTranscriptionLanguage(p.language);
+        transcriptionLanguageRef.current = p.language;
+        void saveSetting("transcriptionLanguage", p.language);
+      }
+      if (p.autoApply !== undefined) {
+        setAutoPaste(p.autoApply);
+        autoPasteRef.current = p.autoApply;
+        void saveSetting("autoPaste", p.autoApply);
+      }
+    });
+
+    // Note button on the pill jumps to the Scribble tab.
+    const unlistenPillNote = listen("pill-open-scribble", () => {
+      setActiveTab("scribble");
+    });
+
+    // When the pill window has wired its listeners, push current settings.
+    const unlistenPillReady = listen("pill-ready", () => {
+      invoke("pill_push_settings", {
+        transform: tonePresetRef.current,
+        language: transcriptionLanguageRef.current,
+        autoApply: autoPasteRef.current,
+      }).catch(console.warn);
+    });
+
     return () => {
       unlistenStart.then((f) => f());
       unlistenStop.then((f) => f());
       unlistenErr.then((f) => f());
       unlistenReg.then((f) => f());
+      unlistenPillSettings.then((f) => f());
+      unlistenPillNote.then((f) => f());
+      unlistenPillReady.then((f) => f());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads settings, registers hotkey listeners; uses refs for mutable state
   }, []);
@@ -1021,12 +1167,12 @@ function App() {
       }
 
       await invoke("ensure_whisper_model_loaded", { role, path });
-      const nextKey = `${role}:${path}`;
-      if (currentWhisperKeyRef.current !== nextKey) {
-        currentWhisperKeyRef.current = nextKey;
-        currentWhisperRoleRef.current = role;
+      const pathChanged = currentWhisperKeyRef.current !== path;
+      if (pathChanged) {
+        currentWhisperKeyRef.current = path;
         voiceEngineWarmupRef.current = false;
       }
+      currentWhisperRoleRef.current = role;
 
       setWhisperLoadedAndRef(true);
       setWhisperModelPath(path);
@@ -1040,6 +1186,14 @@ function App() {
       prepareWhisperModel(preferredRole, { load: true, autoDownload: true }),
     [prepareWhisperModel],
   );
+
+  canStartMeetingRecordingRef.current = () =>
+    !isRecordingRef.current &&
+    !isScribbleRecordingRef.current &&
+    !isScribbleProcessingRef.current;
+  ensureMinutesWhisperModelLoadedRef.current = ensureWhisperModelLoaded;
+  warmMinutesVoiceEngineRef.current = () => warmVoiceEngine();
+  getMinutesAudioConstraintsRef.current = () => getAudioConstraints();
 
   const handleModelPresetChange = useCallback(
     async (role: WhisperModelRole, preset: WhisperModelPreset) => {
@@ -1175,6 +1329,13 @@ function App() {
     shouldPaste: boolean,
     _targetApp?: string,   // used in paste_transcription for NSRunningApplication re-focus
   ) => {
+    // ── Timing instrumentation (stream/dictation flow) ───────────────────────
+    // Logs a single summary line at the end so we can spot which stage is slow.
+    const tStart = performance.now();
+    const timings: Record<string, number> = {};
+    const metrics: Record<string, string | number> = {};
+    let hadError = false;
+
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
 
@@ -1197,6 +1358,7 @@ function App() {
     }
 
     setStatus(`Decoding ${(audioBlob.size / 1024).toFixed(0)}KB audio...`);
+    const tDecode0 = performance.now();
     const arrayBuffer = await audioBlob.arrayBuffer();
     const audioContext = new AudioContext({ sampleRate: 16000 });
     let audioData: Float32Array;
@@ -1245,20 +1407,42 @@ function App() {
       return;
     }
 
+    const tTrim0 = performance.now();
+    const trimResult = trimStreamSilence(audioData);
+    audioData = trimResult.audio;
+    timings["audio-trim"] = Math.round(performance.now() - tTrim0);
+    metrics["audio-ms"] =
+      `${durationMsForSamples(trimResult.originalSamples)}->${durationMsForSamples(trimResult.trimmedSamples)}`;
+    metrics["trim-ms"] =
+      `${trimResult.leadingTrimMs}+${trimResult.trailingTrimMs}`;
+    metrics["voice-frames"] = trimResult.voicedFrames;
+    metrics["trim-threshold"] =
+      `${trimResult.thresholdRms.toFixed(3)}/${trimResult.thresholdPeak.toFixed(3)}`;
+
     const durationSec = (audioData.length / 16000).toFixed(1);
     setIsProcessing(true);
     setStatus(`Transcribing ${durationSec}s...`);
+    timings["decode+mixdown"] = Math.round(performance.now() - tDecode0);
 
     try {
+      const tWhisperLoad0 = performance.now();
       await ensureWhisperModelLoaded("dictation");
+      timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
+
+      const tAudioArray0 = performance.now();
+      const audioDataForIpc = Array.from(audioData);
+      timings["audio-array"] = Math.round(performance.now() - tAudioArray0);
+
+      const tWhisper0 = performance.now();
       const result = await invoke<Transcription>("transcribe_audio", {
-        audioData: Array.from(audioData),
+        audioData: audioDataForIpc,
         initialPrompt: buildInitialPrompt(
           transcriptionLanguage,
           dictWordsRef.current,
         ),
         language: getWhisperLanguage(transcriptionLanguage, "dictation"),
       });
+      timings["whisper-transcribe"] = Math.round(performance.now() - tWhisper0);
 
       if (!result.text) {
         console.warn("[process] ABORT: no speech detected (whisper empty)");
@@ -1285,17 +1469,22 @@ function App() {
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
       if (aiCleanupEnabled) {
         setStatus("Improving with AI...");
+        const tAi0 = performance.now();
         try {
           const cleaned = await aiService.processText(
             finalText,
             "transcribe_cleanup",
-            activeDictationContext && dictationRouting
-              ? {
-                  context: activeDictationContext,
-                  routing: dictationRouting,
-                }
-              : undefined,
+            {
+              promptProfile: "stream",
+              ...(activeDictationContext && dictationRouting
+                ? {
+                    context: activeDictationContext,
+                    routing: dictationRouting,
+                  }
+                : {}),
+            },
           );
+          timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
           if (cleaned && cleaned.trim().length > 0) {
             finalText = cleaned;
           } else {
@@ -1305,6 +1494,7 @@ function App() {
             cleanupReturnedEmpty = true;
           }
         } catch (aiErr) {
+          timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
           // Silently fall back to raw transcript — user never sees this
           console.warn(
             "[ai] silent cleanup failed, using raw transcript:",
@@ -1323,6 +1513,7 @@ function App() {
       // Now that AI cleanup is complete, paste the improved text to the target app.
       if (shouldPaste) {
         const isMac = navigator.platform.toLowerCase().includes("mac");
+        const tPaste0 = performance.now();
         try {
           // Pass targetApp so the Rust command can re-activate it via
           // NSRunningApplication before posting Cmd+V.  This handles the case
@@ -1333,6 +1524,7 @@ function App() {
             text: finalText,
             targetApp: _targetApp || undefined,
           });
+          timings["paste"] = Math.round(performance.now() - tPaste0);
           if (pasteResult === "CLIPBOARD_ONLY") {
             // Accessibility not granted — text is in clipboard, guide user
             setStatus(
@@ -1344,6 +1536,7 @@ function App() {
             setStatus("Pasted! ✓");
           }
         } catch (pe) {
+          timings["paste"] = Math.round(performance.now() - tPaste0);
           console.error("[paste] FAILED:", pe);
           setStatus(
             isMac
@@ -1353,6 +1546,7 @@ function App() {
         }
       }
 
+      const tPersist0 = performance.now();
       setTranscript((prev) => (prev ? prev + "\n\n" + finalText : finalText));
 
       // Add to local transcripts list for the HomeTab UI
@@ -1369,16 +1563,37 @@ function App() {
         saveSetting("localTranscripts", updatedTranscripts);
         return updatedTranscripts;
       });
+      timings["persist"] = Math.round(performance.now() - tPersist0);
 
       if (!shouldPaste) {
         setStatus("Done! ✓");
       }
     } catch (e) {
+      hadError = true;
       setStatus(`❌ Error: ${e}`);
+      // Surface an error glyph on the pill briefly, then collapse to rest.
+      invoke("set_pill_phase", { phase: "error" }).catch(console.warn);
+      setTimeout(() => {
+        invoke("hide_recording_pill").catch(console.warn);
+      }, 1500);
     } finally {
       setIsProcessing(false);
-      // Hide the pill now that processing is complete
-      invoke("hide_recording_pill").catch(console.warn);
+      // Success path: show the "Inserted" toast for the design dwell, then
+      // collapse the pill back to its resting edge handle.
+      if (!hadError) {
+        invoke("set_pill_phase", { phase: "inserted" }).catch(console.warn);
+        setTimeout(() => {
+          invoke("hide_recording_pill").catch(console.warn);
+        }, 1500);
+      }
+      const totalMs = Math.round(performance.now() - tStart);
+      const timingParts = Object.entries(timings)
+        .map(([k, v]) => `${k}=${v}ms`);
+      const metricParts = Object.entries(metrics)
+        .map(([k, v]) => `${k}=${v}`);
+      const parts = [...timingParts, ...metricParts]
+        .join(" ");
+      console.info(`[stream-timing] total=${totalMs}ms ${parts}`);
     }
 
     // Don't stop the stream — keep it warm for next recording
@@ -1387,9 +1602,21 @@ function App() {
   // ── Scribble recording (click to start/stop, saves a Scribble) ───────────
 
   const processScribbleAudio = async () => {
+    const finish = (msg: string | null) => {
+      setIsProcessing(false);
+      setIsScribbleProcessing(false);
+      isScribbleProcessingRef.current = false;
+      setScribbleStatus(msg);
+      if (msg) {
+        window.setTimeout(() => {
+          setScribbleStatus((current) => (current === msg ? null : current));
+        }, 2500);
+      }
+    };
+
     if (!user?.id) {
       setStatus("Sign in to save Scribbles.");
-      isScribbleProcessingRef.current = false;
+      finish("Sign in to save Scribbles.");
       return;
     }
 
@@ -1398,7 +1625,7 @@ function App() {
 
     if (chunkCount === 0 || totalBytes === 0) {
       setStatus("No audio captured. Check microphone permission.");
-      isScribbleProcessingRef.current = false;
+      finish("No audio captured. Check microphone permission.");
       return;
     }
 
@@ -1409,11 +1636,13 @@ function App() {
 
     if (audioBlob.size < 500) {
       setStatus("Scribble recording was too short. Try again.");
-      isScribbleProcessingRef.current = false;
+      finish("Recording was too short. Try again.");
       return;
     }
 
     setIsProcessing(true);
+    setIsScribbleProcessing(true);
+    setScribbleStatus("Transcribing…");
     setStatus("Transcribing Scribble...");
 
     const arrayBuffer = await audioBlob.arrayBuffer();
@@ -1432,8 +1661,7 @@ function App() {
       audioData = mono;
     } catch (e) {
       setStatus(`Scribble decode failed (${mimeType}): ${e}`);
-      setIsProcessing(false);
-      isScribbleProcessingRef.current = false;
+      finish(`Decode failed: ${e}`);
       return;
     } finally {
       audioContext.close();
@@ -1441,8 +1669,7 @@ function App() {
 
     if (audioData.length < 1600) {
       setStatus("Scribble recording was too short. Try again.");
-      setIsProcessing(false);
-      isScribbleProcessingRef.current = false;
+      finish("Recording was too short. Try again.");
       return;
     }
 
@@ -1460,11 +1687,13 @@ function App() {
       const rawText = result.text?.trim() ?? "";
       if (!rawText) {
         setStatus("No speech detected. Try speaking louder or closer.");
+        finish("No speech detected. Try again.");
         return;
       }
 
       let formattedText = rawText;
       if (aiImprovementEnabledRef.current) {
+        setScribbleStatus("Cleaning up…");
         setStatus("Cleaning up Scribble...");
         try {
           const cleaned = await aiService.processText(rawText, "transcribe_cleanup");
@@ -1476,6 +1705,7 @@ function App() {
         }
       }
 
+      setScribbleStatus("Saving…");
       setStatus("Saving Scribble...");
       const { error } = await scribblesService.createScribble({
         user_id: user.id,
@@ -1491,12 +1721,11 @@ function App() {
 
       setScribbleRefreshKey((key) => key + 1);
       setStatus("Scribble saved.");
+      finish("Scribble saved ✓");
     } catch (e) {
       console.error("[scribble] failed:", e);
       setStatus(`Scribble failed: ${e}`);
-    } finally {
-      setIsProcessing(false);
-      isScribbleProcessingRef.current = false;
+      finish(`Failed: ${e}`);
     }
   };
 
@@ -1568,9 +1797,12 @@ function App() {
       scribbleMediaRecorderRef.current.state === "recording"
     ) {
       isScribbleProcessingRef.current = true;
+      setIsScribbleProcessing(true);
+      setScribbleStatus("Processing…");
       scribbleMediaRecorderRef.current.stop();
     } else {
       isScribbleProcessingRef.current = false;
+      setIsScribbleProcessing(false);
     }
   };
 
@@ -1689,358 +1921,6 @@ function App() {
     }
   }, [clearCalendarConnection, googleCalendarConnectedUserId, user?.id]);
 
-  // ── Meeting recording (click to start/stop, no auto-paste) ──────────────
-
-  const resetMeetingPipelineState = () => {
-    if (meetingTimerRef.current) {
-      clearInterval(meetingTimerRef.current);
-      meetingTimerRef.current = null;
-    }
-    if (meetingSegmentTimerRef.current) {
-      clearTimeout(meetingSegmentTimerRef.current);
-      meetingSegmentTimerRef.current = null;
-    }
-    meetingSegmentQueueRef.current = [];
-    meetingSegmentWorkerRunningRef.current = false;
-    meetingTranscriptRef.current = "";
-    meetingTranscriptSegmentsRef.current = [];
-    meetingStartedAtRef.current = "";
-    meetingNextSegmentIndexRef.current = 0;
-    meetingStopRequestedRef.current = false;
-    meetingFinalizationResolveRef.current = null;
-    meetingSegmentStopRef.current = null;
-    meetingSessionUsesSystemAudioRef.current = false;
-    systemAudioActiveRef.current = false;
-    meetingMediaRecorderRef.current = null;
-    setMeetingTranscript("");
-    setMeetingTranscriptSegments([]);
-    setMeetingStartedAt("");
-    setMeetingRecordingTime(0);
-    setMinutesSegmentQueue(0);
-    setMinutesSegmentsCompleted(0);
-    setMinutesSegmentsTotal(0);
-    setMinutesTranscriptionStatus("idle");
-  };
-
-  const maybeCompleteMeetingFinalization = () => {
-    if (!meetingStopRequestedRef.current) return;
-    if (
-      meetingMediaRecorderRef.current &&
-      meetingMediaRecorderRef.current.state === "recording"
-    ) {
-      return;
-    }
-    if (meetingSegmentQueueRef.current.length > 0) return;
-    if (meetingSegmentWorkerRunningRef.current) return;
-
-    systemAudioActiveRef.current = false;
-    setMinutesSegmentQueue(0);
-    setMinutesTranscriptionStatus("notes");
-    meetingFinalizationResolveRef.current?.();
-    meetingFinalizationResolveRef.current = null;
-  };
-
-  const processMeetingSegmentQueue = async () => {
-    if (meetingSegmentWorkerRunningRef.current) return;
-    meetingSegmentWorkerRunningRef.current = true;
-
-    while (meetingSegmentQueueRef.current.length > 0) {
-      const job = meetingSegmentQueueRef.current.shift();
-      if (!job) break;
-
-      setMinutesSegmentQueue(meetingSegmentQueueRef.current.length);
-      if (!meetingStopRequestedRef.current) {
-        setMinutesTranscriptionStatus("transcribing");
-      }
-
-      try {
-        const bytes = Array.from(new Uint8Array(await job.blob.arrayBuffer()));
-        const result = await invoke<Transcription>(
-          "transcribe_meeting_segment_bytes",
-          {
-            bytes,
-            ext: job.ext,
-            useSystemAudio: job.useSystemAudio,
-            initialPrompt: buildInitialPrompt(
-              transcriptionLanguage,
-              dictWordsRef.current,
-            ),
-            language: getWhisperLanguage(transcriptionLanguage, "minutes"),
-            segmentIndex: job.segmentIndex,
-            previousTailText: getTranscriptTailWords(
-              meetingTranscriptRef.current,
-              30,
-            ),
-          },
-        );
-
-        if (result.segments && result.segments.length > 0) {
-          const absoluteSegments = toAbsoluteMeetingTranscriptSegments(
-            job,
-            result.segments,
-          );
-          const mergedSegments = mergeMeetingTranscriptSegments(
-            meetingTranscriptSegmentsRef.current,
-            absoluteSegments,
-          );
-          meetingTranscriptSegmentsRef.current = mergedSegments;
-          setMeetingTranscriptSegments(mergedSegments);
-
-          const nextTranscript =
-            buildTranscriptFromStructuredSegments(mergedSegments);
-          meetingTranscriptRef.current = nextTranscript;
-          setMeetingTranscript(nextTranscript);
-        } else if (result.text) {
-          const nextTranscript = appendTranscriptSegment(
-            meetingTranscriptRef.current,
-            result.text,
-          );
-          meetingTranscriptRef.current = nextTranscript;
-          setMeetingTranscript(nextTranscript);
-        }
-      } catch (e) {
-        console.error("[meeting] segment transcription failed:", e);
-      } finally {
-        setMinutesSegmentsCompleted((prev) => prev + 1);
-      }
-    }
-
-    meetingSegmentWorkerRunningRef.current = false;
-
-    if (meetingStopRequestedRef.current) {
-      maybeCompleteMeetingFinalization();
-      return;
-    }
-
-    if (
-      meetingMediaRecorderRef.current &&
-      meetingMediaRecorderRef.current.state === "recording"
-    ) {
-      setMinutesTranscriptionStatus("recording");
-    } else {
-      setMinutesTranscriptionStatus("idle");
-    }
-  };
-
-  const queueMeetingSegment = (job: MeetingSegmentJob) => {
-    meetingSegmentQueueRef.current.push(job);
-    setMinutesSegmentQueue(meetingSegmentQueueRef.current.length);
-    setMinutesSegmentsTotal((prev) => Math.max(prev, job.segmentIndex + 1));
-    if (!meetingStopRequestedRef.current) {
-      setMinutesTranscriptionStatus("transcribing");
-    }
-    void processMeetingSegmentQueue();
-  };
-
-  const startMeetingSegmentRecorder = (sessionId: number) => {
-    const stream = warmStreamRef.current;
-    if (!stream) return;
-
-    const useMp4 = MediaRecorder.isTypeSupported("audio/mp4");
-    const mimeType = useMp4 ? "audio/mp4" : "audio/webm";
-    const ext = useMp4 ? "mp4" : "webm";
-    const segmentIndex = meetingNextSegmentIndexRef.current;
-    const segmentUsesSystemAudio = meetingSessionUsesSystemAudioRef.current;
-    meetingNextSegmentIndexRef.current += 1;
-    const segmentStartedAtMs = Date.now();
-    if (segmentIndex === 0) {
-      const startedAt = new Date(segmentStartedAtMs).toISOString();
-      meetingStartedAtRef.current = startedAt;
-      setMeetingStartedAt(startedAt);
-    }
-
-    const chunks: Blob[] = [];
-    let stopMode: "rotate" | "final" | null = null;
-    let rotationPromise: Promise<void> = Promise.resolve();
-    let segmentEndedAtMs = segmentStartedAtMs;
-
-    const mediaRecorder = new MediaRecorder(stream, { mimeType });
-    meetingMediaRecorderRef.current = mediaRecorder;
-    meetingSegmentStopRef.current = (mode = "final") => {
-      if (mediaRecorder.state !== "recording") return;
-      if (meetingSegmentTimerRef.current) {
-        clearTimeout(meetingSegmentTimerRef.current);
-        meetingSegmentTimerRef.current = null;
-      }
-
-      stopMode = mode;
-      segmentEndedAtMs = Date.now();
-      rotationPromise = segmentUsesSystemAudio
-        ? invoke("rotate_meeting_system_audio_segment", {
-            segmentIndex,
-            restartCapture: mode === "rotate",
-          })
-            .then(() => undefined)
-            .catch((err) => {
-              console.warn("[meeting] system audio segment rotation failed:", err);
-              meetingSessionUsesSystemAudioRef.current = false;
-              systemAudioActiveRef.current = false;
-            })
-        : Promise.resolve();
-
-      mediaRecorder.stop();
-    };
-
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunks.push(event.data);
-      }
-    };
-
-    mediaRecorder.onstop = () => {
-      window.setTimeout(async () => {
-        await rotationPromise;
-
-        const shouldContinue =
-          stopMode === "rotate" &&
-          !meetingStopRequestedRef.current &&
-          meetingSessionIdRef.current === sessionId;
-
-        if (shouldContinue) {
-          startMeetingSegmentRecorder(sessionId);
-        }
-
-        if (meetingMediaRecorderRef.current === mediaRecorder) {
-          meetingMediaRecorderRef.current = null;
-        }
-        if (meetingSegmentStopRef.current && stopMode === "final") {
-          meetingSegmentStopRef.current = null;
-        }
-
-        const audioBlob = new Blob(chunks, { type: mimeType });
-        if (audioBlob.size >= 500) {
-          queueMeetingSegment({
-            blob: audioBlob,
-            ext,
-            segmentIndex,
-            useSystemAudio: segmentUsesSystemAudio,
-            startedAtMs: segmentStartedAtMs,
-            endedAtMs: Math.max(segmentEndedAtMs, segmentStartedAtMs + 1),
-          });
-        }
-
-        maybeCompleteMeetingFinalization();
-      }, 0);
-    };
-
-    mediaRecorder.start();
-    setMinutesTranscriptionStatus("recording");
-    meetingSegmentTimerRef.current = setTimeout(() => {
-      if (meetingSessionIdRef.current !== sessionId || meetingStopRequestedRef.current) {
-        return;
-      }
-      meetingSegmentStopRef.current?.("rotate");
-    }, MEETING_SEGMENT_DURATION_MS);
-  };
-
-  const startMeetingRecording = async () => {
-    if (
-      isRecordingRef.current ||
-      isScribbleRecordingRef.current ||
-      isScribbleProcessingRef.current
-    ) {
-      return;
-    }
-
-    setSystemAudioWarning("");
-    resetMeetingPipelineState();
-
-    try {
-      await ensureWhisperModelLoaded("minutes");
-      await warmVoiceEngine();
-    } catch (e) {
-      console.error("[meeting-record] failed to prepare Whisper model:", e);
-      return;
-    }
-
-    let stream: MediaStream;
-    if (
-      warmStreamRef.current &&
-      warmStreamRef.current.getAudioTracks().some((t) => t.readyState === "live")
-    ) {
-      stream = warmStreamRef.current;
-    } else {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: getAudioConstraints(),
-        });
-        warmStreamRef.current = stream;
-      } catch (e) {
-        console.error("[meeting-record] getUserMedia failed:", e);
-        return;
-      }
-    }
-    meetingSessionIdRef.current += 1;
-    const sessionId = meetingSessionIdRef.current;
-    meetingStopRequestedRef.current = false;
-    meetingTranscriptRef.current = "";
-    await invoke("clear_meeting_segment_buffers").catch((err) => {
-      console.warn("[meeting-record] failed to clear segment buffers:", err);
-    });
-
-    // Start system audio capture (ScreenCaptureKit on macOS) in parallel with mic
-    if (systemAudioEnabled && systemAudioSupported) {
-      try {
-        await invoke("start_system_audio_capture");
-        systemAudioActiveRef.current = true;
-        meetingSessionUsesSystemAudioRef.current = true;
-        setSystemAudioWarning("");
-        console.log("[meeting-record] System audio capture started");
-      } catch (e) {
-        console.warn("[meeting-record] System audio capture failed, mic only:", e);
-        systemAudioActiveRef.current = false;
-        meetingSessionUsesSystemAudioRef.current = false;
-        const reason = String(e).replace(/^Error:\s*/i, "");
-        setSystemAudioWarning(
-          `${reason} Meeting recording will continue with your microphone only.`,
-        );
-      }
-    } else {
-      systemAudioActiveRef.current = false;
-      meetingSessionUsesSystemAudioRef.current = false;
-      setSystemAudioWarning("");
-    }
-
-    isMeetingRecordingRef.current = true;
-    setIsMeetingRecording(true);
-    setMeetingRecordingTime(0);
-    setMeetingTranscript("");
-    setMinutesTranscriptionStatus("recording");
-    meetingTimerRef.current = setInterval(() => {
-      setMeetingRecordingTime((prev) => prev + 1);
-    }, 1000);
-    startMeetingSegmentRecorder(sessionId);
-  };
-
-  const stopMeetingRecording = () => {
-    isMeetingRecordingRef.current = false;
-    setIsMeetingRecording(false);
-    meetingStopRequestedRef.current = true;
-    setMinutesTranscriptionStatus("finalizing");
-
-    if (meetingTimerRef.current) {
-      clearInterval(meetingTimerRef.current);
-      meetingTimerRef.current = null;
-    }
-    if (meetingSegmentTimerRef.current) {
-      clearTimeout(meetingSegmentTimerRef.current);
-      meetingSegmentTimerRef.current = null;
-    }
-
-    if (meetingSegmentStopRef.current) {
-      meetingSegmentStopRef.current("final");
-      return;
-    }
-
-    if (systemAudioActiveRef.current) {
-      void invoke("stop_system_audio_capture").catch((err) => {
-        console.warn("[meeting] failed to stop system audio capture:", err);
-      });
-      systemAudioActiveRef.current = false;
-    }
-    maybeCompleteMeetingFinalization();
-  };
-
   const handlePermissionsContinue = async () => {
     await saveSetting("permissionsDone", true);
     setPermissionsShown(true);
@@ -2088,26 +1968,18 @@ function App() {
     setSystemAudioEnabled(enabled);
     saveSetting("systemAudioEnabled", enabled);
     if (!enabled) {
-      setSystemAudioWarning("");
+      clearSystemAudioWarning();
     }
-  }, []);
+  }, [clearSystemAudioWarning]);
 
   useEffect(() => {
     if (!setupComplete) return;
-
-    if (activeTab === "meetings") {
-      void ensureWhisperModelLoaded("minutes")
-        .then(() => warmVoiceEngine())
-        .catch((err) => console.warn("[whisper] failed to prepare Minutes model:", err));
-      return;
-    }
-
-    if (currentWhisperRoleRef.current === "minutes") {
-      void ensureWhisperModelLoaded("dictation")
-        .then(() => warmVoiceEngine())
-        .catch((err) => console.warn("[whisper] failed to restore dictation model:", err));
-    }
-  }, [activeTab, ensureWhisperModelLoaded, setupComplete]);
+    if (activeTab !== "meetings") return;
+    if (currentWhisperRoleRef.current !== "minutes") return;
+    void warmVoiceEngine().catch((err) =>
+      console.warn("[whisper] failed to warm voice engine:", err),
+    );
+  }, [activeTab, setupComplete]);
 
   // ── Subscription state ─────────────────────────────────────────────────────
   const [isProUser, setIsProUser] = useState(false);
@@ -2255,18 +2127,7 @@ function App() {
                   transcript={meetingTranscript}
                   transcriptSegments={meetingTranscriptSegments}
                   meetingStartedAt={meetingStartedAt}
-                  onClearTranscript={() => {
-                    meetingTranscriptRef.current = "";
-                    meetingTranscriptSegmentsRef.current = [];
-                    meetingStartedAtRef.current = "";
-                    setMeetingTranscript("");
-                    setMeetingTranscriptSegments([]);
-                    setMeetingStartedAt("");
-                    setMinutesSegmentQueue(0);
-                    setMinutesSegmentsCompleted(0);
-                    setMinutesSegmentsTotal(0);
-                    setMinutesTranscriptionStatus("idle");
-                  }}
+                  onClearTranscript={clearMeetingTranscript}
                   systemAudioWarning={systemAudioWarning}
                   googleCalendarToken={googleCalendarToken}
                   onConnectCalendar={connectGoogleCalendar}
@@ -2290,6 +2151,8 @@ function App() {
                     saveSetting("savedMeetings", updated);
                     meetingsService.deleteMeeting(id).catch((e) => console.warn("[minutes] delete failed:", e));
                   }}
+                  hostName={user.user_metadata?.full_name || ""}
+                  hostEmail={user.email || ""}
                   minutesTranscriptionStatus={minutesTranscriptionStatus}
                   minutesSegmentQueue={minutesSegmentQueue}
                   minutesSegmentsCompleted={minutesSegmentsCompleted}
@@ -2302,7 +2165,10 @@ function App() {
                   userId={user.id}
                   refreshKey={scribbleRefreshKey}
                   isRecording={isScribbleRecording}
+                  isProcessing={isScribbleProcessing}
+                  statusMessage={scribbleStatus}
                   onToggleRecording={() => {
+                    if (isScribbleProcessing) return;
                     if (isScribbleRecording) {
                       stopScribbleRecording();
                     } else {
@@ -2318,7 +2184,13 @@ function App() {
                   transcriptionLanguage={transcriptionLanguage}
                   onLanguageChange={(lang) => {
                     setTranscriptionLanguage(lang);
+                    transcriptionLanguageRef.current = lang;
                     saveSetting("transcriptionLanguage", lang);
+                    invoke("pill_push_settings", {
+                      transform: tonePresetRef.current,
+                      language: lang,
+                      autoApply: autoPasteRef.current,
+                    }).catch(console.warn);
                   }}
                   selectedMicId={selectedMicId}
                   onMicChange={(id) => {
@@ -2343,7 +2215,7 @@ function App() {
                         ...Object.values(FALLBACK_MODELS).map(
                           (spec) => `${home}/${relativeModelPath(spec.variant)}`,
                         ),
-                        // Legacy local AI model files (removed in favour of Groq)
+                        // Legacy local AI model files (removed in favour of cloud AI)
                         `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
                         `${home}/.oscar/models/phi-3.5-tokenizer.json`,
                       ];

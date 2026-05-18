@@ -29,7 +29,7 @@ Record → [active app / tab context captured] → STT → Format Agent (context
 - Shared context type in `@oscar/shared/types`
 - `AI_CONFIG` / prompt selection logic in `lib/services/ai.service.ts`
 - New prompt variants in `lib/prompts.ts` keyed by app category (ide, browser, email, docs, chat)
-- Pass context through recording hook → format API route → Groq call
+- Pass context through recording hook → format API route → Gemini call
 
 ---
 
@@ -61,7 +61,7 @@ Record (Vibe Coding mode) → STT → Prompt Enhancement Agent → Ready-to-past
 ```
 
 **Implementation touch points**:
-- New API route: `app/api/groq/vibe-code/route.ts`
+- New API route: `app/api/ai/vibe-code/route.ts`
 - New system prompt in `lib/prompts.ts`: `SYSTEM_PROMPTS.VIBE_CODE` — aggressive prompt engineering, coding-aware
 - New hook: `useVibeCoding.ts` in `lib/hooks/`
 - Mode selector UI on recording screen (web + desktop)
@@ -77,6 +77,64 @@ Output:     "The loading state in the dashboard feels sluggish. Investigate why 
              the fetch waterfall and ensure the loading state transitions smoothly. Suggest 
              fixes with code."
 ```
+
+---
+
+## Voice Activity Detection (VAD) for Hands-Free Dictation
+
+**Problem**: Today the desktop dictation pill needs an explicit start/stop — hold `Ctrl+Space`, or click the pill, click again. That's fine for a quick burst but breaks the flow for longer dictation: the user has to keep a finger on the hotkey, and accidental releases truncate the recording. There's also no way to skip the "click to stop" step — the pill always sits at processing only when the user tells it to.
+
+**Idea**: Run a Voice Activity Detection model on the live mic stream so the pill auto-arms on speech and auto-finalizes on silence. The user enters the hit zone (or hits the hotkey once as a toggle), then just speaks. When silence runs past a configurable threshold (~700–1200 ms), the pill transitions to processing on its own.
+
+**Why VAD over a simple amplitude gate**:
+
+- Amplitude gates fire on keyboard noise, fan hum, AC hiss. Real VAD models (Silero v5, WebRTC VAD, ONNX-based) classify speech-vs-noise per ~20–30 ms frame and stay robust across noisy rooms.
+- Silero v5 is ~1.8 MB, ONNX-runnable, runs at >100× realtime on a single CPU core — cheap to bundle in the Tauri binary.
+- WebRTC VAD is even smaller (built into most browser stacks) but more false-positive prone on music / TV background.
+
+**Surfaces affected**:
+
+- **Desktop only initially.** The pill is the natural entry point — we already have the mic stream warm.
+- Web could follow if a meaningful streaming flow ships, but no plans yet.
+
+**Rough flow**:
+
+```
+Pill ready / hotkey toggle on
+  → MediaRecorder + VAD analyser run in parallel on the same stream
+  → VAD: speech-start → flip pill to recording
+  → VAD: silence > threshold → flip pill to processing, finalize
+  → existing transcribe_cleanup → paste pipeline
+```
+
+**Open questions** (to settle before implementation):
+
+- **Push-to-talk vs hands-free as default?** Likely a setting in the pill's gear popover — "Hands-free dictation" toggle. Default off so existing users aren't surprised.
+- **Silence threshold tuning** — too short and pauses-for-thought truncate; too long and the user waits. Start at 900 ms, expose as a slider.
+- **Confidence floor** — VAD output is probabilistic. Don't transition out of recording on a single silence frame; require N consecutive silence frames.
+- **Wake on what?** Only flip to recording when speech is detected AFTER the user has hit the ready/expanded state — never spontaneously when the user is just hovering near the bottom edge.
+- **Pre-roll buffer**: VAD detects speech ~100–200 ms after it starts. Keep a rolling 300 ms buffer so we don't clip the first syllable.
+
+**Implementation touch points**:
+
+- Add Silero v5 ONNX model to [`packages/desktop/src-tauri/resources/`](./packages/desktop/src-tauri); load via `ort` (already a transitive whisper-rs dep) or expose a small JS wrapper running in the pill's webview.
+- New Rust command `vad_analyze_frame(samples: &[f32]) -> f32` returning speech probability; called from the same audio pipeline that feeds whisper-rs in [`packages/desktop/src/App.tsx`](./packages/desktop/src/App.tsx) `startHotkeyRecording`.
+- Pill state machine ([`packages/desktop/public/pill.html`](./packages/desktop/public/pill.html)): add `armed` phase between `expanded` and `recording`. New events: `pill-set-phase: armed`, transitions driven by VAD probability from the host.
+- Setting: `vadEnabled` + `vadSilenceMs` persisted alongside `tonePreset` / `transcriptionLanguage` / `autoPaste`.
+- Surface the toggle in the existing pill settings popover and in `SettingsTab`.
+
+**Example**:
+
+```
+User hits Ctrl+Space once (toggle), or hovers the edge handle
+  → pill expands, sits in "armed" with a soft cyan ring
+  → user speaks: "draft a reply to that email about the demo"
+  → pill flips to recording on first detected speech frame
+  → user pauses 1 s past their last word
+  → pill flips to processing → cleanup → pastes into Gmail
+```
+
+**Out of scope for v1**: speaker diarization (Murmur is single-speaker dictation), barge-in (interrupting a paste), continuous transcription with rolling final segments. Park those behind separate roadmap items if needed.
 
 ---
 

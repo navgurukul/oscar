@@ -1,12 +1,11 @@
 //! Whisper model lifecycle (download, load, warm) and core transcription
 //! pipeline shared between dictation and meeting flows.
 
-use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex, OnceLock};
-use tauri::Emitter;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+use crate::events::{DownloadProgress, OscarEvent};
 use crate::hardware::HardwareProfile;
 use crate::state::{
     AppState, TranscriptSegmentResult, TranscriptSpeaker, TranscriptionResult,
@@ -18,13 +17,6 @@ use crate::state::{
 fn hardware_profile() -> &'static HardwareProfile {
     static PROFILE: OnceLock<HardwareProfile> = OnceLock::new();
     PROFILE.get_or_init(HardwareProfile::detect)
-}
-
-#[derive(Clone, Serialize)]
-struct DownloadProgress {
-    downloaded: u64,
-    total: u64,
-    percentage: u8,
 }
 
 #[tauri::command]
@@ -96,14 +88,12 @@ pub async fn download_whisper_model(
         // webview IPC channel on fast networks.
         if percentage != last_emit_pct {
             last_emit_pct = percentage;
-            let _ = app.emit(
-                "download-progress",
-                DownloadProgress {
-                    downloaded,
-                    total: total_size,
-                    percentage,
-                },
-            );
+            OscarEvent::DownloadProgress(DownloadProgress {
+                downloaded,
+                total: total_size,
+                percentage,
+            })
+            .dispatch(&app);
         }
     }
 
@@ -143,17 +133,18 @@ fn load_whisper_model_inner(
     path: &str,
     state: &Arc<Mutex<AppState>>,
 ) -> Result<String, String> {
-    let should_reload = {
+    let already_loaded = {
         let app_state = state.lock().map_err(|e| e.to_string())?;
-        !(
-            app_state.whisper_context.is_some()
-                && app_state.loaded_model_role.as_deref() == Some(role)
-                && app_state.loaded_model_path.as_deref() == Some(path)
-        )
+        app_state.whisper_context.is_some()
+            && app_state.loaded_model_path.as_deref() == Some(path)
     };
 
-    if !should_reload {
-        log::info!("[whisper] Model already loaded for role={} path={}", role, path);
+    if already_loaded {
+        log::info!(
+            "[whisper] Model already loaded (role={} path={})",
+            role,
+            path,
+        );
         return Ok("Whisper model already loaded".to_string());
     }
 
@@ -166,7 +157,6 @@ fn load_whisper_model_inner(
         })?;
     let mut app_state = state.lock().map_err(|e| e.to_string())?;
     app_state.whisper_context = Some(Arc::new(context));
-    app_state.loaded_model_role = Some(role.to_string());
     app_state.loaded_model_path = Some(path.to_string());
     log::info!("[whisper] Model loaded successfully");
     Ok("Whisper model loaded successfully".to_string())
@@ -211,6 +201,103 @@ pub fn warm_whisper_runtime(
     Ok("Whisper runtime warmed".to_string())
 }
 
+/// Known Whisper hallucination phrases that surface on silence, music,
+/// background noise, or cross-talk. Match on lowercased trimmed segment.
+const HALLUCINATION_PHRASES: &[&str] = &[
+    "thank you.",
+    "thank you",
+    "thanks for watching.",
+    "thanks for watching",
+    "thanks for watching!",
+    "subscribe to the channel.",
+    "please subscribe.",
+    "please subscribe to the channel.",
+    "you",
+    "...",
+    "bye.",
+    "bye",
+    "bye!",
+    "i'm not going to read the text",
+    "i'm not going to read the text.",
+    "ruins fat is here!",
+    "ruins fat is here",
+];
+
+/// Mark a Whisper segment as a likely hallucination so the caller can drop it
+/// before downstream summarization sees it. We are deliberately conservative:
+/// only flag clear-cut noise patterns (stock phrases, repetition loops,
+/// wrong-script-for-target-language) rather than anything ambiguous.
+fn is_hallucination_segment(trimmed: &str, language: &str) -> bool {
+    let lower = trimmed.to_lowercase();
+
+    if HALLUCINATION_PHRASES.iter().any(|phrase| lower == *phrase) {
+        return true;
+    }
+
+    let condensed: String = lower
+        .chars()
+        .filter(|c| !c.is_whitespace() && !c.is_ascii_punctuation())
+        .collect();
+
+    let words: Vec<&str> = lower.split_whitespace().collect();
+
+    // `foreign foreign foreign ...` style — Whisper's "unknown language" loop.
+    if !words.is_empty() && words.iter().all(|w| *w == "foreign") {
+        return true;
+    }
+
+    // Same single word repeated 4+ times with no other content.
+    if words.len() >= 4 {
+        let first = words[0];
+        if words.iter().all(|w| *w == first) {
+            return true;
+        }
+    }
+
+    // CJK / Hangul / Hiragana / Katakana segments in a non-CJK target
+    // language are almost always hallucinations on Indian English / Hinglish
+    // meetings.
+    let mut script_counts = (0usize, 0usize); // (cjk_like, latin_like)
+    for c in trimmed.chars() {
+        let code = c as u32;
+        if (0xAC00..=0xD7AF).contains(&code) // Hangul
+            || (0x3040..=0x30FF).contains(&code) // Hiragana / Katakana
+            || (0x4E00..=0x9FFF).contains(&code) // CJK Unified
+            || (0x3400..=0x4DBF).contains(&code) // CJK Ext A
+        {
+            script_counts.0 += 1;
+        } else if c.is_ascii_alphabetic() {
+            script_counts.1 += 1;
+        }
+    }
+    let target_is_cjk = matches!(language, "ko" | "ja" | "zh");
+    if !target_is_cjk && script_counts.0 > 0 && script_counts.0 >= script_counts.1 {
+        return true;
+    }
+
+    // Pure-punctuation segments slipped through Whisper's filter occasionally.
+    if !condensed.is_empty() && condensed.chars().all(|c| !c.is_alphanumeric()) {
+        return true;
+    }
+
+    false
+}
+
+/// Frame-level VAD pre-filter. Returns a speech-only audio buffer with
+/// interior silence stripped, plus a flag indicating whether any speech
+/// survived. Replaces the old whole-clip energy gate — interior gaps no
+/// longer feed silent samples into Whisper, which is the strongest
+/// mitigation for silence-triggered hallucinations.
+fn filter_speech(audio_data: &[f32]) -> (Vec<f32>, bool) {
+    if audio_data.is_empty() {
+        return (Vec::new(), false);
+    }
+    let mut detector = crate::vad::make_default();
+    let filtered = crate::vad::keep_speech_only(audio_data, detector.as_mut());
+    let has_speech = !filtered.is_empty();
+    (filtered, has_speech)
+}
+
 /// Shared transcription logic used by both `transcribe_audio` and
 /// `transcribe_meeting_audio`.
 pub(crate) fn transcribe_audio_inner(
@@ -228,12 +315,28 @@ pub(crate) fn transcribe_audio_inner(
         });
     }
 
+    let (speech_audio, has_speech) = filter_speech(audio_data);
+    if !has_speech {
+        log::info!(
+            "[whisper] Skipping inference — VAD found no speech in {} samples",
+            audio_data.len()
+        );
+        return Ok(TranscriptionResult {
+            text: String::new(),
+            error: None,
+            segments: None,
+        });
+    }
+
     log::info!(
-        "[whisper] transcribe_audio_inner — {} samples ({:.1}s), lang={:?}",
+        "[whisper] transcribe_audio_inner — input {} samples ({:.1}s) → speech {} samples ({:.1}s), lang={:?}",
         audio_data.len(),
         audio_data.len() as f64 / 16000.0,
+        speech_audio.len(),
+        speech_audio.len() as f64 / 16000.0,
         language
     );
+    let audio_data: &[f32] = &speech_audio;
 
     // Lock briefly to grab a handle to the shared context, then release —
     // otherwise the AppState mutex is held for the whole inference (multiple
@@ -283,12 +386,12 @@ pub(crate) fn transcribe_audio_inner(
     let mut full_text = String::new();
     let mut structured_segments = Vec::new();
     let mut dropped_no_speech = 0usize;
+    let mut dropped_hallucination = 0usize;
 
-    // Whisper emits a per-segment probability that the segment contains no
-    // speech. Drop segments above this threshold to suppress stock-phrase
-    // hallucinations on silent audio ("you", "Thank you.", "...").
-    // 0.6 matches whisper.cpp's default no_speech_thold.
-    const NO_SPEECH_THRESHOLD: f32 = 0.6;
+    // Tightened from whisper.cpp default 0.6 → 0.5 to cut hallucinations on
+    // borderline-silent or cross-talk segments more aggressively.
+    const NO_SPEECH_THRESHOLD: f32 = 0.5;
+    let effective_language = lang.unwrap_or("");
 
     for i in 0..num_segments {
         if let Some(segment) = state.get_segment(i) {
@@ -306,6 +409,16 @@ pub(crate) fn transcribe_audio_inner(
             if let Ok(text) = segment.to_str() {
                 let trimmed = text.trim();
                 if trimmed.is_empty() {
+                    continue;
+                }
+
+                if is_hallucination_segment(trimmed, effective_language) {
+                    dropped_hallucination += 1;
+                    log::debug!(
+                        "[whisper] Dropping hallucination segment {}: {:?}",
+                        i,
+                        trimmed,
+                    );
                     continue;
                 }
 
@@ -332,6 +445,12 @@ pub(crate) fn transcribe_audio_inner(
             "[whisper] Dropped {} segment(s) above no_speech threshold {:.2}",
             dropped_no_speech,
             NO_SPEECH_THRESHOLD
+        );
+    }
+    if dropped_hallucination > 0 {
+        log::info!(
+            "[whisper] Dropped {} hallucination segment(s)",
+            dropped_hallucination,
         );
     }
 

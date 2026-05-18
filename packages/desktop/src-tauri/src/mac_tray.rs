@@ -12,8 +12,9 @@
 use std::sync::atomic::Ordering;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{image::Image, Emitter, Manager};
+use tauri::{image::Image, Manager};
 
+use crate::events::OscarEvent;
 use crate::frontmost::get_frontmost_context_payload;
 use crate::state::{HotkeyState, MAC_TRAY};
 
@@ -121,7 +122,7 @@ fn start_recording(app: &tauri::AppHandle) {
         payload.app_name,
         payload.site_host.as_deref()
     );
-    let _ = app.emit("hotkey-recording-start", payload);
+    OscarEvent::HotkeyRecordingStart(payload).dispatch(app);
 }
 
 fn stop_recording(app: &tauri::AppHandle) {
@@ -131,7 +132,7 @@ fn stop_recording(app: &tauri::AppHandle) {
         return;
     }
     log::info!("[mac-tray] Stop Recording — emitting hotkey-recording-stop");
-    let _ = app.emit("hotkey-recording-stop", ());
+    OscarEvent::HotkeyRecordingStop.dispatch(app);
 }
 
 // ── Tooltip helpers — called from pill.rs to keep tray state in sync ─────────

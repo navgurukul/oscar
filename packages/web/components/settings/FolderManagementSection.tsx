@@ -390,7 +390,7 @@ export default function FolderManagementSection() {
                             title="Rename folder"
                           >
                             <Edit2 className="w-4 h-4" />
-                          </button>                       
+                          </button>
                              <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <button

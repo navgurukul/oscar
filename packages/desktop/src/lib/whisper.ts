@@ -21,11 +21,11 @@ export function buildInitialPrompt(
 
 export function getWhisperLanguage(
   transcriptionLanguage: string,
-  role: WhisperModelRole,
+  _role: WhisperModelRole,
 ) {
   if (transcriptionLanguage === "auto") return undefined;
   if (transcriptionLanguage === "hi-en") {
-    return role === "minutes" ? undefined : "en";
+    return "en";
   }
   return transcriptionLanguage;
 }
