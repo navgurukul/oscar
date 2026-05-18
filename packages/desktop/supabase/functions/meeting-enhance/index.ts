@@ -65,6 +65,8 @@ const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_MODEL = "gemini-2.5-flash-lite";
 const MAX_SEGMENT_BATCH_CHARS = 12_000;
 const MAX_SEGMENT_BATCH_SIZE = 80;
+const MAX_CLEANUP_BATCH_CHARS = 8_000;
+const MAX_CLEANUP_BATCH_SIZE = 50;
 const NO_USABLE_MEETING_NOTES_ERROR =
   "NO_USABLE_MEETING_NOTES: model output contained no transcript-backed bullets.";
 const NON_SUBSTANTIVE_BULLET_RE =
@@ -301,17 +303,23 @@ function formatMeetingContext(
     .join("\n");
 }
 
+function speakerDisplayLabel(source: MeetingTranscriptSource): string {
+  return source === "microphone" ? "Me" : "Them";
+}
+
 function formatSegmentsForPrompt(segments: MeetingTranscriptSegment[]): string {
   return segments
     .map(
       (segment) =>
-        `${segment.id} | ${segment.start_time} | ${segment.end_time} | ${segment.speaker.source} | ${segment.text}`,
+        `${segment.id} | ${segment.start_time} | ${segment.end_time} | ${segment.speaker.source} (${speakerDisplayLabel(segment.speaker.source)}) | ${segment.text}`,
     )
     .join("\n");
 }
 
-function splitSegmentBatches(
+function splitSegmentBatchesWithLimits(
   segments: MeetingTranscriptSegment[],
+  maxChars: number,
+  maxSize: number,
 ): MeetingTranscriptSegment[][] {
   const batches: MeetingTranscriptSegment[][] = [];
   let currentBatch: MeetingTranscriptSegment[] = [];
@@ -320,8 +328,8 @@ function splitSegmentBatches(
   for (const segment of segments) {
     const segmentChars = segment.text.length + 80;
     const wouldOverflow =
-      currentBatch.length >= MAX_SEGMENT_BATCH_SIZE ||
-      currentChars + segmentChars > MAX_SEGMENT_BATCH_CHARS;
+      currentBatch.length >= maxSize ||
+      currentChars + segmentChars > maxChars;
 
     if (wouldOverflow && currentBatch.length > 0) {
       batches.push(currentBatch);
@@ -338,6 +346,16 @@ function splitSegmentBatches(
   }
 
   return batches;
+}
+
+function splitSegmentBatches(
+  segments: MeetingTranscriptSegment[],
+): MeetingTranscriptSegment[][] {
+  return splitSegmentBatchesWithLimits(
+    segments,
+    MAX_SEGMENT_BATCH_CHARS,
+    MAX_SEGMENT_BATCH_SIZE,
+  );
 }
 
 async function callGemini(
@@ -382,6 +400,115 @@ async function callGemini(
   }
 
   return output;
+}
+
+function parseCleanedSegmentLines(
+  output: string,
+  originalSegments: MeetingTranscriptSegment[],
+): MeetingTranscriptSegment[] {
+  const byId = new Map(
+    originalSegments.map((segment) => [segment.id, segment] as const),
+  );
+  const cleanedById = new Map<string, string>();
+  const sanitized = sanitizeModelMarkdown(output);
+
+  for (const rawLine of sanitized.split("\n")) {
+    const line = rawLine.trim().replace(/^\s*[-*]\s+/, "");
+    if (!line) continue;
+
+    const match = line.match(/^([A-Za-z0-9._:-]+)\s*\|\s*(?:(microphone|speaker|me|them)\s*\|\s*)?(.*?)\s*$/i);
+    if (!match) continue;
+
+    const id = match[1].trim();
+    if (!byId.has(id)) continue;
+
+    const cleanedText = match[3]
+      .replace(/^["']|["']$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    cleanedById.set(id, cleanedText);
+  }
+
+  return originalSegments.map((segment) => {
+    if (!cleanedById.has(segment.id)) return segment;
+    const cleanedText = cleanedById.get(segment.id) ?? "";
+    if (!cleanedText) {
+      return {
+        ...segment,
+        text: "",
+      };
+    }
+
+    const normalizedCleaned = normalizeText(cleanedText);
+    const normalizedOriginal = normalizeText(segment.text);
+    if (!normalizedCleaned) return segment;
+    if (
+      normalizedCleaned.length < 8 &&
+      normalizedOriginal.length > normalizedCleaned.length * 4
+    ) {
+      return segment;
+    }
+
+    return {
+      ...segment,
+      text: cleanedText,
+    };
+  });
+}
+
+async function cleanTranscriptSegments(
+  geminiApiKey: string,
+  request: EnhancedMeetingNoteRequest,
+): Promise<MeetingTranscriptSegment[]> {
+  if (request.transcript_segments.length === 0) {
+    return request.transcript_segments;
+  }
+
+  const batches = splitSegmentBatchesWithLimits(
+    request.transcript_segments,
+    MAX_CLEANUP_BATCH_CHARS,
+    MAX_CLEANUP_BATCH_SIZE,
+  );
+  const cleanedSegments: MeetingTranscriptSegment[] = [];
+  const systemPrompt =
+    "You clean noisy meeting transcript segments before summarization. " +
+    "This is not a summary task. Preserve meaning, facts, numbers, names, branches, files, PRs, design references, dates, and action items. " +
+    "Fix obvious speech-recognition errors in English, Hindi, and Hinglish when the nearby context supports the correction. " +
+    "Remove filler-only noise such as hmm, uh, aham, repeated stutters, and accidental repeated phrases. " +
+    "Keep the speaker source intact: microphone means Me/host; speaker means Them/other participants. " +
+    "Output exactly one line per input segment in this format: SEGMENT_ID | SOURCE | CLEANED_TEXT. " +
+    "Use SOURCE as microphone or speaker exactly. Do not merge segments. Do not add headings, bullets, prose, timestamps, or citations. " +
+    "If a segment has no meaningful speech, output the segment id and source with an empty CLEANED_TEXT.";
+
+  for (let index = 0; index < batches.length; index += 1) {
+    const batch = batches[index];
+    const userPrompt = [
+      `Meeting title: ${request.meeting_title || "Untitled Meeting"}`,
+      request.attendees_compact
+        ? `Attendees: ${request.attendees_compact}`
+        : "",
+      `Transcript cleanup batch ${index + 1} of ${batches.length}:`,
+      formatSegmentsForPrompt(batch),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    try {
+      const cleanedOutput = await callGemini(
+        geminiApiKey,
+        systemPrompt,
+        userPrompt,
+        2_400,
+      );
+      cleanedSegments.push(...parseCleanedSegmentLines(cleanedOutput, batch));
+    } catch (error) {
+      console.warn("[meeting-enhance] transcript cleanup failed:", error);
+      cleanedSegments.push(...batch);
+    }
+  }
+
+  return cleanedSegments;
 }
 
 async function reduceTranscriptBatches(
@@ -1100,15 +1227,25 @@ Deno.serve(async (req: Request) => {
         .filter((segment) => Boolean(segment.text)),
     };
 
-    const meetingType = inferMeetingType(normalizedRequest);
+    const cleanedRequest: EnhancedMeetingNoteRequest = {
+      ...normalizedRequest,
+      transcript_segments: (
+        await cleanTranscriptSegments(
+          geminiApiKey,
+          normalizedRequest,
+        )
+      ).filter((segment) => Boolean(segment.text.trim())),
+    };
+
+    const meetingType = inferMeetingType(cleanedRequest);
     const expectedSections = buildExpectedSections(
-      normalizedRequest,
+      cleanedRequest,
       meetingType,
     );
 
     const markdown = await generateFinalMarkdown(
       geminiApiKey,
-      normalizedRequest,
+      cleanedRequest,
       expectedSections,
       meetingType,
     );
