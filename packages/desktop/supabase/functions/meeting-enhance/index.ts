@@ -584,17 +584,6 @@ function transcriptText(request: EnhancedMeetingNoteRequest): string {
     .trim();
 }
 
-function includesAny(value: string, patterns: RegExp[]): boolean {
-  return patterns.some((pattern) => pattern.test(value));
-}
-
-function pushUniqueBullet(bucket: string[], bullet: string): void {
-  const normalized = normalizeText(bullet);
-  if (!normalized) return;
-  if (bucket.some((existing) => normalizeText(existing) === normalized)) return;
-  bucket.push(bullet);
-}
-
 function scoreSegmentMatch(
   bulletText: string,
   segment: MeetingTranscriptSegment,
@@ -831,10 +820,8 @@ async function generateUncitedFallbackMarkdown(
     "You are recovering useful meeting notes from a noisy transcript. " +
     "Output only markdown. Use the required section headings exactly as given; do not rename, reorder, add, or omit headings. " +
     "Use markdown bullets under every heading. Do not use citation tokens. " +
-    "Prefer concrete action items, technical details, decisions, open questions, numeric values, branch names, PRs, testing needs, and design follow-ups. " +
-    "The transcript may mix English, Hindi, Hinglish, and speech-recognition errors. Recover likely meaning when several nearby words support it. " +
-    "Common noisy mappings: 'piyar raise', 'pyar raise', or 'PR raise' means raise a PR; 'git', 'github', or 'gidhub' means GitHub; 'feat audio transcription' is a branch name; '0 percent English usage', '36 percent', and '59 percent' are accuracy/usage metrics; 'design PDF', 'dark mode', 'light mode', 'font', and 'spacing' are UI/design follow-ups. " +
-    "Never output only 'None captured' when the transcript contains app demo, GitHub, PR, testing, English usage, accuracy, design, branch, PDF, UI, or data/storage details. " +
+    "Prefer concrete action items, technical details, decisions, open questions, numeric values, branch names, testing needs, and design follow-ups only when they appear in the transcript or manual notes. " +
+    "The transcript may mix English, Hindi, Hinglish, and speech-recognition errors. Recover likely meaning when several nearby words support it, but never import details from examples or prior meetings. " +
     "Never write blank sections. If a section truly has no evidence, write one bullet: None captured. " +
     "For Action items, use '- [ ] <action> — <Owner>' with the owner if identifiable, or 'Owner: unassigned'.";
 
@@ -852,138 +839,6 @@ async function generateUncitedFallbackMarkdown(
 
   const fallbackPass = await callGemini(geminiApiKey, systemPrompt, userPrompt, 2_200);
   return buildFinalMarkdown(request, expectedSections, fallbackPass);
-}
-
-function buildHeuristicRecoveryMarkdown(
-  request: EnhancedMeetingNoteRequest,
-  expectedSections: ParsedSections,
-): string {
-  const rawTranscript = transcriptText(request);
-  const lower = rawTranscript.toLowerCase();
-  const normalized = normalizeText(rawTranscript);
-  const bulletsByHeading = new Map<string, string[]>();
-
-  const bucketFor = (heading: string): string[] => {
-    const key = normalizeHeadingKey(heading);
-    const bucket = bulletsByHeading.get(key) ?? [];
-    bulletsByHeading.set(key, bucket);
-    return bucket;
-  };
-
-  const hasGithub = includesAny(lower, [/git\s*hub|github|gidhub|git par|git pe|गिट|गिद/]);
-  const hasPush = includesAny(lower, [/push|sync|सिंक|पुश/]);
-  const hasPr = includesAny(lower, [/\bpr\b|pull request|piyar|pyar|pyaar|पी\s*आर|प्यार/]);
-  const hasBranch = includesAny(lower, [/branch|feat[-\s]?audio[-\s]?transcription|audio transcription|ब्रांच/]);
-  const hasTesting = includesAny(lower, [/test|testing|1-2|1 to 2|one or two|accuracy|accurate|95|98|100%|100 percent|english usage|इंग्लिश|टेस्ट/]);
-  const hasDesign = includesAny(lower, [/design|pdf|ui|font|spacing|dark mode|light mode|opening screen|screen|डिजाइन|फॉन्ट/]);
-  const hasDemo = includesAny(lower, [/start your first session|start session|participant|joining|session|demo|visible|phone|screen share/]);
-  const hasMetrics = includesAny(lower, [/0%|0 percent|zero percent|36%|36 percent|59%|59 percent|english usage|calculation|match/]);
-  const hasBackend = includesAny(lower, [/backend|back end|front end|frontend|database|data clean|delete data|internal database|डेटा/]);
-  const hasSpeakerDiarization = includesAny(lower, [/diarization|speaker diarization/]);
-
-  for (const heading of expectedSections.orderedHeadings) {
-    const key = normalizeHeadingKey(heading);
-    const bucket = bucketFor(heading);
-
-    if (key === "action items") {
-      if (hasGithub && hasPush) {
-        pushUniqueBullet(bucket, "- [ ] Push or sync the code to GitHub — Owner: unassigned");
-      }
-      if (hasPr) {
-        pushUniqueBullet(bucket, "- [ ] Raise a PR to main — Owner: unassigned");
-      }
-      if (hasTesting) {
-        pushUniqueBullet(bucket, "- [ ] Test English usage accuracy with 1-2 people, including a 100% English speech run — Owner: unassigned");
-      }
-      if (hasDesign) {
-        pushUniqueBullet(bucket, "- [ ] Review the shared design PDF and update UI details such as font, spacing, and session screens — Owner: unassigned");
-      }
-      if (hasBranch) {
-        pushUniqueBullet(bucket, "- [ ] Share or use the feat-audio-transcription branch for follow-up work — Owner: unassigned");
-      }
-      continue;
-    }
-
-    if (key === "decisions") {
-      if (hasGithub || hasPr) {
-        pushUniqueBullet(bucket, "- Code review and design follow-up should happen through GitHub after the branch is pushed.");
-      }
-      if (hasDesign) {
-        pushUniqueBullet(bucket, "- UI/design changes can be handled after the current functional work is available in a PR.");
-      }
-      continue;
-    }
-
-    if (key === "key topics") {
-      if (hasDemo) {
-        pushUniqueBullet(bucket, "- App demo covered session creation, participant entry, starting a session, and live session flow.");
-      }
-      if (hasMetrics) {
-        pushUniqueBullet(bucket, "- English usage and accuracy tracking showed questionable results, including 0% English usage and earlier 36% / 59% readings.");
-      }
-      if (hasTesting) {
-        pushUniqueBullet(bucket, "- Accuracy needs verification with cleaner English-only testing before deciding whether model or calculation changes are needed.");
-      }
-      if (hasDesign) {
-        pushUniqueBullet(bucket, "- UI differences were called out around the Start Session design, font, spacing, and shared PDF screens.");
-      }
-      if (hasBackend) {
-        pushUniqueBullet(bucket, "- Data handling and app storage were discussed, including frontend/backend connection and internal database behavior.");
-      }
-      if (hasSpeakerDiarization) {
-        pushUniqueBullet(bucket, "- Speaker diarization is not implemented, so longer accuracy testing should account for that limitation.");
-      }
-      continue;
-    }
-
-    if (key === "open questions") {
-      if (hasMetrics) {
-        pushUniqueBullet(bucket, "- Is the 0% English usage result caused by mostly Hindi speech, calculation issues, or the phone setup?");
-      }
-      if (hasTesting) {
-        pushUniqueBullet(bucket, "- What accuracy gap remains when the app is tested with 100% English speech?");
-      }
-      if (hasDesign) {
-        pushUniqueBullet(bucket, "- Which UI details from the design PDF still need to be matched?");
-      }
-      continue;
-    }
-
-    if (key === "next steps") {
-      if (hasGithub && hasPush) {
-        pushUniqueBullet(bucket, "- Push or sync the branch to GitHub.");
-      }
-      if (hasPr) {
-        pushUniqueBullet(bucket, "- Raise a PR against main for review.");
-      }
-      if (hasTesting) {
-        pushUniqueBullet(bucket, "- Run accuracy testing with 1-2 people and a fully English speech sample.");
-      }
-      if (hasDesign) {
-        pushUniqueBullet(bucket, "- Review the PDF design screens and update UI after code is available.");
-      }
-    }
-  }
-
-  const lines = [
-    `## ${request.meeting_title || "Untitled Meeting"}`,
-    request.meeting_local_datetime,
-    request.attendees_compact,
-    "",
-  ];
-
-  for (const heading of expectedSections.orderedHeadings) {
-    lines.push(`### ${heading}`);
-    const bucket = bulletsByHeading.get(normalizeHeadingKey(heading)) ?? [];
-    if (bucket.length > 0) {
-      lines.push(...bucket);
-    } else {
-      lines.push("- None captured.");
-    }
-    lines.push("");
-  }
-
-  return lines.join("\n").trimEnd();
 }
 
 function buildTranscriptExcerptFallbackMarkdown(
@@ -1095,14 +950,6 @@ async function generateFinalMarkdown(
       }
     } catch (fallbackError) {
       console.warn("[meeting-enhance] no-citation fallback failed:", fallbackError);
-    }
-
-    const heuristicMarkdown = buildHeuristicRecoveryMarkdown(
-      request,
-      expectedSections,
-    );
-    if (countSubstantiveBullets(heuristicMarkdown) > 0) {
-      return heuristicMarkdown;
     }
 
     return buildTranscriptExcerptFallbackMarkdown(request, expectedSections);
