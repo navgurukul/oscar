@@ -24,7 +24,7 @@ fn normalize_phase(phase: &str) -> &'static str {
     match phase {
         "rest" => "rest",
         "ready" => "ready",
-        "expanded" => "ready",
+        "expanded" => "expanded",
         "recording" => "recording",
         "processing" => "processing",
         "inserted" => "inserted",
