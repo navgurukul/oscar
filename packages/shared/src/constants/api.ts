@@ -1,15 +1,15 @@
 export const API_CONFIG = {
   // Internal API routes
-  FORMAT_ENDPOINT: "/api/groq/format",
-  FORMAT_EMAIL_ENDPOINT: "/api/groq/format-email",
-  TITLE_ENDPOINT: "/api/groq/title",
-  TRANSLATE_ENDPOINT: "/api/groq/translate",
+  FORMAT_ENDPOINT: "/api/ai/format",
+  FORMAT_EMAIL_ENDPOINT: "/api/ai/format-email",
+  TITLE_ENDPOINT: "/api/ai/title",
+  TRANSLATE_ENDPOINT: "/api/ai/translate",
 
-  // External APIs
-  GROQ_API_URL: "https://api.groq.com/openai/v1/chat/completions",
+  // External APIs (Google Gemini, native API)
+  GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1beta",
 
-  // Groq model
-  GROQ_MODEL: "llama-3.1-8b-instant",
+  // Inference model
+  GEMINI_MODEL: "gemini-2.5-flash-lite",
 
   // Format API settings
   FORMAT_TEMPERATURE: 0.0,

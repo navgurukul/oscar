@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { aiService } from "../services/ai.service";
@@ -20,6 +20,7 @@ import {
   X,
   Trash2,
   History,
+  RefreshCw,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import googleMeetLogo from "../assets/meeting-logos/google-meet.png";
@@ -39,6 +40,13 @@ import type {
   MeetingTypeHint,
   SavedMeetingRecord,
 } from "../types/meeting.types";
+import {
+  buildLabeledTranscript,
+  groupSegmentsIntoTurns,
+  resolveSpeakerLabels,
+  type SpeakerLabels,
+  type TranscriptTurn,
+} from "../lib/transcript-utils";
 
 const GOOGLE_CALENDAR_LOGO_URL =
   "https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253";
@@ -113,6 +121,8 @@ interface MeetingsTabProps {
   minutesSegmentQueue: number;
   minutesSegmentsCompleted: number;
   minutesSegmentsTotal: number;
+  hostName: string;
+  hostEmail: string;
 }
 
 const MEETING_TYPE_OPTIONS: Array<{
@@ -201,6 +211,23 @@ function formatEventTimeRange(event: CalendarEvent): string {
   return `${event.start_time} - ${event.end_time}`;
 }
 
+function groupEventsByDay(
+  events: CalendarEvent[],
+  currentTime: number,
+): Array<{ key: string; label: string; events: CalendarEvent[] }> {
+  const groups = new Map<string, { label: string; events: CalendarEvent[] }>();
+  for (const event of events) {
+    const live = isEventOngoing(event, currentTime);
+    const label = live ? "Ongoing" : getEventDayLabel(event, currentTime);
+    const key = label;
+    if (!groups.has(key)) {
+      groups.set(key, { label, events: [] });
+    }
+    groups.get(key)!.events.push(event);
+  }
+  return Array.from(groups.entries()).map(([key, value]) => ({ key, ...value }));
+}
+
 function buildMeetingLocalDatetime(dateValue: string): string {
   const date = new Date(dateValue);
   if (Number.isNaN(date.getTime())) {
@@ -229,7 +256,28 @@ function buildCalendarContext(
   };
 }
 
-function getNotesLoadingLabel(
+function buildFallbackTranscriptSegments(
+  transcript: string,
+  startedAt: string,
+): MeetingTranscriptSegment[] {
+  const text = transcript.trim();
+  if (!text) return [];
+
+  const start = Date.parse(startedAt);
+  const startTime = Number.isFinite(start) ? start : Date.now();
+
+  return [
+    {
+      id: "seg-fallback-0-microphone",
+      speaker: { source: "microphone" },
+      text,
+      start_time: new Date(startTime).toISOString(),
+      end_time: new Date(Math.max(Date.now(), startTime + 1)).toISOString(),
+    },
+  ];
+}
+
+function getScribblesLoadingLabel(
   status: MinutesTranscriptionStatus,
   transcript: string,
   completed: number,
@@ -340,14 +388,12 @@ function CalendarEventRow({
   event,
   onUse,
   isLive,
-  currentTime,
 }: {
   event: CalendarEvent;
   onUse: (event: CalendarEvent) => void;
   isLive?: boolean;
-  currentTime: number;
 }) {
-  const label =
+  const attendeeLabel =
     event.attendees.length === 1
       ? "1 attendee"
       : `${event.attendees.length} attendees`;
@@ -355,7 +401,8 @@ function CalendarEventRow({
   return (
     <button
       className={cn(
-        "group flex w-full items-center justify-between gap-4 border-b border-[#eef2f7] px-[18px] py-4 text-left transition-colors last:border-b-0 max-md:flex-col max-md:items-start",
+        "group relative flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors",
+        "after:pointer-events-none after:absolute after:bottom-0 after:left-4 after:right-4 after:h-px after:bg-[#eef2f7] last:after:hidden",
         isLive
           ? "bg-gradient-to-r from-cyan-50/95 via-white to-white hover:from-cyan-50 hover:via-slate-50 hover:to-slate-50"
           : "bg-white hover:bg-slate-50",
@@ -363,39 +410,39 @@ function CalendarEventRow({
       onClick={() => onUse(event)}
       type="button"
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span
-            className={cn(
-              "inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[0.69rem] font-bold uppercase tracking-[0.05em] text-slate-500",
-              isLive && "bg-teal-100 text-teal-700",
-            )}
-          >
-            {isLive ? "Ongoing" : getEventDayLabel(event, currentTime)}
-          </span>
-          <span className="flex items-center gap-[5px] text-[0.78rem] font-medium text-slate-500">
-            <Clock size={11} />
-            {formatEventTimeRange(event)}
-          </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="truncate text-[0.875rem] font-semibold leading-[1.3] text-slate-900">
+          {event.title}
         </div>
-        <div className="text-[0.95rem] font-semibold leading-[1.35] text-slate-900">{event.title}</div>
-        {event.attendees.length > 0 && (
-          <div className="flex items-center gap-1 text-[0.76rem] text-slate-400">
-            <Users size={10} />
-            {label}
-          </div>
-        )}
+        <div className="mt-0.5 flex items-center gap-1.5 text-[0.75rem] text-slate-500">
+          <Clock size={10} />
+          <span>{formatEventTimeRange(event)}</span>
+          {event.attendees.length > 0 && (
+            <>
+              <span className="text-slate-300">·</span>
+              <Users size={10} />
+              <span>{attendeeLabel}</span>
+            </>
+          )}
+          {isLive && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span className="font-semibold text-teal-600">● Live</span>
+            </>
+          )}
+        </div>
       </div>
       <span
+        title="Record this meeting"
+        aria-label="Record this meeting"
         className={cn(
-          "inline-flex shrink-0 items-center gap-[5px] rounded-full px-3 py-[9px] text-[0.78rem] font-semibold transition-colors max-md:self-start",
+          "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
           isLive
             ? "bg-teal-100 text-teal-700"
             : "bg-sky-50 text-cyan-700 group-hover:bg-cyan-100 group-hover:text-cyan-800",
         )}
       >
         <Play size={12} fill="currentColor" />
-        Record
       </span>
     </button>
   );
@@ -421,6 +468,8 @@ export function MeetingsTab({
   minutesSegmentQueue,
   minutesSegmentsCompleted,
   minutesSegmentsTotal,
+  hostName,
+  hostEmail,
 }: MeetingsTabProps) {
   const [meetingTypeHint, setMeetingTypeHint] = useState<MeetingTypeHint>("auto");
   const [meetingTitle, setMeetingTitle] = useState("");
@@ -436,6 +485,8 @@ export function MeetingsTab({
   const [copied, setCopied] = useState(false);
   const [resultTab, setResultTab] = useState<"notes" | "transcript">("notes");
   const [viewingSaved, setViewingSaved] = useState<SavedMeetingRecord | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState("");
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [showAttendeeEditor, setShowAttendeeEditor] = useState(false);
@@ -445,6 +496,19 @@ export function MeetingsTab({
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const lastCalendarFetchRef = useRef<string>("");
   const liveTranscriptScrollRef = useRef<HTMLDivElement>(null);
+
+  const liveSpeakerLabels = useMemo<SpeakerLabels>(
+    () => resolveSpeakerLabels(attendees, hostName, hostEmail),
+    [attendees, hostName, hostEmail],
+  );
+
+  const savedSpeakerLabels = useMemo<SpeakerLabels>(
+    () =>
+      viewingSaved
+        ? resolveSpeakerLabels(viewingSaved.attendeesFull, hostName, hostEmail)
+        : liveSpeakerLabels,
+    [viewingSaved, hostName, hostEmail, liveSpeakerLabels],
+  );
 
   useEffect(() => {
     if (phase === "recording" && liveTranscriptScrollRef.current) {
@@ -497,67 +561,81 @@ export function MeetingsTab({
     }
   };
 
-  useEffect(() => {
-    if (!googleCalendarToken) {
-      setCalendarEvents([]);
-      setCalendarError(null);
-      lastCalendarFetchRef.current = "";
-      return;
-    }
-
-    const now = new Date();
-    const dateKey = now.toISOString().slice(0, 10);
-    const cacheKey = `${googleCalendarToken.slice(0, 16)}:${dateKey}`;
-    if (cacheKey === lastCalendarFetchRef.current && calendarEvents.length > 0) {
-      return;
-    }
-
-    setCalendarLoading(true);
-    setCalendarError(null);
-    const timeMin = new Date(now);
-    timeMin.setHours(0, 0, 0, 0);
-    const timeMax = new Date(now);
-    timeMax.setDate(timeMax.getDate() + 14);
-    timeMax.setHours(23, 59, 59, 999);
-
-    invoke<CalendarEvent[]>("get_calendar_events", {
-      token: googleCalendarToken,
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
-    })
-      .then((events) => {
-        setCalendarEvents(events);
+  const fetchCalendarEvents = useCallback(
+    (options?: { force?: boolean }) => {
+      if (!googleCalendarToken) {
+        setCalendarEvents([]);
         setCalendarError(null);
-        lastCalendarFetchRef.current = cacheKey;
+        lastCalendarFetchRef.current = "";
+        return;
+      }
+
+      const now = new Date();
+      const dateKey = now.toISOString().slice(0, 10);
+      const cacheKey = `${googleCalendarToken.slice(0, 16)}:${dateKey}`;
+      if (
+        !options?.force &&
+        cacheKey === lastCalendarFetchRef.current &&
+        calendarEvents.length > 0
+      ) {
+        return;
+      }
+
+      setCalendarLoading(true);
+      setCalendarError(null);
+      const timeMin = new Date(now);
+      timeMin.setHours(0, 0, 0, 0);
+      const timeMax = new Date(now);
+      timeMax.setDate(timeMax.getDate() + 14);
+      timeMax.setHours(23, 59, 59, 999);
+
+      invoke<CalendarEvent[]>("get_calendar_events", {
+        token: googleCalendarToken,
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
       })
-      .catch(async (invokeError: unknown) => {
-        const message = String(invokeError);
-        if (message.includes("NEEDS_RECONNECT")) {
-          setCalendarErrorMsg("");
-          const recoveryState = await onCalendarTokenInvalid();
-          if (recoveryState === "refreshed") {
-            setCalendarError(null);
-          } else if (recoveryState === "retry_later") {
-            setCalendarError("fetch_error");
-            setCalendarErrorMsg(
-              "Calendar access is being refreshed in the background. Please try again in a moment.",
-            );
+        .then((events) => {
+          setCalendarEvents(events);
+          setCalendarError(null);
+          lastCalendarFetchRef.current = cacheKey;
+        })
+        .catch(async (invokeError: unknown) => {
+          const message = String(invokeError);
+          if (message.includes("NEEDS_RECONNECT")) {
+            setCalendarErrorMsg("");
+            const recoveryState = await onCalendarTokenInvalid();
+            if (recoveryState === "refreshed") {
+              setCalendarError(null);
+            } else if (recoveryState === "retry_later") {
+              setCalendarError("fetch_error");
+              setCalendarErrorMsg(
+                "Calendar access is being refreshed in the background. Please try again in a moment.",
+              );
+            } else {
+              setCalendarError("needs_reconnect");
+            }
           } else {
-            setCalendarError("needs_reconnect");
+            console.warn("[meetings] calendar fetch failed:", invokeError);
+            setCalendarError("fetch_error");
+            setCalendarErrorMsg(message.replace(/^Error:\s*/i, "").slice(0, 200));
           }
-        } else {
-          console.warn("[meetings] calendar fetch failed:", invokeError);
-          setCalendarError("fetch_error");
-          setCalendarErrorMsg(message.replace(/^Error:\s*/i, "").slice(0, 200));
-        }
-      })
-      .finally(() => setCalendarLoading(false));
-  }, [calendarEvents.length, googleCalendarToken, onCalendarTokenInvalid]);
+        })
+        .finally(() => setCalendarLoading(false));
+    },
+    [calendarEvents.length, googleCalendarToken, onCalendarTokenInvalid],
+  );
+
+  useEffect(() => {
+    fetchCalendarEvents();
+  }, [fetchCalendarEvents]);
 
   useEffect(() => {
     const id = setInterval(() => setCurrentTime(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  const hasTranscriptInput =
+    transcriptSegments.length > 0 || transcript.trim().length > 0;
 
   const buildNoteRequest = useCallback((): EnhancedMeetingNoteRequest => {
     const title =
@@ -569,6 +647,10 @@ export function MeetingsTab({
       selectedCalendarEvent?.start_at ||
       meetingStartedAt ||
       new Date().toISOString();
+    const effectiveTranscriptSegments =
+      transcriptSegments.length > 0
+        ? transcriptSegments
+        : buildFallbackTranscriptSegments(transcript, startedAt);
 
     return {
       meeting_title: title,
@@ -577,7 +659,7 @@ export function MeetingsTab({
       attendees_full: attendees,
       calendar_context: buildCalendarContext(selectedCalendarEvent),
       my_notes_markdown: manualNotes.trim(),
-      transcript_segments: transcriptSegments,
+      transcript_segments: effectiveTranscriptSegments,
       meeting_type_hint: meetingTypeHint,
     };
   }, [
@@ -587,11 +669,49 @@ export function MeetingsTab({
     meetingTitle,
     meetingTypeHint,
     selectedCalendarEvent,
+    transcript,
     transcriptSegments,
   ]);
 
+  const handleRegenerateSaved = useCallback(
+    async (saved: SavedMeetingRecord) => {
+      if (regenerating) return;
+      setRegenerateError("");
+      setRegenerating(true);
+      try {
+        const request: EnhancedMeetingNoteRequest = {
+          meeting_title: saved.meetingTitle,
+          meeting_local_datetime: saved.meetingLocalDatetime,
+          attendees_compact: saved.attendeesCompact,
+          attendees_full: saved.attendeesFull,
+          calendar_context: saved.calendarContext,
+          my_notes_markdown: saved.myNotesMarkdown,
+          transcript_segments:
+            saved.transcriptSegments.length > 0
+              ? saved.transcriptSegments
+              : buildFallbackTranscriptSegments(saved.transcript, saved.startedAt),
+          meeting_type_hint: saved.meetingTypeHint,
+        };
+        const newMarkdown = await aiService.generateEnhancedMeetingNote(request);
+        const updated: SavedMeetingRecord = {
+          ...saved,
+          notesMarkdown: newMarkdown,
+        };
+        onSaveMeeting(updated);
+        setViewingSaved(updated);
+      } catch (err) {
+        setRegenerateError(
+          err instanceof Error ? err.message : String(err),
+        );
+      } finally {
+        setRegenerating(false);
+      }
+    },
+    [onSaveMeeting, regenerating],
+  );
+
   const processTranscript = useCallback(async () => {
-    if (!transcriptSegments.length && !manualNotes.trim()) return;
+    if (!hasTranscriptInput && !manualNotes.trim()) return;
 
     setStreaming(true);
     setResult("");
@@ -613,13 +733,13 @@ export function MeetingsTab({
     } finally {
       setStreaming(false);
     }
-  }, [buildNoteRequest, manualNotes, transcriptSegments.length]);
+  }, [buildNoteRequest, hasTranscriptInput, manualNotes]);
 
   useEffect(() => {
     if (
       phase === "processing" &&
       minutesTranscriptionStatus === "notes" &&
-      (transcriptSegments.length > 0 || manualNotes.trim())
+      (hasTranscriptInput || manualNotes.trim())
     ) {
       void processTranscript();
     }
@@ -628,6 +748,7 @@ export function MeetingsTab({
     minutesTranscriptionStatus,
     phase,
     processTranscript,
+    hasTranscriptInput,
     transcriptSegments.length,
   ]);
 
@@ -642,6 +763,11 @@ export function MeetingsTab({
     const meetingId = `meeting_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     savedMeetingIdRef.current = meetingId;
 
+    const labeledTranscript =
+      request.transcript_segments.length > 0
+        ? buildLabeledTranscript(request.transcript_segments, liveSpeakerLabels)
+        : transcript;
+
     onSaveMeeting({
       id: meetingId,
       startedAt:
@@ -654,8 +780,8 @@ export function MeetingsTab({
       attendeesFull: request.attendees_full,
       calendarContext: request.calendar_context,
       meetingTypeHint: request.meeting_type_hint,
-      transcript,
-      transcriptSegments,
+      transcript: labeledTranscript,
+      transcriptSegments: request.transcript_segments,
       myNotesMarkdown: request.my_notes_markdown,
       notesMarkdown: result,
       createdAt: now,
@@ -663,6 +789,7 @@ export function MeetingsTab({
   }, [
     buildNoteRequest,
     error,
+    liveSpeakerLabels,
     meetingStartedAt,
     onSaveMeeting,
     phase,
@@ -825,6 +952,21 @@ export function MeetingsTab({
               <CalendarDays size={14} />
               <span>Coming up</span>
               {calendarLoading && <Loader2 size={12} className="animate-spin" />}
+              {googleCalendarToken && (
+                <button
+                  type="button"
+                  onClick={() => fetchCalendarEvents({ force: true })}
+                  disabled={calendarLoading}
+                  className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="Refresh upcoming meetings"
+                  title="Refresh"
+                >
+                  <RefreshCw
+                    size={12}
+                    className={calendarLoading ? "animate-spin" : ""}
+                  />
+                </button>
+              )}
             </div>
 
             {!googleCalendarToken && !calendarLoading && (
@@ -882,14 +1024,20 @@ export function MeetingsTab({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.22 }}
                 >
-                  {nextCalendarEvents.map((event, index) => (
-                    <CalendarEventRow
-                      key={`${event.title}-${event.start_at}-${index}`}
-                      event={event}
-                      onUse={startFromEvent}
-                      isLive={isEventOngoing(event, currentTime)}
-                      currentTime={currentTime}
-                    />
+                  {groupEventsByDay(nextCalendarEvents, currentTime).map((group) => (
+                    <div key={group.key} className="border-b border-[#eef2f7] last:border-b-0">
+                      <div className="bg-slate-50/60 px-4 py-1.5 text-[0.6875rem] font-bold uppercase tracking-[0.06em] text-slate-400">
+                        {group.label}
+                      </div>
+                      {group.events.map((event, index) => (
+                        <CalendarEventRow
+                          key={`${event.title}-${event.start_at}-${index}`}
+                          event={event}
+                          onUse={startFromEvent}
+                          isLive={isEventOngoing(event, currentTime)}
+                        />
+                      ))}
+                    </div>
                   ))}
                 </motion.div>
               )
@@ -1026,44 +1174,69 @@ export function MeetingsTab({
               <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-slate-700">
                 <MarkdownNotesView markdown={viewingSaved.notesMarkdown} />
               </div>
-              <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
-                <button
-                  className={cn(FOOTER_BUTTON_CLASS_NAME, "border-cyan-600 bg-cyan-600 text-white hover:border-cyan-700 hover:bg-cyan-700")}
-                  onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
-                  type="button"
-                >
-                  {copied ? <Check size={12} /> : <Copy size={12} />}
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-                <button
-                  className={FOOTER_BUTTON_CLASS_NAME}
-                  onClick={() =>
-                    void handleShareByEmail({
-                      subjectTitle: viewingSaved.meetingTitle,
-                      attendeesFull: viewingSaved.attendeesFull,
-                      markdown: viewingSaved.notesMarkdown,
-                    })
-                  }
-                  type="button"
-                >
-                  <Mail size={12} /> Email
-                </button>
+              <div className="flex flex-col gap-2 border-t border-slate-100 px-4 py-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className={cn(FOOTER_BUTTON_CLASS_NAME, "border-cyan-600 bg-cyan-600 text-white hover:border-cyan-700 hover:bg-cyan-700")}
+                    onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
+                    type="button"
+                  >
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                  <button
+                    className={FOOTER_BUTTON_CLASS_NAME}
+                    onClick={() =>
+                      void handleShareByEmail({
+                        subjectTitle: viewingSaved.meetingTitle,
+                        attendeesFull: viewingSaved.attendeesFull,
+                        markdown: viewingSaved.notesMarkdown,
+                      })
+                    }
+                    type="button"
+                  >
+                    <Mail size={12} /> Email
+                  </button>
+                  <button
+                    className={cn(
+                      FOOTER_BUTTON_CLASS_NAME,
+                      regenerating &&
+                        "cursor-not-allowed opacity-60",
+                    )}
+                    onClick={() => void handleRegenerateSaved(viewingSaved)}
+                    disabled={
+                      regenerating ||
+                      (viewingSaved.transcriptSegments.length === 0 &&
+                        !viewingSaved.myNotesMarkdown.trim())
+                    }
+                    type="button"
+                    title="Re-run the AI to regenerate notes from the transcript"
+                  >
+                    {regenerating ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={12} />
+                    )}
+                    {regenerating ? "Regenerating…" : "Regenerate"}
+                  </button>
+                </div>
+                {regenerateError && (
+                  <p className="m-0 text-[0.75rem] text-rose-500">
+                    {regenerateError}
+                  </p>
+                )}
               </div>
             </div>
           )}
 
           {resultTab === "transcript" && (
             <div className="p-0">
-              {viewingSaved.transcript.trim() ? (
-                <div className="max-h-[400px] overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-[1.65] text-gray-700">
-                  {viewingSaved.transcript}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2 px-5 py-10 text-[0.8125rem] text-slate-400">
-                  <Mic size={20} />
-                  <span>No transcript available.</span>
-                </div>
-              )}
+              <TranscriptView
+                segments={viewingSaved.transcriptSegments}
+                fallbackText={viewingSaved.transcript}
+                labels={savedSpeakerLabels}
+                emptyMessage="No transcript available."
+              />
             </div>
           )}
         </div>
@@ -1185,8 +1358,13 @@ export function MeetingsTab({
                 ref={liveTranscriptScrollRef}
                 className="max-h-[180px] min-h-[60px] overflow-y-auto rounded-lg bg-slate-50 px-3.5 py-2.5 text-[0.8125rem] leading-[1.65] text-gray-600"
               >
-                {transcript.trim() ? (
-                  <span className="whitespace-pre-wrap">{transcript}</span>
+                {transcriptSegments.length > 0 || transcript.trim() ? (
+                  <TranscriptTurns
+                    segments={transcriptSegments}
+                    fallbackText={transcript}
+                    labels={liveSpeakerLabels}
+                    compact
+                  />
                 ) : (
                   <span className="italic text-slate-300">Listening…</span>
                 )}
@@ -1290,7 +1468,7 @@ export function MeetingsTab({
               <div className="flex flex-col items-center gap-4 py-16">
                 <Loader2 size={28} className="animate-spin" />
                 <span className="text-[0.9375rem] font-medium text-slate-500">
-                  {getNotesLoadingLabel(
+                  {getScribblesLoadingLabel(
                     minutesTranscriptionStatus,
                     transcript,
                     minutesSegmentsCompleted,
@@ -1362,19 +1540,98 @@ export function MeetingsTab({
 
         {resultTab === "transcript" && (
           <div className="p-0">
-            {transcript.trim() ? (
-              <div className="max-h-[400px] overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-[1.65] text-gray-700">
-                {transcript}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 px-5 py-10 text-[0.8125rem] text-slate-400">
-                <Mic size={20} />
-                <span>No transcript yet.</span>
-              </div>
-            )}
+            <TranscriptView
+              segments={transcriptSegments}
+              fallbackText={transcript}
+              labels={liveSpeakerLabels}
+              emptyMessage="No transcript yet."
+            />
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+interface TranscriptTurnsProps {
+  segments: MeetingTranscriptSegment[];
+  fallbackText: string;
+  labels: SpeakerLabels;
+  compact?: boolean;
+}
+
+function TranscriptTurns({
+  segments,
+  fallbackText,
+  labels,
+  compact = false,
+}: TranscriptTurnsProps) {
+  const turns: TranscriptTurn[] =
+    segments.length > 0 ? groupSegmentsIntoTurns(segments, labels) : [];
+
+  if (turns.length === 0) {
+    const trimmed = fallbackText.trim();
+    if (!trimmed) return null;
+    return (
+      <div className={cn("whitespace-pre-wrap", compact && "leading-[1.65]")}>
+        <span className="mr-1 font-semibold text-slate-700">
+          {labels.microphone}:
+        </span>
+        <span>{trimmed}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("flex flex-col", compact ? "gap-1.5" : "gap-3")}>
+      {turns.map((turn, index) => (
+        <div key={`${turn.startTime}-${index}`} className="whitespace-pre-wrap">
+          <span
+            className={cn(
+              "mr-1 font-semibold",
+              turn.source === "microphone" ? "text-cyan-700" : "text-slate-700",
+            )}
+          >
+            {turn.label}:
+          </span>
+          <span>{turn.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface TranscriptViewProps {
+  segments: MeetingTranscriptSegment[];
+  fallbackText: string;
+  labels: SpeakerLabels;
+  emptyMessage: string;
+}
+
+function TranscriptView({
+  segments,
+  fallbackText,
+  labels,
+  emptyMessage,
+}: TranscriptViewProps) {
+  const hasContent = segments.length > 0 || fallbackText.trim().length > 0;
+
+  if (!hasContent) {
+    return (
+      <div className="flex flex-col items-center gap-2 px-5 py-10 text-[0.8125rem] text-slate-400">
+        <Mic size={20} />
+        <span>{emptyMessage}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-h-[400px] overflow-y-auto rounded-lg bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-[1.65] text-gray-700">
+      <TranscriptTurns
+        segments={segments}
+        fallbackText={fallbackText}
+        labels={labels}
+      />
     </div>
   );
 }

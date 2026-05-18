@@ -1,0 +1,816 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
+import { scribblesService } from "@/lib/services/scribbles.service";
+import { feedbackService } from "@/lib/services/feedback.service";
+import { storageService } from "@/lib/services/storage.service";
+import { aiService } from "@/lib/services/ai.service";
+import { ROUTES } from "@/lib/constants";
+import { ScribbleEditorSkeleton } from "@/components/results/ScribbleEditorSkeleton";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Copy,
+  Download,
+  Share2,
+  Mail,
+  MessageCircle,
+  FileText,
+  FileCode,
+  Languages,
+  ListChecks,
+  BookOpen,
+  Star,
+  Mic,
+  Printer,
+} from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
+import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/contexts/AuthContext";
+import { FeedbackWidget } from "@/components/results/FeedbackWidget";
+import type { DBScribble, FeedbackReason } from "@/lib/types/scribble.types";
+
+export default function ScribbleDetailPage() {
+  const params = useParams<{ id: string }>();
+  const id = params?.id as string;
+  const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
+
+  const [scribble, setScribble] = useState<DBScribble | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editedText, setEditedText] = useState("");
+  const [activeTab, setActiveTab] = useState<"transcript" | "ai-scribbles">("ai-scribbles");
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareSubject, setShareSubject] = useState<string | null>(null);
+  const { formatText: gmailFormatText } =
+    useAIEmailFormatting();
+  const [activeMode, setActiveMode] = useState<"normal" | "email" | "translate" | "summary" | "bullets">("normal");
+  const [modeContent, setModeContent] = useState<Record<string, string>>({});
+  const [modeSource, setModeSource] = useState<Record<string, string>>({});
+  const [isLoadingMode, setIsLoadingMode] = useState(false);
+
+  // Translation states
+  const [selectedLanguage, setSelectedLanguage] = useState<"original" | "en" | "hi">("original");
+  const [isTranslating, setIsTranslating] = useState(false);
+  const translationCacheScribbleRef = useRef<Map<string, string>>(new Map());
+  const translateControllerRef = useRef<AbortController | null>(null);
+
+  const getScribbleBaseText = () => {
+    if (!scribble) return "";
+
+    if (activeMode === "normal") {
+      return editedText || scribble.edited_text || scribble.original_formatted_text || scribble.raw_text || "";
+    }
+
+    return scribble.edited_text || scribble.original_formatted_text || scribble.raw_text || "";
+  };
+
+  const handleSelectMode = async (
+    nextMode: "normal" | "email" | "translate" | "summary" | "bullets"
+  ) => {
+    if (!scribble) return;
+
+    if (nextMode === "normal") {
+      setActiveMode("normal");
+      setEditedText(scribble.edited_text || scribble.original_formatted_text || "");
+      return;
+    }
+
+    setActiveMode(nextMode);
+    if (nextMode === "translate") {
+      return;
+    }
+
+    const baseText = getScribbleBaseText();
+    const hasFreshContent =
+      modeContent[nextMode] && modeSource[nextMode] === baseText;
+
+    if (hasFreshContent) {
+      setEditedText(modeContent[nextMode] || baseText);
+      return;
+    }
+
+    setIsLoadingMode(true);
+
+    let resultText = baseText;
+    if (nextMode === "email") {
+      const res = await gmailFormatText(baseText, scribble.title || "Untitled Scribble");
+      resultText = res.success ? res.formattedText || baseText : baseText;
+    } else {
+      const res = await aiService.transformText(baseText, nextMode, scribble.title || "Untitled Scribble");
+      resultText = res.success ? res.formattedText || baseText : baseText;
+    }
+
+    setModeContent((previous) => ({ ...previous, [nextMode]: resultText }));
+    setModeSource((previous) => ({ ...previous, [nextMode]: baseText }));
+    setEditedText(resultText);
+    setIsLoadingMode(false);
+  };
+
+  const applyLanguage = async (lang: "original" | "en" | "hi") => {
+    if (!scribble) return;
+
+    if (lang === "original") {
+      translateControllerRef.current?.abort();
+      translateControllerRef.current = null;
+      setSelectedLanguage("original");
+      setModeContent(prev => ({ ...prev, translate: "" }));
+      setEditedText(scribble.edited_text || scribble.original_formatted_text || "");
+      return;
+    }
+
+    const baseScribble = getScribbleBaseText();
+    if (!baseScribble) return;
+
+    if (isTranslating && translateControllerRef.current) {
+      translateControllerRef.current.abort();
+    }
+
+    const scribbleKey = `${lang}|scribble|${baseScribble}`;
+    const cachedScribble = translationCacheScribbleRef.current.get(scribbleKey);
+
+    if (cachedScribble) {
+      setSelectedLanguage(lang);
+      setModeContent(prev => ({ ...prev, translate: cachedScribble }));
+      setEditedText(cachedScribble);
+      toast({
+        title: "Language updated",
+        description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    translateControllerRef.current = controller;
+    setIsTranslating(true);
+    try {
+      const res = await aiService.translateText(baseScribble, lang, controller.signal);
+
+      if (!res.success) {
+        if (controller.signal.aborted) return;
+        toast({
+          title: "Translation failed",
+          description: res.error || "Could not translate right now.",
+          variant: "destructive",
+        });
+        if (res.error && res.error.toLowerCase().includes("sign in")) {
+          router.push(ROUTES.AUTH);
+        }
+        return;
+      }
+
+      const scribbleText = res.translatedText || "";
+      translationCacheScribbleRef.current.set(scribbleKey, scribbleText);
+
+      setSelectedLanguage(lang);
+      setModeContent(prev => ({ ...prev, translate: scribbleText }));
+      setEditedText(scribbleText);
+
+      toast({
+        title: "Language updated",
+        description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
+      });
+    } finally {
+      setIsTranslating(false);
+      if (translateControllerRef.current === controller) {
+        translateControllerRef.current = null;
+      }
+    }
+  };
+
+  // Feedback state
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
+  const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
+  const [feedbackValue, setFeedbackValue] = useState<boolean | null>(null);
+
+  // Star state
+  const [isStarring, setIsStarring] = useState(false);
+
+  useEffect(() => {
+    const loadScribble = async () => {
+      if (!id) return;
+      if (authLoading) return;
+      if (!user) {
+        router.push(`/auth?redirectTo=${encodeURIComponent(`/scribble/${id}`)}`);
+        return;
+      }
+      setIsLoading(true);
+      const { data, error } = await scribblesService.getScribbleById(id);
+      if (error || !data) {
+        router.push("/scribble");
+      } else if (user && data.user_id !== user.id) {
+        // Ownership check
+        router.push("/scribble");
+      } else {
+        setScribble(data);
+        setEditedText(data.edited_text || data.original_formatted_text);
+        // Set current scribble ID and raw text in storage for "Continue Recording" support
+        storageService.setCurrentScribbleId(data.id);
+        storageService.updateRawText(data.raw_text);
+        storageService.saveScribble(
+          data.original_formatted_text,
+          data.raw_text,
+          data.title
+        );
+        // Set existing feedback state
+        if (data.feedback_helpful !== null) {
+          setHasFeedbackSubmitted(true);
+          setFeedbackValue(data.feedback_helpful);
+        }
+      }
+      setIsLoading(false);
+    };
+
+    loadScribble();
+  }, [id, router, user, authLoading]);
+
+  useEffect(() => {
+    setModeContent({});
+    setModeSource({});
+    setActiveMode("normal");
+    setSelectedLanguage("original");
+  }, [scribble?.id, scribble?.updated_at]);
+
+  const handleSaveEdit = async () => {
+    if (!scribble || !editedText) return;
+    setIsSaving(true);
+
+    const { error } = await scribblesService.updateScribble(scribble.id, {
+      edited_text: editedText,
+    });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save changes. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      setScribble({ ...scribble, edited_text: editedText });
+      if (activeMode !== "normal") {
+        setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
+      }
+    }
+    setIsSaving(false);
+  };
+
+  const handleCopy = async () => {
+    const text = activeMode === "normal"
+      ? (editedText || scribble?.edited_text || scribble?.original_formatted_text || "")
+      : (modeContent[activeMode] || editedText || scribble?.edited_text || scribble?.original_formatted_text || "");
+    await navigator.clipboard.writeText(text);
+    toast({
+      title: "Copied!",
+      description: "Scribble copied to clipboard.",
+    });
+  };
+
+  const handleDownload = () => {
+    if (!scribble) return;
+    const text = activeMode === "normal"
+      ? (editedText || scribble.edited_text || scribble.original_formatted_text)
+      : (modeContent[activeMode] || editedText || scribble.edited_text || scribble.original_formatted_text);
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${scribble.title.replace(/[^a-z0-9]/gi, "_")}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadMarkdown = () => {
+    if (!scribble) return;
+    const body = activeMode === "normal"
+      ? (editedText || scribble.edited_text || scribble.original_formatted_text)
+      : (modeContent[activeMode] || editedText || scribble.edited_text || scribble.original_formatted_text);
+    const date = new Date(scribble.created_at).toLocaleDateString("en-US", {
+      month: "long", day: "numeric", year: "numeric",
+    });
+    const md   = `# ${scribble.title || "Untitled Scribble"}\n\n_${date}_\n\n---\n\n${body}`;
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `${scribble.title.replace(/[^a-z0-9]/gi, "_")}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintPDF = () => {
+    window.print();
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
+  const handleFeedbackSubmit = async (
+    helpful: boolean,
+    reasons?: FeedbackReason[]
+  ) => {
+    if (!scribble) {
+      toast({
+        title: "Error",
+        description: "Could not submit feedback - scribble not found.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsFeedbackSubmitting(true);
+    const { success, error } = await feedbackService.submitFeedback(
+      scribble.id,
+      helpful,
+      reasons
+    );
+
+    if (error || !success) {
+      toast({
+        title: "Error",
+        description: "Failed to submit feedback. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      setHasFeedbackSubmitted(true);
+      setFeedbackValue(helpful);
+      toast({
+        title: "Thanks!",
+        description: "Your feedback helps us improve.",
+      });
+    }
+    setIsFeedbackSubmitting(false);
+  };
+
+  const handleToggleStar = async () => {
+    if (!scribble || isStarring) return;
+    const currentScribble = scribble;
+    const newStarred = !currentScribble.is_starred;
+    setIsStarring(true);
+    // Optimistic update
+    setScribble((prev) => prev ? { ...prev, is_starred: newStarred } : prev);
+    const { data, error } = await scribblesService.toggleStar(currentScribble.id, newStarred);
+    if (error || !data) {
+      // Revert on failure
+      setScribble((prev) => prev ? { ...prev, is_starred: currentScribble.is_starred } : prev);
+      toast({
+        title: "Error",
+        description: "Failed to update star. Please try again.",
+        variant: "destructive",
+      });
+    } else {
+      // Sync with actual DB value
+      setScribble((prev) => prev ? { ...prev, is_starred: data.is_starred } : prev);
+    }
+    setIsStarring(false);
+  };
+
+  if (isLoading) {
+    return (
+      <main className="flex flex-col items-center px-4 pt-8 pb-24">
+        <div className="w-full max-w-xl flex flex-col items-center gap-8 mt-16">
+          <div className="w-9" />
+          <ScribbleEditorSkeleton />
+        </div>
+      </main>
+    );
+  }
+
+  if (!scribble) {
+    return null;
+  }
+
+  return (
+    <main className="min-h-screen bg-[#020617] text-white flex flex-col items-center pt-24 pb-32 px-4 relative overflow-x-hidden">
+      {/* Scribble Header Info (Centered) */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-3xl text-center mb-4 space-y-3 mt-5"
+      >
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+          {scribble.title || "Untitled Scribble"}
+        </h1>
+        <p className="text-gray-500 text-sm font-medium">
+          {formatDate(scribble.created_at)}
+        </p>
+      </motion.div>
+
+      {/* Mode Selection Bar (Floating) */}
+      <div className="flex flex-col items-center gap-1.5 w-full mb-4">
+        <p className="text-sm text-gray-400 font-medium">Transform this Scribble into <span className="text-base font-bold text-cyan-400">→</span></p>
+        <TooltipProvider>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 shadow-2xl z-10"
+          >
+            {[
+              { id: "normal", icon: FileText, label: "Scribble", desc: "Your clean working draft" },
+              { id: "email", icon: Mail, label: "Email", desc: "Send-ready draft" },
+              { id: "bullets", icon: ListChecks, label: "Bullets", desc: "Quick key points" },
+              { id: "summary", icon: BookOpen, label: "Summary", desc: "Condensed overview" },
+              { id: "translate", icon: Languages, label: "Translate", desc: "Change language" }
+            ].map((mode) => (
+              <Tooltip key={mode.id} delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => void handleSelectMode(mode.id as typeof activeMode)}
+                    className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
+                      activeMode === mode.id
+                        ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
+                        : "text-gray-400 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    {isLoadingMode && activeMode === mode.id ? (
+                      <Spinner className="w-5 h-5" />
+                    ) : (
+                      <mode.icon className="w-5 h-5" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-sm"><span className="font-semibold">{mode.label}</span> — {mode.desc}</p>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </motion.div>
+        </TooltipProvider>
+
+        {/* Translation Dropdown - only when translate mode is active */}
+        <AnimatePresence>
+          {activeMode === "translate" && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex items-center gap-2 bg-slate-900/50 backdrop-blur-sm border border-white/5 rounded-full p-1 shadow-xl mb-4"
+            >
+              {[
+                { id: "original", label: "Original" },
+                { id: "en", label: "English" },
+                { id: "hi", label: "Hindi" }
+              ].map((lang) => (
+                <button
+                  key={lang.id}
+                  onClick={() => applyLanguage(lang.id as "original" | "en" | "hi")}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    selectedLanguage === lang.id
+                      ? "bg-cyan-500 text-slate-950 shadow-lg"
+                      : "text-gray-400 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  {isTranslating && selectedLanguage === lang.id ? (
+                    <Spinner className="w-3 h-3" />
+                  ) : (
+                    lang.label
+                  )}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Main Scribble Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="w-full max-w-3xl"
+      >
+        <div className="bg-[#0f172a]/60 backdrop-blur-sm border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl relative group overflow-hidden">
+          {/* Subtle Glow Effect */}
+          <div className="absolute -top-16 -right-16 w-48 h-48 bg-cyan-500/5 blur-[80px] rounded-full pointer-events-none" />
+
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
+            <div className="space-y-1.5">
+              <h2 className="text-xl font-bold text-white leading-tight">
+                {scribble.title || "Untitled Scribble"}
+              </h2>
+              <p className="text-gray-500 text-xs font-medium">
+                {formatDate(scribble.created_at)}
+              </p>
+            </div>
+
+            {/* Action Icons */}
+            <TooltipProvider>
+              <div className="flex items-center gap-1 self-end md:self-start">
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleToggleStar}
+                      className={`p-2 rounded-lg transition-all duration-300 ${scribble.is_starred ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
+                    >
+                      <Star className={`w-4 h-4 ${scribble.is_starred ? 'fill-cyan-400' : ''}`} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Star</span> — Mark as favourite</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                {isSaving && <Spinner className="w-4 h-4 text-cyan-500" />}
+
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleCopy}
+                      className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Copy</span> — Copy to clipboard</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleDownload}
+                      className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Download</span> — Save as .txt</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleDownloadMarkdown}
+                      className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                    >
+                      <FileCode className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Markdown</span> — Save as .md</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handlePrintPDF}
+                      className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                    >
+                      <Printer className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Print</span> — Save as PDF</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setIsShareModalOpen(true)}
+                      className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5 transition-all duration-300"
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p><span className="font-semibold">Share</span> — Send this Scribble</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </TooltipProvider>
+          </div>
+
+          {/* Cyan Underline */}
+          <div className="w-16 h-0.5 bg-cyan-500/80 rounded-full mb-4" />
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-4">
+            <button
+              onClick={() => setActiveTab("transcript")}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === "transcript"
+                  ? "bg-cyan-500/10 text-cyan-400"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              Raw Transcript
+            </button>
+            <button
+              onClick={() => setActiveTab("ai-scribbles")}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === "ai-scribbles"
+                  ? "bg-cyan-500/10 text-cyan-400"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              Scribble
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="min-h-[120px]">
+            {activeTab === "transcript" ? (
+              <div className="text-gray-300 text-base leading-relaxed whitespace-pre-wrap">
+                {scribble.raw_text || "No transcript available."}
+              </div>
+            ) : (
+              <textarea
+                value={editedText}
+                onChange={(e) => setEditedText(e.target.value)}
+                onBlur={handleSaveEdit}
+                placeholder="Your Scribble will appear here..."
+                className="w-full bg-transparent text-base text-gray-300 leading-relaxed focus:outline-none resize-none border-none p-0 min-h-[120px] max-h-[500px] overflow-y-auto placeholder:text-gray-600"
+              />
+            )}
+          </div>
+
+          <div className="flex border-white/5 border-t mt-4 pt-4 justify-end">
+            <button
+              onClick={() => {
+                const raw = scribble.raw_text;
+                if (!raw) {
+                  toast({
+                    title: "Error",
+                    description: "Original recording not found. Cannot continue.",
+                    variant: "destructive"
+                  });
+                  return;
+                }
+                storageService.updateRawText(raw);
+                storageService.setCurrentScribbleId(scribble.id);
+                storageService.setContinueMode(true);
+                router.push("/recording");
+              }}
+              className="bg-cyan-500/5 hover:bg-cyan-500/15 gap-2 text-cyan-400 px-4 py-2 rounded-lg font-medium text-xs transition-all duration-300 flex items-center border border-cyan-500/10 group"
+              title="Continue recording and append to this Scribble"
+            >
+              <Mic className="w-3 h-3" />
+              <span>Continue Recording</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Feedback Section (Below Card) */}
+        <div className="mt-4">
+          <FeedbackWidget
+            onSubmit={handleFeedbackSubmit}
+            isSubmitting={isFeedbackSubmitting}
+            hasSubmitted={hasFeedbackSubmitted}
+            submittedValue={feedbackValue}
+          />
+        </div>
+      </motion.div>
+
+      {/* Share Modal */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsShareModalOpen(false)}
+          />
+          <div className="relative w-full max-w-md rounded-2xl border border-cyan-700/30 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Share2 className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Share Scribble</h3>
+                  <p className="text-sm text-gray-400">Choose a destination</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsShareModalOpen(false)}
+                className="text-gray-400 hover:text-white text-xl"
+                aria-label="Close share dialog"
+              >
+                ✕
+              </button>
+            </div>
+            <Separator className="bg-cyan-700/30" />
+
+            {/* Subject input */}
+            <div className="mt-4">
+              <label className="text-sm text-gray-400 block mb-1">Email subject</label>
+              <input
+                type="text"
+                value={shareSubject ?? (scribble.title || "Untitled Scribble")}
+                onChange={(e) => setShareSubject(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                placeholder="Subject"
+              />
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              {/* WhatsApp */}
+              <button
+                onClick={() => {
+                  const bodyText = activeMode === "normal"
+                    ? editedText || ""
+                    : modeContent[activeMode] || editedText || "";
+                  const payload = `${scribble.title || "Untitled Scribble"}\n\n${bodyText}`.trim();
+                  const url = `https://wa.me/?text=${encodeURIComponent(payload)}`;
+                  window.open(url, "_blank", "noopener,noreferrer");
+                  setIsShareModalOpen(false);
+                }}
+                className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+              >
+                <MessageCircle className="w-5 h-5" />
+                <span>WhatsApp</span>
+              </button>
+
+              {/* Gmail */}
+              <button
+                onClick={() => {
+                  const subjectText = shareSubject ?? (scribble.title || "Untitled Scribble");
+                  const subject = encodeURIComponent(subjectText);
+                  const bodyText = activeMode === "normal"
+                    ? editedText || ""
+                    : modeContent[activeMode] || editedText || "";
+                  const body = encodeURIComponent(bodyText);
+                  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}&tf=1`;
+                  window.open(gmailUrl, "_blank", "noopener,noreferrer");
+                  setIsShareModalOpen(false);
+                }}
+                className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+              >
+                <Mail className="w-5 h-5" />
+                <div className="flex flex-col items-start">
+                  <span>Gmail</span>
+                  <span className="text-xs text-gray-400">Uses current transcript content</span>
+                </div>
+              </button>
+
+              {/* Default Email Client */}
+              <button
+                onClick={() => {
+                  const subjectText = shareSubject ?? (scribble.title || "Untitled Scribble");
+                  const subject = encodeURIComponent(subjectText);
+                  const bodyText = activeMode === "normal"
+                    ? editedText || ""
+                    : modeContent[activeMode] || editedText || "";
+                  const body = encodeURIComponent(bodyText);
+                  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                  setIsShareModalOpen(false);
+                }}
+                className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+              >
+                <Mail className="w-5 h-5" />
+                <div className="flex flex-col items-start">
+                  <span>Email (Default Client)</span>
+                  <span className="text-xs text-gray-400">Uses current transcript content</span>
+                </div>
+              </button>
+
+              {/* Native Share (if available) */}
+              {typeof navigator !== "undefined" && "share" in navigator && (
+                <button
+                  onClick={async () => {
+                    const bodyText = activeMode === "normal"
+                      ? editedText || ""
+                      : modeContent[activeMode] || editedText || "";
+                    const shareTitle = scribble.title || "Untitled Scribble";
+                    const payload = `${shareTitle}\n\n${bodyText}`.trim();
+                    try {
+                      setIsSharing(true);
+                      const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+                      await nav.share?.({ title: shareTitle, text: payload });
+                      setIsShareModalOpen(false);
+                    } catch {
+                      // user may have cancelled
+                    } finally {
+                      setIsSharing(false);
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+                >
+                  <Share2 className="w-5 h-5" />
+                  <span>More Options…{isSharing && "…"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

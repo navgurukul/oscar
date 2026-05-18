@@ -11,7 +11,7 @@ export interface DeleteUserDataResult {
 }
 
 /**
- * Permanently delete all notes and vocabulary for a given user.
+ * Permanently delete all scribbles and vocabulary for a given user.
  * Does NOT delete the auth account — call supabase.auth.admin.deleteUser
  * separately if account removal is needed.
  */
@@ -19,14 +19,14 @@ export async function deleteAllUserData(
   supabase: SupabaseClient,
   userId: string
 ): Promise<DeleteUserDataResult> {
-  const [notesResult, vocabularyResult] = await Promise.all([
-    supabase.from("notes").delete().eq("user_id", userId),
+  const [scribblesResult, vocabularyResult] = await Promise.all([
+    supabase.from("scribbles").delete().eq("user_id", userId),
     supabase.from("user_vocabulary").delete().eq("user_id", userId),
   ]);
 
-  if (notesResult.error) {
-    console.error("Error deleting notes:", notesResult.error);
-    return { error: "Failed to delete notes" };
+  if (scribblesResult.error) {
+    console.error("Error deleting scribbles:", scribblesResult.error);
+    return { error: "Failed to delete scribbles" };
   }
 
   if (vocabularyResult.error) {

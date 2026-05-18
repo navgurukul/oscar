@@ -29,6 +29,7 @@ function RecordingPageInner() {
   const {
     canRecord,
     recordingsThisMonth,
+    incrementUsage,
   } = useSubscriptionContext();
 
   const {
@@ -152,8 +153,8 @@ function RecordingPageInner() {
           // Limit exceeded
           setShowUpgradePrompt(true);
           toast({
-            title: "Recording Limit Reached",
-            description: data.message || "Please upgrade to Pro for unlimited recordings.",
+            title: "Scribble Recording Limit Reached",
+            description: data.message || "Please upgrade to Pro for unlimited Scribble recordings.",
             variant: "destructive",
           });
           return;
@@ -310,14 +311,19 @@ function RecordingPageInner() {
 
         const generatedTitle = titleResult.success
           ? titleResult.title
-          : "Untitled Note";
+          : "Untitled Scribble";
 
         // Store in session storage for immediate display
-        storageService.saveNote(
+        storageService.saveScribble(
           result.formattedText,
           transcript,
           generatedTitle
         );
+
+        // ✅ Increment recording usage AFTER successful AI processing
+        if (user) {
+          await incrementUsage();
+        }
 
         if (isMountedRef.current) {
           setProcessingProgress(100);
@@ -417,7 +423,7 @@ function RecordingPageInner() {
   }
 
   return (
-    <main className="flex flex-col items-center px-4 pt-4 sm:pt-8 min-h-dvh">
+    <main className="flex flex-col items-center px-4 pt-8 min-h-dvh">
       {/* Upgrade Prompt Modal */}
       {showUpgradePrompt && (
         <UpgradePrompt
@@ -437,11 +443,11 @@ function RecordingPageInner() {
         </div>
       )}
 
-      <div className="w-full max-w-xl flex flex-col items-center gap-4 sm:gap-8 mt-4 sm:mt-16">
+      <div className="w-full max-w-xl flex flex-col items-center gap-4 sm:gap-8 mt-16">
         {/* Header */}
         <div className="text-center space-y-1">
           <h1 className="text-2xl sm:text-4xl font-bold">
-            Start a <span className="text-cyan-500">Stream</span>
+            Record a <span className="text-cyan-500">Scribble</span>
           </h1>
         </div>
 
@@ -489,7 +495,7 @@ function RecordingPageInner() {
               </p>
             ) : (
               <p className="text-gray-400 text-base sm:text-lg text-center px-2">
-                Speak naturally. OSCAR will turn this Stream into a clean Scribble.
+                Speak naturally. OSCAR will clean this note into a Scribble.
               </p>
             )}
           </div>

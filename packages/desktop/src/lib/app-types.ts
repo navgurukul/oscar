@@ -1,9 +1,14 @@
-import type { DictationContextSnapshot } from "../types/note.types";
+import type { DictationContextSnapshot } from "../types/scribble.types";
+import type {
+  ModelPreset as WhisperModelPreset,
+  ModelRecommendation as WhisperModelRecommendation,
+  WhisperModelVariant,
+} from "./whisper-models";
 
 export type TabType =
   | "home"
   | "meetings"
-  | "notes"
+  | "scribble"
   | "vocabulary"
   | "billing"
   | "settings";
@@ -47,8 +52,29 @@ export interface HotkeyContextEventPayload {
 export type TonePreset = "none" | "professional" | "casual" | "friendly";
 export type MicrophonePermissionState = "granted" | "denied" | "prompt" | "unknown";
 export type WhisperModelRole = "dictation" | "minutes";
-export type MinutesModelVariant = "large-v3-turbo-q5_0";
-export type MinutesModelDownloadState = "idle" | "downloading" | "installed";
+
+// Re-export canonical model types from the Whisper registry.
+export type {
+  WhisperModelVariant,
+  ModelPreset as WhisperModelPreset,
+  ModelSpec as WhisperModelSpec,
+  ModelRecommendation as WhisperModelRecommendation,
+  HardwareProfile,
+  GpuBackend,
+} from "./whisper-models";
+export type RoleModelDownloadState = "idle" | "checking" | "downloading" | "ready" | "error";
+
+export interface RoleModelState {
+  role: WhisperModelRole;
+  preset: WhisperModelPreset;
+  recommendation: WhisperModelRecommendation | null;
+  activeVariant: WhisperModelVariant | null;
+  resolvedPath: string | null;
+  fallbackUsed: boolean;
+  downloadState: RoleModelDownloadState;
+  progress: number;
+  error: string | null;
+}
 
 export interface DownloadProgress {
   downloaded: number;

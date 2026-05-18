@@ -5,18 +5,23 @@ import {
   User,
   Search,
   Loader2,
-  Download,
   ExternalLink,
   LogOut,
   Trash2,
   Lock,
   Mail,
+  CreditCard,
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { BillingSection } from "./BillingSection";
 import { VocabularySection } from "./VocabularySection";
 import { getInitials } from "../lib/utils";
 import { isContextAwarePlatform } from "../lib/dictation-context";
+import {
+  formatModelSize,
+  type ModelPreset,
+} from "../lib/whisper-models";
+import type { RoleModelState, WhisperModelRole } from "../lib/app-types";
 
 /* ── Types ── */
 
@@ -29,11 +34,11 @@ type SettingsSection =
   | "privacy";
 
 /** Internal active tab */
-type ActiveTab = "general" | "vocabulary" | "account";
+type ActiveTab = "general" | "vocabulary" | "billing" | "account";
 
 function resolveTab(section?: SettingsSection): ActiveTab {
-  if (section === "billing" || section === "privacy" || section === "account")
-    return "account";
+  if (section === "billing") return "billing";
+  if (section === "privacy" || section === "account") return "account";
   if (section === "vocabulary") return "vocabulary";
   return "general";
 }
@@ -127,6 +132,7 @@ const NAV_ITEMS: {
 }[] = [
   { id: "general", label: "General", icon: Settings2 },
   { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
+  { id: "billing", label: "Plans & Billing", icon: CreditCard },
   { id: "account", label: "Account", icon: User },
 ];
 
@@ -150,12 +156,9 @@ interface SettingsTabProps {
   systemAudioSupported?: boolean;
   systemAudioEnabled?: boolean;
   onSystemAudioToggle?: (enabled: boolean) => void;
-  minutesModelEnabled?: boolean;
-  minutesModelDownloadState?: "idle" | "downloading" | "installed";
-  minutesModelDownloadProgress?: number;
-  minutesModelVariant?: string;
-  onDownloadMinutesModel?: () => void;
-  onRemoveMinutesModel?: () => void;
+  dictationModel: RoleModelState;
+  meetingModel: RoleModelState;
+  onModelPresetChange: (role: WhisperModelRole, preset: ModelPreset) => void;
 }
 
 /* ── Component ── */
@@ -178,11 +181,9 @@ export function SettingsTab({
   systemAudioSupported = false,
   systemAudioEnabled = true,
   onSystemAudioToggle,
-  minutesModelEnabled = false,
-  minutesModelDownloadState = "idle",
-  minutesModelDownloadProgress = 0,
-  onDownloadMinutesModel,
-  onRemoveMinutesModel,
+  dictationModel,
+  meetingModel,
+  onModelPresetChange,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>(
     resolveTab(initialSection),
@@ -220,9 +221,84 @@ export function SettingsTab({
       l.native.toLowerCase().includes(langSearch.toLowerCase()),
   );
 
-  const minutesPackInstalled =
-    minutesModelDownloadState === "installed" || minutesModelEnabled;
   const contextAwareSupported = isContextAwarePlatform(contextAwarePlatform);
+  const contextAwareDisabled = !aiImprovementEnabled || !contextAwareSupported;
+  const contextAwareDescription = !contextAwareSupported
+    ? "Available on macOS and Windows"
+    : aiImprovementEnabled
+      ? "Adapt cleanup style to active app"
+      : "Requires AI Cleanup";
+
+  const renderModelStatus = (model: RoleModelState) => {
+    if (model.downloadState === "downloading") {
+      return (
+        <div className="st-row-status st-row-status--downloading">
+          <Loader2 size={12} className="animate-spin" />
+          Downloading {Math.round(model.progress)}%
+        </div>
+      );
+    }
+
+    if (model.downloadState === "checking") {
+      return (
+        <div className="st-row-status st-row-status--downloading">
+          <Loader2 size={12} className="animate-spin" />
+          Preparing
+        </div>
+      );
+    }
+
+    if (model.activeVariant) {
+      return (
+        <div className="st-row-status st-row-status--installed">
+          Ready
+        </div>
+      );
+    }
+
+    if (model.recommendation) {
+      return (
+        <div className="st-row-status">
+          Will download · {formatModelSize(model.recommendation.spec.sizeBytes)}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const renderModelRow = (
+    label: string,
+    description: string,
+    model: RoleModelState,
+  ) => {
+    return (
+      <div className="st-row">
+        <div className="st-row-text">
+          <div className="st-row-label">{label}</div>
+          <div className="st-row-desc">{description}</div>
+          {renderModelStatus(model)}
+          {model.error && <div className="st-row-error">{model.error}</div>}
+        </div>
+        <div className="st-row-action">
+          <select
+            className="st-select"
+            value={model.preset}
+            onChange={(e) =>
+              onModelPresetChange(model.role, e.target.value as ModelPreset)
+            }
+            aria-label={label}
+            disabled={model.downloadState === "downloading"}
+          >
+            <option value="auto">Auto (recommended)</option>
+            <option value="fast">Fast</option>
+            <option value="balanced">Balanced</option>
+            <option value="best">Best quality</option>
+          </select>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="st-layout">
@@ -256,25 +332,6 @@ export function SettingsTab({
             {/* — Recording — */}
             <div className="st-section-label">Recording</div>
             <div className="st-card st-card--grouped">
-              <div className="st-row">
-                <div className="st-row-text">
-                  <div className="st-row-label">Context-Aware Dictation</div>
-                  <div className="st-row-desc">
-                    Auto-adapts formatting to active app
-                  </div>
-                </div>
-                <Toggle
-                  checked={contextAwareDictationEnabled}
-                  onChange={() =>
-                    onContextAwareDictationChange(!contextAwareDictationEnabled)
-                  }
-                  label="Context-Aware Dictation"
-                  disabled={!contextAwareSupported}
-                />
-              </div>
-
-              <div className="st-divider" />
-
               <div className="st-row st-row--col">
                 <div className="st-row-label">Microphone</div>
                 <select
@@ -390,59 +447,43 @@ export function SettingsTab({
 
               <div className="st-divider" />
 
-              <div className="st-row">
+              <div className="st-row st-row--sub">
                 <div className="st-row-text">
-                  <div className="st-row-label">Accuracy Pack</div>
+                  <div className="st-row-label">Adapt to Active App</div>
                   <div className="st-row-desc">
-                    Better Hindi, Hinglish, and long-meeting transcription
+                    {contextAwareDescription}
                   </div>
-                  {minutesModelDownloadState === "downloading" && (
-                    <div className="st-row-status st-row-status--downloading">
-                      Downloading…{" "}
-                      {Math.max(
-                        0,
-                        Math.min(
-                          100,
-                          Math.round(minutesModelDownloadProgress),
-                        ),
-                      )}
-                      %
-                    </div>
-                  )}
-                  {minutesPackInstalled &&
-                    minutesModelDownloadState !== "downloading" && (
-                      <div className="st-row-status st-row-status--installed">
-                        Installed
-                      </div>
-                    )}
                 </div>
-                <div className="st-row-action">
-                  {minutesPackInstalled ? (
-                    <button
-                      className="st-btn-ghost-sm"
-                      onClick={() => onRemoveMinutesModel?.()}
-                      disabled={minutesModelDownloadState === "downloading"}
-                    >
-                      Remove
-                    </button>
-                  ) : (
-                    <button
-                      className="st-btn-primary-sm"
-                      onClick={() => onDownloadMinutesModel?.()}
-                      disabled={minutesModelDownloadState === "downloading"}
-                    >
-                      {minutesModelDownloadState === "downloading" ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <Download size={14} />
-                      )}
-                      {minutesModelDownloadState === "downloading"
-                        ? "Downloading…"
-                        : "Download"}
-                    </button>
-                  )}
-                </div>
+                <Toggle
+                  checked={
+                    contextAwareDictationEnabled &&
+                    aiImprovementEnabled &&
+                    contextAwareSupported
+                  }
+                  onChange={() =>
+                    onContextAwareDictationChange(!contextAwareDictationEnabled)
+                  }
+                  label="Adapt to Active App"
+                  disabled={contextAwareDisabled}
+                />
               </div>
+            </div>
+
+            {/* — Voice Models — */}
+            <div className="st-section-label">Voice Models</div>
+            <div className="st-card st-card--grouped">
+              {renderModelRow(
+                "Dictation",
+                "For Scribbles, Stream, and Ctrl+Space.",
+                dictationModel,
+              )}
+
+              <div className="st-divider" />
+              {renderModelRow(
+                "Meetings",
+                "For Minutes and long meeting transcription.",
+                meetingModel,
+              )}
             </div>
           </div>
         )}
@@ -460,6 +501,22 @@ export function SettingsTab({
               </div>
             </div>
           ))}
+
+        {/* ════════════ Plans & Billing ════════════ */}
+        {activeTab === "billing" && (
+          <div className="st-content">
+            <h2 className="st-content-title">Plans & Billing</h2>
+            {userId && userEmail ? (
+              <BillingSection userId={userId} />
+            ) : (
+              <div className="st-card st-card--grouped">
+                <p className="st-row-desc" style={{ padding: "4px 0" }}>
+                  Sign in to view your plan and usage.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ════════════ Account ════════════ */}
         {activeTab === "account" && (
@@ -484,17 +541,6 @@ export function SettingsTab({
                 </div>
               </div>
             </div>
-
-            {/* Plan & Usage */}
-            {userId && userEmail ? (
-              <BillingSection userId={userId} />
-            ) : (
-              <div className="st-card st-card--grouped">
-                <p className="st-row-desc" style={{ padding: "4px 0" }}>
-                  Sign in to view your plan and usage.
-                </p>
-              </div>
-            )}
 
             {/* Resources */}
             <div className="st-section-label">Resources</div>

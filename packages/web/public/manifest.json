@@ -1,7 +1,7 @@
 {
-  "name": "OSCAR — Voice Notes",
+  "name": "OSCAR — Voice Scribbles",
   "short_name": "OSCAR",
-  "description": "AI-powered voice notes. Speak naturally, get polished text.",
+  "description": "AI-powered voice scribbles. Speak naturally, get polished text.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#020617",
@@ -30,8 +30,8 @@
     },
     {
       "name": "My Scribbles",
-      "url": "/notes",
-      "description": "Browse saved notes"
+      "url": "/scribble",
+      "description": "Browse saved scribbles"
     }
   ]
 }

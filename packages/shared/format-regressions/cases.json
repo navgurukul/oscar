@@ -1,0 +1,33 @@
+[
+  {
+    "id": "indian-english-cum-wardrobe-changing-room",
+    "tags": ["homophone", "hinglish", "interior-design"],
+    "raw": "The selected area will be a wardrobe come changing room.",
+    "badOutputs": [
+      "The selected area will be a wardrobe, come changing room.",
+      "The selected area will be a wardrobe come changing room."
+    ],
+    "expected": "The selected area will be a wardrobe-cum-changing room.",
+    "promptMustContain": [
+      "X-cum-Y",
+      "wardrobe-cum-changing room"
+    ],
+    "desktopPromptMustContain": [
+      "X-cum-Y",
+      "wardrobe-cum-changing room"
+    ]
+  },
+  {
+    "id": "indian-english-cum-living-dining-area",
+    "tags": ["homophone", "hinglish", "interior-design"],
+    "raw": "This can become a living come dining area.",
+    "badOutputs": [
+      "This can become a living come dining area.",
+      "This can become a living, come dining area."
+    ],
+    "expected": "This can become a living-cum-dining area.",
+    "promptMustContain": [
+      "living-cum-dining area"
+    ]
+  }
+]

@@ -1,16 +1,16 @@
 export const STORAGE_KEYS = {
-  FORMATTED_NOTE: "formattedNote",
+  FORMATTED_SCRIBBLE: "formattedScribble",
   RAW_TEXT: "rawText",
-  TITLE: "noteTitle",
+  TITLE: "scribbleTitle",
   CONTINUE_MODE: "continueRecording",
-  CURRENT_NOTE_ID: "currentNoteId",
+  CURRENT_SCRIBBLE_ID: "currentScribbleId",
 } as const;
 
 export const ROUTES = {
   HOME: "/",
   RECORDING: "/recording",
   RESULTS: "/results",
-  NOTES: "/notes",
+  SCRIBBLE: "/scribble",
   AUTH: "/auth",
   SETTINGS: "/settings",
   BILLING: "/billing",

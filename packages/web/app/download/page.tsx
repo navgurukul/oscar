@@ -262,7 +262,7 @@ function FeatureShowcase() {
           </div>
           <p className="text-sm text-white/60 italic leading-relaxed">
             Enable cloud AI to remove filler words, fix grammar, and structure
-            your notes beautifully.
+            your Scribbles beautifully.
           </p>
         </div>
       </div>

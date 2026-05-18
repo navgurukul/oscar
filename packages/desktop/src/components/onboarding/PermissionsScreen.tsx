@@ -237,77 +237,63 @@ export function PermissionsScreen({
                   </button>
                 )}
               </div>
-            </div>
 
-            {systemAudioSupported && (
-              <div className="perm-item-modern">
-                <div className="perm-item-icon">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                  </svg>
-                </div>
-                <div className="perm-item-content">
-                  <span className="perm-item-label">
-                    System audio in meetings
-                  </span>
-                  <span className="perm-item-sub">
-                    Optional, but needed to capture other participants
-                  </span>
-                </div>
-                {systemAudioStatus === "granted" ? (
-                  <span className="perm-badge-modern granted">
+              {systemAudioSupported && (
+                <div className="perm-item-modern">
+                  <div className="perm-item-icon">
                     <svg
-                      width="14"
-                      height="14"
+                      width="20"
+                      height="20"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth="3"
+                      strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     >
-                      <polyline points="20 6 9 17 4 12" />
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
                     </svg>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className="perm-enable-btn-modern"
-                    onClick={requestSystemAudio}
-                  >
-                    {systemAudioStatus === "denied" ? "Retry" : "Enable"}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {!accessibilityEnabled && (
-              <p className="perm-skip-note-modern">
-                You can enable Accessibility later in System Settings → Privacy
-                &amp; Security.
-              </p>
-            )}
-
-            {systemAudioSupported && systemAudioStatus !== "granted" && (
-              <p className="perm-skip-note-modern">
-                System audio is optional. macOS may ask you to restart OSCAR
-                after enabling Screen Recording.
-              </p>
-            )}
+                  </div>
+                  <div className="perm-item-content">
+                    <span className="perm-item-label">
+                      System audio in meetings
+                    </span>
+                    <span className="perm-item-sub">
+                      Optional, but needed to capture other participants
+                    </span>
+                  </div>
+                  {systemAudioStatus === "granted" ? (
+                    <span className="perm-badge-modern granted">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="perm-enable-btn-modern"
+                      onClick={requestSystemAudio}
+                    >
+                      {systemAudioStatus === "denied" ? "Retry" : "Enable"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             {hotkeyWarning && (
-              <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 text-amber-900">
+              <div className="my-4 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 text-amber-900">
                 <p className="m-0 text-[0.9rem] leading-6">{hotkeyWarning}</p>
                 {onRetryHotkey && (
                   <button
@@ -321,13 +307,9 @@ export function PermissionsScreen({
               </div>
             )}
 
-            <p className="mb-0 mt-5 text-[0.78rem] text-slate-400">
-              Next up: downloading the AI speech model (~140 MB, one-time).
-            </p>
-
             <button
               type="button"
-              className={`perm-continue-btn-modern mt-2.5 ${canContinue ? "active" : ""}`}
+              className={`perm-continue-btn-modern ${canContinue ? "active" : ""}`}
               disabled={!canContinue}
               onClick={onContinue}
             >

@@ -1,6 +1,6 @@
 // Storage service for session storage operations
 
-import type { Note } from "../types/note.types";
+import type { Scribble } from "../types/scribble.types";
 import { STORAGE_KEYS } from "../constants";
 
 /**
@@ -12,16 +12,16 @@ function isBrowser(): boolean {
 
 export const storageService = {
   /**
-   * Save complete note data to session storage
+   * Save complete scribble data to session storage
    */
-  saveNote(formatted: string, raw: string, title?: string): void {
+  saveScribble(formatted: string, raw: string, title?: string): void {
     if (!isBrowser()) {
       console.warn("sessionStorage not available (SSR context)");
       return;
     }
 
     try {
-      sessionStorage.setItem(STORAGE_KEYS.FORMATTED_NOTE, formatted);
+      sessionStorage.setItem(STORAGE_KEYS.FORMATTED_SCRIBBLE, formatted);
       sessionStorage.setItem(STORAGE_KEYS.RAW_TEXT, raw);
       if (title) {
         sessionStorage.setItem(STORAGE_KEYS.TITLE, title);
@@ -30,21 +30,21 @@ export const storageService = {
       }
     } catch (error) {
       // sessionStorage can fail when storage is full or in private browsing.
-      // Log but do not throw — the note will still be in memory for this session.
-      console.error("Failed to save note to storage:", error);
+      // Log but do not throw — the scribble will still be in memory for this session.
+      console.error("Failed to save scribble to storage:", error);
     }
   },
 
   /**
-   * Retrieve complete note data from session storage
+   * Retrieve complete scribble data from session storage
    */
-  getNote(): Partial<Note> | null {
+  getScribble(): Partial<Scribble> | null {
     if (!isBrowser()) {
       return null;
     }
 
     try {
-      const formattedText = sessionStorage.getItem(STORAGE_KEYS.FORMATTED_NOTE);
+      const formattedText = sessionStorage.getItem(STORAGE_KEYS.FORMATTED_SCRIBBLE);
       const rawText = sessionStorage.getItem(STORAGE_KEYS.RAW_TEXT);
       const title = sessionStorage.getItem(STORAGE_KEYS.TITLE);
 
@@ -58,7 +58,7 @@ export const storageService = {
         title: title || undefined,
       };
     } catch (error) {
-      console.error("Failed to retrieve note from storage:", error);
+      console.error("Failed to retrieve scribble from storage:", error);
       return null;
     }
   },
@@ -74,13 +74,13 @@ export const storageService = {
   },
 
   /**
-   * Update formatted note text
+   * Update formatted scribble text
    */
-  updateFormattedNote(text: string): void {
+  updateFormattedScribble(text: string): void {
     if (!isBrowser()) {
       return;
     }
-    sessionStorage.setItem(STORAGE_KEYS.FORMATTED_NOTE, text);
+    sessionStorage.setItem(STORAGE_KEYS.FORMATTED_SCRIBBLE, text);
   },
 
   /**
@@ -94,17 +94,17 @@ export const storageService = {
   },
 
   /**
-   * Clear all note-related data
+   * Clear all scribble-related data
    */
-  clearNote(): void {
+  clearScribble(): void {
     if (!isBrowser()) {
       return;
     }
-    sessionStorage.removeItem(STORAGE_KEYS.FORMATTED_NOTE);
+    sessionStorage.removeItem(STORAGE_KEYS.FORMATTED_SCRIBBLE);
     sessionStorage.removeItem(STORAGE_KEYS.RAW_TEXT);
     sessionStorage.removeItem(STORAGE_KEYS.TITLE);
     sessionStorage.removeItem(STORAGE_KEYS.CONTINUE_MODE);
-    sessionStorage.removeItem(STORAGE_KEYS.CURRENT_NOTE_ID);
+    sessionStorage.removeItem(STORAGE_KEYS.CURRENT_SCRIBBLE_ID);
   },
 
   /**
@@ -142,26 +142,26 @@ export const storageService = {
   },
 
   /**
-   * Set current note ID
+   * Set current scribble ID
    */
-  setCurrentNoteId(id: string | null): void {
+  setCurrentScribbleId(id: string | null): void {
     if (!isBrowser()) {
       return;
     }
     if (id) {
-      sessionStorage.setItem(STORAGE_KEYS.CURRENT_NOTE_ID, id);
+      sessionStorage.setItem(STORAGE_KEYS.CURRENT_SCRIBBLE_ID, id);
     } else {
-      sessionStorage.removeItem(STORAGE_KEYS.CURRENT_NOTE_ID);
+      sessionStorage.removeItem(STORAGE_KEYS.CURRENT_SCRIBBLE_ID);
     }
   },
 
   /**
-   * Get current note ID
+   * Get current scribble ID
    */
-  getCurrentNoteId(): string | null {
+  getCurrentScribbleId(): string | null {
     if (!isBrowser()) {
       return null;
     }
-    return sessionStorage.getItem(STORAGE_KEYS.CURRENT_NOTE_ID);
+    return sessionStorage.getItem(STORAGE_KEYS.CURRENT_SCRIBBLE_ID);
   },
 };

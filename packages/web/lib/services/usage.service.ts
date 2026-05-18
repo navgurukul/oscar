@@ -147,19 +147,19 @@ export const usageService = {
   },
 
   /**
-   * Get total note count for a user
+   * Get total scribble count for a user
    */
-  async getUserNoteCount(userId: string): Promise<number> {
+  async getUserScribbleCount(userId: string): Promise<number> {
     const supabase = getSupabaseAdmin();
 
     const { count, error } = await supabase
-      .from("notes")
+      .from("scribbles")
       .select("*", { count: "exact", head: true })
       .eq("user_id", userId)
       .is("deleted_at", null);
 
     if (error) {
-      console.error("Error fetching note count:", error);
+      console.error("Error fetching scribble count:", error);
       return 0;
     }
 
@@ -167,9 +167,9 @@ export const usageService = {
   },
 
   /**
-   * Check if user can create a new note
+   * Check if user can create a new scribble
    */
-  async canUserCreateNote(
+  async canUserCreateScribble(
     userId: string
   ): Promise<{ allowed: boolean; remaining: number | null; current: number }> {
     // Check if user is pro
@@ -179,9 +179,9 @@ export const usageService = {
       return { allowed: true, remaining: null, current: 0 };
     }
 
-    // Get current note count
-    const currentCount = await this.getUserNoteCount(userId);
-    const limit = SUBSCRIPTION_CONFIG.FREE_MAX_NOTES;
+    // Get current scribble count
+    const currentCount = await this.getUserScribbleCount(userId);
+    const limit = SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES;
     const remaining = Math.max(0, limit - currentCount);
 
     return {
@@ -197,36 +197,36 @@ export const usageService = {
   async getUsageStats(userId: string): Promise<{
     recordingsThisMonth: number;
     recordingsLimit: number | null;
-    notesCount: number;
-    notesLimit: number | null;
+    scribblesCount: number;
+    scribblesLimit: number | null;
     isProUser: boolean;
     canRecord: boolean;
-    canCreateNote: boolean;
+    canCreateScribble: boolean;
   }> {
     const isProUser = await subscriptionService.isProUser(userId);
     const recordingsThisMonth = await this.getMonthlyUsage(userId);
-    const notesCount = await this.getUserNoteCount(userId);
+    const scribblesCount = await this.getUserScribbleCount(userId);
 
     const recordingsLimit = isProUser
       ? null
       : SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS;
-    const notesLimit = isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_NOTES;
+    const scribblesLimit = isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES;
 
     const canRecord = isProUser
       ? true
       : recordingsThisMonth < SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS;
-    const canCreateNote = isProUser
+    const canCreateScribble = isProUser
       ? true
-      : notesCount < SUBSCRIPTION_CONFIG.FREE_MAX_NOTES;
+      : scribblesCount < SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES;
 
     return {
       recordingsThisMonth,
       recordingsLimit,
-      notesCount,
-      notesLimit,
+      scribblesCount,
+      scribblesLimit,
       isProUser,
       canRecord,
-      canCreateNote,
+      canCreateScribble,
     };
   },
 };

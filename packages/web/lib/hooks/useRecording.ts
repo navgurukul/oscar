@@ -28,9 +28,15 @@ export function useRecording() {
       setState(RecordingState.REQUESTING_PERMISSION);
 
       // This will now prompt for permission during initialization
-      await service.initialize((transcript) => {
-        setCurrentTranscript(transcript);
-      });
+      await service.initialize(
+        (transcript) => {
+          setCurrentTranscript(transcript);
+        },
+        {
+          continueOnSilence: true,
+          silenceThresholdMs: 5000,
+        },
+      );
 
       sttServiceRef.current = service;
       setState(RecordingState.READY);
@@ -108,7 +114,7 @@ export function useRecording() {
 
     // Small delay before retry to give browser time to reset
     await new Promise((resolve) =>
-      setTimeout(resolve, PERMISSION_CONFIG.RETRY_DELAY_MS)
+      setTimeout(resolve, PERMISSION_CONFIG.RETRY_DELAY_MS),
     );
 
     await initSTT();
@@ -132,7 +138,7 @@ export function useRecording() {
         setState(RecordingState.ERROR);
       }
     },
-    [state]
+    [state],
   );
 
   const stopRecording = useCallback(async (): Promise<string> => {

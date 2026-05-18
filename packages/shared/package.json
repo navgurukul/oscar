@@ -1,6 +1,6 @@
 {
   "name": "@oscar/shared",
-  "version": "0.3.32",
+  "version": "0.3.59",
   "private": true,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -11,7 +11,9 @@
     "./prompts": "./src/prompts/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:format-regressions": "node scripts/run-format-regressions.mjs",
+    "test:format-regressions:live": "node scripts/run-format-regressions.mjs --live"
   },
   "peerDependencies": {
     "@supabase/supabase-js": "^2.90.0"

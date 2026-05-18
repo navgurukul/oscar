@@ -22,10 +22,10 @@ export function getInitials(email?: string): string {
 }
 
 /**
- * Format a date string for display in note cards.
+ * Format a date string for display in Scribble cards.
  * Shows month, day, year, hour, and minute.
  */
-export function formatNoteDate(dateString: string): string {
+export function formatScribbleDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",

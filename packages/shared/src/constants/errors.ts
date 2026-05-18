@@ -27,17 +27,17 @@ export const ERROR_MESSAGES = {
   FORMATTING_FAILED: "Failed to format text. Please try again.",
   TITLE_GENERATION_FAILED: "Failed to generate title.",
   FORMATTING_FALLBACK:
-    "AI unavailable - basic formatting applied. You can still edit your note.",
+    "AI unavailable - basic formatting applied. You can still edit your Scribble.",
   FORMATTING_CANCELLED: "Formatting cancelled.",
 
   // API Errors
   API_ERROR: "API request failed. Please try again.",
   NETWORK_ERROR: "Network error. Please check your connection.",
-  GROQ_API_ERROR: "Groq API error",
-  GROQ_REQUEST_FAILED: "Groq request failed",
+  AI_API_ERROR: "AI API error",
+  AI_REQUEST_FAILED: "AI request failed",
   INVALID_JSON_BODY: "Invalid JSON body",
-  INVALID_GROQ_RESPONSE: "Invalid Groq response",
-  SERVER_MISSING_API_KEY: "Server missing GROQ_API_KEY",
+  INVALID_AI_RESPONSE: "Invalid AI response",
+  SERVER_MISSING_API_KEY: "Server missing GEMINI_API_KEY",
   RAW_TEXT_REQUIRED: "rawText is required",
   TEXT_REQUIRED: "text is required",
   NO_TEXT_PROVIDED_FOR_FORMATTING: "No text provided for formatting",

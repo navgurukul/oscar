@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { meetingsService } from "./services/meetings.service";
 import { aiService } from "./services/ai.service";
+import { scribblesService } from "./services/scribbles.service";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
@@ -10,7 +11,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { Navigation } from "./components/Navigation";
 import { Header } from "./components/Header";
-import { NotesTab } from "./components/NotesTab";
+import { ScribbleTab } from "./components/ScribbleTab";
 import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
 import { useUpdater } from "./hooks/useUpdater";
@@ -34,14 +35,13 @@ import type {
 import type {
   DictationContextSnapshot,
   LocalTranscript,
-} from "./types/note.types";
+} from "./types/scribble.types";
 import type {
   DownloadProgress,
   HotkeyContextEventPayload,
   MeetingSegmentJob,
-  MinutesModelDownloadState,
-  MinutesModelVariant,
   MicrophonePermissionState,
+  RoleModelState,
   TabType,
   TonePreset,
   Transcription,
@@ -50,11 +50,6 @@ import type {
 import {
   MEETING_SEGMENT_DURATION_MS,
   MINUTES_DATA_RESET_VERSION,
-  MINUTES_MODEL_PATH,
-  MINUTES_MODEL_URL,
-  MINUTES_MODEL_VARIANT,
-  MODEL_PATH,
-  OLD_MODEL_PATH,
 } from "./lib/desktop-constants";
 import {
   buildDictationContextSnapshot,
@@ -69,10 +64,151 @@ import {
   getTranscriptTailWords,
   mergeMeetingTranscriptSegments,
   toAbsoluteMeetingTranscriptSegments,
+  toFallbackMeetingTranscriptSegment,
 } from "./lib/transcript-utils";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
+import {
+  FALLBACK_MODELS,
+  relativeModelPath,
+  type ModelSpec,
+  type ModelPreset as WhisperModelPreset,
+  type WhisperModelVariant,
+} from "./lib/whisper-models";
+import {
+  downloadModel,
+  resolveModelForRole,
+} from "./lib/whisper-model-manager";
 import { getStore, loadSetting, saveSetting } from "./lib/store";
 import "./App.css";
+
+function buildFallbackScribbleTitle(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const firstSentence = normalized.split(/[.!?\n]/)[0]?.trim() || normalized;
+  const title = firstSentence.slice(0, 60).trim();
+  return title || "Untitled Scribble";
+}
+
+interface AudioTrimResult {
+  audio: Float32Array;
+  originalSamples: number;
+  trimmedSamples: number;
+  leadingTrimMs: number;
+  trailingTrimMs: number;
+  voicedFrames: number;
+  thresholdRms: number;
+  thresholdPeak: number;
+}
+
+const STREAM_SAMPLE_RATE = 16_000;
+const STREAM_TRIM_FRAME_MS = 20;
+const STREAM_TRIM_PADDING_MS = 250;
+const STREAM_MIN_TRIM_MS = 120;
+const STREAM_MIN_RETAINED_MS = 800;
+const STREAM_TRIM_RMS_THRESHOLD = 0.006;
+const STREAM_TRIM_PEAK_THRESHOLD = 0.025;
+
+function durationMsForSamples(samples: number): number {
+  return Math.round((samples / STREAM_SAMPLE_RATE) * 1000);
+}
+
+function trimStreamSilence(audio: Float32Array): AudioTrimResult {
+  const frameSize = Math.max(
+    1,
+    Math.round((STREAM_SAMPLE_RATE * STREAM_TRIM_FRAME_MS) / 1000),
+  );
+  const paddingSamples = Math.round(
+    (STREAM_SAMPLE_RATE * STREAM_TRIM_PADDING_MS) / 1000,
+  );
+  const minRetainedSamples = Math.round(
+    (STREAM_SAMPLE_RATE * STREAM_MIN_RETAINED_MS) / 1000,
+  );
+
+  let firstVoiced = -1;
+  let lastVoiced = -1;
+  let voicedFrames = 0;
+
+  for (let frameStart = 0; frameStart < audio.length; frameStart += frameSize) {
+    const frameEnd = Math.min(audio.length, frameStart + frameSize);
+    let sumSq = 0;
+    let peak = 0;
+
+    for (let i = frameStart; i < frameEnd; i++) {
+      const sample = audio[i];
+      sumSq += sample * sample;
+      const abs = sample < 0 ? -sample : sample;
+      if (abs > peak) peak = abs;
+    }
+
+    const rms = Math.sqrt(sumSq / Math.max(1, frameEnd - frameStart));
+    if (rms >= STREAM_TRIM_RMS_THRESHOLD || peak >= STREAM_TRIM_PEAK_THRESHOLD) {
+      voicedFrames += 1;
+      if (firstVoiced === -1) firstVoiced = frameStart;
+      lastVoiced = frameEnd;
+    }
+  }
+
+  if (firstVoiced === -1 || lastVoiced === -1) {
+    return {
+      audio,
+      originalSamples: audio.length,
+      trimmedSamples: audio.length,
+      leadingTrimMs: 0,
+      trailingTrimMs: 0,
+      voicedFrames,
+      thresholdRms: STREAM_TRIM_RMS_THRESHOLD,
+      thresholdPeak: STREAM_TRIM_PEAK_THRESHOLD,
+    };
+  }
+
+  const start = Math.max(0, firstVoiced - paddingSamples);
+  const end = Math.min(audio.length, lastVoiced + paddingSamples);
+  const trimmedSamples = end - start;
+  const removedSamples = audio.length - trimmedSamples;
+
+  if (
+    trimmedSamples < minRetainedSamples ||
+    durationMsForSamples(removedSamples) < STREAM_MIN_TRIM_MS
+  ) {
+    return {
+      audio,
+      originalSamples: audio.length,
+      trimmedSamples: audio.length,
+      leadingTrimMs: 0,
+      trailingTrimMs: 0,
+      voicedFrames,
+      thresholdRms: STREAM_TRIM_RMS_THRESHOLD,
+      thresholdPeak: STREAM_TRIM_PEAK_THRESHOLD,
+    };
+  }
+
+  return {
+    audio: audio.slice(start, end),
+    originalSamples: audio.length,
+    trimmedSamples,
+    leadingTrimMs: durationMsForSamples(start),
+    trailingTrimMs: durationMsForSamples(audio.length - end),
+    voicedFrames,
+    thresholdRms: STREAM_TRIM_RMS_THRESHOLD,
+    thresholdPeak: STREAM_TRIM_PEAK_THRESHOLD,
+  };
+}
+
+function createRoleModelState(
+  role: WhisperModelRole,
+  preset: WhisperModelPreset = "auto",
+): RoleModelState {
+  return {
+    role,
+    preset,
+    recommendation: null,
+    activeVariant: null,
+    resolvedPath: null,
+    fallbackUsed: false,
+    downloadState: "idle",
+    progress: 0,
+    error: null,
+  };
+}
 
 function App() {
   const defaultContextAwareDictationEnabled = isContextAwarePlatform(
@@ -91,33 +227,44 @@ function App() {
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
 
   // Recording & processing (global hotkey functionality)
-  const [isRecording, setIsRecording] = useState(false);
+  const [_isRecording, setIsRecording] = useState(false);
   const [_transcript, setTranscript] = useState("");
   const [localTranscripts, setLocalTranscripts] = useState<LocalTranscript[]>(
     [],
   );
+  const [isScribbleRecording, setIsScribbleRecording] = useState(false);
+  const [scribbleRecordingTime, setScribbleRecordingTime] = useState(0);
+  const [scribbleRefreshKey, setScribbleRefreshKey] = useState(0);
   const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
   const [_isProcessing, setIsProcessing] = useState(false);
   const [hotkeyWarning, setHotkeyWarning] = useState("");
+  const [dictationConflict, setDictationConflict] = useState(false);
 
   // Settings panel
   const [_whisperModelPath, setWhisperModelPath] = useState("");
   const [_autoPaste, setAutoPaste] = useState(true);
-  const [minutesModelEnabled, setMinutesModelEnabled] = useState(false);
-  const [minutesModelPath, setMinutesModelPath] = useState("");
-  const [minutesModelVariant, setMinutesModelVariant] =
-    useState<MinutesModelVariant>(MINUTES_MODEL_VARIANT);
-  const [minutesModelDownloadState, setMinutesModelDownloadState] =
-    useState<MinutesModelDownloadState>("idle");
-  const [minutesModelDownloadProgress, setMinutesModelDownloadProgress] =
-    useState(0);
+
+  // Hardware-aware model selection. Preset persists across sessions; variant
+  // is resolved on demand by the manager so it always matches what's on disk.
+  const [dictationModel, setDictationModel] = useState<RoleModelState>(() =>
+    createRoleModelState("dictation"),
+  );
+  const [meetingModel, setMeetingModel] = useState<RoleModelState>(() =>
+    createRoleModelState("minutes"),
+  );
+  const dictationModelPresetRef = useRef<WhisperModelPreset>("auto");
+  const minutesModelPresetRef = useRef<WhisperModelPreset>("auto");
+  const modelDownloadPromisesRef = useRef(
+    new Map<WhisperModelVariant, Promise<string>>(),
+  );
+  const modelDownloadQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // AI editing (legacy — kept for settings migration)
   const [_aiEditing, setAiEditing] = useState(false);
   const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
-  // AI Improvement toggle (user-controllable — controls Groq AI cleanup)
+  // AI Improvement toggle (user-controllable — controls Gemini AI cleanup)
   const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
   const aiImprovementEnabledRef = useRef(true);
   const [contextAwareDictationEnabled, setContextAwareDictationEnabled] =
@@ -159,6 +306,7 @@ function App() {
   const [minutesSegmentsCompleted, setMinutesSegmentsCompleted] = useState(0);
   const [minutesSegmentsTotal, setMinutesSegmentsTotal] = useState(0);
   const meetingMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const isMeetingRecordingRef = useRef(false);
   const meetingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const meetingSegmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const meetingSegmentStopRef =
@@ -187,8 +335,14 @@ function App() {
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const scribbleMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const scribbleAudioChunksRef = useRef<Blob[]>([]);
+  const scribbleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isScribbleRecordingRef = useRef(false);
+  const isScribbleProcessingRef = useRef(false);
   const whisperLoadedRef = useRef(false);
   const isRecordingRef = useRef(false);
+  const hotkeyStartInFlightRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
   const autoPasteRef = useRef(true);
   const targetAppRef = useRef<string>("");
@@ -198,6 +352,7 @@ function App() {
   const voiceEngineWarmupRef = useRef(false);
   const aiEditingRef = useRef(false);
   const tonePresetRef = useRef<TonePreset>("none");
+  const transcriptionLanguageRef = useRef<string>("hi-en");
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
   const authInitRef = useRef(false);
@@ -208,6 +363,14 @@ function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const updater = useUpdater();
   const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    isScribbleRecordingRef.current = isScribbleRecording;
+  }, [isScribbleRecording]);
+
+  useEffect(() => {
+    isMeetingRecordingRef.current = isMeetingRecording;
+  }, [isMeetingRecording]);
 
   // Fetch app version on mount
   useEffect(() => {
@@ -502,9 +665,8 @@ function App() {
         savedMicId,
         savedAiImprovement,
         savedContextAwareDictation,
-        savedMinutesModelEnabled,
-        savedMinutesModelPath,
-        savedMinutesModelVariant,
+        savedDictationPreset,
+        savedMinutesPreset,
         savedCalToken,
         savedCalRefreshToken,
         savedCalConnectedUserId,
@@ -527,9 +689,8 @@ function App() {
           "contextAwareDictationEnabled",
           defaultContextAwareDictationEnabled,
         ),
-        loadSetting<boolean>("minutesModelEnabled", false),
-        loadSetting<string>("minutesModelPath", ""),
-        loadSetting<MinutesModelVariant>("minutesModelVariant", MINUTES_MODEL_VARIANT),
+        loadSetting<WhisperModelPreset>("dictationModelPreset", "auto"),
+        loadSetting<WhisperModelPreset>("minutesModelPreset", "auto"),
         loadSetting<string>("googleCalendarToken", ""),
         loadSetting<string>("googleCalendarRefreshToken", ""),
         loadSetting<string>("googleCalendarConnectedUserId", ""),
@@ -565,6 +726,11 @@ function App() {
         }
       }
 
+      if (isMacOS()) {
+        const conflict = await invoke<boolean>("check_dictation_ctrl_conflict").catch(() => false);
+        setDictationConflict(conflict);
+      }
+
       setPermissionsShown(nextPermissionsShown);
       if (!setupDone) {
         setSetupComplete(false);
@@ -579,30 +745,17 @@ function App() {
       dictWordsRef.current = savedDict;
       setLocalTranscripts(savedTranscripts);
       setTranscriptionLanguage(savedLanguage);
+      transcriptionLanguageRef.current = savedLanguage;
       setSelectedMicId(savedMicId);
       selectedMicIdRef.current = savedMicId;
       setAiImprovementEnabled(savedAiImprovement);
       aiImprovementEnabledRef.current = savedAiImprovement;
       setContextAwareDictationEnabled(savedContextAwareDictation);
       contextAwareDictationEnabledRef.current = savedContextAwareDictation;
-      const normalizedMinutesModelPath = savedMinutesModelPath || "";
-      let hasMinutesModel = false;
-      if (normalizedMinutesModelPath) {
-        hasMinutesModel = await invoke<boolean>("check_file_exists", {
-          path: normalizedMinutesModelPath,
-        }).catch(() => false);
-      }
-      setMinutesModelEnabled(savedMinutesModelEnabled && hasMinutesModel);
-      setMinutesModelPath(savedMinutesModelEnabled && hasMinutesModel ? normalizedMinutesModelPath : "");
-      setMinutesModelVariant(savedMinutesModelVariant || MINUTES_MODEL_VARIANT);
-      setMinutesModelDownloadState(
-        savedMinutesModelEnabled && hasMinutesModel ? "installed" : "idle",
-      );
-      setMinutesModelDownloadProgress(0);
-      if (savedMinutesModelEnabled && !hasMinutesModel) {
-        void saveSetting("minutesModelEnabled", false);
-        void saveSetting("minutesModelPath", "");
-      }
+      setDictationModel((prev) => ({ ...prev, preset: savedDictationPreset }));
+      dictationModelPresetRef.current = savedDictationPreset;
+      setMeetingModel((prev) => ({ ...prev, preset: savedMinutesPreset }));
+      minutesModelPresetRef.current = savedMinutesPreset;
       setSystemAudioEnabled(savedSystemAudioEnabled);
       const hasLegacyCalendarConnection =
         Boolean(savedCalToken || savedCalRefreshToken) && !savedCalConnectedUserId;
@@ -655,6 +808,16 @@ function App() {
       (ev) => {
         const appName = ev.payload?.appName?.trim() || "";
         const isSelfApp = SELF_APP_NAMES.includes(appName.toLowerCase());
+        if (
+          isSelfApp ||
+          isScribbleRecordingRef.current ||
+          isScribbleProcessingRef.current ||
+          isMeetingRecordingRef.current
+        ) {
+          pendingStopRef.current = false;
+          return;
+        }
+
         targetAppRef.current = isSelfApp
           ? ""
           : ev.payload?.targetAppName?.trim() || "";
@@ -662,23 +825,24 @@ function App() {
           ? null
           : buildDictationContextSnapshot(ev.payload);
         pendingStopRef.current = false;
-        if (whisperLoadedRef.current && !isRecordingRef.current)
-          startHotkeyRecording();
+        if (whisperLoadedRef.current && !isRecordingRef.current) {
+          hotkeyStartInFlightRef.current = true;
+          void startHotkeyRecording().finally(() => {
+            hotkeyStartInFlightRef.current = false;
+          });
+        }
       },
     );
     const unlistenStop = listen("hotkey-recording-stop", () => {
       // ALWAYS set pending stop — this is the safety net for the race condition
       // where STOP arrives before getUserMedia resolves in startHotkeyRecording
-      pendingStopRef.current = true;
-      // Switch pill to processing immediately — regardless of recorder state
-      invoke("set_pill_processing").catch(console.warn);
+      pendingStopRef.current = hotkeyStartInFlightRef.current;
+      // Also try the normal stop path
       if (
         mediaRecorderRef.current &&
         mediaRecorderRef.current.state === "recording"
       ) {
-        isRecordingRef.current = false;
-        setIsRecording(false);
-        mediaRecorderRef.current.stop();
+        stopHotkeyRecording();
       }
     });
     const unlistenErr = listen<string>("hotkey-permission-error", (ev) => {
@@ -686,11 +850,53 @@ function App() {
     });
     const unlistenReg = listen("hotkey-registered", () => setHotkeyWarning(""));
 
+    // ── Edge-handle pill events ───────────────────────────────────────────
+    // Settings updates from the pill's popover — persist + sync state.
+    const unlistenPillSettings = listen<{
+      transform?: TonePreset;
+      language?: string;
+      autoApply?: boolean;
+    }>("pill-settings-update", (ev) => {
+      const p = ev.payload || {};
+      if (p.transform !== undefined) {
+        setTonePreset(p.transform);
+        tonePresetRef.current = p.transform;
+        void saveSetting("tonePreset", p.transform);
+      }
+      if (p.language !== undefined) {
+        setTranscriptionLanguage(p.language);
+        transcriptionLanguageRef.current = p.language;
+        void saveSetting("transcriptionLanguage", p.language);
+      }
+      if (p.autoApply !== undefined) {
+        setAutoPaste(p.autoApply);
+        autoPasteRef.current = p.autoApply;
+        void saveSetting("autoPaste", p.autoApply);
+      }
+    });
+
+    // Note button on the pill jumps to the Scribble tab.
+    const unlistenPillNote = listen("pill-open-scribble", () => {
+      setActiveTab("scribble");
+    });
+
+    // When the pill window has wired its listeners, push current settings.
+    const unlistenPillReady = listen("pill-ready", () => {
+      invoke("pill_push_settings", {
+        transform: tonePresetRef.current,
+        language: transcriptionLanguageRef.current,
+        autoApply: autoPasteRef.current,
+      }).catch(console.warn);
+    });
+
     return () => {
       unlistenStart.then((f) => f());
       unlistenStop.then((f) => f());
       unlistenErr.then((f) => f());
       unlistenReg.then((f) => f());
+      unlistenPillSettings.then((f) => f());
+      unlistenPillNote.then((f) => f());
+      unlistenPillReady.then((f) => f());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads settings, registers hotkey listeners; uses refs for mutable state
   }, []);
@@ -812,101 +1018,208 @@ function App() {
     }
   };
 
-  const resolveDictationModelPath = useCallback(async (): Promise<string | null> => {
-    let home: string;
-    try {
-      home = await homeDir();
-    } catch {
-      setStatus("Failed to get home directory.");
-      return null;
-    }
-
-    const paths = [
-      `${home}/${MODEL_PATH}`,
-      `${home}/.oscar/models/ggml-small.bin`,
-      `${home}/.whisper/ggml-small.bin`,
-      "./models/ggml-small.bin",
-      "/usr/local/share/whisper/ggml-small.bin",
-    ];
-
-    for (const path of paths) {
-      try {
-        const exists = await invoke<boolean>("check_file_exists", { path });
-        if (exists) return path;
-      } catch {
-        continue;
+  const updateRoleModel = useCallback(
+    (role: WhisperModelRole, patch: Partial<RoleModelState>) => {
+      const update = (prev: RoleModelState): RoleModelState => ({
+        ...prev,
+        ...patch,
+      });
+      if (role === "dictation") {
+        setDictationModel(update);
+      } else {
+        setMeetingModel(update);
       }
-    }
+    },
+    [],
+  );
 
-    return null;
-  }, []);
+  const syncDownloadProgress = useCallback(
+    (variant: WhisperModelVariant, progress: number) => {
+      const update = (prev: RoleModelState): RoleModelState =>
+        prev.recommendation?.spec.variant === variant
+          ? { ...prev, progress }
+          : prev;
+      setDictationModel(update);
+      setMeetingModel(update);
+    },
+    [],
+  );
 
-  const resolveMinutesModelPath = useCallback(async (): Promise<string | null> => {
-    if (!minutesModelEnabled) {
-      return null;
-    }
+  const downloadRecommendedModel = useCallback(
+    async (spec: ModelSpec): Promise<string> => {
+      const existing = modelDownloadPromisesRef.current.get(spec.variant);
+      if (existing) return existing;
 
-    let home: string;
-    try {
-      home = await homeDir();
-    } catch {
-      return null;
-    }
+      const queuedDownload = modelDownloadQueueRef.current.then(async () => {
+        const unlisten = await listen<DownloadProgress>(
+          "download-progress",
+          (event) => {
+            syncDownloadProgress(spec.variant, event.payload.percentage);
+          },
+        );
 
-    const candidates = [
-      minutesModelPath,
-      `${home}/${MINUTES_MODEL_PATH}`,
-    ].filter(Boolean);
+        try {
+          const path = await downloadModel(spec);
+          syncDownloadProgress(spec.variant, 100);
+          return path;
+        } finally {
+          unlisten();
+        }
+      });
 
-    for (const path of candidates) {
-      try {
-        const exists = await invoke<boolean>("check_file_exists", { path });
-        if (exists) return path;
-      } catch {
-        continue;
+      const trackedDownload = queuedDownload.finally(() => {
+        modelDownloadPromisesRef.current.delete(spec.variant);
+      });
+
+      modelDownloadQueueRef.current = trackedDownload
+        .then(() => undefined)
+        .catch(() => undefined);
+
+      modelDownloadPromisesRef.current.set(spec.variant, trackedDownload);
+      return trackedDownload;
+    },
+    [syncDownloadProgress],
+  );
+
+  const prepareWhisperModel = useCallback(
+    async (
+      role: WhisperModelRole,
+      options: { load?: boolean; autoDownload?: boolean } = {},
+    ) => {
+      const preset =
+        role === "dictation"
+          ? dictationModelPresetRef.current
+          : minutesModelPresetRef.current;
+
+      updateRoleModel(role, {
+        preset,
+        downloadState: "checking",
+        progress: 0,
+        error: null,
+      });
+
+      const { recommendation, resolved } = await resolveModelForRole(
+        role,
+        preset,
+      );
+
+      updateRoleModel(role, {
+        recommendation,
+        activeVariant: resolved?.variant ?? null,
+        resolvedPath: resolved?.path ?? null,
+        fallbackUsed: resolved?.fallbackUsed ?? false,
+        downloadState: resolved ? "ready" : "idle",
+      });
+
+      let path = resolved?.path ?? null;
+      const shouldDownloadRecommended =
+        options.autoDownload !== false && (!path || resolved?.fallbackUsed);
+
+      if (shouldDownloadRecommended) {
+        updateRoleModel(role, {
+          downloadState: "downloading",
+          progress: 0,
+          error: null,
+        });
+
+        try {
+          path = await downloadRecommendedModel(recommendation.spec);
+          updateRoleModel(role, {
+            activeVariant: recommendation.spec.variant,
+            resolvedPath: path,
+            fallbackUsed: false,
+            downloadState: "ready",
+            progress: 100,
+          });
+        } catch (err) {
+          const message = `Model download failed: ${err}`;
+          console.warn(`[whisper] ${role} model download failed:`, err);
+          updateRoleModel(role, {
+            downloadState: "error",
+            error: message,
+            progress: 0,
+          });
+
+          const retry = await resolveModelForRole(role, preset);
+          if (retry.resolved) {
+            path = retry.resolved.path;
+            updateRoleModel(role, {
+              recommendation: retry.recommendation,
+              activeVariant: retry.resolved.variant,
+              resolvedPath: retry.resolved.path,
+              fallbackUsed: retry.resolved.fallbackUsed,
+              downloadState: "ready",
+              error: message,
+            });
+          }
+        }
       }
-    }
 
-    return null;
-  }, [minutesModelEnabled, minutesModelPath]);
+      if (!path) {
+        if (!options.load && options.autoDownload === false) {
+          return { role, path: null };
+        }
+        throw new Error(
+          role === "minutes"
+            ? "Meeting model not found."
+            : "Dictation model not found.",
+        );
+      }
 
-  const ensureWhisperModelLoaded = useCallback(async (preferredRole: WhisperModelRole) => {
-    let role: WhisperModelRole = preferredRole;
-    let path =
-      preferredRole === "minutes"
-        ? await resolveMinutesModelPath()
-        : await resolveDictationModelPath();
+      if (!options.load) {
+        return { role, path };
+      }
 
-    if (!path && preferredRole === "minutes") {
-      role = "dictation";
-      path = await resolveDictationModelPath();
-    }
-
-    if (!path) {
-      throw new Error("Whisper model not found.");
-    }
-
-    await invoke("ensure_whisper_model_loaded", { role, path });
-    const nextKey = `${role}:${path}`;
-    if (currentWhisperKeyRef.current !== nextKey) {
-      currentWhisperKeyRef.current = nextKey;
+      await invoke("ensure_whisper_model_loaded", { role, path });
+      const pathChanged = currentWhisperKeyRef.current !== path;
+      if (pathChanged) {
+        currentWhisperKeyRef.current = path;
+        voiceEngineWarmupRef.current = false;
+      }
       currentWhisperRoleRef.current = role;
-      voiceEngineWarmupRef.current = false;
-    }
 
-    setWhisperLoadedAndRef(true);
-    setWhisperModelPath(path);
-    return { role, path };
-  }, [resolveDictationModelPath, resolveMinutesModelPath]);
+      setWhisperLoadedAndRef(true);
+      setWhisperModelPath(path);
+      return { role, path };
+    },
+    [downloadRecommendedModel, updateRoleModel],
+  );
+
+  const ensureWhisperModelLoaded = useCallback(
+    async (preferredRole: WhisperModelRole) =>
+      prepareWhisperModel(preferredRole, { load: true, autoDownload: true }),
+    [prepareWhisperModel],
+  );
+
+  const handleModelPresetChange = useCallback(
+    async (role: WhisperModelRole, preset: WhisperModelPreset) => {
+      if (role === "dictation") {
+        dictationModelPresetRef.current = preset;
+        setDictationModel((prev) => ({ ...prev, preset }));
+        await saveSetting("dictationModelPreset", preset);
+      } else {
+        minutesModelPresetRef.current = preset;
+        setMeetingModel((prev) => ({ ...prev, preset }));
+        await saveSetting("minutesModelPreset", preset);
+      }
+
+      void prepareWhisperModel(role, {
+        load: currentWhisperRoleRef.current === role,
+        autoDownload: true,
+      }).catch((err) => {
+        console.warn(`[whisper] failed to prepare ${role} model:`, err);
+      });
+    },
+    [prepareWhisperModel],
+  );
 
   const initWhisper = async () => {
     try {
-      const { path } = await ensureWhisperModelLoaded("dictation");
+      await ensureWhisperModelLoaded("dictation");
       setStatus("Preparing voice engine...");
       void warmVoiceEngine().finally(() => {
         setStatus("Ready! Hold Ctrl+Space anywhere to record.");
       });
-      setWhisperModelPath(path);
       return true;
     } catch {
       setWhisperLoadedAndRef(false);
@@ -915,9 +1228,26 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (!setupComplete) return;
+
+    void prepareWhisperModel("dictation", { autoDownload: false })
+      .catch((err) => console.warn("[whisper] failed to inspect dictation model:", err));
+    void prepareWhisperModel("minutes", { autoDownload: false })
+      .catch((err) => console.warn("[whisper] failed to inspect meeting model:", err));
+  }, [prepareWhisperModel, setupComplete]);
+
   // ── Hotkey recording ───────────────────────────────────────────────────────
 
   const startHotkeyRecording = async () => {
+    if (
+      isScribbleRecordingRef.current ||
+      isScribbleProcessingRef.current ||
+      isMeetingRecordingRef.current
+    ) {
+      return;
+    }
+
     // Show the pill immediately so users see instant feedback
     invoke("show_recording_pill").catch(console.warn);
 
@@ -995,6 +1325,13 @@ function App() {
     shouldPaste: boolean,
     _targetApp?: string,   // used in paste_transcription for NSRunningApplication re-focus
   ) => {
+    // ── Timing instrumentation (stream/dictation flow) ───────────────────────
+    // Logs a single summary line at the end so we can spot which stage is slow.
+    const tStart = performance.now();
+    const timings: Record<string, number> = {};
+    const metrics: Record<string, string | number> = {};
+    let hadError = false;
+
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
 
@@ -1017,6 +1354,7 @@ function App() {
     }
 
     setStatus(`Decoding ${(audioBlob.size / 1024).toFixed(0)}KB audio...`);
+    const tDecode0 = performance.now();
     const arrayBuffer = await audioBlob.arrayBuffer();
     const audioContext = new AudioContext({ sampleRate: 16000 });
     let audioData: Float32Array;
@@ -1047,69 +1385,112 @@ function App() {
       return;
     }
 
-    let sumSquares = 0;
+    let sumSq = 0;
+    let peak = 0;
     for (let i = 0; i < audioData.length; i++) {
-      sumSquares += audioData[i] * audioData[i];
+      const v = audioData[i];
+      sumSq += v * v;
+      const abs = v < 0 ? -v : v;
+      if (abs > peak) peak = abs;
     }
-    const rms = Math.sqrt(sumSquares / audioData.length);
-    if (rms < 0.01) {
-      setIsProcessing(false);
-      setStatus("No speech detected. Try speaking louder or closer.");
+    const rms = Math.sqrt(sumSq / audioData.length);
+    if (rms < 0.005 || peak < 0.02) {
+      console.warn(
+        `[process] ABORT: silent audio (rms=${rms.toFixed(4)}, peak=${peak.toFixed(4)})`,
+      );
+      setStatus("⚠️ No speech detected. Try speaking louder or closer.");
       invoke("hide_recording_pill").catch(console.warn);
       return;
     }
 
+    const tTrim0 = performance.now();
+    const trimResult = trimStreamSilence(audioData);
+    audioData = trimResult.audio;
+    timings["audio-trim"] = Math.round(performance.now() - tTrim0);
+    metrics["audio-ms"] =
+      `${durationMsForSamples(trimResult.originalSamples)}->${durationMsForSamples(trimResult.trimmedSamples)}`;
+    metrics["trim-ms"] =
+      `${trimResult.leadingTrimMs}+${trimResult.trailingTrimMs}`;
+    metrics["voice-frames"] = trimResult.voicedFrames;
+    metrics["trim-threshold"] =
+      `${trimResult.thresholdRms.toFixed(3)}/${trimResult.thresholdPeak.toFixed(3)}`;
+
     const durationSec = (audioData.length / 16000).toFixed(1);
     setIsProcessing(true);
     setStatus(`Transcribing ${durationSec}s...`);
+    timings["decode+mixdown"] = Math.round(performance.now() - tDecode0);
 
     try {
+      const tWhisperLoad0 = performance.now();
       await ensureWhisperModelLoaded("dictation");
+      timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
+
+      const tAudioArray0 = performance.now();
+      const audioDataForIpc = Array.from(audioData);
+      timings["audio-array"] = Math.round(performance.now() - tAudioArray0);
+
+      const tWhisper0 = performance.now();
       const result = await invoke<Transcription>("transcribe_audio", {
-        audioData: Array.from(audioData),
+        audioData: audioDataForIpc,
         initialPrompt: buildInitialPrompt(
           transcriptionLanguage,
           dictWordsRef.current,
         ),
         language: getWhisperLanguage(transcriptionLanguage, "dictation"),
       });
+      timings["whisper-transcribe"] = Math.round(performance.now() - tWhisper0);
 
       if (!result.text) {
-        console.warn("[process] ABORT: no speech detected");
+        console.warn("[process] ABORT: no speech detected (whisper empty)");
         setStatus("⚠️ No speech detected. Try speaking louder or closer.");
         return;
       }
 
       let finalText = result.text;
-      const activeDictationContext =
-        contextAwareDictationEnabledRef.current
-          ? dictationContextRef.current
-          : null;
-      const dictationRouting =
-        contextAwareDictationEnabledRef.current
-          ? routeDictationContext(activeDictationContext)
-          : null;
+      const aiCleanupEnabled = aiImprovementEnabledRef.current;
+      const effectiveContextAwareDictation =
+        aiCleanupEnabled &&
+        contextAwareDictationEnabledRef.current &&
+        isContextAwarePlatform(getDesktopPlatform());
+      const activeDictationContext = effectiveContextAwareDictation
+        ? dictationContextRef.current
+        : null;
+      const dictationRouting = activeDictationContext
+        ? routeDictationContext(activeDictationContext)
+        : null;
       const dictationMetadata = buildDictationMetadata(dictationRouting);
+      let cleanupReturnedEmpty = false;
 
       // Silent AI cleanup via the backend AI function.
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
-      if (aiImprovementEnabledRef.current) {
+      if (aiCleanupEnabled) {
         setStatus("Improving with AI...");
+        const tAi0 = performance.now();
         try {
           const cleaned = await aiService.processText(
             finalText,
             "transcribe_cleanup",
-            activeDictationContext && dictationRouting
-              ? {
-                  context: activeDictationContext,
-                  routing: dictationRouting,
-                }
-              : undefined,
+            {
+              promptProfile: "stream",
+              ...(activeDictationContext && dictationRouting
+                ? {
+                    context: activeDictationContext,
+                    routing: dictationRouting,
+                  }
+                : {}),
+            },
           );
+          timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
           if (cleaned && cleaned.trim().length > 0) {
             finalText = cleaned;
+          } else {
+            // Server signalled "no real speech" (silence / hallucination).
+            // Skip paste and persistence so the user is not surprised by a
+            // chatty refusal or stray hallucinated text.
+            cleanupReturnedEmpty = true;
           }
         } catch (aiErr) {
+          timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
           // Silently fall back to raw transcript — user never sees this
           console.warn(
             "[ai] silent cleanup failed, using raw transcript:",
@@ -1118,10 +1499,17 @@ function App() {
         }
       }
 
+      if (cleanupReturnedEmpty) {
+        console.info("[process] AI cleanup returned empty — treating as silence");
+        setStatus("⚠️ No speech detected. Try speaking louder or closer.");
+        return;
+      }
+
       // ── Auto-paste: do this AFTER AI cleanup ──────────────────────────────
       // Now that AI cleanup is complete, paste the improved text to the target app.
       if (shouldPaste) {
         const isMac = navigator.platform.toLowerCase().includes("mac");
+        const tPaste0 = performance.now();
         try {
           // Pass targetApp so the Rust command can re-activate it via
           // NSRunningApplication before posting Cmd+V.  This handles the case
@@ -1132,6 +1520,7 @@ function App() {
             text: finalText,
             targetApp: _targetApp || undefined,
           });
+          timings["paste"] = Math.round(performance.now() - tPaste0);
           if (pasteResult === "CLIPBOARD_ONLY") {
             // Accessibility not granted — text is in clipboard, guide user
             setStatus(
@@ -1143,6 +1532,7 @@ function App() {
             setStatus("Pasted! ✓");
           }
         } catch (pe) {
+          timings["paste"] = Math.round(performance.now() - tPaste0);
           console.error("[paste] FAILED:", pe);
           setStatus(
             isMac
@@ -1152,6 +1542,7 @@ function App() {
         }
       }
 
+      const tPersist0 = performance.now();
       setTranscript((prev) => (prev ? prev + "\n\n" + finalText : finalText));
 
       // Add to local transcripts list for the HomeTab UI
@@ -1168,19 +1559,230 @@ function App() {
         saveSetting("localTranscripts", updatedTranscripts);
         return updatedTranscripts;
       });
+      timings["persist"] = Math.round(performance.now() - tPersist0);
 
       if (!shouldPaste) {
         setStatus("Done! ✓");
       }
     } catch (e) {
+      hadError = true;
       setStatus(`❌ Error: ${e}`);
+      // Surface an error glyph on the pill briefly, then collapse to rest.
+      invoke("set_pill_phase", { phase: "error" }).catch(console.warn);
+      setTimeout(() => {
+        invoke("hide_recording_pill").catch(console.warn);
+      }, 1500);
     } finally {
       setIsProcessing(false);
-      // Hide the pill now that processing is complete
-      invoke("hide_recording_pill").catch(console.warn);
+      // Success path: show the "Inserted" toast for the design dwell, then
+      // collapse the pill back to its resting edge handle.
+      if (!hadError) {
+        invoke("set_pill_phase", { phase: "inserted" }).catch(console.warn);
+        setTimeout(() => {
+          invoke("hide_recording_pill").catch(console.warn);
+        }, 1500);
+      }
+      const totalMs = Math.round(performance.now() - tStart);
+      const timingParts = Object.entries(timings)
+        .map(([k, v]) => `${k}=${v}ms`);
+      const metricParts = Object.entries(metrics)
+        .map(([k, v]) => `${k}=${v}`);
+      const parts = [...timingParts, ...metricParts]
+        .join(" ");
+      console.info(`[stream-timing] total=${totalMs}ms ${parts}`);
     }
 
     // Don't stop the stream — keep it warm for next recording
+  };
+
+  // ── Scribble recording (click to start/stop, saves a Scribble) ───────────
+
+  const processScribbleAudio = async () => {
+    if (!user?.id) {
+      setStatus("Sign in to save Scribbles.");
+      isScribbleProcessingRef.current = false;
+      return;
+    }
+
+    const chunkCount = scribbleAudioChunksRef.current.length;
+    const totalBytes = scribbleAudioChunksRef.current.reduce((s, b) => s + b.size, 0);
+
+    if (chunkCount === 0 || totalBytes === 0) {
+      setStatus("No audio captured. Check microphone permission.");
+      isScribbleProcessingRef.current = false;
+      return;
+    }
+
+    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
+      ? "audio/mp4"
+      : "audio/webm";
+    const audioBlob = new Blob(scribbleAudioChunksRef.current, { type: mimeType });
+
+    if (audioBlob.size < 500) {
+      setStatus("Scribble recording was too short. Try again.");
+      isScribbleProcessingRef.current = false;
+      return;
+    }
+
+    setIsProcessing(true);
+    setStatus("Transcribing Scribble...");
+
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const audioContext = new AudioContext({ sampleRate: 16000 });
+    let audioData: Float32Array;
+
+    try {
+      const decoded = await audioContext.decodeAudioData(arrayBuffer);
+      const numChannels = decoded.numberOfChannels;
+      const length = decoded.length;
+      const mono = new Float32Array(length);
+      for (let ch = 0; ch < numChannels; ch++) {
+        const channel = decoded.getChannelData(ch);
+        for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
+      }
+      audioData = mono;
+    } catch (e) {
+      setStatus(`Scribble decode failed (${mimeType}): ${e}`);
+      setIsProcessing(false);
+      isScribbleProcessingRef.current = false;
+      return;
+    } finally {
+      audioContext.close();
+    }
+
+    if (audioData.length < 1600) {
+      setStatus("Scribble recording was too short. Try again.");
+      setIsProcessing(false);
+      isScribbleProcessingRef.current = false;
+      return;
+    }
+
+    try {
+      await ensureWhisperModelLoaded("dictation");
+      const result = await invoke<Transcription>("transcribe_audio", {
+        audioData: Array.from(audioData),
+        initialPrompt: buildInitialPrompt(
+          transcriptionLanguage,
+          dictWordsRef.current,
+        ),
+        language: getWhisperLanguage(transcriptionLanguage, "dictation"),
+      });
+
+      const rawText = result.text?.trim() ?? "";
+      if (!rawText) {
+        setStatus("No speech detected. Try speaking louder or closer.");
+        return;
+      }
+
+      let formattedText = rawText;
+      if (aiImprovementEnabledRef.current) {
+        setStatus("Cleaning up Scribble...");
+        try {
+          const cleaned = await aiService.processText(rawText, "transcribe_cleanup");
+          if (cleaned.trim()) {
+            formattedText = cleaned.trim();
+          }
+        } catch (aiErr) {
+          console.warn("[scribble] cleanup failed, saving raw transcript:", aiErr);
+        }
+      }
+
+      setStatus("Saving Scribble...");
+      const { error } = await scribblesService.createScribble({
+        user_id: user.id,
+        title: buildFallbackScribbleTitle(formattedText),
+        raw_text: rawText,
+        original_formatted_text: formattedText,
+        edited_text: null,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setScribbleRefreshKey((key) => key + 1);
+      setStatus("Scribble saved.");
+    } catch (e) {
+      console.error("[scribble] failed:", e);
+      setStatus(`Scribble failed: ${e}`);
+    } finally {
+      setIsProcessing(false);
+      isScribbleProcessingRef.current = false;
+    }
+  };
+
+  const startScribbleRecording = async () => {
+    if (
+      isRecordingRef.current ||
+      isMeetingRecordingRef.current ||
+      isScribbleRecordingRef.current ||
+      isScribbleProcessingRef.current
+    ) {
+      return;
+    }
+
+    let stream: MediaStream;
+    if (
+      warmStreamRef.current &&
+      warmStreamRef.current.getAudioTracks().some((t) => t.readyState === "live")
+    ) {
+      stream = warmStreamRef.current;
+    } else {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: getAudioConstraints(),
+        });
+        warmStreamRef.current = stream;
+      } catch (e) {
+        console.error("[scribble] getUserMedia failed:", e);
+        setStatus(`Could not access microphone: ${e}`);
+        isScribbleProcessingRef.current = false;
+        return;
+      }
+    }
+
+    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
+      ? "audio/mp4"
+      : "audio/webm";
+    const mediaRecorder = new MediaRecorder(stream, { mimeType });
+    scribbleMediaRecorderRef.current = mediaRecorder;
+    scribbleAudioChunksRef.current = [];
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        scribbleAudioChunksRef.current.push(event.data);
+      }
+    };
+    mediaRecorder.onstop = () => {
+      void processScribbleAudio();
+    };
+
+    mediaRecorder.start(100);
+    isScribbleRecordingRef.current = true;
+    setIsScribbleRecording(true);
+    setScribbleRecordingTime(0);
+    scribbleTimerRef.current = setInterval(() => {
+      setScribbleRecordingTime((previous) => previous + 1);
+    }, 1000);
+    setStatus("Recording Scribble...");
+  };
+
+  const stopScribbleRecording = () => {
+    isScribbleRecordingRef.current = false;
+    setIsScribbleRecording(false);
+    if (scribbleTimerRef.current) {
+      clearInterval(scribbleTimerRef.current);
+      scribbleTimerRef.current = null;
+    }
+    if (
+      scribbleMediaRecorderRef.current &&
+      scribbleMediaRecorderRef.current.state === "recording"
+    ) {
+      isScribbleProcessingRef.current = true;
+      scribbleMediaRecorderRef.current.stop();
+    } else {
+      isScribbleProcessingRef.current = false;
+    }
   };
 
   // ── Google Calendar OAuth (direct Google PKCE — no Supabase auth) ───────
@@ -1400,12 +2002,31 @@ function App() {
           meetingTranscriptRef.current = nextTranscript;
           setMeetingTranscript(nextTranscript);
         } else if (result.text) {
-          const nextTranscript = appendTranscriptSegment(
-            meetingTranscriptRef.current,
+          const fallbackSegment = toFallbackMeetingTranscriptSegment(
+            job,
             result.text,
           );
-          meetingTranscriptRef.current = nextTranscript;
-          setMeetingTranscript(nextTranscript);
+
+          if (fallbackSegment) {
+            const mergedSegments = mergeMeetingTranscriptSegments(
+              meetingTranscriptSegmentsRef.current,
+              [fallbackSegment],
+            );
+            meetingTranscriptSegmentsRef.current = mergedSegments;
+            setMeetingTranscriptSegments(mergedSegments);
+
+            const nextTranscript =
+              buildTranscriptFromStructuredSegments(mergedSegments);
+            meetingTranscriptRef.current = nextTranscript;
+            setMeetingTranscript(nextTranscript);
+          } else {
+            const nextTranscript = appendTranscriptSegment(
+              meetingTranscriptRef.current,
+              result.text,
+            );
+            meetingTranscriptRef.current = nextTranscript;
+            setMeetingTranscript(nextTranscript);
+          }
         }
       } catch (e) {
         console.error("[meeting] segment transcription failed:", e);
@@ -1543,6 +2164,14 @@ function App() {
   };
 
   const startMeetingRecording = async () => {
+    if (
+      isRecordingRef.current ||
+      isScribbleRecordingRef.current ||
+      isScribbleProcessingRef.current
+    ) {
+      return;
+    }
+
     setSystemAudioWarning("");
     resetMeetingPipelineState();
 
@@ -1602,6 +2231,7 @@ function App() {
       setSystemAudioWarning("");
     }
 
+    isMeetingRecordingRef.current = true;
     setIsMeetingRecording(true);
     setMeetingRecordingTime(0);
     setMeetingTranscript("");
@@ -1613,6 +2243,7 @@ function App() {
   };
 
   const stopMeetingRecording = () => {
+    isMeetingRecordingRef.current = false;
     setIsMeetingRecording(false);
     meetingStopRequestedRef.current = true;
     setMinutesTranscriptionStatus("finalizing");
@@ -1691,106 +2322,14 @@ function App() {
     }
   }, []);
 
-  const handleDownloadMinutesModel = useCallback(async () => {
-    if (minutesModelDownloadState === "downloading") return;
-
-    setMinutesModelDownloadState("downloading");
-    setMinutesModelDownloadProgress(0);
-
-    const unlisten = await listen<DownloadProgress>(
-      "download-progress",
-      (event) => {
-        setMinutesModelDownloadProgress(event.payload.percentage);
-      },
-    );
-
-    try {
-      const home = await homeDir();
-      const fullPath = `${home}/${MINUTES_MODEL_PATH}`;
-
-      await invoke("download_whisper_model", {
-        url: MINUTES_MODEL_URL,
-        path: fullPath,
-      });
-
-      setMinutesModelEnabled(true);
-      setMinutesModelPath(fullPath);
-      setMinutesModelVariant(MINUTES_MODEL_VARIANT);
-      setMinutesModelDownloadState("installed");
-      setMinutesModelDownloadProgress(100);
-      await Promise.all([
-        saveSetting("minutesModelEnabled", true),
-        saveSetting("minutesModelPath", fullPath),
-        saveSetting("minutesModelVariant", MINUTES_MODEL_VARIANT),
-      ]);
-
-      if (activeTab === "meetings") {
-        await ensureWhisperModelLoaded("minutes");
-        await warmVoiceEngine();
-      }
-    } catch (err) {
-      console.error("[minutes-model] download failed:", err);
-      setMinutesModelDownloadState(minutesModelEnabled ? "installed" : "idle");
-      setMinutesModelDownloadProgress(0);
-    } finally {
-      unlisten();
-    }
-  }, [
-    activeTab,
-    ensureWhisperModelLoaded,
-    minutesModelDownloadState,
-    minutesModelEnabled,
-  ]);
-
-  const handleRemoveMinutesModel = useCallback(async () => {
-    if (!minutesModelPath) return;
-
-    try {
-      const exists = await invoke<boolean>("check_file_exists", {
-        path: minutesModelPath,
-      });
-      if (exists) {
-        await invoke("delete_file", { path: minutesModelPath });
-      }
-    } catch (err) {
-      console.warn("[minutes-model] remove failed:", err);
-    }
-
-    setMinutesModelEnabled(false);
-    setMinutesModelPath("");
-    setMinutesModelDownloadProgress(0);
-    setMinutesModelDownloadState("idle");
-    await Promise.all([
-      saveSetting("minutesModelEnabled", false),
-      saveSetting("minutesModelPath", ""),
-    ]);
-
-    if (currentWhisperRoleRef.current === "minutes") {
-      try {
-        await ensureWhisperModelLoaded("dictation");
-        await warmVoiceEngine();
-      } catch (err) {
-        console.warn("[minutes-model] failed to fall back to dictation model:", err);
-      }
-    }
-  }, [ensureWhisperModelLoaded, minutesModelPath]);
-
   useEffect(() => {
     if (!setupComplete) return;
-
-    if (activeTab === "meetings") {
-      void ensureWhisperModelLoaded("minutes")
-        .then(() => warmVoiceEngine())
-        .catch((err) => console.warn("[whisper] failed to prepare Minutes model:", err));
-      return;
-    }
-
-    if (currentWhisperRoleRef.current === "minutes") {
-      void ensureWhisperModelLoaded("dictation")
-        .then(() => warmVoiceEngine())
-        .catch((err) => console.warn("[whisper] failed to restore dictation model:", err));
-    }
-  }, [activeTab, ensureWhisperModelLoaded, setupComplete]);
+    if (activeTab !== "meetings") return;
+    if (currentWhisperRoleRef.current !== "minutes") return;
+    void warmVoiceEngine().catch((err) =>
+      console.warn("[whisper] failed to warm voice engine:", err),
+    );
+  }, [activeTab, setupComplete]);
 
   // ── Subscription state ─────────────────────────────────────────────────────
   const [isProUser, setIsProUser] = useState(false);
@@ -1860,6 +2399,22 @@ function App() {
             onClick={() => retryHotkeyRegistration()}
           >
             Retry Hotkey
+          </button>
+        </div>
+      )}
+
+      {dictationConflict && (
+        <div className="px-4 py-3 border-b border-amber-200 bg-amber-50 flex items-center justify-between gap-3">
+          <p className="text-sm text-amber-900 m-0">
+            macOS Dictation is set to &ldquo;Press Control Key Twice&rdquo;, which interferes with Ctrl+Space recording. Go to{" "}
+            <strong>System Settings → Keyboard → Dictation</strong> and change the shortcut to &ldquo;Press 🌐 Key Twice&rdquo; or Off.
+          </p>
+          <button
+            type="button"
+            className="shrink-0 text-sm font-medium text-amber-900 bg-white border border-amber-300 rounded-md px-3 py-1.5"
+            onClick={() => setDictationConflict(false)}
+          >
+            Dismiss
           </button>
         </div>
       )}
@@ -1957,6 +2512,8 @@ function App() {
                     saveSetting("savedMeetings", updated);
                     meetingsService.deleteMeeting(id).catch((e) => console.warn("[minutes] delete failed:", e));
                   }}
+                  hostName={user.user_metadata?.full_name || ""}
+                  hostEmail={user.email || ""}
                   minutesTranscriptionStatus={minutesTranscriptionStatus}
                   minutesSegmentQueue={minutesSegmentQueue}
                   minutesSegmentsCompleted={minutesSegmentsCompleted}
@@ -1964,18 +2521,19 @@ function App() {
                 />
               )}
 
-              {activeTab === "notes" && user && (
-                <NotesTab
+              {activeTab === "scribble" && user && (
+                <ScribbleTab
                   userId={user.id}
-                  isRecording={isRecording}
+                  refreshKey={scribbleRefreshKey}
+                  isRecording={isScribbleRecording}
                   onToggleRecording={() => {
-                    if (isRecording) {
-                      stopHotkeyRecording();
+                    if (isScribbleRecording) {
+                      stopScribbleRecording();
                     } else {
-                      startHotkeyRecording();
+                      void startScribbleRecording();
                     }
                   }}
-                  recordingTime={0}
+                  recordingTime={scribbleRecordingTime}
                 />
               )}
 
@@ -1984,7 +2542,13 @@ function App() {
                   transcriptionLanguage={transcriptionLanguage}
                   onLanguageChange={(lang) => {
                     setTranscriptionLanguage(lang);
+                    transcriptionLanguageRef.current = lang;
                     saveSetting("transcriptionLanguage", lang);
+                    invoke("pill_push_settings", {
+                      transform: tonePresetRef.current,
+                      language: lang,
+                      autoApply: autoPasteRef.current,
+                    }).catch(console.warn);
                   }}
                   selectedMicId={selectedMicId}
                   onMicChange={(id) => {
@@ -2006,10 +2570,10 @@ function App() {
                       // Delete downloaded model files
                       const home = await homeDir();
                       const filesToDelete = [
-                        `${home}/${MODEL_PATH}`,
-                        `${home}/${OLD_MODEL_PATH}`,
-                        `${home}/${MINUTES_MODEL_PATH}`,
-                        // Legacy local AI model files (removed in favour of Groq)
+                        ...Object.values(FALLBACK_MODELS).map(
+                          (spec) => `${home}/${relativeModelPath(spec.variant)}`,
+                        ),
+                        // Legacy local AI model files (removed in favour of cloud AI)
                         `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
                         `${home}/.oscar/models/phi-3.5-tokenizer.json`,
                       ];
@@ -2059,12 +2623,9 @@ function App() {
                   systemAudioSupported={systemAudioSupported}
                   systemAudioEnabled={systemAudioEnabled}
                   onSystemAudioToggle={handleSystemAudioToggle}
-                  minutesModelEnabled={minutesModelEnabled}
-                  minutesModelDownloadState={minutesModelDownloadState}
-                  minutesModelDownloadProgress={minutesModelDownloadProgress}
-                  minutesModelVariant={minutesModelVariant}
-                  onDownloadMinutesModel={handleDownloadMinutesModel}
-                  onRemoveMinutesModel={handleRemoveMinutesModel}
+                  dictationModel={dictationModel}
+                  meetingModel={meetingModel}
+                  onModelPresetChange={handleModelPresetChange}
                 />
               )}
             </div>

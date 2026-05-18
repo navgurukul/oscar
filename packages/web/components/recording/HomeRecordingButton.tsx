@@ -23,7 +23,7 @@ export function HomeRecordingButton() {
 
   const handleStartRecording = () => {
     // Clear previous session data
-    storageService.clearNote();
+    storageService.clearScribble();
     // Navigate to recording page
     router.push(ROUTES.RECORDING);
   };

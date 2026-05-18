@@ -13,7 +13,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { FormattingResult } from "../types/note.types";
+import type { FormattingResult } from "../types/scribble.types";
 
 type AIOperationFn<TArgs extends unknown[]> = (
   signal: AbortSignal,

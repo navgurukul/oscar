@@ -2,9 +2,10 @@ import type {
   DictationCategory,
   DictationContextSnapshot,
   DictationRoutingResult,
-} from "../types/note.types";
+} from "../types/scribble.types";
+import { DICTATION_PROMPT_VERSION } from "../types/scribble.types";
 
-export const STREAM_PROMPT_VERSION = "stream-v1";
+export const CONTEXT_AWARE_DICTATION_PROMPT_VERSION = DICTATION_PROMPT_VERSION;
 
 const GENERIC_BROWSER_APPS = [
   { key: "arc", match: ["arc", "company.thebrowser.browser"] },
@@ -139,7 +140,7 @@ export function routeDictationContext(
       appKey: "default",
       source: "fallback",
       confidence: "low",
-      promptVersion: STREAM_PROMPT_VERSION,
+      promptVersion: CONTEXT_AWARE_DICTATION_PROMPT_VERSION,
     };
   }
 
@@ -152,7 +153,7 @@ export function routeDictationContext(
         appKey: siteRule.appKey,
         source: "site",
         confidence: "high",
-        promptVersion: STREAM_PROMPT_VERSION,
+        promptVersion: CONTEXT_AWARE_DICTATION_PROMPT_VERSION,
       };
     }
   }
@@ -170,7 +171,7 @@ export function routeDictationContext(
       appKey: appRule.appKey,
       source: "app",
       confidence: "high",
-      promptVersion: STREAM_PROMPT_VERSION,
+      promptVersion: CONTEXT_AWARE_DICTATION_PROMPT_VERSION,
     };
   }
 
@@ -181,7 +182,7 @@ export function routeDictationContext(
       appKey: genericBrowser.key,
       source: "app",
       confidence: siteHost ? "high" : "medium",
-      promptVersion: STREAM_PROMPT_VERSION,
+      promptVersion: CONTEXT_AWARE_DICTATION_PROMPT_VERSION,
     };
   }
 
@@ -190,6 +191,6 @@ export function routeDictationContext(
     appKey: "default",
     source: "fallback",
     confidence: "low",
-    promptVersion: STREAM_PROMPT_VERSION,
+    promptVersion: CONTEXT_AWARE_DICTATION_PROMPT_VERSION,
   };
 }

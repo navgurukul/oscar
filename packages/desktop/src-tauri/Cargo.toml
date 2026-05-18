@@ -1,6 +1,6 @@
 [package]
 name = "oscar"
-version = "0.3.32"
+version = "0.4.3"
 description = "Voice to Text Desktop App"
 authors = ["you"]
 edition = "2021"
@@ -38,6 +38,9 @@ symphonia = { version = "0.5", features = ["aac", "isomp4", "mkv", "pcm"] }
 rubato = "0.16"
 base64 = "0.22"
 opus = "0.3"
+sysinfo = { version = "0.32", default-features = false, features = ["system"] }
+sha2 = "0.10"
+num_cpus = "1.16"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Threading"] }

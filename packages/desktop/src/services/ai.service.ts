@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import { applyTranscriptPostProcessing } from "@oscar/shared/prompts";
 import type {
   EnhancedMeetingNoteRequest,
   EnhancedMeetingNoteResponse,
@@ -7,7 +8,7 @@ import type {
 import type {
   DictationContextSnapshot,
   DictationRoutingResult,
-} from "../types/note.types";
+} from "../types/scribble.types";
 import { MEETING_CONFIG } from "@oscar/shared/constants";
 
 export type DesktopAIMode =
@@ -15,7 +16,9 @@ export type DesktopAIMode =
   | "cleanup"
   | "summary"
   | "bullets"
-  | "email";
+  | "email"
+  | "meeting_notes";
+type AIProcessPromptProfile = "stream";
 
 interface AIProcessResponse {
   text?: string;
@@ -27,10 +30,15 @@ interface AIProcessRequest {
   mode: DesktopAIMode;
   context?: DictationContextSnapshot;
   routing?: DictationRoutingResult;
+  promptProfile?: AIProcessPromptProfile;
 }
 
 const EDGE_FUNCTION_FETCH_ERROR = "Failed to send a request to the Edge Function";
 const EDGE_FUNCTION_RELAY_ERROR = "Relay Error invoking the Edge Function";
+const EDGE_FUNCTION_NON_2XX_ERROR = "Edge Function returned a non-2xx status code";
+const NO_USABLE_MEETING_NOTES_ERROR = "NO_USABLE_MEETING_NOTES";
+const NON_SUBSTANTIVE_BULLET_RE =
+  /^(none captured|no (specific )?.*captured|not captured|n\/a)\.?$/i;
 const {
   MAX_REQUEST_SEGMENTS: MAX_MEETING_REQUEST_SEGMENTS,
   MAX_REQUEST_CHARS: MAX_MEETING_REQUEST_CHARS,
@@ -179,6 +187,68 @@ function normalizeBullets(value: string): string[] {
     .map((line) => (line.startsWith("- ") ? line : `- ${line.replace(/^[*-]\s*/, "")}`));
 }
 
+function sanitizeMarkdown(value: string): string {
+  return value
+    .replace(/```markdown|```md|```/gi, "")
+    .replace(/\r\n/g, "\n")
+    .trim();
+}
+
+function countSubstantiveBullets(markdown: string): number {
+  return markdown
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^\s*[-*]\s+/.test(line))
+    .map((line) =>
+      line
+        .replace(/^\s*[-*]\s+/, "")
+        .replace(/^\[[ xX]\]\s+/, "")
+        .trim(),
+    )
+    .filter((bullet) => bullet && !NON_SUBSTANTIVE_BULLET_RE.test(bullet))
+    .length;
+}
+
+function hasSubstantiveBullets(markdown: string): boolean {
+  return countSubstantiveBullets(markdown) > 0;
+}
+
+function isRecoverableMeetingEnhanceFailure(message: string): boolean {
+  return (
+    message.includes(EDGE_FUNCTION_FETCH_ERROR) ||
+    message.includes(EDGE_FUNCTION_RELAY_ERROR) ||
+    message.includes(EDGE_FUNCTION_NON_2XX_ERROR) ||
+    message.includes(NO_USABLE_MEETING_NOTES_ERROR)
+  );
+}
+
+function buildFallbackMeetingInput(
+  request: EnhancedMeetingNoteRequest,
+  transcriptSource: string,
+): string {
+  return [
+    `Meeting title: ${request.meeting_title.trim() || "Untitled Meeting"}`,
+    `Local meeting datetime: ${request.meeting_local_datetime.trim()}`,
+    `Attendees: ${request.attendees_compact.trim() || "Not captured"}`,
+    request.attendees_full.length > 0
+      ? `Attendee details: ${request.attendees_full
+          .map((attendee) =>
+            attendee.email ? `${attendee.name} <${attendee.email}>` : attendee.name)
+          .join(", ")}`
+      : "",
+    request.calendar_context
+      ? `Calendar context: ${JSON.stringify(request.calendar_context)}`
+      : "",
+    `Meeting type hint: ${request.meeting_type_hint}`,
+    request.my_notes_markdown.trim()
+      ? `Manual notes:\n${request.my_notes_markdown.trim()}`
+      : "",
+    transcriptSource ? `Transcript excerpt:\n${transcriptSource}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 async function extractInvokeError(error: unknown): Promise<string> {
   const fallback =
     error instanceof Error ? error.message : "AI request failed.";
@@ -238,9 +308,16 @@ async function invokeAIProcess(
     throw new Error(await extractInvokeError(error));
   }
 
-  const processedText = data?.text?.trim();
-  if (!processedText) {
+  const processedText = data?.text?.trim() ?? "";
+  // transcribe_cleanup may legitimately return empty when the server detects
+  // silence / Whisper hallucinations. Surface that instead of throwing so the
+  // caller can skip the paste step.
+  if (!processedText && request.mode !== "transcribe_cleanup") {
     throw new Error(data?.error || "AI returned an empty response.");
+  }
+
+  if (request.mode === "transcribe_cleanup" || request.mode === "cleanup") {
+    return applyTranscriptPostProcessing(processedText);
   }
 
   return processedText;
@@ -270,6 +347,10 @@ async function invokeMeetingEnhance(
     throw new Error("Enhanced note generation returned an empty response.");
   }
 
+  if (request.transcript_segments.length > 0 && !hasSubstantiveBullets(markdown)) {
+    throw new Error(NO_USABLE_MEETING_NOTES_ERROR);
+  }
+
   return markdown;
 }
 
@@ -290,6 +371,37 @@ async function buildFallbackMeetingMarkdown(
 
   let summaryBullets = "";
   if (sourceForSummary) {
+    try {
+      const structuredNotes = await invokeAIProcess(
+        accessToken,
+        {
+          text: buildFallbackMeetingInput(request, transcriptSource),
+          mode: "meeting_notes",
+        },
+      );
+
+      if (structuredNotes.trim()) {
+        const sanitizedNotes = sanitizeMarkdown(structuredNotes);
+        if (hasSubstantiveBullets(sanitizedNotes)) {
+          return sanitizedNotes;
+        }
+      }
+    } catch {
+      try {
+        summaryBullets = await invokeAIProcess(
+          accessToken,
+          {
+            text: sourceForSummary,
+            mode: "bullets",
+          },
+        );
+      } catch {
+        summaryBullets = "";
+      }
+    }
+  }
+
+  if (!summaryBullets.trim() && sourceForSummary) {
     try {
       summaryBullets = await invokeAIProcess(
         accessToken,
@@ -317,7 +429,7 @@ async function buildFallbackMeetingMarkdown(
   }
 
   if (summaryBullets.trim()) {
-    lines.push("### Transcript Highlights");
+    lines.push("### Top of mind");
     lines.push(...normalizeBullets(summaryBullets));
     return lines.join("\n").trimEnd();
   }
@@ -337,6 +449,7 @@ export const aiService = {
     options?: {
       context?: DictationContextSnapshot;
       routing?: DictationRoutingResult;
+      promptProfile?: AIProcessPromptProfile;
     },
   ): Promise<string> {
     if (!text.trim()) {
@@ -351,6 +464,7 @@ export const aiService = {
         mode,
         context: options?.context,
         routing: options?.routing,
+        promptProfile: options?.promptProfile,
       },
     );
   },
@@ -369,9 +483,8 @@ export const aiService = {
       return await invokeMeetingEnhance(accessToken, initialRequest);
     } catch (initialError) {
       const initialMessage = await extractInvokeError(initialError);
-      const isFetchFailure =
-        initialMessage.includes(EDGE_FUNCTION_FETCH_ERROR) ||
-        initialMessage.includes(EDGE_FUNCTION_RELAY_ERROR);
+      const shouldUseFallback =
+        isRecoverableMeetingEnhanceFailure(initialMessage);
       const shouldRetryWithCompaction =
         !startWithCompactedRequest &&
         meetingRequestChanged(request, compactedRequest);
@@ -383,10 +496,7 @@ export const aiService = {
           return await invokeMeetingEnhance(accessToken, compactedRequest);
         } catch (retryError) {
           const retryMessage = await extractInvokeError(retryError);
-          if (
-            retryMessage.includes(EDGE_FUNCTION_FETCH_ERROR) ||
-            retryMessage.includes(EDGE_FUNCTION_RELAY_ERROR)
-          ) {
+          if (isRecoverableMeetingEnhanceFailure(retryMessage)) {
             return buildFallbackMeetingMarkdown(accessToken, compactedRequest);
           }
 
@@ -394,7 +504,7 @@ export const aiService = {
         }
       }
 
-      if (isFetchFailure) {
+      if (shouldUseFallback) {
         return buildFallbackMeetingMarkdown(accessToken, compactedRequest);
       }
 

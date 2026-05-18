@@ -5,15 +5,15 @@ export const UI_STRINGS = {
   // Page titles
   PROCESSING_TITLE: "Processing Your Speech",
   RECORDING_TITLE: "Record Your Voice",
-  RESULTS_TITLE: "Here's your note",
+  RESULTS_TITLE: "Here's your Scribble",
 
   // Loading states
   INITIALIZING: "Initializing...",
   REQUESTING_PERMISSION: "Requesting microphone permission...",
-  LOADING_NOTE: "Loading your note...",
+  LOADING_SCRIBBLE: "Loading your Scribble...",
 
-  // Note defaults
-  UNTITLED_NOTE: "Untitled Note",
+  // Scribble defaults
+  UNTITLED_SCRIBBLE: "Untitled Scribble",
   NO_RAW_TRANSCRIPT: "No raw transcript available.",
 
   CONTINUE_RECORDING: "Continue Recording",
@@ -44,7 +44,7 @@ export const UI_STRINGS = {
     "Press the microphone button and start speaking. Oscar will do the rest.",
 
   // Download filenames
-  NOTE_FILENAME: "oscar-note.txt",
+  SCRIBBLE_FILENAME: "oscar-scribble.txt",
   RAW_FILENAME: "oscar-raw.txt",
 } as const;
 

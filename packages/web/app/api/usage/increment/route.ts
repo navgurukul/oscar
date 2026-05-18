@@ -36,8 +36,8 @@ export async function POST() {
       // Return 402 Payment Required to signal upgrade needed
       return NextResponse.json(
         {
-          error: "Recording limit reached",
-          message: "You've reached your monthly recording limit. Upgrade to Pro for unlimited recordings.",
+          error: "Scribble recording limit reached",
+          message: "You've reached your monthly Scribble recording limit. Upgrade to Pro for unlimited Scribble recordings.",
           current,
           remaining: 0,
           upgradeRequired: true,

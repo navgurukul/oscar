@@ -25,21 +25,21 @@ import {
 } from "@/components/ui/accordion";
 
 const FREE_FEATURES = [
-  `${SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} recordings per month`,
-  `Up to ${SUBSCRIPTION_CONFIG.FREE_MAX_NOTES} total notes`,
+  `${SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} Scribble recordings per month`,
+  `Up to ${SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES} total Scribbles`,
   `Custom vocabulary (up to ${SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} entries)`,
   "AI-powered text formatting",
   "Basic voice-to-text",
-  "Download and copy notes",
+  "Download and copy Scribbles",
 ];
 
 const PRO_FEATURES = [
-  "Unlimited recordings",
-  "Unlimited notes",
+  "Unlimited Scribble recordings",
+  "Unlimited Scribbles",
   "Unlimited vocabulary entries",
   "AI-powered text formatting",
   "Priority processing",
-  "Download and copy notes",
+  "Download and copy Scribbles",
   "Priority support",
 ];
 
@@ -186,16 +186,23 @@ export default function PricingPage() {
               </thead>
               <tbody className="text-sm">
                 <tr className="border-b border-gray-800/50">
-                  <td className="py-4 text-gray-300">Recordings per month</td>
+                  <td className="py-4 text-gray-300">Scribble recordings per month</td>
                   <td className="py-4 text-center text-gray-400">
                     {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS}
                   </td>
                   <td className="py-4 text-center text-cyan-400">Unlimited</td>
                 </tr>
                 <tr className="border-b border-gray-800/50">
-                  <td className="py-4 text-gray-300">Total notes</td>
+                  <td className="py-4 text-gray-300">Total Scribbles</td>
                   <td className="py-4 text-center text-gray-400">
-                    {SUBSCRIPTION_CONFIG.FREE_MAX_NOTES}
+                    {SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES}
+                  </td>
+                  <td className="py-4 text-center text-cyan-400">Unlimited</td>
+                </tr>
+                <tr className="border-b border-gray-800/50">
+                  <td className="py-4 text-gray-300">Vocabulary</td>
+                  <td className="py-4 text-center text-gray-400">
+                    {SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY}
                   </td>
                   <td className="py-4 text-center text-cyan-400">Unlimited</td>
                 </tr>
@@ -218,7 +225,7 @@ export default function PricingPage() {
                   </td>
                 </tr>
                 <tr className="border-b border-gray-800/50">
-                  <td className="py-4 text-gray-300">Export notes</td>
+                  <td className="py-4 text-gray-300">Export Scribbles</td>
                   <td className="py-4 text-center">
                     <Check className="w-5 h-5 text-gray-400 mx-auto" />
                   </td>
@@ -257,7 +264,7 @@ export default function PricingPage() {
           >
             <AccordionItem value="item-1" className="border-gray-800">
               <AccordionTrigger className="px-6 text-md font-bold  text-white hover:no-underline">
-                Can I cancel anytime?
+                Can I cancel my subscription anytime?
               </AccordionTrigger>
               <AccordionContent className="px-6 text-gray-400">
                 Yes! You can cancel your subscription at any time. You&apos;ll
@@ -266,10 +273,10 @@ export default function PricingPage() {
             </AccordionItem>
             <AccordionItem value="item-2" className="border-gray-800">
               <AccordionTrigger className="px-6 text-md font-bold text-white hover:no-underline">
-                What happens to my notes if I downgrade?
+                What happens to my Scribbles if I downgrade?
               </AccordionTrigger>
               <AccordionContent className="px-6 text-gray-400">
-                Your existing notes are safe! You&apos;ll keep all your notes,
+                Your existing Scribbles are safe! You&apos;ll keep all your Scribbles,
                 but new recording limits will apply.
               </AccordionContent>
             </AccordionItem>

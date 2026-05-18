@@ -54,7 +54,7 @@ export default function DataPrivacySection() {
       if (!res.ok) {
         throw new Error("Clear failed");
       }
-      toast({ title: "Data cleared", description: "All your notes and vocabulary have been permanently deleted." });
+      toast({ title: "Data cleared", description: "All your Scribbles and vocabulary have been permanently deleted." });
       setShowClearConfirm(false);
     } catch {
       toast({ title: "Clear failed", description: "Could not clear your data. Please try again.", variant: "destructive" });
@@ -81,12 +81,11 @@ export default function DataPrivacySection() {
             onClick={handleExportData}
             disabled={isExporting}
             className="flex items-center justify-between w-full p-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <div className="flex items-center gap-3">
+          >              <div className="flex items-center gap-3">
               <Download className="w-4 h-4 text-cyan-400" />
               <div className="text-left">
                 <p className="text-gray-300 text-sm font-medium">Export my data</p>
-                <p className="text-gray-500 text-xs">Download all your notes and vocabulary as JSON</p>
+                <p className="text-gray-500 text-xs">Download all your Scribbles and vocabulary as JSON</p>
               </div>
             </div>
             {isExporting && (
@@ -103,7 +102,7 @@ export default function DataPrivacySection() {
                 <Trash2 className="w-4 h-4 text-red-400" />
                 <div className="text-left">
                   <p className="text-red-400 text-sm font-medium">Clear all data</p>
-                  <p className="text-gray-500 text-xs">Permanently delete all notes and vocabulary</p>
+                  <p className="text-gray-500 text-xs">Permanently delete all Scribbles and vocabulary</p>
                 </div>
               </div>
             </button>

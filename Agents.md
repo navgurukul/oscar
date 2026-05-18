@@ -4,12 +4,12 @@ Overview of AI agents and services in OSCAR.
 
 ## Overview
 
-OSCAR uses Groq-powered AI agents to transform voice recordings into clean formatted text. Two primary agents process and organize voice notes.
+OSCAR uses Google Gemini AI agents to transform voice recordings into clean formatted text. Two primary agents process and organize Stream transcripts into Scribbles.
 
 ## Architecture
 
 ```
-Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent → Formatted Note
+Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent → Formatted Scribble
 ```
 
 ## AI Agents
@@ -18,7 +18,7 @@ Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent �
 
 **Purpose**: Converts raw speech-to-text transcripts into clean, well-formatted text.
 
-**Location**: [`/app/api/groq/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/format/route.ts)
+**Location**: [`/app/api/ai/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/format/route.ts)
 
 **Key Responsibilities**:
 
@@ -37,7 +37,7 @@ Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent �
 
 **Configuration**:
 
-- Model: Groq (configured in `API_CONFIG.GROQ_MODEL`)
+- Model: Google Gemini (configured in `API_CONFIG.GEMINI_MODEL`)
 - Temperature: Configured via `API_CONFIG.FORMAT_TEMPERATURE`
 - Top P: Configured via `API_CONFIG.FORMAT_TOP_P`
 - Max Tokens: Configured via `API_CONFIG.FORMAT_MAX_TOKENS`
@@ -51,9 +51,9 @@ Output: "How to create a React app."
 
 ### 2. Title Generation Agent
 
-**Purpose**: Generates concise, descriptive titles for formatted notes.
+**Purpose**: Generates concise, descriptive titles for formatted Scribbles.
 
-**Location**: [`/app/api/groq/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/title/route.ts)
+**Location**: [`/app/api/ai/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/title/route.ts)
 
 **Key Responsibilities**:
 
@@ -67,11 +67,11 @@ If AI title generation fails, system uses heuristic:
 
 - Extracts first sentence
 - Truncates to 60 characters if needed
-- Falls back to "Untitled Note" if no content
+- Falls back to "Untitled Scribble" if no content
 
 **Configuration**:
 
-- Model: Groq (configured in `API_CONFIG.GROQ_MODEL`)
+- Model: Google Gemini (configured in `API_CONFIG.GEMINI_MODEL`)
 - Temperature: Configured via `API_CONFIG.TITLE_TEMPERATURE`
 - Top P: Configured via `API_CONFIG.TITLE_TOP_P`
 - Max Tokens: Configured via `API_CONFIG.TITLE_MAX_TOKENS`
@@ -142,8 +142,8 @@ All AI agent configs centralized in [`/lib/constants.ts`](file:///Users/souvik/D
 
 ```typescript
 API_CONFIG = {
-  GROQ_API_URL: "https://api.groq.com/openai/v1/chat/completions",
-  GROQ_MODEL: "llama-3.1-8b-instant",
+  GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1beta",
+  GEMINI_MODEL: "gemini-2.5-flash-lite",
   FORMAT_TEMPERATURE: // Configured value
   FORMAT_TOP_P: // Configured value
   FORMAT_MAX_TOKENS: // Configured value
@@ -159,7 +159,7 @@ API_CONFIG = {
 Required:
 
 ```
-GROQ_API_KEY=your_api_key_here
+GEMINI_API_KEY=your_api_key_here
 ```
 
 ## Error Handling
@@ -180,9 +180,50 @@ Error messages defined in [`/lib/constants.ts`](file:///Users/souvik/Desktop/osc
 2. **Speech-to-Text**: Browser API or stt-tts-lib converts audio to text
 3. **AI Formatting**: Raw transcript sent to formatting agent
 4. **AI Title Generation**: Formatted text sent to title agent
-5. **Storage**: Results saved to sessionStorage and Supabase
+5. **Storage**: Results saved to sessionStorage, and to Supabase when saved as a Scribble
 6. **Display**: User can view, edit, copy, or download
 7. **Feedback Collection**: User provides quality feedback on AI formatting
+
+## Desktop Stream (Dictation) Pill
+
+On desktop, the stream / dictation flow has its own dedicated entry point — the always-visible edge-handle pill — distinct from Scribble and Minutes recordings.
+
+**Entry points**:
+
+- **Edge handle (hover)**: a 72×5 px handle docked flush to the bottom of the primary monitor. Cursor enters the bottom 56 px hit zone → handle widens with a cyan glow → after a 180 ms hold the full Paper pill rises from the edge → click to start recording.
+- **Global hotkey `Ctrl+Space`** ([`packages/desktop/src-tauri/src/hotkey.rs`](./packages/desktop/src-tauri/src/hotkey.rs)): hold to record, release to stop. Captures frontmost-app context at press time.
+
+**Pipeline (different from the Scribble/Minutes path)**:
+
+```
+Pill click / Ctrl+Space
+  → capture frontmost app  (frontmost.rs)
+  → MediaRecorder (mp4 / webm, 100 ms chunks)
+  → whisper-rs transcription  (whisper.rs, local model)
+  → aiService.processText(text, "transcribe_cleanup")  — micro Gemini prompt
+  → paste_transcription  (clipboard + synthetic Cmd/Ctrl+V via paste.rs)
+  → pill shows "Inserted into document" toast (1500 ms)
+  → pill collapses back to the edge handle
+```
+
+The AI cleanup uses the `transcribe_cleanup` mode in [`packages/desktop/src/services/ai.service.ts`](./packages/desktop/src/services/ai.service.ts) — a smaller, faster prompt than the Scribble formatter because stream inserts go directly into the user's focused field. The Title Agent is **not** invoked for stream inserts (there is no scribble to title).
+
+**Pill state machine** (driven by `set_pill_phase` Tauri command + `pill-set-phase` event in [`packages/desktop/public/pill.html`](./packages/desktop/public/pill.html)):
+
+| Phase | Visual | Window height |
+|---|---|---|
+| `rest` | 72×5 handle flush at edge | 56 px |
+| `ready` | 96×6 handle, cyan-400 glow, "Click to dictate" hint | 56 px |
+| `expanded` | full Paper pill with idle dots | 200 px |
+| `recording` | 15-bar cyan waveform | 200 px |
+| `processing` | 13 pulsing dots (1.1 s stagger × 0.07 s) | 200 px |
+| `inserted` | cyan-500 "Inserted into document" toast (1500 ms dwell) | 200 px |
+| `error` | rose-700 triangle + "no input" (1500 ms) | 200 px |
+| `settings` | popover open above the pill | 380 px |
+
+The pill's settings popover (Polish / Prompt Engineer / Email Reply transforms, Language, Auto-apply) is wired to the same persisted settings the Settings tab writes (`tonePreset`, `transcriptionLanguage`, `autoPaste`). The pill emits `pill-settings-update` events; the host in [`packages/desktop/src/App.tsx`](./packages/desktop/src/App.tsx) listens and calls `saveSetting`.
+
+**Linux**: secondary webview windows crash tao's event loop, so the pill is not created. Recording state surfaces on the tray-icon tooltip instead (`crate::state::LINUX_TRAY`).
 
 ## AI Quality Feedback System
 
@@ -192,7 +233,7 @@ Feedback system collects user signals on AI formatting quality for continuous pr
 
 ### User Experience
 
-On each formatted note, users see:
+On each formatted Scribble, users see:
 
 - **"Was this formatting helpful?"** with Yes/No buttons
 - If "No", optional reason tags:
@@ -205,9 +246,9 @@ On each formatted note, users see:
 
 ### Data Storage
 
-**Location**: [`/lib/types/note.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/note.types.ts)
+**Location**: [`/lib/types/scribble.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/scribble.types.ts)
 
-Each note stores:
+Each Scribble stores:
 
 ```typescript
 feedback_helpful: boolean | null;        // User's yes/no response
@@ -221,7 +262,7 @@ feedback_timestamp: string | null;        // When feedback was given
 
 **Methods**:
 
-- `submitFeedback(noteId, helpful, reasons?)` - Store user feedback
+- `submitFeedback(scribbleId, helpful, reasons?)` - Store user feedback
 - `getFeedbackStats()` - Get aggregated statistics:
   - Total feedback count
   - Helpful vs not helpful counts
@@ -254,10 +295,10 @@ console.log("Top issues:", stats.reasonBreakdown);
 
 // If "missed_key_info" is high, review examples
 const { data: cases } = await feedbackService.getRecentNegativeFeedback(20);
-cases.forEach((note) => {
-  console.log("Raw:", note.raw_text);
-  console.log("Formatted:", note.original_formatted_text);
-  console.log("Issues:", note.feedback_reasons);
+cases.forEach((scribble) => {
+  console.log("Raw:", scribble.raw_text);
+  console.log("Formatted:", scribble.original_formatted_text);
+  console.log("Issues:", scribble.feedback_reasons);
 });
 
 // Update SYSTEM_PROMPTS.FORMAT in /lib/prompts.ts
@@ -278,7 +319,7 @@ cases.forEach((note) => {
 - Displays Yes/No buttons
 - Shows reason tag selection on "No"
 - Handles submission and thank you message display
-- Integrated into results and note detail pages
+- Integrated into results and Scribble detail pages
 
 ### Future Enhancements
 
@@ -310,7 +351,7 @@ For any meaningful UI, UX, styling, layout, navigation, or motion work in OSCAR:
 Use review workflow for:
 
 - landing page or pricing updates
-- recording, notes, results, settings, or billing UI changes
+- recording, Scribble, results, settings, or billing UI changes
 - shared component or design-token changes
 - cross-cutting refactors that can create visual or architectural drift
 
@@ -346,10 +387,10 @@ Potential improvements:
 - [`/lib/services/feedback.service.ts`](file:///Users/souvik/Desktop/oscar/lib/services/feedback.service.ts) - Feedback collection and analytics
 - [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) - Agent prompts and optimization guide
 - [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts) - Configuration constants
-- [`/lib/types/note.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/note.types.ts) - Type definitions
+- [`/lib/types/scribble.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/scribble.types.ts) - Type definitions
 - [`/lib/types/api.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/api.types.ts) - API type definitions
-- [`/app/api/groq/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/format/route.ts) - Format endpoint
-- [`/app/api/groq/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/groq/title/route.ts) - Title endpoint
+- [`/app/api/ai/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/format/route.ts) - Format endpoint
+- [`/app/api/ai/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/title/route.ts) - Title endpoint
 - [`/components/results/FeedbackWidget.tsx`](file:///Users/souvik/Desktop/oscar/components/results/FeedbackWidget.tsx) - Feedback UI component
 
 ## Support
@@ -358,5 +399,5 @@ For issues with AI agents:
 
 1. Check error messages in browser console
 2. Review API logs in terminal
-3. Verify `GROQ_API_KEY` set correctly
+3. Verify `GEMINI_API_KEY` set correctly
 4. Test with fallback mechanisms disabled to isolate issues

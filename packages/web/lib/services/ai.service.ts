@@ -1,12 +1,13 @@
 import type {
   FormattingResult,
   TitleGenerationResult,
-} from "../types/note.types";
+} from "../types/scribble.types";
 import type {
-  GroqFormatResponse,
-  GroqTitleResponse,
+  FormatResponse,
+  TitleResponse,
 } from "../types/api.types";
 import { API_CONFIG, ERROR_MESSAGES, UI_STRINGS } from "../constants";
+import { applyTranscriptPostProcessing } from "../prompts";
 import { localFormatterService } from "./localFormatter.service";
 
 const RETRY_CONFIG = {
@@ -118,7 +119,7 @@ async function parseFormatResponse(
   let formattedText: string;
 
   if (contentType.includes("application/json")) {
-    const data = (await response.json()) as GroqFormatResponse;
+    const data = (await response.json()) as FormatResponse;
     formattedText = data?.formattedText?.trim() || "";
   } else {
     formattedText = await readStream(response, onChunk ?? (() => {}));
@@ -129,10 +130,12 @@ async function parseFormatResponse(
   }
 
   // Strip markdown code fences (safety net — backend already strips these)
-  return formattedText
+  const cleaned = formattedText
     .replace(/^```[\w]*\n/, "")
     .replace(/\n```$/, "")
     .trim();
+
+  return applyTranscriptPostProcessing(cleaned);
 }
 
 /**
@@ -333,10 +336,10 @@ export const aiService = {
         } else if (response.status === 429) {
           friendlyError = "Too many translation requests. Please wait a moment.";
         } else if (response.status === 500) {
-          if (serverError?.includes("Server missing GROQ_API_KEY")) {
+          if (serverError?.includes("Server missing GEMINI_API_KEY")) {
             friendlyError = "Server configuration issue: translation API key is missing.";
           } else {
-            friendlyError = ERROR_MESSAGES.GROQ_REQUEST_FAILED;
+            friendlyError = ERROR_MESSAGES.AI_REQUEST_FAILED;
           }
         } else if (response.status >= 400 && response.status < 500) {
           friendlyError = serverError || ERROR_MESSAGES.API_ERROR;
@@ -387,7 +390,7 @@ export const aiService = {
 
           if (!response.ok) return this.generateFallbackTitle(source);
 
-          const data = (await response.json()) as GroqTitleResponse;
+          const data = (await response.json()) as TitleResponse;
           const title = data?.title?.trim();
           if (!title) return this.generateFallbackTitle(source);
 
@@ -416,7 +419,7 @@ export const aiService = {
         title: this.sanitizeTitle(truncated || cleaned.slice(0, API_CONFIG.TITLE_MAX_LENGTH)),
       };
     } catch {
-      return { success: true, title: UI_STRINGS.UNTITLED_NOTE };
+      return { success: true, title: UI_STRINGS.UNTITLED_SCRIBBLE };
     }
   },
 

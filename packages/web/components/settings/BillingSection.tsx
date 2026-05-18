@@ -20,8 +20,8 @@ interface BillingSectionProps {
   currentPeriodEnd: string | null;
   recordingsThisMonth: number;
   recordingsLimit: number | null;
-  notesCount: number;
-  notesLimit: number | null;
+  scribblesCount: number;
+  scribblesLimit: number | null;
   isProUser: boolean;
   isLoading: boolean;
   onRefetch: () => void;
@@ -33,8 +33,8 @@ export function BillingSection({
   currentPeriodEnd,
   recordingsThisMonth,
   recordingsLimit,
-  notesCount,
-  notesLimit,
+  scribblesCount,
+  scribblesLimit,
   isProUser,
   isLoading,
   onRefetch,
@@ -128,9 +128,9 @@ export function BillingSection({
                 variant="full"
               />
               <UsageIndicator
-                type="notes"
-                current={notesCount}
-                limit={notesLimit}
+                type="scribbles"
+                current={scribblesCount}
+                limit={scribblesLimit}
                 variant="full"
               />
               <UsageIndicator
@@ -157,11 +157,11 @@ export function BillingSection({
               <ul className="space-y-3 mb-6">
                 <li className="flex items-center gap-3 text-gray-300">
                   <Check className="w-5 h-5 text-cyan-400" />
-                  Unlimited recordings every month
+                  Unlimited Scribble recordings every month
                 </li>
                 <li className="flex items-center gap-3 text-gray-300">
                   <Check className="w-5 h-5 text-cyan-400" />
-                  Store unlimited notes forever
+                  Store unlimited Scribbles forever
                 </li>
                 <li className="flex items-center gap-3 text-gray-300">
                   <Check className="w-5 h-5 text-cyan-400" />

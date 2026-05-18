@@ -10,34 +10,90 @@ import type {
 interface DBMeeting {
   id: string;
   user_id: string;
-  started_at: string;
-  meeting_title: string;
-  meeting_local_datetime: string;
-  attendees_compact: string;
-  attendees_full: MeetingAttendee[] | null;
-  calendar_context: MeetingCalendarContext | null;
-  meeting_type_hint: MeetingTypeHint;
+  started_at?: string;
+  meeting_title?: string;
+  meeting_local_datetime?: string;
+  attendees_compact?: string;
+  attendees_full?: MeetingAttendee[] | null;
+  calendar_context?: MeetingCalendarContext | null;
+  meeting_type_hint?: MeetingTypeHint;
   transcript: string;
-  transcript_segments: MeetingTranscriptSegment[] | null;
-  my_notes_markdown: string;
-  notes_markdown: string;
+  transcript_segments?: MeetingTranscriptSegment[] | null;
+  my_notes_markdown?: string;
+  notes_markdown?: string;
   created_at: string;
+  title?: string;
+  date?: string;
+  participants?: string[] | null;
+  notes?: string;
+  template_id?: string;
+}
+
+function attendeeLabel(attendee: MeetingAttendee): string {
+  return attendee.name || attendee.email;
+}
+
+function attendeesFromLegacy(participants?: string[] | null): MeetingAttendee[] {
+  return (participants ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => ({ name: value, email: "" }));
+}
+
+function attendeesCompactFromLegacy(participants?: string[] | null): string {
+  return (participants ?? []).map((value) => value.trim()).filter(Boolean).join(", ");
+}
+
+function legacyParticipants(meeting: SavedMeetingRecord): string[] {
+  const fromFull = meeting.attendeesFull.map(attendeeLabel).filter(Boolean);
+  if (fromFull.length > 0) return fromFull;
+  return meeting.attendeesCompact
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function legacyMeetingType(meetingTypeHint?: string): MeetingTypeHint {
+  if (
+    meetingTypeHint === "auto" ||
+    meetingTypeHint === "discovery" ||
+    meetingTypeHint === "1on1" ||
+    meetingTypeHint === "standup" ||
+    meetingTypeHint === "general"
+  ) {
+    return meetingTypeHint;
+  }
+
+  return meetingTypeHint === "meeting_standup" ? "standup" : "auto";
+}
+
+function isMissingEnhancedMeetingColumn(error: Error | null): boolean {
+  if (!error) return false;
+
+  return (
+    (error as Error & { code?: string }).code === "PGRST204" ||
+    /Could not find the '.+?' column of 'meetings'/i.test(error.message)
+  );
 }
 
 function toSaved(row: DBMeeting): SavedMeetingRecord {
+  const attendeesFull =
+    row.attendees_full ?? attendeesFromLegacy(row.participants);
+
   return {
     id: row.id,
-    startedAt: row.started_at,
-    meetingTitle: row.meeting_title,
-    meetingLocalDatetime: row.meeting_local_datetime,
-    attendeesCompact: row.attendees_compact,
-    attendeesFull: row.attendees_full ?? [],
-    calendarContext: row.calendar_context,
-    meetingTypeHint: row.meeting_type_hint,
+    startedAt: row.started_at ?? row.date ?? row.created_at,
+    meetingTitle: row.meeting_title ?? row.title ?? "Untitled Meeting",
+    meetingLocalDatetime: row.meeting_local_datetime ?? row.date ?? "",
+    attendeesCompact:
+      row.attendees_compact ?? attendeesCompactFromLegacy(row.participants),
+    attendeesFull,
+    calendarContext: row.calendar_context ?? null,
+    meetingTypeHint: legacyMeetingType(row.meeting_type_hint ?? row.template_id),
     transcript: row.transcript,
     transcriptSegments: row.transcript_segments ?? [],
-    myNotesMarkdown: row.my_notes_markdown,
-    notesMarkdown: row.notes_markdown,
+    myNotesMarkdown: row.my_notes_markdown ?? "",
+    notesMarkdown: row.notes_markdown ?? row.notes ?? "",
     createdAt: row.created_at,
   };
 }
@@ -78,6 +134,27 @@ export const meetingsService = {
       },
       { onConflict: "id" },
     );
+
+    if (isMissingEnhancedMeetingColumn(error as Error | null)) {
+      const { error: legacyError } = await supabase.from("meetings").upsert(
+        {
+          id: meeting.id,
+          user_id: userId,
+          title: meeting.meetingTitle,
+          date: meeting.startedAt,
+          participants: legacyParticipants(meeting),
+          transcript: meeting.transcript,
+          notes: meeting.notesMarkdown,
+          template_id:
+            meeting.meetingTypeHint === "standup"
+              ? "meeting_standup"
+              : "meeting_general",
+        },
+        { onConflict: "id" },
+      );
+      return { error: legacyError as Error | null };
+    }
+
     return { error: error as Error | null };
   },
 

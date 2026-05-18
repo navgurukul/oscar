@@ -738,6 +738,11 @@
   gap: 8px;
 }
 
+.st-row--sub {
+  background: #f8fafc;
+  border-left: 2px solid #e2e8f0;
+}
+
 .st-row-text {
   flex: 1;
   min-width: 0;
@@ -782,6 +787,16 @@
 
 .st-row-status--downloading {
   color: #0891b2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.st-row-error {
+  color: #dc2626;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  margin-top: 4px;
 }
 
 /* ── Divider ── */
@@ -1080,6 +1095,98 @@
   color: #64748b;
   padding: 12px 20px 16px;
   line-height: 1.5;
+}
+
+.billing-plan-price {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.billing-status-cancelling {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.billing-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  font-size: 0.8125rem;
+}
+
+.billing-detail-row + .billing-detail-row {
+  border-top: 1px solid #f1f5f9;
+}
+
+.billing-detail-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+}
+
+.billing-detail-val {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.billing-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 20px 14px;
+}
+
+.billing-unlimited {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #0891b2;
+  background: #f0f9ff;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.billing-benefits {
+  padding: 16px 20px;
+}
+
+.billing-benefits-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.billing-benefits-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.8125rem;
+  color: #334155;
+}
+
+.billing-benefits-list li svg {
+  color: #06b6d4;
+  flex-shrink: 0;
+}
+
+.billing-benefits-cta {
+  margin-top: 14px;
+  width: 100%;
+  justify-content: center;
 }
 
 /* ═════════════════════════════════════════════════════════════════════════════
@@ -1439,4 +1546,3 @@
 @media (max-width: 480px) {
   /* Vocabulary handled by container queries above; only non-vocabulary rules here */
 }
-

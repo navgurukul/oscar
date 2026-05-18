@@ -1,5 +1,104 @@
-import type { MeetingTranscriptSegment } from "../types/meeting.types";
+import type {
+  MeetingAttendee,
+  MeetingTranscriptSegment,
+  MeetingTranscriptSource,
+} from "../types/meeting.types";
 import type { MeetingSegmentJob, Transcription } from "./app-types";
+
+export interface SpeakerLabels {
+  microphone: string;
+  speaker: string;
+}
+
+const DEFAULT_HOST_LABEL = "You";
+const DEFAULT_OTHERS_LABEL = "Others";
+
+function normalizeEmail(value: string | undefined | null): string {
+  return (value || "").trim().toLowerCase();
+}
+
+function preferredAttendeeLabel(attendee: MeetingAttendee): string {
+  const name = attendee.name?.trim();
+  if (name) return name;
+  const email = attendee.email?.trim();
+  if (email) return email;
+  return "";
+}
+
+export function resolveSpeakerLabels(
+  attendees: MeetingAttendee[],
+  hostName: string,
+  hostEmail: string,
+): SpeakerLabels {
+  const micLabel = hostName?.trim() || hostEmail?.trim() || DEFAULT_HOST_LABEL;
+  const hostKey = normalizeEmail(hostEmail);
+
+  const others = attendees.filter((attendee) => {
+    const email = normalizeEmail(attendee.email);
+    if (hostKey && email && email === hostKey) return false;
+    return Boolean(preferredAttendeeLabel(attendee));
+  });
+
+  if (others.length === 1) {
+    const label = preferredAttendeeLabel(others[0]);
+    return {
+      microphone: micLabel,
+      speaker: label || DEFAULT_OTHERS_LABEL,
+    };
+  }
+
+  return {
+    microphone: micLabel,
+    speaker: DEFAULT_OTHERS_LABEL,
+  };
+}
+
+export interface TranscriptTurn {
+  source: MeetingTranscriptSource;
+  label: string;
+  text: string;
+  startTime: string;
+  endTime: string;
+}
+
+export function groupSegmentsIntoTurns(
+  segments: MeetingTranscriptSegment[],
+  labels: SpeakerLabels,
+): TranscriptTurn[] {
+  const turns: TranscriptTurn[] = [];
+  for (const segment of segments) {
+    const text = segment.text.trim();
+    if (!text) continue;
+
+    const source = segment.speaker.source;
+    const label = source === "microphone" ? labels.microphone : labels.speaker;
+    const previous = turns[turns.length - 1];
+
+    if (previous && previous.source === source) {
+      previous.text = appendTranscriptSegment(previous.text, text);
+      previous.endTime = segment.end_time;
+      continue;
+    }
+
+    turns.push({
+      source,
+      label,
+      text,
+      startTime: segment.start_time,
+      endTime: segment.end_time,
+    });
+  }
+  return turns;
+}
+
+export function buildLabeledTranscript(
+  segments: MeetingTranscriptSegment[],
+  labels: SpeakerLabels,
+): string {
+  const turns = groupSegmentsIntoTurns(segments, labels);
+  if (turns.length === 0) return "";
+  return turns.map((turn) => `${turn.label}: ${turn.text}`).join("\n\n");
+}
 
 export function getTranscriptTailWords(text: string, wordCount: number) {
   const words = text.trim().split(/\s+/).filter(Boolean);
@@ -136,4 +235,22 @@ export function toAbsoluteMeetingTranscriptSegments(
       };
     })
     .filter((segment) => Boolean(segment.text));
+}
+
+export function toFallbackMeetingTranscriptSegment(
+  job: MeetingSegmentJob,
+  text: string,
+): MeetingTranscriptSegment | null {
+  const trimmedText = text.trim();
+  if (!trimmedText) return null;
+
+  const source = job.useSystemAudio ? "speaker" : "microphone";
+
+  return {
+    id: `seg-${job.segmentIndex}-0-${source}`,
+    speaker: { source },
+    text: trimmedText,
+    start_time: new Date(job.startedAtMs).toISOString(),
+    end_time: new Date(Math.max(job.endedAtMs, job.startedAtMs + 1)).toISOString(),
+  };
 }

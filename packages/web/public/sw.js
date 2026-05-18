@@ -4,8 +4,8 @@
  * Strategy:
  *   - App shell (JS/CSS/fonts): cache-first — fast repeat loads.
  *   - Navigation (HTML pages): network-first with offline fallback.
- *   - Supabase REST API (/rest/v1/notes, /rest/v1/meetings): stale-while-revalidate
- *     so notes are readable offline and update in the background.
+ *   - Supabase REST API (/rest/v1/scribbles, /rest/v1/meetings): stale-while-revalidate
+ *     so scribbles are readable offline and update in the background.
  *   - AI / format API routes: network-only (AI results can't be meaningfully cached).
  *   - Everything else: network-first.
  */
@@ -16,7 +16,7 @@ const DATA_CACHE    = `${CACHE_VERSION}-data`;
 
 const SHELL_ASSETS = [
   "/",
-  "/notes",
+  "/scribble",
   "/meetings",
   "/recording",
   "/offline",
@@ -58,10 +58,10 @@ self.addEventListener("fetch", (event) => {
   // Only handle same-origin GET requests (and Supabase data GETs)
   if (request.method !== "GET") return;
 
-  // ── Supabase notes / meetings REST: stale-while-revalidate ──────────────
+  // ── Supabase scribbles / meetings REST: stale-while-revalidate ──────────────
   const isSupabaseData =
     url.hostname.includes("supabase") &&
-    (url.pathname.includes("/rest/v1/notes") ||
+    (url.pathname.includes("/rest/v1/scribbles") ||
       url.pathname.includes("/rest/v1/meetings"));
 
   if (isSupabaseData) {
