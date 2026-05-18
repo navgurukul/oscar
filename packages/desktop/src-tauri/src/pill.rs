@@ -8,6 +8,7 @@
 //! Linux: secondary webview windows crash tao's event loop, so state lands on
 //! the tray-icon tooltip instead.
 
+use std::sync::Mutex;
 use tauri::{LogicalPosition, LogicalSize, Manager};
 
 use crate::events::OscarEvent;
@@ -17,6 +18,87 @@ const PILL_W: f64 = 360.0;
 const PILL_H_REST: f64 = 56.0;          // 5px handle + ~50px ready-hint headroom
 const PILL_H_EXPANDED: f64 = 200.0;     // pill + toast space
 const PILL_H_SETTINGS: f64 = 380.0;     // pill + settings popover
+static CURRENT_PILL_PHASE: Mutex<&'static str> = Mutex::new("rest");
+
+fn normalize_phase(phase: &str) -> &'static str {
+    match phase {
+        "rest" => "rest",
+        "ready" => "ready",
+        "expanded" => "expanded",
+        "recording" => "recording",
+        "processing" => "processing",
+        "inserted" => "inserted",
+        "error" => "error",
+        "settings" => "settings",
+        _ => "rest",
+    }
+}
+
+fn phase_height(phase: &str) -> f64 {
+    match phase {
+        "rest" | "ready" => PILL_H_REST,
+        "settings" => PILL_H_SETTINGS,
+        _ => PILL_H_EXPANDED,
+    }
+}
+
+fn current_pill_phase() -> &'static str {
+    CURRENT_PILL_PHASE
+        .lock()
+        .map(|phase| *phase)
+        .unwrap_or("rest")
+}
+
+fn store_pill_phase(phase: &'static str) {
+    if phase == "settings" {
+        return;
+    }
+
+    if let Ok(mut current) = CURRENT_PILL_PHASE.lock() {
+        *current = phase;
+    }
+}
+
+fn apply_phase_script<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, phase: &str) {
+    let Ok(serialized_phase) = serde_json::to_string(phase) else {
+        return;
+    };
+    let script = format!(
+        "window.__oscarSetPillPhase && window.__oscarSetPillPhase({});",
+        serialized_phase
+    );
+    let _ = window.eval(&script);
+}
+
+fn sync_pill_phase(app: &tauri::AppHandle, phase: &'static str) {
+    let visual_phase = if phase == "settings" {
+        current_pill_phase()
+    } else {
+        store_pill_phase(phase);
+        phase
+    };
+
+    create_pill_window(app);
+
+    if let Some(w) = app.get_webview_window("recording-pill") {
+        resize_pill(&w, phase_height(phase));
+        let _ = w.show();
+        apply_phase_script(&w, visual_phase);
+    }
+
+    if phase != "settings" {
+        OscarEvent::PillSetPhase(visual_phase.into()).dispatch(app);
+    }
+}
+
+fn sync_tray_phase(phase: &str) {
+    #[cfg(target_os = "macos")]
+    match phase {
+        "recording" => crate::mac_tray::set_tooltip_recording(),
+        "processing" => crate::mac_tray::set_tooltip_processing(),
+        _ => crate::mac_tray::set_tooltip_idle(),
+    }
+}
 
 /// Reposition the pill so its bottom edge sits flush with the primary
 /// monitor's bottom edge. Called after every resize.
@@ -151,29 +233,8 @@ pub fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(not(target_os = "linux"))]
     {
         log::info!("[pill] show_recording_pill called");
-        create_pill_window(&app);
-
-        if let Some(w) = app.get_webview_window("recording-pill") {
-            resize_pill(&w, PILL_H_EXPANDED);
-            OscarEvent::PillSetPhase("recording".into()).dispatch(&app);
-            w.show().map_err(|e| e.to_string())?;
-
-            #[cfg(target_os = "macos")]
-            {
-                if let Ok(ns_win) = w.ns_window() {
-                    let ptr = ns_win as usize;
-                    let _ = app.run_on_main_thread(move || {
-                        crate::macos_paste::set_window_above_fullscreen(
-                            ptr as *mut std::ffi::c_void,
-                        );
-                    });
-                }
-            }
-        }
-
-        #[cfg(target_os = "macos")]
-        crate::mac_tray::set_tooltip_recording();
-
+        sync_pill_phase(&app, "recording");
+        sync_tray_phase("recording");
         Ok(())
     }
 }
@@ -194,14 +255,8 @@ pub fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
         // We never actually hide the pill — it's the always-visible edge handle.
         // Collapse back to the rest height so clicks above the handle pass through.
         log::info!("[pill] hide_recording_pill → collapse to rest");
-        if let Some(w) = app.get_webview_window("recording-pill") {
-            OscarEvent::PillSetPhase("rest".into()).dispatch(&app);
-            resize_pill(&w, PILL_H_REST);
-        }
-
-        #[cfg(target_os = "macos")]
-        crate::mac_tray::set_tooltip_idle();
-
+        sync_pill_phase(&app, "rest");
+        sync_tray_phase("rest");
         Ok(())
     }
 }
@@ -220,14 +275,8 @@ pub fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(not(target_os = "linux"))]
     {
         log::info!("[pill] set_pill_processing called");
-        if let Some(w) = app.get_webview_window("recording-pill") {
-            resize_pill(&w, PILL_H_EXPANDED);
-        }
-        OscarEvent::PillSetPhase("processing".into()).dispatch(&app);
-
-        #[cfg(target_os = "macos")]
-        crate::mac_tray::set_tooltip_processing();
-
+        sync_pill_phase(&app, "processing");
+        sync_tray_phase("processing");
         Ok(())
     }
 }
@@ -246,14 +295,8 @@ pub fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(not(target_os = "linux"))]
     {
         log::info!("[pill] set_pill_listening called");
-        if let Some(w) = app.get_webview_window("recording-pill") {
-            resize_pill(&w, PILL_H_EXPANDED);
-        }
-        OscarEvent::PillSetPhase("recording".into()).dispatch(&app);
-
-        #[cfg(target_os = "macos")]
-        crate::mac_tray::set_tooltip_recording();
-
+        sync_pill_phase(&app, "recording");
+        sync_tray_phase("recording");
         Ok(())
     }
 }
@@ -263,10 +306,12 @@ pub fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
 /// The window height is adjusted to fit the phase.
 #[tauri::command]
 pub fn set_pill_phase(app: tauri::AppHandle, phase: String) -> Result<(), String> {
+    let phase = normalize_phase(&phase);
+
     #[cfg(target_os = "linux")]
     {
         if let Some(tray) = crate::state::LINUX_TRAY.get() {
-            let label = match phase.as_str() {
+            let label = match phase {
                 "recording" => "● Recording — Oscar",
                 "processing" => "⟳ Processing — Oscar",
                 "inserted" => "✓ Inserted — Oscar",
@@ -275,6 +320,7 @@ pub fn set_pill_phase(app: tauri::AppHandle, phase: String) -> Result<(), String
             };
             tray.set_tooltip(Some(label)).ok();
         }
+        store_pill_phase(phase);
         let _ = app;
         return Ok(());
     }
@@ -282,25 +328,15 @@ pub fn set_pill_phase(app: tauri::AppHandle, phase: String) -> Result<(), String
     #[cfg(not(target_os = "linux"))]
     {
         log::debug!("[pill] set_pill_phase → {}", phase);
-        if let Some(w) = app.get_webview_window("recording-pill") {
-            let h = match phase.as_str() {
-                "rest" | "ready" => PILL_H_REST,
-                "settings" => PILL_H_SETTINGS,
-                _ => PILL_H_EXPANDED,
-            };
-            resize_pill(&w, h);
-        }
-        OscarEvent::PillSetPhase(phase.clone()).dispatch(&app);
-
-        #[cfg(target_os = "macos")]
-        match phase.as_str() {
-            "recording" => crate::mac_tray::set_tooltip_recording(),
-            "processing" => crate::mac_tray::set_tooltip_processing(),
-            _ => crate::mac_tray::set_tooltip_idle(),
-        }
-
+        sync_pill_phase(&app, phase);
+        sync_tray_phase(phase);
         Ok(())
     }
+}
+
+#[tauri::command]
+pub fn get_pill_phase() -> String {
+    current_pill_phase().to_string()
 }
 
 /// User clicked the pill to start recording. Mirrors the hotkey-press path so

@@ -631,7 +631,23 @@
       'es': 'Español',
     };
 
+    function normalizePhase(next) {
+      switch (next) {
+        case 'rest':
+        case 'ready':
+        case 'expanded':
+        case 'recording':
+        case 'processing':
+        case 'inserted':
+        case 'error':
+          return next;
+        default:
+          return phase || 'rest';
+      }
+    }
+
     function applyPhase(next) {
+      next = normalizePhase(next);
       phase = next;
       document.body.setAttribute('data-phase', next);
       // Any pending hover-driven transitions must not stomp an externally-set
@@ -649,6 +665,7 @@
     }
 
     function setSettingsOpen(open) {
+      if (settingsOpen === open) return;
       settingsOpen = open;
       document.body.setAttribute('data-settings-open', open ? 'true' : 'false');
       const btn = document.getElementById('btn-settings');
@@ -682,19 +699,24 @@
       });
     }
 
+    window.__oscarSetPillPhase = applyPhase;
+    window.__oscarGetPillPhase = () => phase;
+
     /* ─── Tauri IPC helpers ────────────────────────────────────────────── */
     function callTauri(cmd, args) {
       const core = window.__TAURI__ && window.__TAURI__.core;
-      if (!core || !core.invoke) return;
-      core.invoke(cmd, args || {}).catch((err) => {
+      if (!core || !core.invoke) return Promise.resolve(undefined);
+      return core.invoke(cmd, args || {}).catch((err) => {
         console.warn('[pill] invoke failed', cmd, err);
+        return undefined;
       });
     }
     function emitTauri(name, payload) {
       const ev = window.__TAURI__ && window.__TAURI__.event;
-      if (!ev || !ev.emit) return;
-      ev.emit(name, payload).catch((err) => {
+      if (!ev || !ev.emit) return Promise.resolve(undefined);
+      return ev.emit(name, payload).catch((err) => {
         console.warn('[pill] emit failed', name, err);
+        return undefined;
       });
     }
 
@@ -820,26 +842,35 @@
     });
 
     /* ─── Backend → frontend events ────────────────────────────────────── */
-    function setupListeners() {
+    async function setupListeners() {
       const ev = window.__TAURI__ && window.__TAURI__.event;
       if (!ev) { setTimeout(setupListeners, 50); return; }
 
-      ev.listen('pill-set-phase', (evt) => {
-        const next = evt.payload || 'rest';
-        if (typeof next === 'string') applyPhase(next);
-      });
+      try {
+        await Promise.all([
+          ev.listen('pill-set-phase', (evt) => {
+            const next = evt.payload || 'rest';
+            if (typeof next === 'string') applyPhase(next);
+          }),
 
-      ev.listen('pill-settings-init', (evt) => {
-        const p = evt.payload || {};
-        if (p.transform) settings.transform = p.transform;
-        if (p.language) settings.language = p.language;
-        if (typeof p.autoApply === 'boolean') settings.autoApply = p.autoApply;
-        renderSettingsUI();
-      });
+          ev.listen('pill-settings-init', (evt) => {
+            const p = evt.payload || {};
+            if (p.transform) settings.transform = p.transform;
+            if (p.language) settings.language = p.language;
+            if (typeof p.autoApply === 'boolean') settings.autoApply = p.autoApply;
+            renderSettingsUI();
+          }),
 
-      // Back-compat with old events; map to new phase
-      ev.listen('pill-set-processing', () => applyPhase('processing'));
-      ev.listen('pill-set-listening', () => applyPhase('recording'));
+          // Back-compat with old events; map to new phase
+          ev.listen('pill-set-processing', () => applyPhase('processing')),
+          ev.listen('pill-set-listening', () => applyPhase('recording')),
+        ]);
+      } catch (err) {
+        console.warn('[pill] listen setup failed', err);
+      }
+
+      const latestPhase = await callTauri('get_pill_phase');
+      if (typeof latestPhase === 'string') applyPhase(latestPhase);
 
       // Signal we're ready so the host can push initial settings.
       emitTauri('pill-ready', {});

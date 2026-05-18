@@ -92,6 +92,7 @@ pub fn run() {
             pill::set_pill_processing,
             pill::set_pill_listening,
             pill::set_pill_phase,
+            pill::get_pill_phase,
             pill::pill_push_settings,
             pill::pill_request_record_start,
             pill::pill_request_record_stop,
