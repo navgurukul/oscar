@@ -211,6 +211,106 @@ pub fn warm_whisper_runtime(
     Ok("Whisper runtime warmed".to_string())
 }
 
+/// Known Whisper hallucination phrases that surface on silence, music,
+/// background noise, or cross-talk. Match on lowercased trimmed segment.
+const HALLUCINATION_PHRASES: &[&str] = &[
+    "thank you.",
+    "thank you",
+    "thanks for watching.",
+    "thanks for watching",
+    "thanks for watching!",
+    "subscribe to the channel.",
+    "please subscribe.",
+    "please subscribe to the channel.",
+    "you",
+    "...",
+    "bye.",
+    "bye",
+    "bye!",
+    "i'm not going to read the text",
+    "i'm not going to read the text.",
+    "ruins fat is here!",
+    "ruins fat is here",
+];
+
+/// Mark a Whisper segment as a likely hallucination so the caller can drop it
+/// before downstream summarization sees it. We are deliberately conservative:
+/// only flag clear-cut noise patterns (stock phrases, repetition loops,
+/// wrong-script-for-target-language) rather than anything ambiguous.
+fn is_hallucination_segment(trimmed: &str, language: &str) -> bool {
+    let lower = trimmed.to_lowercase();
+
+    if HALLUCINATION_PHRASES.iter().any(|phrase| lower == *phrase) {
+        return true;
+    }
+
+    let condensed: String = lower
+        .chars()
+        .filter(|c| !c.is_whitespace() && !c.is_ascii_punctuation())
+        .collect();
+
+    let words: Vec<&str> = lower.split_whitespace().collect();
+
+    // `foreign foreign foreign ...` style — Whisper's "unknown language" loop.
+    if !words.is_empty() && words.iter().all(|w| *w == "foreign") {
+        return true;
+    }
+
+    // Same single word repeated 4+ times with no other content.
+    if words.len() >= 4 {
+        let first = words[0];
+        if words.iter().all(|w| *w == first) {
+            return true;
+        }
+    }
+
+    // CJK / Hangul / Hiragana / Katakana segments in a non-CJK target
+    // language are almost always hallucinations on Indian English / Hinglish
+    // meetings.
+    let mut script_counts = (0usize, 0usize); // (cjk_like, latin_like)
+    for c in trimmed.chars() {
+        let code = c as u32;
+        if (0xAC00..=0xD7AF).contains(&code) // Hangul
+            || (0x3040..=0x30FF).contains(&code) // Hiragana / Katakana
+            || (0x4E00..=0x9FFF).contains(&code) // CJK Unified
+            || (0x3400..=0x4DBF).contains(&code) // CJK Ext A
+        {
+            script_counts.0 += 1;
+        } else if c.is_ascii_alphabetic() {
+            script_counts.1 += 1;
+        }
+    }
+    let target_is_cjk = matches!(language, "ko" | "ja" | "zh");
+    if !target_is_cjk && script_counts.0 > 0 && script_counts.0 >= script_counts.1 {
+        return true;
+    }
+
+    // Pure-punctuation segments slipped through Whisper's filter occasionally.
+    if !condensed.is_empty() && condensed.chars().all(|c| !c.is_alphanumeric()) {
+        return true;
+    }
+
+    false
+}
+
+/// Cheap energy-gate VAD: returns false when the audio chunk's RMS energy
+/// looks like silence/noise floor. Lets the caller skip running Whisper on
+/// chunks that contain no real speech, which is the strongest mitigation for
+/// silence-triggered hallucinations.
+fn audio_has_speech(audio_data: &[f32]) -> bool {
+    if audio_data.is_empty() {
+        return false;
+    }
+    let sum_squares: f64 = audio_data
+        .iter()
+        .map(|sample| (*sample as f64) * (*sample as f64))
+        .sum();
+    let rms = (sum_squares / audio_data.len() as f64).sqrt();
+    // Empirically picked: typical meeting silence floor sits below 0.002 RMS
+    // on 16-bit-normalized f32 audio; soft speech is comfortably above 0.005.
+    rms > 0.003
+}
+
 /// Shared transcription logic used by both `transcribe_audio` and
 /// `transcribe_meeting_audio`.
 pub(crate) fn transcribe_audio_inner(
@@ -221,6 +321,18 @@ pub(crate) fn transcribe_audio_inner(
     source: Option<&str>,
 ) -> Result<TranscriptionResult, String> {
     if audio_data.is_empty() {
+        return Ok(TranscriptionResult {
+            text: String::new(),
+            error: None,
+            segments: None,
+        });
+    }
+
+    if !audio_has_speech(audio_data) {
+        log::info!(
+            "[whisper] Skipping inference — audio chunk below VAD energy threshold ({} samples)",
+            audio_data.len()
+        );
         return Ok(TranscriptionResult {
             text: String::new(),
             error: None,
@@ -283,12 +395,12 @@ pub(crate) fn transcribe_audio_inner(
     let mut full_text = String::new();
     let mut structured_segments = Vec::new();
     let mut dropped_no_speech = 0usize;
+    let mut dropped_hallucination = 0usize;
 
-    // Whisper emits a per-segment probability that the segment contains no
-    // speech. Drop segments above this threshold to suppress stock-phrase
-    // hallucinations on silent audio ("you", "Thank you.", "...").
-    // 0.6 matches whisper.cpp's default no_speech_thold.
-    const NO_SPEECH_THRESHOLD: f32 = 0.6;
+    // Tightened from whisper.cpp default 0.6 → 0.5 to cut hallucinations on
+    // borderline-silent or cross-talk segments more aggressively.
+    const NO_SPEECH_THRESHOLD: f32 = 0.5;
+    let effective_language = lang.unwrap_or("");
 
     for i in 0..num_segments {
         if let Some(segment) = state.get_segment(i) {
@@ -306,6 +418,16 @@ pub(crate) fn transcribe_audio_inner(
             if let Ok(text) = segment.to_str() {
                 let trimmed = text.trim();
                 if trimmed.is_empty() {
+                    continue;
+                }
+
+                if is_hallucination_segment(trimmed, effective_language) {
+                    dropped_hallucination += 1;
+                    log::debug!(
+                        "[whisper] Dropping hallucination segment {}: {:?}",
+                        i,
+                        trimmed,
+                    );
                     continue;
                 }
 
@@ -332,6 +454,12 @@ pub(crate) fn transcribe_audio_inner(
             "[whisper] Dropped {} segment(s) above no_speech threshold {:.2}",
             dropped_no_speech,
             NO_SPEECH_THRESHOLD
+        );
+    }
+    if dropped_hallucination > 0 {
+        log::info!(
+            "[whisper] Dropped {} hallucination segment(s)",
+            dropped_hallucination,
         );
     }
 

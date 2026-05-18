@@ -457,6 +457,64 @@ function parseCleanedSegmentLines(
   });
 }
 
+const HALLUCINATION_EXACT_PHRASES: ReadonlySet<string> = new Set([
+  "thank you.",
+  "thank you",
+  "thanks for watching.",
+  "thanks for watching",
+  "thanks for watching!",
+  "subscribe to the channel.",
+  "please subscribe.",
+  "please subscribe to the channel.",
+  "you",
+  "...",
+  "bye.",
+  "bye",
+  "bye!",
+  "i'm not going to read the text",
+  "i'm not going to read the text.",
+  "ruins fat is here!",
+  "ruins fat is here",
+]);
+
+const CJK_RE = /[぀-ヿ㐀-䶿一-鿿가-힯]/;
+
+function isHallucinationText(rawText: string): boolean {
+  const text = rawText.trim();
+  if (!text) return true;
+  const lower = text.toLowerCase();
+
+  if (HALLUCINATION_EXACT_PHRASES.has(lower)) return true;
+
+  const words = lower.split(/\s+/).filter(Boolean);
+  if (words.length > 0 && words.every((w) => w === "foreign")) return true;
+  if (words.length >= 4 && words.every((w) => w === words[0])) return true;
+
+  const cjkChars = (text.match(new RegExp(CJK_RE, "g")) || []).length;
+  const latinChars = (text.match(/[A-Za-z]/g) || []).length;
+  if (cjkChars > 0 && cjkChars >= latinChars) return true;
+
+  const condensed = lower.replace(/[\s\p{P}]/gu, "");
+  if (condensed.length === 0) return true;
+
+  return false;
+}
+
+function preFilterHallucinations(
+  segments: MeetingTranscriptSegment[],
+): { kept: MeetingTranscriptSegment[]; droppedCount: number } {
+  const kept: MeetingTranscriptSegment[] = [];
+  let droppedCount = 0;
+  for (const segment of segments) {
+    if (isHallucinationText(segment.text)) {
+      droppedCount += 1;
+      continue;
+    }
+    kept.push(segment);
+  }
+  return { kept, droppedCount };
+}
+
 async function cleanTranscriptSegments(
   geminiApiKey: string,
   request: EnhancedMeetingNoteRequest,
@@ -465,8 +523,20 @@ async function cleanTranscriptSegments(
     return request.transcript_segments;
   }
 
-  const batches = splitSegmentBatchesWithLimits(
+  const { kept: preFiltered, droppedCount } = preFilterHallucinations(
     request.transcript_segments,
+  );
+  if (droppedCount > 0) {
+    console.info(
+      `[meeting-enhance] Pre-filter dropped ${droppedCount} hallucination segment(s) of ${request.transcript_segments.length}`,
+    );
+  }
+  if (preFiltered.length === 0) {
+    return preFiltered;
+  }
+
+  const batches = splitSegmentBatchesWithLimits(
+    preFiltered,
     MAX_CLEANUP_BATCH_CHARS,
     MAX_CLEANUP_BATCH_SIZE,
   );
@@ -474,8 +544,8 @@ async function cleanTranscriptSegments(
   const systemPrompt =
     "You clean noisy meeting transcript segments before summarization. " +
     "This is not a summary task. Preserve meaning, facts, numbers, names, branches, files, PRs, design references, dates, and action items. " +
-    "Fix obvious speech-recognition errors in English, Hindi, and Hinglish when the nearby context supports the correction. " +
-    "Remove filler-only noise such as hmm, uh, aham, repeated stutters, and accidental repeated phrases. " +
+    "Fix obvious speech-recognition errors in English, Hindi, and Hinglish when the nearby context supports the correction. Restore punctuation and capitalization so each segment reads as a clean sentence; do not paraphrase or rewrite content. " +
+    "Aggressively drop hallucinations: blank the CLEANED_TEXT for any segment that is only filler (hmm, uh, aham, haan haan, mm-hmm), Whisper stock phrases (Thank you / Thanks for watching / Subscribe / Bye / 'I'm not going to read the text' / 'Ruins fat is here'), repetition loops where the same word or phrase repeats 3+ times with no content, the literal word 'foreign' repeated, or Korean / Japanese / Chinese characters appearing inside an English or Hindi meeting. " +
     "Keep the speaker source intact: microphone means Me/host; speaker means Them/other participants. " +
     "Output exactly one line per input segment in this format: SEGMENT_ID | SOURCE | CLEANED_TEXT. " +
     "Use SOURCE as microphone or speaker exactly. Do not merge segments. Do not add headings, bullets, prose, timestamps, or citations. " +
