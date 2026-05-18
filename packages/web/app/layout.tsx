@@ -14,6 +14,7 @@ import { HomeRecordingButton } from "@/components/recording/HomeRecordingButton"
 import { Footer } from "@/components/shared/Footer";
 import { AuthProvider, useAuth } from "@/lib/contexts/AuthContext";
 import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
+import { QueryProvider } from "@/lib/providers/QueryProvider";
 import "./globals.css";
 
 const figtree = Figtree({
@@ -116,11 +117,13 @@ export default function RootLayout({
         </Script>
       </head>
       <body className="bg-slate-950 text-white antialiased font-sans" suppressHydrationWarning>
-        <AuthProvider>
-          <SubscriptionProvider>
-            <LayoutContent>{children}</LayoutContent>
-          </SubscriptionProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <SubscriptionProvider>
+              <LayoutContent>{children}</LayoutContent>
+            </SubscriptionProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

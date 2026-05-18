@@ -1,12 +1,11 @@
 //! Whisper model lifecycle (download, load, warm) and core transcription
 //! pipeline shared between dictation and meeting flows.
 
-use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex, OnceLock};
-use tauri::Emitter;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+use crate::events::{DownloadProgress, OscarEvent};
 use crate::hardware::HardwareProfile;
 use crate::state::{
     AppState, TranscriptSegmentResult, TranscriptSpeaker, TranscriptionResult,
@@ -18,13 +17,6 @@ use crate::state::{
 fn hardware_profile() -> &'static HardwareProfile {
     static PROFILE: OnceLock<HardwareProfile> = OnceLock::new();
     PROFILE.get_or_init(HardwareProfile::detect)
-}
-
-#[derive(Clone, Serialize)]
-struct DownloadProgress {
-    downloaded: u64,
-    total: u64,
-    percentage: u8,
 }
 
 #[tauri::command]
@@ -96,14 +88,12 @@ pub async fn download_whisper_model(
         // webview IPC channel on fast networks.
         if percentage != last_emit_pct {
             last_emit_pct = percentage;
-            let _ = app.emit(
-                "download-progress",
-                DownloadProgress {
-                    downloaded,
-                    total: total_size,
-                    percentage,
-                },
-            );
+            OscarEvent::DownloadProgress(DownloadProgress {
+                downloaded,
+                total: total_size,
+                percentage,
+            })
+            .dispatch(&app);
         }
     }
 
@@ -293,22 +283,19 @@ fn is_hallucination_segment(trimmed: &str, language: &str) -> bool {
     false
 }
 
-/// Cheap energy-gate VAD: returns false when the audio chunk's RMS energy
-/// looks like silence/noise floor. Lets the caller skip running Whisper on
-/// chunks that contain no real speech, which is the strongest mitigation for
-/// silence-triggered hallucinations.
-fn audio_has_speech(audio_data: &[f32]) -> bool {
+/// Frame-level VAD pre-filter. Returns a speech-only audio buffer with
+/// interior silence stripped, plus a flag indicating whether any speech
+/// survived. Replaces the old whole-clip energy gate — interior gaps no
+/// longer feed silent samples into Whisper, which is the strongest
+/// mitigation for silence-triggered hallucinations.
+fn filter_speech(audio_data: &[f32]) -> (Vec<f32>, bool) {
     if audio_data.is_empty() {
-        return false;
+        return (Vec::new(), false);
     }
-    let sum_squares: f64 = audio_data
-        .iter()
-        .map(|sample| (*sample as f64) * (*sample as f64))
-        .sum();
-    let rms = (sum_squares / audio_data.len() as f64).sqrt();
-    // Empirically picked: typical meeting silence floor sits below 0.002 RMS
-    // on 16-bit-normalized f32 audio; soft speech is comfortably above 0.005.
-    rms > 0.003
+    let mut detector = crate::vad::make_default();
+    let filtered = crate::vad::keep_speech_only(audio_data, detector.as_mut());
+    let has_speech = !filtered.is_empty();
+    (filtered, has_speech)
 }
 
 /// Shared transcription logic used by both `transcribe_audio` and
@@ -328,9 +315,10 @@ pub(crate) fn transcribe_audio_inner(
         });
     }
 
-    if !audio_has_speech(audio_data) {
+    let (speech_audio, has_speech) = filter_speech(audio_data);
+    if !has_speech {
         log::info!(
-            "[whisper] Skipping inference — audio chunk below VAD energy threshold ({} samples)",
+            "[whisper] Skipping inference — VAD found no speech in {} samples",
             audio_data.len()
         );
         return Ok(TranscriptionResult {
@@ -341,11 +329,14 @@ pub(crate) fn transcribe_audio_inner(
     }
 
     log::info!(
-        "[whisper] transcribe_audio_inner — {} samples ({:.1}s), lang={:?}",
+        "[whisper] transcribe_audio_inner — input {} samples ({:.1}s) → speech {} samples ({:.1}s), lang={:?}",
         audio_data.len(),
         audio_data.len() as f64 / 16000.0,
+        speech_audio.len(),
+        speech_audio.len() as f64 / 16000.0,
         language
     );
+    let audio_data: &[f32] = &speech_audio;
 
     // Lock briefly to grab a handle to the shared context, then release —
     // otherwise the AppState mutex is held for the whole inference (multiple

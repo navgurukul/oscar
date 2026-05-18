@@ -27,6 +27,14 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.90.1",
     "@tabler/icons-react": "^3.36.1",
+    "@tanstack/react-query": "^5.100.10",
+    "@tiptap/extension-link": "^3.23.4",
+    "@tiptap/extension-placeholder": "^3.23.4",
+    "@tiptap/extension-task-item": "^3.23.4",
+    "@tiptap/extension-task-list": "^3.23.4",
+    "@tiptap/pm": "^3.23.4",
+    "@tiptap/react": "^3.23.4",
+    "@tiptap/starter-kit": "^3.23.4",
     "@tsparticles/engine": "^3.9.1",
     "@tsparticles/react": "^3.0.0",
     "@tsparticles/slim": "^3.9.1",
@@ -39,9 +47,12 @@
     "razorpay": "^2.9.6",
     "react": "19",
     "react-dom": "19",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "speech-to-speech": "^0.1.5",
     "tailwind-merge": "^3.4.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "tiptap-markdown": "^0.9.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

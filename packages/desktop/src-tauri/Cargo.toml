@@ -10,8 +10,10 @@ name = "oscar_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
+default = []
 cuda   = ["whisper-rs/cuda"]
 vulkan = ["whisper-rs/vulkan"]
+silero-vad = ["dep:voice_activity_detector"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -41,6 +43,7 @@ opus = "0.3"
 sysinfo = { version = "0.32", default-features = false, features = ["system"] }
 sha2 = "0.10"
 num_cpus = "1.16"
+voice_activity_detector = { version = "0.2", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.52", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Threading"] }

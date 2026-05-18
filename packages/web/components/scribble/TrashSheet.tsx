@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { RotateCcw, X } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -11,6 +12,11 @@ import {
 } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { scribblesService } from "@/lib/services/scribbles.service";
+import {
+  useTrashedScribbles,
+  useRestoreScribble,
+} from "@/lib/hooks/queries/useScribbles";
+import { queryKeys } from "@/lib/hooks/queries/keys";
 import type { DBScribble } from "@/lib/types/scribble.types";
 
 interface TrashSheetProps {
@@ -20,56 +26,43 @@ interface TrashSheetProps {
 }
 
 export function TrashSheet({ open, onOpenChange, onRestore }: TrashSheetProps) {
-  const [trashedScribbles, setTrashedScribbles] = useState<DBScribble[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const qc = useQueryClient();
+  const { data: trashedScribbles = [], isLoading } = useTrashedScribbles(open);
+  const restoreMutation = useRestoreScribble();
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      loadTrashedScribbles();
-    }
-  }, [open]);
-
-  const loadTrashedScribbles = async () => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await scribblesService.getTrashedScribbles();
-      if (error) {
-        console.error("Failed to load trashed scribbles:", error);
-        setTrashedScribbles([]);
-      } else {
-        setTrashedScribbles(data || []);
-      }
-    } catch (err) {
-      console.error("Error loading trashed scribbles:", err);
-      setTrashedScribbles([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const permanentDelete = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await scribblesService.permanentDelete(id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: (id) => {
+      qc.setQueryData<DBScribble[]>(queryKeys.trashedScribbles, (prev) =>
+        prev ? prev.filter((s) => s.id !== id) : prev,
+      );
+    },
+  });
 
   const handleRestore = async (id: string) => {
     setRestoringId(id);
-    const { error } = await scribblesService.restoreScribble(id);
-    if (error) {
-      console.error("Failed to restore scribble:", error);
-    } else {
-      setTrashedScribbles((prev) => prev.filter((scribble) => scribble.id !== id));
+    try {
+      await restoreMutation.mutateAsync(id);
       onRestore?.();
+    } catch (err) {
+      console.error("Failed to restore scribble:", err);
     }
     setRestoringId(null);
   };
 
   const handlePermanentDelete = async (id: string) => {
     if (!confirm("Delete forever?")) return;
-
     setDeletingId(id);
-    const { error } = await scribblesService.permanentDelete(id);
-    if (error) {
-      console.error("Failed to delete scribble:", error);
-    } else {
-      setTrashedScribbles((prev) => prev.filter((scribble) => scribble.id !== id));
+    try {
+      await permanentDelete.mutateAsync(id);
+    } catch (err) {
+      console.error("Failed to delete scribble:", err);
     }
     setDeletingId(null);
   };

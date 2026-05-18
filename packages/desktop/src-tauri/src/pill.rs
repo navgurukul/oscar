@@ -8,7 +8,9 @@
 //! Linux: secondary webview windows crash tao's event loop, so state lands on
 //! the tray-icon tooltip instead.
 
-use tauri::{Emitter, LogicalPosition, LogicalSize, Manager};
+use tauri::{LogicalPosition, LogicalSize, Manager};
+
+use crate::events::OscarEvent;
 
 // Window width is fixed; height grows per state.
 const PILL_W: f64 = 360.0;
@@ -153,7 +155,7 @@ pub fn show_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
 
         if let Some(w) = app.get_webview_window("recording-pill") {
             resize_pill(&w, PILL_H_EXPANDED);
-            let _ = app.emit_to("recording-pill", "pill-set-phase", "recording");
+            OscarEvent::PillSetPhase("recording".into()).dispatch(&app);
             w.show().map_err(|e| e.to_string())?;
 
             #[cfg(target_os = "macos")]
@@ -193,7 +195,7 @@ pub fn hide_recording_pill(app: tauri::AppHandle) -> Result<(), String> {
         // Collapse back to the rest height so clicks above the handle pass through.
         log::info!("[pill] hide_recording_pill → collapse to rest");
         if let Some(w) = app.get_webview_window("recording-pill") {
-            let _ = app.emit_to("recording-pill", "pill-set-phase", "rest");
+            OscarEvent::PillSetPhase("rest".into()).dispatch(&app);
             resize_pill(&w, PILL_H_REST);
         }
 
@@ -221,7 +223,7 @@ pub fn set_pill_processing(app: tauri::AppHandle) -> Result<(), String> {
         if let Some(w) = app.get_webview_window("recording-pill") {
             resize_pill(&w, PILL_H_EXPANDED);
         }
-        let _ = app.emit_to("recording-pill", "pill-set-phase", "processing");
+        OscarEvent::PillSetPhase("processing".into()).dispatch(&app);
 
         #[cfg(target_os = "macos")]
         crate::mac_tray::set_tooltip_processing();
@@ -247,7 +249,7 @@ pub fn set_pill_listening(app: tauri::AppHandle) -> Result<(), String> {
         if let Some(w) = app.get_webview_window("recording-pill") {
             resize_pill(&w, PILL_H_EXPANDED);
         }
-        let _ = app.emit_to("recording-pill", "pill-set-phase", "recording");
+        OscarEvent::PillSetPhase("recording".into()).dispatch(&app);
 
         #[cfg(target_os = "macos")]
         crate::mac_tray::set_tooltip_recording();
@@ -288,7 +290,7 @@ pub fn set_pill_phase(app: tauri::AppHandle, phase: String) -> Result<(), String
             };
             resize_pill(&w, h);
         }
-        let _ = app.emit_to("recording-pill", "pill-set-phase", &phase);
+        OscarEvent::PillSetPhase(phase.clone()).dispatch(&app);
 
         #[cfg(target_os = "macos")]
         match phase.as_str() {
@@ -317,7 +319,7 @@ pub fn pill_request_record_start(app: tauri::AppHandle) -> Result<(), String> {
     }
 
     let payload = crate::frontmost::get_frontmost_context_payload();
-    let _ = app.emit("hotkey-recording-start", payload);
+    OscarEvent::HotkeyRecordingStart(payload).dispatch(&app);
     Ok(())
 }
 
@@ -326,7 +328,7 @@ pub fn pill_request_record_start(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn pill_request_record_stop(app: tauri::AppHandle) -> Result<(), String> {
     log::info!("[pill] pill_request_record_stop");
-    let _ = app.emit("hotkey-recording-stop", ());
+    OscarEvent::HotkeyRecordingStop.dispatch(&app);
     Ok(())
 }
 
@@ -352,7 +354,7 @@ pub fn pill_push_settings(
             "language": language,
             "autoApply": auto_apply,
         });
-        let _ = app.emit_to("recording-pill", "pill-settings-init", payload);
+        OscarEvent::PillSettingsInit(payload).dispatch(&app);
         Ok(())
     }
 }

@@ -83,7 +83,7 @@ pub(crate) struct TranscriptionResult {
     pub(crate) segments: Option<Vec<TranscriptSegmentResult>>,
 }
 
-#[derive(Serialize, Clone, Default)]
+#[derive(Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct FrontmostContextPayload {
     pub(crate) platform: String,

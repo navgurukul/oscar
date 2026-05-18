@@ -5,6 +5,28 @@
 //          audio render device (speakers / headphones).
 // Linux:   PulseAudio / PipeWire-PA monitor source via `parec` subprocess.
 //          Requires pulseaudio-utils (Ubuntu/Debian) or pipewire-pulse.
+//
+// Architecture: each OS module exposes the same four free functions. A
+// `SystemAudioBackend` trait wraps them so call sites can hold a single
+// `&dyn` handle and tests can substitute a mock. The trait is intentionally
+// thin — implementations delegate to the existing platform free functions,
+// which already own their per-OS state. Future work can move that state
+// onto the backend struct if needed.
+
+/// Capture backend. All implementations expect samples at 16 kHz mono.
+pub trait SystemAudioBackend: Send + Sync {
+    /// Whether the OS supports system-audio capture in this build/runtime.
+    fn is_supported(&self) -> bool;
+
+    /// Begin capture. Subsequent reads via `drain` will return audio.
+    fn start_capture(&self) -> Result<(), String>;
+
+    /// Stop capture. Pending buffered samples remain readable until drained.
+    fn stop_capture(&self);
+
+    /// Drain the capture buffer and return ownership of the samples.
+    fn drain(&self) -> Vec<f32>;
+}
 
 // ── macOS ─────────────────────────────────────────────────────────────────────
 
@@ -405,4 +427,30 @@ mod platform {
     pub fn get_audio_data() -> Vec<f32> { Vec::new() }
 }
 
-pub use platform::*;
+// ── Trait-backed handle ──────────────────────────────────────────────────────
+
+/// Concrete backend for the host OS. Stateless — it delegates to the
+/// platform free functions, which own the actual capture state.
+pub struct PlatformBackend;
+
+impl SystemAudioBackend for PlatformBackend {
+    fn is_supported(&self) -> bool {
+        platform::is_supported()
+    }
+    fn start_capture(&self) -> Result<(), String> {
+        platform::start_capture()
+    }
+    fn stop_capture(&self) {
+        platform::stop_capture()
+    }
+    fn drain(&self) -> Vec<f32> {
+        platform::get_audio_data()
+    }
+}
+
+/// Single shared handle for callers that want to hold `&dyn SystemAudioBackend`.
+/// Tests can ignore this and construct a mock that implements the trait.
+pub fn backend() -> &'static dyn SystemAudioBackend {
+    static B: PlatformBackend = PlatformBackend;
+    &B
+}

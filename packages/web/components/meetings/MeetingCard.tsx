@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { MeetingNotesEditor } from "./MeetingNotesEditor";
 import { MeetingMetadataEditor } from "./MeetingMetadataEditor";
 import { DeleteMeetingDialog } from "./DeleteMeetingDialog";
+import { MarkdownView } from "./MarkdownView";
 import type {
   SavedMeetingRecord,
   MeetingTranscriptSegment,
@@ -313,9 +314,7 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
                   onCancel={() => setEditingNotes(false)}
                 />
               ) : hasNotes ? (
-                <div className="prose prose-sm prose-invert max-w-none text-slate-300 whitespace-pre-wrap leading-relaxed">
-                  {meeting.notesMarkdown}
-                </div>
+                <MarkdownView>{meeting.notesMarkdown}</MarkdownView>
               ) : (
                 <p className="text-sm text-slate-500 italic">
                   No AI notes yet. Click edit to add notes.
@@ -347,9 +346,9 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
                   onCancel={() => setEditingMyNotes(false)}
                 />
               ) : hasMyNotes ? (
-                <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
+                <MarkdownView className="prose prose-sm prose-invert max-w-none text-slate-300 leading-relaxed">
                   {meeting.myNotesMarkdown}
-                </div>
+                </MarkdownView>
               ) : (
                 <p className="text-sm text-slate-500 italic">
                   No personal notes. Click edit to add.
