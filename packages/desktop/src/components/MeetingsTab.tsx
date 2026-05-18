@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { aiService } from "../services/ai.service";
@@ -40,6 +40,13 @@ import type {
   MeetingTypeHint,
   SavedMeetingRecord,
 } from "../types/meeting.types";
+import {
+  buildLabeledTranscript,
+  groupSegmentsIntoTurns,
+  resolveSpeakerLabels,
+  type SpeakerLabels,
+  type TranscriptTurn,
+} from "../lib/transcript-utils";
 
 const GOOGLE_CALENDAR_LOGO_URL =
   "https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253";
@@ -114,6 +121,8 @@ interface MeetingsTabProps {
   minutesSegmentQueue: number;
   minutesSegmentsCompleted: number;
   minutesSegmentsTotal: number;
+  hostName: string;
+  hostEmail: string;
 }
 
 const MEETING_TYPE_OPTIONS: Array<{
@@ -459,6 +468,8 @@ export function MeetingsTab({
   minutesSegmentQueue,
   minutesSegmentsCompleted,
   minutesSegmentsTotal,
+  hostName,
+  hostEmail,
 }: MeetingsTabProps) {
   const [meetingTypeHint, setMeetingTypeHint] = useState<MeetingTypeHint>("auto");
   const [meetingTitle, setMeetingTitle] = useState("");
@@ -485,6 +496,19 @@ export function MeetingsTab({
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const lastCalendarFetchRef = useRef<string>("");
   const liveTranscriptScrollRef = useRef<HTMLDivElement>(null);
+
+  const liveSpeakerLabels = useMemo<SpeakerLabels>(
+    () => resolveSpeakerLabels(attendees, hostName, hostEmail),
+    [attendees, hostName, hostEmail],
+  );
+
+  const savedSpeakerLabels = useMemo<SpeakerLabels>(
+    () =>
+      viewingSaved
+        ? resolveSpeakerLabels(viewingSaved.attendeesFull, hostName, hostEmail)
+        : liveSpeakerLabels,
+    [viewingSaved, hostName, hostEmail, liveSpeakerLabels],
+  );
 
   useEffect(() => {
     if (phase === "recording" && liveTranscriptScrollRef.current) {
@@ -739,6 +763,11 @@ export function MeetingsTab({
     const meetingId = `meeting_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     savedMeetingIdRef.current = meetingId;
 
+    const labeledTranscript =
+      request.transcript_segments.length > 0
+        ? buildLabeledTranscript(request.transcript_segments, liveSpeakerLabels)
+        : transcript;
+
     onSaveMeeting({
       id: meetingId,
       startedAt:
@@ -751,7 +780,7 @@ export function MeetingsTab({
       attendeesFull: request.attendees_full,
       calendarContext: request.calendar_context,
       meetingTypeHint: request.meeting_type_hint,
-      transcript,
+      transcript: labeledTranscript,
       transcriptSegments: request.transcript_segments,
       myNotesMarkdown: request.my_notes_markdown,
       notesMarkdown: result,
@@ -760,6 +789,7 @@ export function MeetingsTab({
   }, [
     buildNoteRequest,
     error,
+    liveSpeakerLabels,
     meetingStartedAt,
     onSaveMeeting,
     phase,
@@ -1201,16 +1231,12 @@ export function MeetingsTab({
 
           {resultTab === "transcript" && (
             <div className="p-0">
-              {viewingSaved.transcript.trim() ? (
-                <div className="max-h-[400px] overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-[1.65] text-gray-700">
-                  {viewingSaved.transcript}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2 px-5 py-10 text-[0.8125rem] text-slate-400">
-                  <Mic size={20} />
-                  <span>No transcript available.</span>
-                </div>
-              )}
+              <TranscriptView
+                segments={viewingSaved.transcriptSegments}
+                fallbackText={viewingSaved.transcript}
+                labels={savedSpeakerLabels}
+                emptyMessage="No transcript available."
+              />
             </div>
           )}
         </div>
@@ -1332,8 +1358,13 @@ export function MeetingsTab({
                 ref={liveTranscriptScrollRef}
                 className="max-h-[180px] min-h-[60px] overflow-y-auto rounded-lg bg-slate-50 px-3.5 py-2.5 text-[0.8125rem] leading-[1.65] text-gray-600"
               >
-                {transcript.trim() ? (
-                  <span className="whitespace-pre-wrap">{transcript}</span>
+                {transcriptSegments.length > 0 || transcript.trim() ? (
+                  <TranscriptTurns
+                    segments={transcriptSegments}
+                    fallbackText={transcript}
+                    labels={liveSpeakerLabels}
+                    compact
+                  />
                 ) : (
                   <span className="italic text-slate-300">Listening…</span>
                 )}
@@ -1509,19 +1540,98 @@ export function MeetingsTab({
 
         {resultTab === "transcript" && (
           <div className="p-0">
-            {transcript.trim() ? (
-              <div className="max-h-[400px] overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-[1.65] text-gray-700">
-                {transcript}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 px-5 py-10 text-[0.8125rem] text-slate-400">
-                <Mic size={20} />
-                <span>No transcript yet.</span>
-              </div>
-            )}
+            <TranscriptView
+              segments={transcriptSegments}
+              fallbackText={transcript}
+              labels={liveSpeakerLabels}
+              emptyMessage="No transcript yet."
+            />
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+interface TranscriptTurnsProps {
+  segments: MeetingTranscriptSegment[];
+  fallbackText: string;
+  labels: SpeakerLabels;
+  compact?: boolean;
+}
+
+function TranscriptTurns({
+  segments,
+  fallbackText,
+  labels,
+  compact = false,
+}: TranscriptTurnsProps) {
+  const turns: TranscriptTurn[] =
+    segments.length > 0 ? groupSegmentsIntoTurns(segments, labels) : [];
+
+  if (turns.length === 0) {
+    const trimmed = fallbackText.trim();
+    if (!trimmed) return null;
+    return (
+      <div className={cn("whitespace-pre-wrap", compact && "leading-[1.65]")}>
+        <span className="mr-1 font-semibold text-slate-700">
+          {labels.microphone}:
+        </span>
+        <span>{trimmed}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("flex flex-col", compact ? "gap-1.5" : "gap-3")}>
+      {turns.map((turn, index) => (
+        <div key={`${turn.startTime}-${index}`} className="whitespace-pre-wrap">
+          <span
+            className={cn(
+              "mr-1 font-semibold",
+              turn.source === "microphone" ? "text-cyan-700" : "text-slate-700",
+            )}
+          >
+            {turn.label}:
+          </span>
+          <span>{turn.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface TranscriptViewProps {
+  segments: MeetingTranscriptSegment[];
+  fallbackText: string;
+  labels: SpeakerLabels;
+  emptyMessage: string;
+}
+
+function TranscriptView({
+  segments,
+  fallbackText,
+  labels,
+  emptyMessage,
+}: TranscriptViewProps) {
+  const hasContent = segments.length > 0 || fallbackText.trim().length > 0;
+
+  if (!hasContent) {
+    return (
+      <div className="flex flex-col items-center gap-2 px-5 py-10 text-[0.8125rem] text-slate-400">
+        <Mic size={20} />
+        <span>{emptyMessage}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-h-[400px] overflow-y-auto rounded-lg bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-[1.65] text-gray-700">
+      <TranscriptTurns
+        segments={segments}
+        fallbackText={fallbackText}
+        labels={labels}
+      />
     </div>
   );
 }

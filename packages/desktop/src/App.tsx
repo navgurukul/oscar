@@ -2512,6 +2512,8 @@ function App() {
                     saveSetting("savedMeetings", updated);
                     meetingsService.deleteMeeting(id).catch((e) => console.warn("[minutes] delete failed:", e));
                   }}
+                  hostName={user.user_metadata?.full_name || ""}
+                  hostEmail={user.email || ""}
                   minutesTranscriptionStatus={minutesTranscriptionStatus}
                   minutesSegmentQueue={minutesSegmentQueue}
                   minutesSegmentsCompleted={minutesSegmentsCompleted}
