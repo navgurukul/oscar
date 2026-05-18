@@ -322,11 +322,11 @@ export default function ResultsPage() {
       setSelectedLanguage(lang);
       setTranslatedScribble(cachedScribble || "");
       setTranslatedRaw(cachedRaw || "");
-      
+
       // Update modeContent for translate mode
       setModeContent(prev => ({ ...prev, translate: cachedScribble || "" }));
       setEditedText(cachedScribble || "");
-      
+
       toast({
         title: "Language updated",
         description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
@@ -381,7 +381,7 @@ export default function ResultsPage() {
       setSelectedLanguage(lang);
       setTranslatedScribble(scribbleText);
       setTranslatedRaw(rawTextTranslated);
-      
+
       // Update modeContent for translate mode
       setModeContent(prev => ({ ...prev, translate: scribbleText }));
       setEditedText(scribbleText);
@@ -601,7 +601,7 @@ export default function ResultsPage() {
                     <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 px-3 py-1 text-sm flex items-center gap-2 hover:bg-cyan-500/20 transition-colors cursor-default">
                       <FolderPlus className="w-3.5 h-3.5" />
                       {selectedFolder}
-                      <button 
+                      <button
                         onClick={() => handleUpdateFolder(null)}
                         className="text-cyan-400 hover:text-red-400 transition-colors ml-1"
                       >
@@ -670,7 +670,7 @@ export default function ResultsPage() {
         <div className="flex flex-col items-center gap-1.5 w-full mb-2">
           <p className="text-sm text-gray-400 font-medium">Transform this Scribble into <span className="text-base font-bold text-cyan-400">→</span></p>
           <TooltipProvider>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 shadow-2xl z-10"
@@ -687,8 +687,8 @@ export default function ResultsPage() {
                     <button
                       onClick={() => void handleSelectMode(mode.id as typeof activeMode)}
                       className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
-                        activeMode === mode.id 
-                          ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
+                        activeMode === mode.id
+                          ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
                           : "text-gray-400 hover:text-white hover:bg-white/5"
                       }`}
                     >
@@ -765,8 +765,8 @@ export default function ResultsPage() {
       </div>
 
       <ScribbleActions
-        onSave={handleSaveToDatabase} 
-        isSaving={isSaving} 
+        onSave={handleSaveToDatabase}
+        isSaving={isSaving}
         showSave={!isScribbleSaved}
       />
 

@@ -67,12 +67,14 @@ jobs:
             cflags: "-march=armv8-a -mmacosx-version-min=12.0"
             macosx_deployment_target: "12.0"
             bundles: "app,dmg"
+            extra_cargo_args: ""
           - target: x86_64-apple-darwin
             label: macos-intel
             os: macos-14
             cflags: "-mmacosx-version-min=12.0"
             macosx_deployment_target: "12.0"
             bundles: "app,dmg"
+            extra_cargo_args: ""
           # ── Windows ──
           - target: x86_64-pc-windows-msvc
             label: windows-x64
@@ -80,6 +82,7 @@ jobs:
             cflags: ""
             macosx_deployment_target: ""
             bundles: "nsis"
+            extra_cargo_args: ""
           # ── Linux ──
           - target: x86_64-unknown-linux-gnu
             label: linux-x64
@@ -87,6 +90,7 @@ jobs:
             cflags: ""
             macosx_deployment_target: ""
             bundles: "appimage,deb"
+            extra_cargo_args: ""
 
     runs-on: ${{ matrix.os }}
 
@@ -197,7 +201,7 @@ jobs:
           VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
           VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
-        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} ${{ matrix.extra_cargo_args }}
 
       - name: Sign bundles
         if: runner.os != 'Windows'
@@ -233,7 +237,18 @@ jobs:
         run: |
           $TAURI_BIN = "../../node_modules/.bin/tauri"
           $BASE = "src-tauri/target/$env:TARGET/release/bundle/nsis"
-          Get-ChildItem "$BASE/*.nsis.zip" -ErrorAction SilentlyContinue | ForEach-Object {
+
+          # Tauri v2 does not always auto-generate the .nsis.zip updater artifact.
+          # Create it manually from the .exe if it doesn't exist.
+          Get-ChildItem "$BASE\*.exe" -ErrorAction SilentlyContinue | ForEach-Object {
+            $zipPath = $_.FullName -replace '\.exe$', '.nsis.zip'
+            if (-not (Test-Path $zipPath)) {
+              Write-Host "Creating updater zip: $(Split-Path $zipPath -Leaf)"
+              Compress-Archive -Path $_.FullName -DestinationPath $zipPath -Force
+            }
+          }
+
+          Get-ChildItem "$BASE\*.nsis.zip" -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Host "Signing $($_.Name)..."
             & $TAURI_BIN signer sign $_.FullName
           }

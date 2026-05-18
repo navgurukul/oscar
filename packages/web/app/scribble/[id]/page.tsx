@@ -115,7 +115,7 @@ export default function ScribbleDetailPage() {
 
   const applyLanguage = async (lang: "original" | "en" | "hi") => {
     if (!scribble) return;
-    
+
     if (lang === "original") {
       translateControllerRef.current?.abort();
       translateControllerRef.current = null;
@@ -399,7 +399,7 @@ export default function ScribbleDetailPage() {
   return (
     <main className="min-h-screen bg-[#020617] text-white flex flex-col items-center pt-24 pb-32 px-4 relative overflow-x-hidden">
       {/* Scribble Header Info (Centered) */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-3xl text-center mb-4 space-y-3 mt-5"
@@ -416,7 +416,7 @@ export default function ScribbleDetailPage() {
       <div className="flex flex-col items-center gap-1.5 w-full mb-4">
         <p className="text-sm text-gray-400 font-medium">Transform this Scribble into <span className="text-base font-bold text-cyan-400">→</span></p>
         <TooltipProvider>
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 shadow-2xl z-10"
@@ -433,8 +433,8 @@ export default function ScribbleDetailPage() {
                   <button
                     onClick={() => void handleSelectMode(mode.id as typeof activeMode)}
                     className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
-                      activeMode === mode.id 
-                        ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20" 
+                      activeMode === mode.id
+                        ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
                         : "text-gray-400 hover:text-white hover:bg-white/5"
                     }`}
                   >
@@ -489,7 +489,7 @@ export default function ScribbleDetailPage() {
       </div>
 
       {/* Main Scribble Card */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
@@ -498,7 +498,7 @@ export default function ScribbleDetailPage() {
         <div className="bg-[#0f172a]/60 backdrop-blur-sm border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl relative group overflow-hidden">
           {/* Subtle Glow Effect */}
           <div className="absolute -top-16 -right-16 w-48 h-48 bg-cyan-500/5 blur-[80px] rounded-full pointer-events-none" />
-          
+
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
             <div className="space-y-1.5">
               <h2 className="text-xl font-bold text-white leading-tight">
@@ -514,7 +514,7 @@ export default function ScribbleDetailPage() {
               <div className="flex items-center gap-1 self-end md:self-start">
                 <Tooltip delayDuration={200}>
                   <TooltipTrigger asChild>
-                    <button 
+                    <button
                       onClick={handleToggleStar}
                       className={`p-2 rounded-lg transition-all duration-300 ${scribble.is_starred ? 'text-cyan-400 bg-cyan-400/10' : 'text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5'}`}
                     >

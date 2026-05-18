@@ -110,4 +110,3 @@ pub struct ModelSpec {
     pub quality: u8,
     pub supports_multilingual: bool,
 }
-

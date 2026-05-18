@@ -27,6 +27,8 @@ export interface Transcription {
   }>;
 }
 
+
+
 export interface MeetingSegmentJob {
   blob: Blob;
   ext: string;
