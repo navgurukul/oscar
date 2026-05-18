@@ -75,6 +75,10 @@
       inset: 0;
       pointer-events: auto;
       z-index: 5;
+      /* Near-zero alpha so the WebView claims the transparent region for
+         cursor hit-testing on macOS NSPanel — pure transparent can drop
+         mouse-move events. */
+      background: rgba(0, 0, 0, 0.001);
     }
 
     /* ─── Full Paper pill (expanded states) ────────────────────────────── */
@@ -717,16 +721,17 @@
     }
 
     /* ─── Hit zone / handle hover ──────────────────────────────────────── */
-    const READY_HOLD_MS = 180;
+    const READY_HOLD_MS = 40;
 
+    function expandNow() {
+      if (phase === 'rest' || phase === 'ready') {
+        applyPhase('expanded');
+        callTauri('set_pill_phase', { phase: 'expanded' });
+      }
+    }
     function scheduleExpand() {
       clearTimeout(readyHoldTimer);
-      readyHoldTimer = setTimeout(() => {
-        if (phase === 'rest' || phase === 'ready') {
-          applyPhase('expanded');
-          callTauri('set_pill_phase', { phase: 'expanded' });
-        }
-      }, READY_HOLD_MS);
+      readyHoldTimer = setTimeout(expandNow, READY_HOLD_MS);
     }
 
     const hitZone = document.getElementById('hit-zone');
@@ -740,9 +745,25 @@
         scheduleExpand();
       }
     });
+    // Mousemove fallback — covers macOS NSPanel quirks where mouseenter
+    // can miss on the very first cursor entry while window not key.
+    hitZone.addEventListener('mousemove', () => {
+      if (phase === 'rest' || phase === 'ready') {
+        clearTimeout(leaveTimer);
+        if (phase === 'rest') {
+          applyPhase('ready');
+          callTauri('set_pill_phase', { phase: 'ready' });
+        }
+        scheduleExpand();
+      }
+    });
     hitZone.addEventListener('click', () => {
-      if (phase === 'rest' || phase === 'ready' || phase === 'expanded') {
-        callTauri('pill_request_record_start');
+      // Click on the bottom handle area expands the pill instead of jumping
+      // straight to recording. Recording starts only via an explicit click on
+      // the expanded pill body (handled below).
+      if (phase === 'rest' || phase === 'ready') {
+        clearTimeout(readyHoldTimer);
+        expandNow();
       }
     });
     hitZone.addEventListener('mouseleave', () => {
