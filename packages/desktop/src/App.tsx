@@ -1053,6 +1053,8 @@ function App() {
     }
     const rms = Math.sqrt(sumSquares / audioData.length);
     if (rms < 0.01) {
+      setIsProcessing(false);
+      setStatus("No speech detected. Try speaking louder or closer.");
       invoke("hide_recording_pill").catch(console.warn);
       return;
     }

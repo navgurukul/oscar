@@ -967,7 +967,7 @@ fn transcribe_audio_inner(
     if let Some(prompt) = initial_prompt {
         if !prompt.is_empty() {
             log::debug!("[whisper] Using initial prompt ({} chars)", prompt.len());
-            // params.set_initial_prompt(prompt);  // API removed in newer whisper-rs
+            params.set_initial_prompt(prompt);
         }
     }
 
