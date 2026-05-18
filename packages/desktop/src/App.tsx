@@ -808,8 +808,16 @@ function App() {
       (ev) => {
         const appName = ev.payload?.appName?.trim() || "";
         const isSelfApp = SELF_APP_NAMES.includes(appName.toLowerCase());
+
+        // Don't double-fire while another recording flow is in-flight.
+        // NOTE: previously this also bailed on `isSelfApp`, which silently
+        // dropped the hotkey whenever macOS reported Oscar as frontmost —
+        // e.g. when the always-visible pill window or the main window had
+        // recent focus. That made Ctrl+Space appear dead. We now always
+        // start the recording; if the frontmost truly is Oscar, the paste
+        // path falls back to clipboard-only (target stays empty) instead of
+        // pasting into Oscar itself.
         if (
-          isSelfApp ||
           isScribbleRecordingRef.current ||
           isScribbleProcessingRef.current ||
           isMeetingRecordingRef.current
