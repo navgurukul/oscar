@@ -67,6 +67,8 @@ const MAX_SEGMENT_BATCH_CHARS = 12_000;
 const MAX_SEGMENT_BATCH_SIZE = 80;
 const NO_USABLE_MEETING_NOTES_ERROR =
   "NO_USABLE_MEETING_NOTES: model output contained no transcript-backed bullets.";
+const NON_SUBSTANTIVE_BULLET_RE =
+  /^(none captured|no (specific )?.*captured|not captured|n\/a)\.?$/i;
 
 const STOP_WORDS = new Set([
   "a",
@@ -431,6 +433,21 @@ function sanitizeModelMarkdown(markdown: string): string {
     .trim();
 }
 
+function countSubstantiveBullets(markdown: string): number {
+  return markdown
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^\s*[-*]\s+/.test(line))
+    .map((line) =>
+      line
+        .replace(/^\s*[-*]\s+/, "")
+        .replace(/^\[[ xX]\]\s+/, "")
+        .trim(),
+    )
+    .filter((bullet) => bullet && !NON_SUBSTANTIVE_BULLET_RE.test(bullet))
+    .length;
+}
+
 function scoreSegmentMatch(
   bulletText: string,
   segment: MeetingTranscriptSegment,
@@ -654,6 +671,72 @@ function buildFinalMarkdown(
   };
 }
 
+async function generateUncitedFallbackMarkdown(
+  geminiApiKey: string,
+  request: EnhancedMeetingNoteRequest,
+  expectedSections: ParsedSections,
+  meetingType: InferredMeetingType,
+  transcriptMaterial: string,
+  previousAnswer: string,
+): Promise<FinalMarkdownResult> {
+  const sections = expectedSections.orderedHeadings;
+  const systemPrompt =
+    "You are recovering useful meeting notes from a noisy transcript. " +
+    "Output only markdown. Use the required section headings exactly as given; do not rename, reorder, add, or omit headings. " +
+    "Use markdown bullets under every heading. Do not use citation tokens. " +
+    "Prefer concrete action items, technical details, decisions, open questions, numeric values, branch names, PRs, testing needs, and design follow-ups. " +
+    "The transcript may mix English, Hindi, Hinglish, and speech-recognition errors. Infer only when strongly supported by the transcript. " +
+    "Never write blank sections. If a section truly has no evidence, write one bullet: None captured. " +
+    "For Action items, use '- [ ] <action> — <Owner>' with the owner if identifiable, or 'Owner: unassigned'.";
+
+  const userPrompt = [
+    formatMeetingContext(request, sections, meetingType),
+    request.my_notes_markdown.trim()
+      ? `Manual notes:\n${request.my_notes_markdown.trim()}`
+      : "",
+    `No-citation recovery required. Previous citation-based answer produced no usable bullets:\n${sanitizeModelMarkdown(previousAnswer)}`,
+    `Transcript material:\n${transcriptMaterial}`,
+    "Produce useful meeting notes now.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const fallbackPass = await callGemini(geminiApiKey, systemPrompt, userPrompt, 2_200);
+  return buildFinalMarkdown(request, expectedSections, fallbackPass);
+}
+
+function buildTranscriptExcerptFallbackMarkdown(
+  request: EnhancedMeetingNoteRequest,
+  expectedSections: ParsedSections,
+): string {
+  const transcriptExcerpt = request.transcript_segments
+    .map((segment) => segment.text.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .slice(0, 1_500)
+    .trim();
+
+  const lines = [
+    `## ${request.meeting_title || "Untitled Meeting"}`,
+    request.meeting_local_datetime,
+    request.attendees_compact,
+    "",
+  ];
+
+  for (const heading of expectedSections.orderedHeadings) {
+    lines.push(`### ${heading}`);
+    if (normalizeHeadingKey(heading) === "key topics" && transcriptExcerpt) {
+      lines.push(`- Transcript captured, but structured extraction failed. Excerpt: ${transcriptExcerpt}`);
+    } else {
+      lines.push("- None captured.");
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
 async function generateFinalMarkdown(
   geminiApiKey: string,
   request: EnhancedMeetingNoteRequest,
@@ -720,7 +803,24 @@ async function generateFinalMarkdown(
     request.transcript_segments.length > 0 &&
     finalOutput.transcriptBulletCount === 0
   ) {
-    throw new Error(NO_USABLE_MEETING_NOTES_ERROR);
+    try {
+      const fallbackOutput = await generateUncitedFallbackMarkdown(
+        geminiApiKey,
+        request,
+        expectedSections,
+        meetingType,
+        transcriptMaterial,
+        firstPass,
+      );
+
+      if (countSubstantiveBullets(fallbackOutput.markdown) > 0) {
+        return fallbackOutput.markdown;
+      }
+    } catch (fallbackError) {
+      console.warn("[meeting-enhance] no-citation fallback failed:", fallbackError);
+    }
+
+    return buildTranscriptExcerptFallbackMarkdown(request, expectedSections);
   }
 
   return finalOutput.markdown;
