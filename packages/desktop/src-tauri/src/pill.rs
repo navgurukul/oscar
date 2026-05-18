@@ -42,11 +42,23 @@ fn phase_height(phase: &str) -> f64 {
     }
 }
 
-fn current_pill_phase() -> &'static str {
+pub(crate) fn current_pill_phase() -> &'static str {
     CURRENT_PILL_PHASE
         .lock()
         .map(|phase| *phase)
         .unwrap_or("rest")
+}
+
+/// Called from background threads (e.g. the macOS cursor-hover poller) to
+/// drive the pill into a new phase without going through the JS layer.
+/// Hops to the main thread because NSWindow/NSPanel resizes are not safe
+/// off-thread.
+pub(crate) fn apply_phase_from_rust(app: &tauri::AppHandle, phase: &str) {
+    let normalized = normalize_phase(phase);
+    let app_clone = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        sync_pill_phase(&app_clone, normalized);
+    });
 }
 
 fn store_pill_phase(phase: &'static str) {
