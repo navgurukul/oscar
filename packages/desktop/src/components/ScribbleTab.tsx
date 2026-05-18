@@ -13,6 +13,8 @@ interface ScribbleTabProps {
   userId: string;
   refreshKey?: number;
   isRecording: boolean;
+  isProcessing?: boolean;
+  statusMessage?: string | null;
   onToggleRecording: () => void;
   recordingTime: number;
 }
@@ -37,6 +39,8 @@ export function ScribbleTab({
   userId,
   refreshKey = 0,
   isRecording,
+  isProcessing = false,
+  statusMessage = null,
   onToggleRecording,
   recordingTime,
 }: ScribbleTabProps) {
@@ -538,30 +542,69 @@ export function ScribbleTab({
       <div className="fixed bottom-6 sm:bottom-10 left-60 right-0 z-50 flex justify-center pointer-events-none">
         <div className="pointer-events-auto">
           <motion.div
-            whileHover={{ y: -5 }}
+            whileHover={isProcessing ? undefined : { y: -5 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
             className="flex flex-col items-center gap-2"
           >
-            {isRecording && (
-              <div className="text-sm font-mono text-rose-600 font-medium">
+            {isRecording && !isProcessing && (
+              <div className="text-sm font-mono text-rose-600 font-medium tabular-nums">
                 {formatTime(recordingTime)}
               </div>
             )}
-            <button
-              onClick={onToggleRecording}
-              title={isRecording ? "Stop Scribble recording" : "Record a new Scribble"}
-              className={`w-16 h-16 flex items-center justify-center sm:w-20 sm:h-20 rounded-full text-white shadow-lg hover:shadow-xl transition-all duration-200 ${
-                isRecording
-                  ? "bg-rose-600 hover:bg-rose-700 animate-pulse"
-                  : "bg-cyan-600 hover:bg-cyan-700"
-              }`}
-            >
-              {isRecording ? (
-                <Square className="w-6 h-6 sm:w-8 sm:h-8" fill="currentColor" />
-              ) : (
-                <Mic className="w-6 h-6 sm:w-8 sm:h-8" />
+            {(isProcessing || (statusMessage && !isRecording)) && (
+              <div
+                className={`text-xs font-medium px-3 py-1 rounded-full shadow-sm border ${
+                  isProcessing
+                    ? "bg-white text-cyan-700 border-cyan-100"
+                    : statusMessage?.toLowerCase().startsWith("failed") ||
+                      statusMessage?.toLowerCase().includes("too short") ||
+                      statusMessage?.toLowerCase().includes("no audio") ||
+                      statusMessage?.toLowerCase().includes("no speech") ||
+                      statusMessage?.toLowerCase().startsWith("sign in")
+                    ? "bg-rose-50 text-rose-700 border-rose-100"
+                    : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                }`}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  {isProcessing && <Loader2 size={12} className="spin" />}
+                  {statusMessage ?? "Processing…"}
+                </span>
+              </div>
+            )}
+            <div className="relative">
+              {isRecording && !isProcessing && (
+                <>
+                  <span className="absolute inset-0 rounded-full bg-rose-500/40 animate-ping" aria-hidden />
+                  <span className="absolute -inset-1 rounded-full ring-2 ring-rose-300/60" aria-hidden />
+                </>
               )}
-            </button>
+              <button
+                onClick={onToggleRecording}
+                disabled={isProcessing}
+                title={
+                  isProcessing
+                    ? "Processing Scribble…"
+                    : isRecording
+                    ? "Stop Scribble recording"
+                    : "Record a new Scribble"
+                }
+                className={`relative w-16 h-16 flex items-center justify-center sm:w-20 sm:h-20 rounded-full text-white shadow-lg transition-colors duration-200 ${
+                  isProcessing
+                    ? "bg-slate-400 cursor-wait"
+                    : isRecording
+                    ? "bg-rose-600 hover:bg-rose-700 hover:shadow-xl"
+                    : "bg-cyan-600 hover:bg-cyan-700 hover:shadow-xl"
+                }`}
+              >
+                {isProcessing ? (
+                  <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 spin" />
+                ) : isRecording ? (
+                  <Square className="w-6 h-6 sm:w-8 sm:h-8" fill="currentColor" />
+                ) : (
+                  <Mic className="w-6 h-6 sm:w-8 sm:h-8" />
+                )}
+              </button>
+            </div>
           </motion.div>
         </div>
       </div>

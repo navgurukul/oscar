@@ -36,6 +36,8 @@ export interface MeetingSegmentJob {
   useSystemAudio: boolean;
   startedAtMs: number;
   endedAtMs: number;
+  speechMs: number;
+  hasDetectedSpeech: boolean;
 }
 
 export interface HotkeyContextEventPayload {

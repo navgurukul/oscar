@@ -14,6 +14,7 @@ import { Header } from "./components/Header";
 import { ScribbleTab } from "./components/ScribbleTab";
 import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
+import { useMinutesRecorder } from "./hooks/useMinutesRecorder";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
 import { MeetingsTab } from "./components/MeetingsTab";
@@ -24,14 +25,8 @@ import {
   isContextAwarePlatform,
   routeDictationContext,
 } from "./lib/dictation-context";
-import type {
-  CalendarReconnectResult,
-  MinutesTranscriptionStatus,
-} from "./components/MeetingsTab";
-import type {
-  MeetingTranscriptSegment,
-  SavedMeetingRecord,
-} from "./types/meeting.types";
+import type { CalendarReconnectResult } from "./components/MeetingsTab";
+import type { SavedMeetingRecord } from "./types/meeting.types";
 import type {
   DictationContextSnapshot,
   LocalTranscript,
@@ -39,7 +34,6 @@ import type {
 import type {
   DownloadProgress,
   HotkeyContextEventPayload,
-  MeetingSegmentJob,
   MicrophonePermissionState,
   RoleModelState,
   TabType,
@@ -47,10 +41,7 @@ import type {
   Transcription,
   WhisperModelRole,
 } from "./lib/app-types";
-import {
-  MEETING_SEGMENT_DURATION_MS,
-  MINUTES_DATA_RESET_VERSION,
-} from "./lib/desktop-constants";
+import { MINUTES_DATA_RESET_VERSION } from "./lib/desktop-constants";
 import {
   buildDictationContextSnapshot,
   buildDictationMetadata,
@@ -58,14 +49,6 @@ import {
   getMicrophonePermissionState,
   isMacOS,
 } from "./lib/desktop-platform";
-import {
-  appendTranscriptSegment,
-  buildTranscriptFromStructuredSegments,
-  getTranscriptTailWords,
-  mergeMeetingTranscriptSegments,
-  toAbsoluteMeetingTranscriptSegments,
-  toFallbackMeetingTranscriptSegment,
-} from "./lib/transcript-utils";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
 import {
   FALLBACK_MODELS,
@@ -235,6 +218,8 @@ function App() {
   const [isScribbleRecording, setIsScribbleRecording] = useState(false);
   const [scribbleRecordingTime, setScribbleRecordingTime] = useState(0);
   const [scribbleRefreshKey, setScribbleRefreshKey] = useState(0);
+  const [isScribbleProcessing, setIsScribbleProcessing] = useState(false);
+  const [scribbleStatus, setScribbleStatus] = useState<string | null>(null);
   const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
   const [_isProcessing, setIsProcessing] = useState(false);
@@ -292,41 +277,9 @@ function App() {
   const [savedMeetings, setSavedMeetings] = useState<SavedMeetingRecord[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>("home");
 
-  // Meeting recording state (separate from hold-to-talk dictation)
-  const [isMeetingRecording, setIsMeetingRecording] = useState(false);
-  const [meetingRecordingTime, setMeetingRecordingTime] = useState(0);
-  const [meetingTranscript, setMeetingTranscript] = useState("");
-  const [meetingTranscriptSegments, setMeetingTranscriptSegments] = useState<
-    MeetingTranscriptSegment[]
-  >([]);
-  const [meetingStartedAt, setMeetingStartedAt] = useState("");
-  const [minutesTranscriptionStatus, setMinutesTranscriptionStatus] =
-    useState<MinutesTranscriptionStatus>("idle");
-  const [minutesSegmentQueue, setMinutesSegmentQueue] = useState(0);
-  const [minutesSegmentsCompleted, setMinutesSegmentsCompleted] = useState(0);
-  const [minutesSegmentsTotal, setMinutesSegmentsTotal] = useState(0);
-  const meetingMediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const isMeetingRecordingRef = useRef(false);
-  const meetingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const meetingSegmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const meetingSegmentStopRef =
-    useRef<((mode?: "rotate" | "final") => void) | null>(null);
-  const meetingSessionIdRef = useRef(0);
-  const meetingStopRequestedRef = useRef(false);
-  const meetingNextSegmentIndexRef = useRef(0);
-  const meetingSegmentQueueRef = useRef<MeetingSegmentJob[]>([]);
-  const meetingSegmentWorkerRunningRef = useRef(false);
-  const meetingTranscriptRef = useRef("");
-  const meetingTranscriptSegmentsRef = useRef<MeetingTranscriptSegment[]>([]);
-  const meetingStartedAtRef = useRef("");
-  const meetingFinalizationResolveRef = useRef<(() => void) | null>(null);
-  const meetingSessionUsesSystemAudioRef = useRef(false);
-
   // System audio capture (other participants' audio via ScreenCaptureKit)
   const [systemAudioSupported, setSystemAudioSupported] = useState(false);
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
-  const [systemAudioWarning, setSystemAudioWarning] = useState("");
-  const systemAudioActiveRef = useRef(false);
 
   // Personal dictionary (local state; synced to Supabase when logged in)
   const [_dictWords, setDictWords] = useState<string[]>([]);
@@ -358,6 +311,45 @@ function App() {
   const authInitRef = useRef(false);
   const currentWhisperRoleRef = useRef<WhisperModelRole | null>(null);
   const currentWhisperKeyRef = useRef("");
+  const canStartMeetingRecordingRef = useRef<() => boolean>(() => true);
+  const ensureMinutesWhisperModelLoadedRef = useRef<
+    (role: WhisperModelRole) => Promise<unknown>
+  >(async () => {
+    throw new Error("Whisper loader unavailable.");
+  });
+  const warmMinutesVoiceEngineRef = useRef<() => Promise<void>>(async () => {});
+  const getMinutesAudioConstraintsRef = useRef<
+    () => MediaTrackConstraints | boolean
+  >(() => true);
+
+  const minutesRecorder = useMinutesRecorder({
+    canStartRecordingRef: canStartMeetingRecordingRef,
+    ensureWhisperModelLoadedRef: ensureMinutesWhisperModelLoadedRef,
+    warmVoiceEngineRef: warmMinutesVoiceEngineRef,
+    getAudioConstraintsRef: getMinutesAudioConstraintsRef,
+    warmStreamRef,
+    dictWordsRef,
+    transcriptionLanguageRef,
+    systemAudioEnabled,
+    systemAudioSupported,
+  });
+  const {
+    isRecording: isMeetingRecording,
+    isRecordingRef: isMeetingRecordingRef,
+    recordingTime: meetingRecordingTime,
+    transcript: meetingTranscript,
+    transcriptSegments: meetingTranscriptSegments,
+    startedAt: meetingStartedAt,
+    transcriptionStatus: minutesTranscriptionStatus,
+    segmentQueue: minutesSegmentQueue,
+    segmentsCompleted: minutesSegmentsCompleted,
+    segmentsTotal: minutesSegmentsTotal,
+    systemAudioWarning,
+    clearSystemAudioWarning,
+    startRecording: startMeetingRecording,
+    stopRecording: stopMeetingRecording,
+    clearTranscript: clearMeetingTranscript,
+  } = minutesRecorder;
 
   // Auto-updater
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -367,10 +359,6 @@ function App() {
   useEffect(() => {
     isScribbleRecordingRef.current = isScribbleRecording;
   }, [isScribbleRecording]);
-
-  useEffect(() => {
-    isMeetingRecordingRef.current = isMeetingRecording;
-  }, [isMeetingRecording]);
 
   // Fetch app version on mount
   useEffect(() => {
@@ -1199,6 +1187,14 @@ function App() {
     [prepareWhisperModel],
   );
 
+  canStartMeetingRecordingRef.current = () =>
+    !isRecordingRef.current &&
+    !isScribbleRecordingRef.current &&
+    !isScribbleProcessingRef.current;
+  ensureMinutesWhisperModelLoadedRef.current = ensureWhisperModelLoaded;
+  warmMinutesVoiceEngineRef.current = () => warmVoiceEngine();
+  getMinutesAudioConstraintsRef.current = () => getAudioConstraints();
+
   const handleModelPresetChange = useCallback(
     async (role: WhisperModelRole, preset: WhisperModelPreset) => {
       if (role === "dictation") {
@@ -1606,9 +1602,21 @@ function App() {
   // ── Scribble recording (click to start/stop, saves a Scribble) ───────────
 
   const processScribbleAudio = async () => {
+    const finish = (msg: string | null) => {
+      setIsProcessing(false);
+      setIsScribbleProcessing(false);
+      isScribbleProcessingRef.current = false;
+      setScribbleStatus(msg);
+      if (msg) {
+        window.setTimeout(() => {
+          setScribbleStatus((current) => (current === msg ? null : current));
+        }, 2500);
+      }
+    };
+
     if (!user?.id) {
       setStatus("Sign in to save Scribbles.");
-      isScribbleProcessingRef.current = false;
+      finish("Sign in to save Scribbles.");
       return;
     }
 
@@ -1617,7 +1625,7 @@ function App() {
 
     if (chunkCount === 0 || totalBytes === 0) {
       setStatus("No audio captured. Check microphone permission.");
-      isScribbleProcessingRef.current = false;
+      finish("No audio captured. Check microphone permission.");
       return;
     }
 
@@ -1628,11 +1636,13 @@ function App() {
 
     if (audioBlob.size < 500) {
       setStatus("Scribble recording was too short. Try again.");
-      isScribbleProcessingRef.current = false;
+      finish("Recording was too short. Try again.");
       return;
     }
 
     setIsProcessing(true);
+    setIsScribbleProcessing(true);
+    setScribbleStatus("Transcribing…");
     setStatus("Transcribing Scribble...");
 
     const arrayBuffer = await audioBlob.arrayBuffer();
@@ -1651,8 +1661,7 @@ function App() {
       audioData = mono;
     } catch (e) {
       setStatus(`Scribble decode failed (${mimeType}): ${e}`);
-      setIsProcessing(false);
-      isScribbleProcessingRef.current = false;
+      finish(`Decode failed: ${e}`);
       return;
     } finally {
       audioContext.close();
@@ -1660,8 +1669,7 @@ function App() {
 
     if (audioData.length < 1600) {
       setStatus("Scribble recording was too short. Try again.");
-      setIsProcessing(false);
-      isScribbleProcessingRef.current = false;
+      finish("Recording was too short. Try again.");
       return;
     }
 
@@ -1679,11 +1687,13 @@ function App() {
       const rawText = result.text?.trim() ?? "";
       if (!rawText) {
         setStatus("No speech detected. Try speaking louder or closer.");
+        finish("No speech detected. Try again.");
         return;
       }
 
       let formattedText = rawText;
       if (aiImprovementEnabledRef.current) {
+        setScribbleStatus("Cleaning up…");
         setStatus("Cleaning up Scribble...");
         try {
           const cleaned = await aiService.processText(rawText, "transcribe_cleanup");
@@ -1695,6 +1705,7 @@ function App() {
         }
       }
 
+      setScribbleStatus("Saving…");
       setStatus("Saving Scribble...");
       const { error } = await scribblesService.createScribble({
         user_id: user.id,
@@ -1710,12 +1721,11 @@ function App() {
 
       setScribbleRefreshKey((key) => key + 1);
       setStatus("Scribble saved.");
+      finish("Scribble saved ✓");
     } catch (e) {
       console.error("[scribble] failed:", e);
       setStatus(`Scribble failed: ${e}`);
-    } finally {
-      setIsProcessing(false);
-      isScribbleProcessingRef.current = false;
+      finish(`Failed: ${e}`);
     }
   };
 
@@ -1787,9 +1797,12 @@ function App() {
       scribbleMediaRecorderRef.current.state === "recording"
     ) {
       isScribbleProcessingRef.current = true;
+      setIsScribbleProcessing(true);
+      setScribbleStatus("Processing…");
       scribbleMediaRecorderRef.current.stop();
     } else {
       isScribbleProcessingRef.current = false;
+      setIsScribbleProcessing(false);
     }
   };
 
@@ -1908,377 +1921,6 @@ function App() {
     }
   }, [clearCalendarConnection, googleCalendarConnectedUserId, user?.id]);
 
-  // ── Meeting recording (click to start/stop, no auto-paste) ──────────────
-
-  const resetMeetingPipelineState = () => {
-    if (meetingTimerRef.current) {
-      clearInterval(meetingTimerRef.current);
-      meetingTimerRef.current = null;
-    }
-    if (meetingSegmentTimerRef.current) {
-      clearTimeout(meetingSegmentTimerRef.current);
-      meetingSegmentTimerRef.current = null;
-    }
-    meetingSegmentQueueRef.current = [];
-    meetingSegmentWorkerRunningRef.current = false;
-    meetingTranscriptRef.current = "";
-    meetingTranscriptSegmentsRef.current = [];
-    meetingStartedAtRef.current = "";
-    meetingNextSegmentIndexRef.current = 0;
-    meetingStopRequestedRef.current = false;
-    meetingFinalizationResolveRef.current = null;
-    meetingSegmentStopRef.current = null;
-    meetingSessionUsesSystemAudioRef.current = false;
-    systemAudioActiveRef.current = false;
-    meetingMediaRecorderRef.current = null;
-    setMeetingTranscript("");
-    setMeetingTranscriptSegments([]);
-    setMeetingStartedAt("");
-    setMeetingRecordingTime(0);
-    setMinutesSegmentQueue(0);
-    setMinutesSegmentsCompleted(0);
-    setMinutesSegmentsTotal(0);
-    setMinutesTranscriptionStatus("idle");
-  };
-
-  const maybeCompleteMeetingFinalization = () => {
-    if (!meetingStopRequestedRef.current) return;
-    if (
-      meetingMediaRecorderRef.current &&
-      meetingMediaRecorderRef.current.state === "recording"
-    ) {
-      return;
-    }
-    if (meetingSegmentQueueRef.current.length > 0) return;
-    if (meetingSegmentWorkerRunningRef.current) return;
-
-    systemAudioActiveRef.current = false;
-    setMinutesSegmentQueue(0);
-    setMinutesTranscriptionStatus("notes");
-    meetingFinalizationResolveRef.current?.();
-    meetingFinalizationResolveRef.current = null;
-  };
-
-  const processMeetingSegmentQueue = async () => {
-    if (meetingSegmentWorkerRunningRef.current) return;
-    meetingSegmentWorkerRunningRef.current = true;
-
-    while (meetingSegmentQueueRef.current.length > 0) {
-      const job = meetingSegmentQueueRef.current.shift();
-      if (!job) break;
-
-      setMinutesSegmentQueue(meetingSegmentQueueRef.current.length);
-      if (!meetingStopRequestedRef.current) {
-        setMinutesTranscriptionStatus("transcribing");
-      }
-
-      try {
-        const bytes = Array.from(new Uint8Array(await job.blob.arrayBuffer()));
-        const result = await invoke<Transcription>(
-          "transcribe_meeting_segment_bytes",
-          {
-            bytes,
-            ext: job.ext,
-            useSystemAudio: job.useSystemAudio,
-            initialPrompt: buildInitialPrompt(
-              transcriptionLanguage,
-              dictWordsRef.current,
-            ),
-            language: getWhisperLanguage(transcriptionLanguage, "minutes"),
-            segmentIndex: job.segmentIndex,
-            previousTailText: getTranscriptTailWords(
-              meetingTranscriptRef.current,
-              30,
-            ),
-          },
-        );
-
-        if (result.segments && result.segments.length > 0) {
-          const absoluteSegments = toAbsoluteMeetingTranscriptSegments(
-            job,
-            result.segments,
-          );
-          const mergedSegments = mergeMeetingTranscriptSegments(
-            meetingTranscriptSegmentsRef.current,
-            absoluteSegments,
-          );
-          meetingTranscriptSegmentsRef.current = mergedSegments;
-          setMeetingTranscriptSegments(mergedSegments);
-
-          const nextTranscript =
-            buildTranscriptFromStructuredSegments(mergedSegments);
-          meetingTranscriptRef.current = nextTranscript;
-          setMeetingTranscript(nextTranscript);
-        } else if (result.text) {
-          const fallbackSegment = toFallbackMeetingTranscriptSegment(
-            job,
-            result.text,
-          );
-
-          if (fallbackSegment) {
-            const mergedSegments = mergeMeetingTranscriptSegments(
-              meetingTranscriptSegmentsRef.current,
-              [fallbackSegment],
-            );
-            meetingTranscriptSegmentsRef.current = mergedSegments;
-            setMeetingTranscriptSegments(mergedSegments);
-
-            const nextTranscript =
-              buildTranscriptFromStructuredSegments(mergedSegments);
-            meetingTranscriptRef.current = nextTranscript;
-            setMeetingTranscript(nextTranscript);
-          } else {
-            const nextTranscript = appendTranscriptSegment(
-              meetingTranscriptRef.current,
-              result.text,
-            );
-            meetingTranscriptRef.current = nextTranscript;
-            setMeetingTranscript(nextTranscript);
-          }
-        }
-      } catch (e) {
-        console.error("[meeting] segment transcription failed:", e);
-      } finally {
-        setMinutesSegmentsCompleted((prev) => prev + 1);
-      }
-    }
-
-    meetingSegmentWorkerRunningRef.current = false;
-
-    if (meetingStopRequestedRef.current) {
-      maybeCompleteMeetingFinalization();
-      return;
-    }
-
-    if (
-      meetingMediaRecorderRef.current &&
-      meetingMediaRecorderRef.current.state === "recording"
-    ) {
-      setMinutesTranscriptionStatus("recording");
-    } else {
-      setMinutesTranscriptionStatus("idle");
-    }
-  };
-
-  const queueMeetingSegment = (job: MeetingSegmentJob) => {
-    meetingSegmentQueueRef.current.push(job);
-    setMinutesSegmentQueue(meetingSegmentQueueRef.current.length);
-    setMinutesSegmentsTotal((prev) => Math.max(prev, job.segmentIndex + 1));
-    if (!meetingStopRequestedRef.current) {
-      setMinutesTranscriptionStatus("transcribing");
-    }
-    void processMeetingSegmentQueue();
-  };
-
-  const startMeetingSegmentRecorder = (sessionId: number) => {
-    const stream = warmStreamRef.current;
-    if (!stream) return;
-
-    const useMp4 = MediaRecorder.isTypeSupported("audio/mp4");
-    const mimeType = useMp4 ? "audio/mp4" : "audio/webm";
-    const ext = useMp4 ? "mp4" : "webm";
-    const segmentIndex = meetingNextSegmentIndexRef.current;
-    const segmentUsesSystemAudio = meetingSessionUsesSystemAudioRef.current;
-    meetingNextSegmentIndexRef.current += 1;
-    const segmentStartedAtMs = Date.now();
-    if (segmentIndex === 0) {
-      const startedAt = new Date(segmentStartedAtMs).toISOString();
-      meetingStartedAtRef.current = startedAt;
-      setMeetingStartedAt(startedAt);
-    }
-
-    const chunks: Blob[] = [];
-    let stopMode: "rotate" | "final" | null = null;
-    let rotationPromise: Promise<void> = Promise.resolve();
-    let segmentEndedAtMs = segmentStartedAtMs;
-
-    const mediaRecorder = new MediaRecorder(stream, { mimeType });
-    meetingMediaRecorderRef.current = mediaRecorder;
-    meetingSegmentStopRef.current = (mode = "final") => {
-      if (mediaRecorder.state !== "recording") return;
-      if (meetingSegmentTimerRef.current) {
-        clearTimeout(meetingSegmentTimerRef.current);
-        meetingSegmentTimerRef.current = null;
-      }
-
-      stopMode = mode;
-      segmentEndedAtMs = Date.now();
-      rotationPromise = segmentUsesSystemAudio
-        ? invoke("rotate_meeting_system_audio_segment", {
-            segmentIndex,
-            restartCapture: mode === "rotate",
-          })
-            .then(() => undefined)
-            .catch((err) => {
-              console.warn("[meeting] system audio segment rotation failed:", err);
-              meetingSessionUsesSystemAudioRef.current = false;
-              systemAudioActiveRef.current = false;
-            })
-        : Promise.resolve();
-
-      mediaRecorder.stop();
-    };
-
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunks.push(event.data);
-      }
-    };
-
-    mediaRecorder.onstop = () => {
-      window.setTimeout(async () => {
-        await rotationPromise;
-
-        const shouldContinue =
-          stopMode === "rotate" &&
-          !meetingStopRequestedRef.current &&
-          meetingSessionIdRef.current === sessionId;
-
-        if (shouldContinue) {
-          startMeetingSegmentRecorder(sessionId);
-        }
-
-        if (meetingMediaRecorderRef.current === mediaRecorder) {
-          meetingMediaRecorderRef.current = null;
-        }
-        if (meetingSegmentStopRef.current && stopMode === "final") {
-          meetingSegmentStopRef.current = null;
-        }
-
-        const audioBlob = new Blob(chunks, { type: mimeType });
-        if (audioBlob.size >= 500) {
-          queueMeetingSegment({
-            blob: audioBlob,
-            ext,
-            segmentIndex,
-            useSystemAudio: segmentUsesSystemAudio,
-            startedAtMs: segmentStartedAtMs,
-            endedAtMs: Math.max(segmentEndedAtMs, segmentStartedAtMs + 1),
-          });
-        }
-
-        maybeCompleteMeetingFinalization();
-      }, 0);
-    };
-
-    mediaRecorder.start();
-    setMinutesTranscriptionStatus("recording");
-    meetingSegmentTimerRef.current = setTimeout(() => {
-      if (meetingSessionIdRef.current !== sessionId || meetingStopRequestedRef.current) {
-        return;
-      }
-      meetingSegmentStopRef.current?.("rotate");
-    }, MEETING_SEGMENT_DURATION_MS);
-  };
-
-  const startMeetingRecording = async () => {
-    if (
-      isRecordingRef.current ||
-      isScribbleRecordingRef.current ||
-      isScribbleProcessingRef.current
-    ) {
-      return;
-    }
-
-    setSystemAudioWarning("");
-    resetMeetingPipelineState();
-
-    try {
-      await ensureWhisperModelLoaded("minutes");
-      await warmVoiceEngine();
-    } catch (e) {
-      console.error("[meeting-record] failed to prepare Whisper model:", e);
-      return;
-    }
-
-    let stream: MediaStream;
-    if (
-      warmStreamRef.current &&
-      warmStreamRef.current.getAudioTracks().some((t) => t.readyState === "live")
-    ) {
-      stream = warmStreamRef.current;
-    } else {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: getAudioConstraints(),
-        });
-        warmStreamRef.current = stream;
-      } catch (e) {
-        console.error("[meeting-record] getUserMedia failed:", e);
-        return;
-      }
-    }
-    meetingSessionIdRef.current += 1;
-    const sessionId = meetingSessionIdRef.current;
-    meetingStopRequestedRef.current = false;
-    meetingTranscriptRef.current = "";
-    await invoke("clear_meeting_segment_buffers").catch((err) => {
-      console.warn("[meeting-record] failed to clear segment buffers:", err);
-    });
-
-    // Start system audio capture (ScreenCaptureKit on macOS) in parallel with mic
-    if (systemAudioEnabled && systemAudioSupported) {
-      try {
-        await invoke("start_system_audio_capture");
-        systemAudioActiveRef.current = true;
-        meetingSessionUsesSystemAudioRef.current = true;
-        setSystemAudioWarning("");
-        console.log("[meeting-record] System audio capture started");
-      } catch (e) {
-        console.warn("[meeting-record] System audio capture failed, mic only:", e);
-        systemAudioActiveRef.current = false;
-        meetingSessionUsesSystemAudioRef.current = false;
-        const reason = String(e).replace(/^Error:\s*/i, "");
-        setSystemAudioWarning(
-          `${reason} Meeting recording will continue with your microphone only.`,
-        );
-      }
-    } else {
-      systemAudioActiveRef.current = false;
-      meetingSessionUsesSystemAudioRef.current = false;
-      setSystemAudioWarning("");
-    }
-
-    isMeetingRecordingRef.current = true;
-    setIsMeetingRecording(true);
-    setMeetingRecordingTime(0);
-    setMeetingTranscript("");
-    setMinutesTranscriptionStatus("recording");
-    meetingTimerRef.current = setInterval(() => {
-      setMeetingRecordingTime((prev) => prev + 1);
-    }, 1000);
-    startMeetingSegmentRecorder(sessionId);
-  };
-
-  const stopMeetingRecording = () => {
-    isMeetingRecordingRef.current = false;
-    setIsMeetingRecording(false);
-    meetingStopRequestedRef.current = true;
-    setMinutesTranscriptionStatus("finalizing");
-
-    if (meetingTimerRef.current) {
-      clearInterval(meetingTimerRef.current);
-      meetingTimerRef.current = null;
-    }
-    if (meetingSegmentTimerRef.current) {
-      clearTimeout(meetingSegmentTimerRef.current);
-      meetingSegmentTimerRef.current = null;
-    }
-
-    if (meetingSegmentStopRef.current) {
-      meetingSegmentStopRef.current("final");
-      return;
-    }
-
-    if (systemAudioActiveRef.current) {
-      void invoke("stop_system_audio_capture").catch((err) => {
-        console.warn("[meeting] failed to stop system audio capture:", err);
-      });
-      systemAudioActiveRef.current = false;
-    }
-    maybeCompleteMeetingFinalization();
-  };
-
   const handlePermissionsContinue = async () => {
     await saveSetting("permissionsDone", true);
     setPermissionsShown(true);
@@ -2326,9 +1968,9 @@ function App() {
     setSystemAudioEnabled(enabled);
     saveSetting("systemAudioEnabled", enabled);
     if (!enabled) {
-      setSystemAudioWarning("");
+      clearSystemAudioWarning();
     }
-  }, []);
+  }, [clearSystemAudioWarning]);
 
   useEffect(() => {
     if (!setupComplete) return;
@@ -2485,18 +2127,7 @@ function App() {
                   transcript={meetingTranscript}
                   transcriptSegments={meetingTranscriptSegments}
                   meetingStartedAt={meetingStartedAt}
-                  onClearTranscript={() => {
-                    meetingTranscriptRef.current = "";
-                    meetingTranscriptSegmentsRef.current = [];
-                    meetingStartedAtRef.current = "";
-                    setMeetingTranscript("");
-                    setMeetingTranscriptSegments([]);
-                    setMeetingStartedAt("");
-                    setMinutesSegmentQueue(0);
-                    setMinutesSegmentsCompleted(0);
-                    setMinutesSegmentsTotal(0);
-                    setMinutesTranscriptionStatus("idle");
-                  }}
+                  onClearTranscript={clearMeetingTranscript}
                   systemAudioWarning={systemAudioWarning}
                   googleCalendarToken={googleCalendarToken}
                   onConnectCalendar={connectGoogleCalendar}
@@ -2534,7 +2165,10 @@ function App() {
                   userId={user.id}
                   refreshKey={scribbleRefreshKey}
                   isRecording={isScribbleRecording}
+                  isProcessing={isScribbleProcessing}
+                  statusMessage={scribbleStatus}
                   onToggleRecording={() => {
+                    if (isScribbleProcessing) return;
                     if (isScribbleRecording) {
                       stopScribbleRecording();
                     } else {
