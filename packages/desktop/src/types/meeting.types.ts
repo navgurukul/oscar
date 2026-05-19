@@ -1,6 +1,11 @@
 export type {
   EnhancedMeetingNoteRequest,
   EnhancedMeetingNoteResponse,
+  MeetingContextConfidence,
+  MeetingContextItem,
+  MeetingContextItemKind,
+  MeetingContextPack,
+  MeetingContextSource,
   MeetingAttendee,
   MeetingCalendarContext,
   MeetingTranscriptSegment,

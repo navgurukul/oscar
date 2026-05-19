@@ -280,7 +280,7 @@ function App() {
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
 
   // Personal dictionary (local state; synced to Supabase when logged in)
-  const [_dictWords, setDictWords] = useState<string[]>([]);
+  const [dictWords, setDictWords] = useState<string[]>([]);
   const [, setDictSyncing] = useState(false);
 
   // Refs
@@ -2265,6 +2265,7 @@ function App() {
                     return refreshState;
                   }}
                   savedMeetings={savedMeetings}
+                  vocabularyTerms={dictWords}
                   onSaveMeeting={(meeting) => {
                     const updated = [meeting, ...savedMeetings.filter((m) => m.id !== meeting.id)];
                     setSavedMeetings(updated);

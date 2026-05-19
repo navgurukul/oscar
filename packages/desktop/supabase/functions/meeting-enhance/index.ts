@@ -23,6 +23,42 @@ interface MeetingCalendarContext {
   event_title: string;
 }
 
+type MeetingContextSource =
+  | "calendar"
+  | "attendee"
+  | "user_vocabulary"
+  | "workspace_glossary"
+  | "transcript_candidate";
+
+type MeetingContextItemKind =
+  | "person"
+  | "product"
+  | "feature"
+  | "tool"
+  | "shortcut"
+  | "process"
+  | "unknown";
+
+type MeetingContextConfidence = "high" | "medium" | "low";
+
+interface MeetingContextItem {
+  label: string;
+  normalized_label: string;
+  kind: MeetingContextItemKind;
+  source: MeetingContextSource;
+  confidence: MeetingContextConfidence;
+  note?: string;
+}
+
+interface MeetingContextPack {
+  items: MeetingContextItem[];
+  summary_policy: {
+    require_uncertainty_labels: true;
+    glossary_suggests_only: true;
+    do_not_confirm_singleton_unknown_terms: true;
+  };
+}
+
 interface MeetingTranscriptSegment {
   id: string;
   speaker: {
@@ -43,6 +79,7 @@ interface EnhancedMeetingNoteRequest {
   my_notes_markdown: string;
   transcript_segments: MeetingTranscriptSegment[];
   meeting_type_hint: MeetingTypeHint;
+  context_pack?: MeetingContextPack;
 }
 
 interface EnhancedMeetingNoteResponse {
@@ -172,7 +209,28 @@ function inferMeetingType(request: EnhancedMeetingNoteRequest): InferredMeetingT
   return "general";
 }
 
-function defaultSectionsForType(meetingType: InferredMeetingType): string[] {
+function isTestingOrDebugMeeting(request: EnhancedMeetingNoteRequest): boolean {
+  const haystack = [
+    request.meeting_title,
+    request.calendar_context?.event_title ?? "",
+    request.my_notes_markdown,
+    request.context_pack?.items
+      .map((item) => `${item.label} ${item.kind} ${item.source}`)
+      .join(" ") ?? "",
+    request.transcript_segments.map((segment) => segment.text).join(" "),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return /\b(qa|test|testing|tester|bug|issue|error|debug|console|network tab|payload|api|latency|slow|hang|hanging|regression|windows)\b/.test(
+    haystack,
+  );
+}
+
+function defaultSectionsForType(
+  meetingType: InferredMeetingType,
+  request: EnhancedMeetingNoteRequest,
+): string[] {
   switch (meetingType) {
     case "discovery":
       return [
@@ -203,6 +261,18 @@ function defaultSectionsForType(meetingType: InferredMeetingType): string[] {
       ];
     case "general":
     default:
+      if (isTestingOrDebugMeeting(request)) {
+        return [
+          "Action items",
+          "Confirmed issues",
+          "Suspected issues",
+          "Needs verification",
+          "Decisions",
+          "Key topics",
+          "Open questions",
+          "Next steps",
+        ];
+      }
       return [
         "Action items",
         "Decisions",
@@ -250,7 +320,7 @@ function buildExpectedSections(
   meetingType: InferredMeetingType,
 ): ParsedSections {
   const parsed = parseSectionsFromMarkdown(request.my_notes_markdown);
-  const defaultHeadings = defaultSectionsForType(meetingType);
+  const defaultHeadings = defaultSectionsForType(meetingType, request);
   if (parsed.orderedHeadings.length > 0) {
     const existingKeys = new Set(
       parsed.orderedHeadings.map((heading) => normalizeHeadingKey(heading)),
@@ -286,6 +356,24 @@ function resolveHostName(request: EnhancedMeetingNoteRequest): string | null {
     if (match?.name) return match.name;
   }
   return request.attendees_full[0]?.name ?? null;
+}
+
+function formatContextPack(request: EnhancedMeetingNoteRequest): string {
+  const items = Array.isArray(request.context_pack?.items)
+    ? request.context_pack.items
+    : [];
+  if (items.length === 0) return "";
+
+  const contextLines = items.slice(0, 60).map((item) => {
+    const note = item.note ? ` — ${item.note}` : "";
+    return `- ${item.label} [${item.kind}; ${item.source}; ${item.confidence}]${note}`;
+  });
+
+  return [
+    "Context pack (use as correction hints, not proof):",
+    "Policy: glossary suggests only; uncertainty labels required; single low-confidence unknown terms cannot become confirmed facts.",
+    ...contextLines,
+  ].join("\n");
 }
 
 function formatMeetingContext(
@@ -324,6 +412,7 @@ function formatMeetingContext(
     `Meeting type hint: ${request.meeting_type_hint}`,
     `Inferred meeting type: ${meetingType}`,
     `Required section order: ${sections.join(" | ")}`,
+    formatContextPack(request),
     "Speaker source semantics: segments tagged 'microphone' come from the meeting host (the person recording); segments tagged 'speaker' come from other participants captured via system audio. Use this to attribute claims, decisions, and action items to the right side.",
   ]
     .filter(Boolean)
@@ -622,8 +711,8 @@ async function cleanTranscriptSegments(
     "You clean noisy meeting transcript segments before summarization. " +
     "This is not a summary task. Preserve meaning, facts, numbers, names, branches, files, PRs, design references, dates, and action items. " +
     "Fix obvious speech-recognition errors in English, Hindi, and Hinglish when the nearby context supports the correction. Restore punctuation and capitalization so each segment reads as a clean sentence; do not paraphrase or rewrite content. " +
-    "Aggressively drop hallucinations: blank the CLEANED_TEXT for any segment that is only filler (hmm, uh, aham, haan haan, mm-hmm), Whisper stock phrases (Thank you / Thanks for watching / Subscribe / Bye / 'I'm not going to read the text' / 'Ruins fat is here' / 'thank you for joining live stream'), repetition loops where the same word or phrase repeats 3+ times with no content, the literal word 'foreign' repeated, or Korean / Japanese / Chinese characters appearing inside an English or Hindi meeting. " +
-    "LOW-CONFIDENCE SPANS: if a short phrase appears garbled, surreal, or semantically out of context for the meeting topic (e.g., 'click to dedicate' inside a software meeting where 'dictate' is clearly meant; a feature name that appears once with no supporting context; self-referential or nonsense questions like 'why does X fix it when X fixes it'), drop or correct that span rather than guessing. Prefer dropping the span to keeping a likely STT artifact. When the entire segment hinges on such a span, blank the CLEANED_TEXT. " +
+    "Aggressively drop hallucinations: blank the CLEANED_TEXT for any segment that is only filler (hmm, uh, aham, haan haan, mm-hmm), Whisper stock phrases (Thank you / Thanks for watching / Subscribe / Bye), repetition loops where the same word or phrase repeats 3+ times with no content, the literal word 'foreign' repeated, or Korean / Japanese / Chinese characters appearing inside an English or Hindi meeting. " +
+    "LOW-CONFIDENCE SPANS: if a short phrase appears garbled, surreal, or semantically out of context for the meeting topic, use the context pack to correct it only when supported by nearby words. Otherwise drop the span rather than guessing. If a feature/name appears once with no supporting context, do not preserve it as a confirmed term. When the entire segment hinges on such a span, blank the CLEANED_TEXT. " +
     "Keep the speaker source intact: microphone means Me/host; speaker means Them/other participants. " +
     "Output exactly one line per input segment in this format: SEGMENT_ID | SOURCE | CLEANED_TEXT. " +
     "Use SOURCE as microphone or speaker exactly. Do not merge segments. Do not add headings, bullets, prose, timestamps, or citations. " +
@@ -977,6 +1066,7 @@ async function generateUncitedFallbackMarkdown(
     "You are recovering useful meeting notes from a noisy transcript. " +
     "Output only markdown. Use the required section headings exactly as given; do not rename, reorder, add, or omit headings. " +
     "Use markdown bullets under every heading. Do not use citation tokens. " +
+    "Use context pack terms as correction hints, not proof. Put unsupported cause, payload/API, and performance claims under Needs verification when that section exists. " +
     "Prefer concrete action items, technical details, decisions, open questions, numeric values, branch names, testing needs, and design follow-ups only when they appear in the transcript or manual notes. " +
     "The transcript may mix English, Hindi, Hinglish, and speech-recognition errors. Recover likely meaning when several nearby words support it, but never import details from examples or prior meetings. " +
     "Never write blank sections. If a section truly has no evidence, write one bullet: None captured. " +
@@ -1048,15 +1138,19 @@ async function generateFinalMarkdown(
 
   const systemPrompt =
     "You are generating high-signal meeting notes that capture substance, not narration. " +
+    "First reason internally into: action items, decisions, confirmed facts, suspected facts, needs verification, open questions, and evidence. Then render only the required visible sections. " +
     "Output only markdown. Use the required section headings exactly as given; do not rename, reorder, add, or omit headings. " +
     "Under each heading, use markdown bullets only. No prose paragraphs, code fences, preamble, or visible timestamps. " +
     "Every bullet derived from transcript content must end with exactly one citation token in the form [[seg:SEGMENT_ID]]. " +
     "ATTRIBUTION: 'microphone' segments come from the meeting host (named in the context block). 'speaker' segments come from the other named attendees. Always use the host's name and attendee names (not 'Me', 'Them', 'the host', or 'the speaker') in bullet text. When assigning action items, the host name owns microphone-attributed asks and the matching attendee owns speaker-attributed asks. If two or more attendees share the 'speaker' source and you cannot disambiguate, list both names ('Alima, Apeksha') rather than 'unassigned'. Only write 'Owner: unassigned' when no attendee is plausibly the owner from context. " +
+    "CONTEXT PACK: use high-confidence context to correct obvious ASR errors, medium-confidence context as hints, and low-confidence context only to avoid overclaiming. Context pack terms are not evidence by themselves. A singleton low-confidence unknown term must never become a confirmed product/feature fact. " +
+    "EVIDENCE LEVELS: Confirmed issues require direct transcript evidence of a reproducible behavior or observed failure. Suspected issues are plausible but incomplete. Needs verification is for cause, payload/API claims, performance timing, or ownership that lacks network/debug/console evidence. Do not assign root cause to AI, server, network, or code unless the transcript provides concrete evidence. " +
     "BANNED phrasing — never write: 'the user', 'the conversation', 'it was discussed', 'discussion around', 'they talked about', 'the meeting covered', 'the speaker', 'the participant'. State the substance directly. " +
-    "ANTI-ECHO: do not echo malformed, garbled, or low-coherence transcript fragments as bullets. A bullet must represent a complete, coherent claim, question, or action. If a candidate bullet would read as garbled, surreal, or self-referential (e.g. 'why does X fix it when X fixes it', 'can X see the click to dedicate option', a feature name like 'gossip' that appears once with no supporting context, a Whisper-style closing such as 'thank you for joining live stream'), omit it. When omitting leaves a section empty, write 'None captured'. " +
-    "PRESERVE VERBATIM: people's names, product/feature names (Stream, Scribble, Minutes, etc.), tool names, file names, URLs, project IDs, numbers, durations, dates, error messages, and exact technical terms. Never paraphrase a named entity. " +
+    "ANTI-ECHO: do not echo malformed, garbled, or low-coherence transcript fragments as bullets. A bullet must represent a complete, coherent claim, question, or action. If a candidate bullet would read as garbled, surreal, self-referential, a one-off unverified feature/name, or a Whisper-style closing, omit it. When omitting leaves a section empty, write 'None captured'. " +
+    "PRESERVE VERBATIM: people's names, product/feature names from transcript or context pack, tool names, file names, URLs, project IDs, numbers, durations, dates, error messages, and exact technical terms. Never paraphrase a named entity. " +
     "ACTION ITEMS section (when present): format each bullet as '- [ ] <action> — <Owner>' with the owner's name when identifiable, or 'Owner: unassigned' otherwise. Include a deadline only if explicitly stated. " +
     "DECISIONS section (when present): include explicit decisions ('we decided X'), deferrals ('X will be fixed later', 'parked for now'), ownership assignments ('X owns Y', 'Y will be added by X'), and process conventions agreed during the meeting ('use replies not edits'). One bullet per item, naming who decided or owns the action when identifiable. " +
+    "CONFIRMED ISSUES / SUSPECTED ISSUES / NEEDS VERIFICATION sections (when present): place facts by evidence level, not importance. Keep cause claims in Needs verification unless backed by timing, logs, or explicit transcript evidence. " +
     "KEY TOPICS / TESTING ISSUES sections: when the section contains 4 or more bullets that cluster into 2 or more themes (e.g., audio/data format, UI/display, performance, network, attribution), group bullets by theme using a bold inline label prefix: '- **Audio data:** <bullet>'. Aim for 2-4 themes when content warrants. Skip grouping when fewer than 4 bullets total. " +
     "Use 1-4 bullets per section by default. Action items and Decisions may have up to 8 bullets each if the meeting warrants it. " +
     "Never invent facts. Never restate the section name inside its bullets. Preserve the structure and intent of any manual notes. " +

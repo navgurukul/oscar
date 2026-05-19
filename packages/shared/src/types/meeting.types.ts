@@ -19,6 +19,42 @@ export interface MeetingCalendarContext {
   event_title: string;
 }
 
+export type MeetingContextSource =
+  | "calendar"
+  | "attendee"
+  | "user_vocabulary"
+  | "workspace_glossary"
+  | "transcript_candidate";
+
+export type MeetingContextItemKind =
+  | "person"
+  | "product"
+  | "feature"
+  | "tool"
+  | "shortcut"
+  | "process"
+  | "unknown";
+
+export type MeetingContextConfidence = "high" | "medium" | "low";
+
+export interface MeetingContextItem {
+  label: string;
+  normalized_label: string;
+  kind: MeetingContextItemKind;
+  source: MeetingContextSource;
+  confidence: MeetingContextConfidence;
+  note?: string;
+}
+
+export interface MeetingContextPack {
+  items: MeetingContextItem[];
+  summary_policy: {
+    require_uncertainty_labels: true;
+    glossary_suggests_only: true;
+    do_not_confirm_singleton_unknown_terms: true;
+  };
+}
+
 export interface MeetingTranscriptSegment {
   id: string;
   speaker: {
@@ -39,6 +75,7 @@ export interface EnhancedMeetingNoteRequest {
   my_notes_markdown: string;
   transcript_segments: MeetingTranscriptSegment[];
   meeting_type_hint: MeetingTypeHint;
+  context_pack?: MeetingContextPack;
 }
 
 export interface EnhancedMeetingNoteResponse {
