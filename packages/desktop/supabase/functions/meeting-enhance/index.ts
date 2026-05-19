@@ -277,11 +277,29 @@ function buildExpectedSections(
   };
 }
 
+function resolveHostName(request: EnhancedMeetingNoteRequest): string | null {
+  const organizerEmail = request.calendar_context?.organizer_email?.toLowerCase();
+  if (organizerEmail) {
+    const match = request.attendees_full.find(
+      (attendee) => attendee.email.toLowerCase() === organizerEmail,
+    );
+    if (match?.name) return match.name;
+  }
+  return request.attendees_full[0]?.name ?? null;
+}
+
 function formatMeetingContext(
   request: EnhancedMeetingNoteRequest,
   sections: string[],
   meetingType: InferredMeetingType,
 ): string {
+  const hostName = resolveHostName(request);
+  const otherAttendees = hostName
+    ? request.attendees_full
+        .filter((attendee) => attendee.name !== hostName)
+        .map((attendee) => attendee.name)
+        .filter(Boolean)
+    : [];
   return [
     `Meeting title: ${request.meeting_title || "Untitled Meeting"}`,
     `Local meeting datetime: ${request.meeting_local_datetime}`,
@@ -293,6 +311,12 @@ function formatMeetingContext(
               ? `${attendee.name} <${attendee.email}>`
               : attendee.name)
           .join(", ")}`
+      : "",
+    hostName
+      ? `Meeting host (the 'microphone' source speaker): ${hostName}`
+      : "",
+    otherAttendees.length > 0
+      ? `Other attendees (candidates for 'speaker' source): ${otherAttendees.join(", ")}`
       : "",
     request.calendar_context
       ? `Calendar context: ${JSON.stringify(request.calendar_context)}`
@@ -506,6 +530,15 @@ const HALLUCINATION_EXACT_PHRASES: ReadonlySet<string> = new Set([
   "ruins fat is here",
 ]);
 
+const HALLUCINATION_SUBSTRING_PATTERNS: ReadonlyArray<RegExp> = [
+  /\bthank(s| you)? for (joining|watching)( the| my)?( live ?stream| video| channel)?\b[.!?]?/gi,
+  /\b(joining|watching) (the |my )?live ?stream\b[.!?]?/gi,
+  /\bsubscribe to (the |my )?(channel|youtube)\b[.!?]?/gi,
+  /\bplease subscribe\b[.!?]?/gi,
+  /\blike and subscribe\b[.!?]?/gi,
+  /\bruins fat is here\b[.!?]?/gi,
+];
+
 const CJK_RE = /[぀-ヿ㐀-䶿一-鿿가-힯]/;
 
 function isHallucinationText(rawText: string): boolean {
@@ -529,6 +562,14 @@ function isHallucinationText(rawText: string): boolean {
   return false;
 }
 
+function stripHallucinationSubstrings(text: string): string {
+  let cleaned = text;
+  for (const pattern of HALLUCINATION_SUBSTRING_PATTERNS) {
+    cleaned = cleaned.replace(pattern, " ");
+  }
+  return cleaned.replace(/\s+/g, " ").trim();
+}
+
 function preFilterHallucinations(
   segments: MeetingTranscriptSegment[],
 ): { kept: MeetingTranscriptSegment[]; droppedCount: number } {
@@ -539,7 +580,14 @@ function preFilterHallucinations(
       droppedCount += 1;
       continue;
     }
-    kept.push(segment);
+    const stripped = stripHallucinationSubstrings(segment.text);
+    if (!stripped || isHallucinationText(stripped)) {
+      droppedCount += 1;
+      continue;
+    }
+    kept.push(
+      stripped === segment.text ? segment : { ...segment, text: stripped },
+    );
   }
   return { kept, droppedCount };
 }
@@ -574,7 +622,8 @@ async function cleanTranscriptSegments(
     "You clean noisy meeting transcript segments before summarization. " +
     "This is not a summary task. Preserve meaning, facts, numbers, names, branches, files, PRs, design references, dates, and action items. " +
     "Fix obvious speech-recognition errors in English, Hindi, and Hinglish when the nearby context supports the correction. Restore punctuation and capitalization so each segment reads as a clean sentence; do not paraphrase or rewrite content. " +
-    "Aggressively drop hallucinations: blank the CLEANED_TEXT for any segment that is only filler (hmm, uh, aham, haan haan, mm-hmm), Whisper stock phrases (Thank you / Thanks for watching / Subscribe / Bye / 'I'm not going to read the text' / 'Ruins fat is here'), repetition loops where the same word or phrase repeats 3+ times with no content, the literal word 'foreign' repeated, or Korean / Japanese / Chinese characters appearing inside an English or Hindi meeting. " +
+    "Aggressively drop hallucinations: blank the CLEANED_TEXT for any segment that is only filler (hmm, uh, aham, haan haan, mm-hmm), Whisper stock phrases (Thank you / Thanks for watching / Subscribe / Bye / 'I'm not going to read the text' / 'Ruins fat is here' / 'thank you for joining live stream'), repetition loops where the same word or phrase repeats 3+ times with no content, the literal word 'foreign' repeated, or Korean / Japanese / Chinese characters appearing inside an English or Hindi meeting. " +
+    "LOW-CONFIDENCE SPANS: if a short phrase appears garbled, surreal, or semantically out of context for the meeting topic (e.g., 'click to dedicate' inside a software meeting where 'dictate' is clearly meant; a feature name that appears once with no supporting context; self-referential or nonsense questions like 'why does X fix it when X fixes it'), drop or correct that span rather than guessing. Prefer dropping the span to keeping a likely STT artifact. When the entire segment hinges on such a span, blank the CLEANED_TEXT. " +
     "Keep the speaker source intact: microphone means Me/host; speaker means Them/other participants. " +
     "Output exactly one line per input segment in this format: SEGMENT_ID | SOURCE | CLEANED_TEXT. " +
     "Use SOURCE as microphone or speaker exactly. Do not merge segments. Do not add headings, bullets, prose, timestamps, or citations. " +
@@ -628,7 +677,7 @@ async function reduceTranscriptBatches(
     "Return only markdown bullets. Every bullet must end with exactly one citation token in the form [[seg:SEGMENT_ID]]. " +
     "Each bullet must capture one concrete fact, blocker, decision, open question, action item, or follow-up. " +
     "Preserve verbatim: people's names, product names, tool names, file names, URLs, project IDs, numbers, durations, dates, error strings, and exact technical terms. " +
-    "Attribute claims using speaker source: 'microphone' = the meeting host, 'speaker' = other participants. When a participant's name is identifiable from context, prefer it over generic pronouns. " +
+    "Attribute claims using speaker source and the named host/attendees in the context block: 'microphone' segments come from the named host; 'speaker' segments come from the other named attendees. Use the host's name (not 'Me' or 'the host') and the attendee's name (not 'Them' or 'the speaker') in bullet text whenever the named person is identifiable from context. If multiple 'speaker' attendees are plausible for a claim and you cannot disambiguate, list both names rather than dropping attribution. " +
     "BANNED phrasing: 'the user', 'the conversation', 'it was discussed', 'discussion around', 'they talked about', 'the meeting covered'. Write the substance directly instead. " +
     "Do not invent facts. Do not output headings or prose.";
 
@@ -1002,11 +1051,13 @@ async function generateFinalMarkdown(
     "Output only markdown. Use the required section headings exactly as given; do not rename, reorder, add, or omit headings. " +
     "Under each heading, use markdown bullets only. No prose paragraphs, code fences, preamble, or visible timestamps. " +
     "Every bullet derived from transcript content must end with exactly one citation token in the form [[seg:SEGMENT_ID]]. " +
-    "ATTRIBUTION: segments tagged 'microphone' come from the meeting host; 'speaker' segments come from other participants. Attribute action items, decisions, commitments, and quotes to the correct side. Use participant names from the attendees list when identifiable from context. " +
+    "ATTRIBUTION: 'microphone' segments come from the meeting host (named in the context block). 'speaker' segments come from the other named attendees. Always use the host's name and attendee names (not 'Me', 'Them', 'the host', or 'the speaker') in bullet text. When assigning action items, the host name owns microphone-attributed asks and the matching attendee owns speaker-attributed asks. If two or more attendees share the 'speaker' source and you cannot disambiguate, list both names ('Alima, Apeksha') rather than 'unassigned'. Only write 'Owner: unassigned' when no attendee is plausibly the owner from context. " +
     "BANNED phrasing — never write: 'the user', 'the conversation', 'it was discussed', 'discussion around', 'they talked about', 'the meeting covered', 'the speaker', 'the participant'. State the substance directly. " +
+    "ANTI-ECHO: do not echo malformed, garbled, or low-coherence transcript fragments as bullets. A bullet must represent a complete, coherent claim, question, or action. If a candidate bullet would read as garbled, surreal, or self-referential (e.g. 'why does X fix it when X fixes it', 'can X see the click to dedicate option', a feature name like 'gossip' that appears once with no supporting context, a Whisper-style closing such as 'thank you for joining live stream'), omit it. When omitting leaves a section empty, write 'None captured'. " +
     "PRESERVE VERBATIM: people's names, product/feature names (Stream, Scribble, Minutes, etc.), tool names, file names, URLs, project IDs, numbers, durations, dates, error messages, and exact technical terms. Never paraphrase a named entity. " +
     "ACTION ITEMS section (when present): format each bullet as '- [ ] <action> — <Owner>' with the owner's name when identifiable, or 'Owner: unassigned' otherwise. Include a deadline only if explicitly stated. " +
-    "DECISIONS section (when present): one bullet per decision, stating what was decided and who decided. " +
+    "DECISIONS section (when present): include explicit decisions ('we decided X'), deferrals ('X will be fixed later', 'parked for now'), ownership assignments ('X owns Y', 'Y will be added by X'), and process conventions agreed during the meeting ('use replies not edits'). One bullet per item, naming who decided or owns the action when identifiable. " +
+    "KEY TOPICS / TESTING ISSUES sections: when the section contains 4 or more bullets that cluster into 2 or more themes (e.g., audio/data format, UI/display, performance, network, attribution), group bullets by theme using a bold inline label prefix: '- **Audio data:** <bullet>'. Aim for 2-4 themes when content warrants. Skip grouping when fewer than 4 bullets total. " +
     "Use 1-4 bullets per section by default. Action items and Decisions may have up to 8 bullets each if the meeting warrants it. " +
     "Never invent facts. Never restate the section name inside its bullets. Preserve the structure and intent of any manual notes. " +
     "If a required section truly has no content from the transcript or manual notes, write exactly one bullet: None captured.";
