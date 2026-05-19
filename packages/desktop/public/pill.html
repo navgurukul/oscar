@@ -464,8 +464,14 @@
     <!-- Settings popover -->
     <div class="settings-pop" id="settings-pop" data-page="main">
       <div class="settings-row">
-        <span>Auto-apply after dictation</span>
-        <button class="toggle" id="toggle-auto" aria-label="Auto apply">
+        <span>Auto-paste after dictation</span>
+        <button class="toggle" id="toggle-auto" aria-label="Auto paste">
+          <span class="knob"></span>
+        </button>
+      </div>
+      <div class="settings-row">
+        <span>Text transform</span>
+        <button class="toggle" id="toggle-transform" aria-label="Text transform">
           <span class="knob"></span>
         </button>
       </div>
@@ -540,12 +546,6 @@
               <path d="M2.5 4.2L5.5 7.2L8.5 4.2" stroke="#0f172a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </button>
-          <button class="pill-btn" id="btn-note" aria-label="Note">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-              <rect x="2.5" y="1.5" width="8" height="10" rx="1.2" stroke="#0f172a" stroke-width="1.3" />
-              <path d="M4.5 4.5H8.5M4.5 6.5H8.5M4.5 8.5H7" stroke="#0f172a" stroke-width="1.3" stroke-linecap="round" />
-            </svg>
-          </button>
         </div>
       </div>
     </div>
@@ -585,7 +585,8 @@
     let readyHoldTimer = null;
     let settings = {
       language: 'hi-en',
-      autoApply: false,
+      autoPaste: true,
+      aiImprovement: true,
     };
 
     const LANG_LABELS = {
@@ -650,9 +651,11 @@
     }
 
     function renderSettingsUI() {
-      // Toggle
-      const toggle = document.getElementById('toggle-auto');
-      toggle.classList.toggle('on', !!settings.autoApply);
+      // Toggles
+      document.getElementById('toggle-auto')
+        .classList.toggle('on', !!settings.autoPaste);
+      document.getElementById('toggle-transform')
+        .classList.toggle('on', !!settings.aiImprovement);
       // Language label
       document.getElementById('lang-label').textContent =
         LANG_LABELS[settings.language] || settings.language;
@@ -786,17 +789,19 @@
       e.stopPropagation();
       setSettingsOpen(!settingsOpen);
     });
-    document.getElementById('btn-note').addEventListener('click', (e) => {
-      e.stopPropagation();
-      emitTauri('pill-open-scribble', {});
-    });
 
     /* Settings popover interactions */
     document.getElementById('toggle-auto').addEventListener('click', (e) => {
       e.stopPropagation();
-      settings.autoApply = !settings.autoApply;
+      settings.autoPaste = !settings.autoPaste;
       renderSettingsUI();
-      emitTauri('pill-settings-update', { autoApply: settings.autoApply });
+      emitTauri('pill-settings-update', { autoPaste: settings.autoPaste });
+    });
+    document.getElementById('toggle-transform').addEventListener('click', (e) => {
+      e.stopPropagation();
+      settings.aiImprovement = !settings.aiImprovement;
+      renderSettingsUI();
+      emitTauri('pill-settings-update', { aiImprovement: settings.aiImprovement });
     });
     document.getElementById('lang-row').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -845,7 +850,8 @@
           ev.listen('pill-settings-init', (evt) => {
             const p = evt.payload || {};
             if (p.language) settings.language = p.language;
-            if (typeof p.autoApply === 'boolean') settings.autoApply = p.autoApply;
+            if (typeof p.autoPaste === 'boolean') settings.autoPaste = p.autoPaste;
+            if (typeof p.aiImprovement === 'boolean') settings.aiImprovement = p.aiImprovement;
             renderSettingsUI();
           }),
 

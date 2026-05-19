@@ -376,17 +376,18 @@ pub fn pill_request_record_stop(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Push current dictation settings (language, auto-apply) into the pill so the
-/// settings popover renders the user's actual state.
+/// Push current dictation settings (language, auto-paste, ai-transform) into
+/// the pill so the settings popover renders the user's actual state.
 #[tauri::command]
 pub fn pill_push_settings(
     app: tauri::AppHandle,
     language: String,
-    auto_apply: bool,
+    auto_paste: bool,
+    ai_improvement: bool,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        let _ = (app, language, auto_apply);
+        let _ = (app, language, auto_paste, ai_improvement);
         return Ok(());
     }
 
@@ -394,7 +395,8 @@ pub fn pill_push_settings(
     {
         let payload = serde_json::json!({
             "language": language,
-            "autoApply": auto_apply,
+            "autoPaste": auto_paste,
+            "aiImprovement": ai_improvement,
         });
         OscarEvent::PillSettingsInit(payload).dispatch(&app);
         Ok(())

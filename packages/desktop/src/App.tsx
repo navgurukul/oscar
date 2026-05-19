@@ -847,7 +847,8 @@ function App() {
     // Settings updates from the pill's popover — persist + sync state.
     const unlistenPillSettings = listen<{
       language?: string;
-      autoApply?: boolean;
+      autoPaste?: boolean;
+      aiImprovement?: boolean;
     }>("pill-settings-update", (ev) => {
       const p = ev.payload || {};
       if (p.language !== undefined) {
@@ -855,23 +856,24 @@ function App() {
         transcriptionLanguageRef.current = p.language;
         void saveSetting("transcriptionLanguage", p.language);
       }
-      if (p.autoApply !== undefined) {
-        setAutoPaste(p.autoApply);
-        autoPasteRef.current = p.autoApply;
-        void saveSetting("autoPaste", p.autoApply);
+      if (p.autoPaste !== undefined) {
+        setAutoPaste(p.autoPaste);
+        autoPasteRef.current = p.autoPaste;
+        void saveSetting("autoPaste", p.autoPaste);
       }
-    });
-
-    // Note button on the pill jumps to the Scribble tab.
-    const unlistenPillNote = listen("pill-open-scribble", () => {
-      setActiveTab("scribble");
+      if (p.aiImprovement !== undefined) {
+        setAiImprovementEnabled(p.aiImprovement);
+        aiImprovementEnabledRef.current = p.aiImprovement;
+        void saveSetting("aiImprovementEnabled", p.aiImprovement);
+      }
     });
 
     // When the pill window has wired its listeners, push current settings.
     const unlistenPillReady = listen("pill-ready", () => {
       invoke("pill_push_settings", {
         language: transcriptionLanguageRef.current,
-        autoApply: autoPasteRef.current,
+        autoPaste: autoPasteRef.current,
+        aiImprovement: aiImprovementEnabledRef.current,
       }).catch(console.warn);
     });
 
@@ -881,7 +883,6 @@ function App() {
       unlistenErr.then((f) => f());
       unlistenReg.then((f) => f());
       unlistenPillSettings.then((f) => f());
-      unlistenPillNote.then((f) => f());
       unlistenPillReady.then((f) => f());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads settings, registers hotkey listeners; uses refs for mutable state
@@ -2019,6 +2020,11 @@ function App() {
     setAiImprovementEnabled(enabled);
     aiImprovementEnabledRef.current = enabled;
     saveSetting("aiImprovementEnabled", enabled);
+    invoke("pill_push_settings", {
+      language: transcriptionLanguageRef.current,
+      autoPaste: autoPasteRef.current,
+      aiImprovement: enabled,
+    }).catch(console.warn);
   }, []);
 
   const handleContextAwareDictationChange = useCallback((enabled: boolean) => {
@@ -2251,7 +2257,8 @@ function App() {
                     saveSetting("transcriptionLanguage", lang);
                     invoke("pill_push_settings", {
                       language: lang,
-                      autoApply: autoPasteRef.current,
+                      autoPaste: autoPasteRef.current,
+                      aiImprovement: aiImprovementEnabledRef.current,
                     }).catch(console.warn);
                   }}
                   selectedMicId={selectedMicId}
