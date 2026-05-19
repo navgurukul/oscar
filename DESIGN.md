@@ -162,7 +162,7 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
 
 **State bodies**:
 - Idle: 13 dots, 2.5 × 2.5 px, color `rgba(15,23,42,.5)`
-- Recording: 15-bar waveform, 2.5 px wide, color `#06B6D4` (cyan-500) — animation `mm-wave 0.9s ease-in-out infinite alternate`, staggered 0.06 s
+- Recording: 15-bar waveform, 2.5 px wide, color `#06B6D4` (cyan-500) — subtle `mm-wave` baseline drift staggered 0.06 s, with live audio levels scaling bar amplitude on top
 - Processing: 13 pulse dots — animation `mm-pulse 1.1s ease-in-out infinite`, staggered 0.07 s
 - Error: rose-700 (`#BE123C`) triangle glyph + "no input" label
 

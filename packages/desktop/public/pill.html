@@ -187,22 +187,27 @@
     }
     .waveform .bar {
       width: 2.5px;
+      transform-origin: center;
+      transform: scaleY(var(--audio-scale, 0.34));
+      transition: transform 0.06s linear;
+      will-change: transform;
+    }
+    .waveform .bar-fill {
+      display: block;
+      width: 100%;
+      height: 100%;
       background: #06b6d4;
       border-radius: 2px;
       transform-origin: center;
-      transform: scaleY(0.2);
-      animation: mm-wave 0.9s ease-in-out infinite alternate;
+      animation: mm-wave 1.15s ease-in-out infinite alternate;
+      will-change: transform;
     }
     @keyframes mm-wave {
-      0%   { transform: scaleY(0.35); }
-      100% { transform: scaleY(1); }
+      0%   { transform: scaleY(0.9); }
+      100% { transform: scaleY(1.08); }
     }
-    /* When live mic levels are streaming in, override the keyframe and let
-       inline transform from the audio meter drive the bars instead. */
-    .waveform.live .bar {
-      animation: none;
-      transition: transform 0.06s linear;
-    }
+    /* Live mic levels change the outer bar scale; inner fill keeps the
+       subtle keyframe motion moving underneath. */
 
     /* Error glyph */
     .error-body {
@@ -558,14 +563,17 @@
       const bar = document.createElement('div');
       bar.className = 'bar';
       bar.style.height = `${Math.max(h * 22, 3)}px`;
-      bar.style.animationDelay = `${i * 0.06}s`;
+      const fill = document.createElement('span');
+      fill.className = 'bar-fill';
+      fill.style.animationDelay = `${i * 0.06}s`;
+      bar.appendChild(fill);
       wf.appendChild(bar);
       waveBars.push(bar);
     });
 
     function clearWaveLive() {
       wf.classList.remove('live');
-      waveBars.forEach((b) => { b.style.transform = ''; });
+      waveBars.forEach((b) => { b.style.removeProperty('--audio-scale'); });
     }
     const ld = document.getElementById('loading-dots');
     for (let i = 0; i < 13; i++) {
@@ -858,8 +866,8 @@
           ev.listen('pill-set-listening', () => applyPhase('recording')),
 
           // Live mic levels from the host. Payload: number[] of 15 floats
-          // in [0..1] — one per bar. Drives the waveform reactively instead
-          // of the default CSS keyframe oscillation.
+          // in [0..1] — one per bar. Audio sets amplitude while the nested
+          // fill keeps the waveform subtly moving between meter updates.
           ev.listen('pill-audio-level', (evt) => {
             if (phase !== 'recording') return;
             const arr = evt.payload;
@@ -867,8 +875,9 @@
             if (!wf.classList.contains('live')) wf.classList.add('live');
             for (let i = 0; i < waveBars.length; i++) {
               const raw = typeof arr[i] === 'number' ? arr[i] : 0;
-              const v = Math.max(0.12, Math.min(1, raw));
-              waveBars[i].style.transform = `scaleY(${v})`;
+              const v = Math.max(0, Math.min(1, raw));
+              const scale = 0.28 + v * 0.72;
+              waveBars[i].style.setProperty('--audio-scale', scale.toFixed(3));
             }
           }),
         ]);
