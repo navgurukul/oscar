@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { meetingsService } from "./services/meetings.service";
 import { aiService } from "./services/ai.service";
 import { scribblesService } from "./services/scribbles.service";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -301,6 +301,10 @@ function App() {
   const pendingStopRef = useRef(false);
   const warmStreamRef = useRef<MediaStream | null>(null);
   const voiceEngineWarmupRef = useRef(false);
+  const meterCtxRef = useRef<AudioContext | null>(null);
+  const meterSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const meterAnalyserRef = useRef<AnalyserNode | null>(null);
+  const meterRafRef = useRef<number | null>(null);
   const aiEditingRef = useRef(false);
   const transcriptionLanguageRef = useRef<string>("hi-en");
   const dictWordsRef = useRef<string[]>([]);
@@ -1227,6 +1231,69 @@ function App() {
       .catch((err) => console.warn("[whisper] failed to inspect meeting model:", err));
   }, [prepareWhisperModel, setupComplete]);
 
+  // ── Recording-pill waveform meter ──────────────────────────────────────────
+  // Sample the live mic stream and push 15 normalized band levels to the pill
+  // window so its waveform bars react to the user's voice instead of the
+  // default CSS keyframe oscillation.
+
+  const PILL_WAVE_BARS = 15;
+
+  const startAudioMeter = (stream: MediaStream) => {
+    stopAudioMeter();
+    try {
+      const AudioCtor = window.AudioContext;
+      if (!AudioCtor) return;
+      const ctx = new AudioCtor();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.6;
+      source.connect(analyser);
+      meterCtxRef.current = ctx;
+      meterSourceRef.current = source;
+      meterAnalyserRef.current = analyser;
+
+      const bufLen = analyser.frequencyBinCount;
+      const data = new Uint8Array(bufLen);
+      const usable = Math.min(60, bufLen);
+      const binsPerBar = Math.max(1, Math.floor(usable / PILL_WAVE_BARS));
+
+      const tick = () => {
+        const a = meterAnalyserRef.current;
+        if (!a) return;
+        a.getByteFrequencyData(data);
+        const levels = new Array<number>(PILL_WAVE_BARS);
+        for (let i = 0; i < PILL_WAVE_BARS; i++) {
+          let sum = 0;
+          const startBin = i * binsPerBar;
+          const endBin = Math.min(startBin + binsPerBar, usable);
+          for (let j = startBin; j < endBin; j++) sum += data[j];
+          const avg = sum / Math.max(1, endBin - startBin) / 255;
+          levels[i] = Math.min(1, Math.pow(avg, 0.7));
+        }
+        emit("pill-audio-level", levels).catch(() => {});
+        meterRafRef.current = requestAnimationFrame(tick);
+      };
+      meterRafRef.current = requestAnimationFrame(tick);
+    } catch (e) {
+      console.warn("[meter] start failed", e);
+    }
+  };
+
+  const stopAudioMeter = () => {
+    if (meterRafRef.current !== null) {
+      cancelAnimationFrame(meterRafRef.current);
+      meterRafRef.current = null;
+    }
+    try { meterSourceRef.current?.disconnect(); } catch {}
+    try { meterAnalyserRef.current?.disconnect(); } catch {}
+    try { meterCtxRef.current?.close(); } catch {}
+    meterSourceRef.current = null;
+    meterAnalyserRef.current = null;
+    meterCtxRef.current = null;
+    emit("pill-audio-level", new Array(PILL_WAVE_BARS).fill(0)).catch(() => {});
+  };
+
   // ── Hotkey recording ───────────────────────────────────────────────────────
 
   const startHotkeyRecording = async () => {
@@ -1290,6 +1357,7 @@ function App() {
     };
 
     mediaRecorder.start(100);
+    startAudioMeter(stream);
     isRecordingRef.current = true;
     setIsRecording(true);
     setStatus("Recording... Release to stop");
@@ -1304,6 +1372,7 @@ function App() {
     ) {
       mediaRecorderRef.current.stop();
     }
+    stopAudioMeter();
     // Switch pill to processing (dots) — don't hide yet
     invoke("set_pill_processing").catch(console.warn);
   };

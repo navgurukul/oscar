@@ -190,11 +190,18 @@
       background: #06b6d4;
       border-radius: 2px;
       transform-origin: center;
+      transform: scaleY(0.2);
       animation: mm-wave 0.9s ease-in-out infinite alternate;
     }
     @keyframes mm-wave {
       0%   { transform: scaleY(0.35); }
       100% { transform: scaleY(1); }
+    }
+    /* When live mic levels are streaming in, override the keyframe and let
+       inline transform from the audio meter drive the bars instead. */
+    .waveform.live .bar {
+      animation: none;
+      transition: transform 0.06s linear;
     }
 
     /* Error glyph */
@@ -548,13 +555,20 @@
     /* ─── Build waveform & loading-dots bars dynamically ───────────────── */
     const WAVE_HEIGHTS = [0.35, 0.55, 0.85, 0.45, 0.7, 0.95, 0.6, 0.4, 0.75, 0.55, 0.3, 0.6, 0.85, 0.5, 0.7];
     const wf = document.getElementById('waveform');
+    const waveBars = [];
     WAVE_HEIGHTS.forEach((h, i) => {
       const bar = document.createElement('div');
       bar.className = 'bar';
       bar.style.height = `${Math.max(h * 22, 3)}px`;
       bar.style.animationDelay = `${i * 0.06}s`;
       wf.appendChild(bar);
+      waveBars.push(bar);
     });
+
+    function clearWaveLive() {
+      wf.classList.remove('live');
+      waveBars.forEach((b) => { b.style.transform = ''; });
+    }
     const ld = document.getElementById('loading-dots');
     for (let i = 0; i < 13; i++) {
       const dot = document.createElement('span');
@@ -612,6 +626,11 @@
       // Closing pill collapses settings too.
       if (next !== 'expanded') {
         setSettingsOpen(false);
+      }
+      // Leaving the recording phase: stop driving bars from live mic data
+      // and fall back to the CSS keyframe (only visible again on next record).
+      if (next !== 'recording') {
+        clearWaveLive();
       }
     }
 
@@ -833,6 +852,21 @@
           // Back-compat with old events; map to new phase
           ev.listen('pill-set-processing', () => applyPhase('processing')),
           ev.listen('pill-set-listening', () => applyPhase('recording')),
+
+          // Live mic levels from the host. Payload: number[] of 15 floats
+          // in [0..1] — one per bar. Drives the waveform reactively instead
+          // of the default CSS keyframe oscillation.
+          ev.listen('pill-audio-level', (evt) => {
+            if (phase !== 'recording') return;
+            const arr = evt.payload;
+            if (!Array.isArray(arr)) return;
+            if (!wf.classList.contains('live')) wf.classList.add('live');
+            for (let i = 0; i < waveBars.length; i++) {
+              const raw = typeof arr[i] === 'number' ? arr[i] : 0;
+              const v = Math.max(0.12, Math.min(1, raw));
+              waveBars[i].style.transform = `scaleY(${v})`;
+            }
+          }),
         ]);
       } catch (err) {
         console.warn('[pill] listen setup failed', err);
