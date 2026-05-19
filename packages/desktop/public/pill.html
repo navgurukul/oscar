@@ -190,11 +190,18 @@
       background: #06b6d4;
       border-radius: 2px;
       transform-origin: center;
+      transform: scaleY(0.2);
       animation: mm-wave 0.9s ease-in-out infinite alternate;
     }
     @keyframes mm-wave {
       0%   { transform: scaleY(0.35); }
       100% { transform: scaleY(1); }
+    }
+    /* When live mic levels are streaming in, override the keyframe and let
+       inline transform from the audio meter drive the bars instead. */
+    .waveform.live .bar {
+      animation: none;
+      transition: transform 0.06s linear;
     }
 
     /* Error glyph */
@@ -308,7 +315,7 @@
       position: absolute;
       left: 50%;
       bottom: 76px;
-      transform: translateX(-30%) translateY(8px);
+      transform: translateX(-50%) translateY(8px);
       width: 260px;
       background: #ffffff;
       border: 1px solid rgba(15, 23, 42, 0.08);
@@ -329,7 +336,7 @@
     body[data-settings-open="true"] .settings-pop {
       opacity: 1;
       pointer-events: auto;
-      transform: translateX(-30%) translateY(0);
+      transform: translateX(-50%) translateY(0);
     }
     .settings-row {
       display: flex;
@@ -364,23 +371,6 @@
     }
     .toggle.on { background: #06b6d4; }
     .toggle.on .knob { left: 16px; }
-    .transform-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      padding: 10px 12px;
-      border: none;
-      cursor: pointer;
-      background: transparent;
-      color: #0f172a;
-      border-radius: 8px;
-      font-size: 13px;
-      font-family: inherit;
-      text-align: left;
-    }
-    .transform-item:hover,
-    .transform-item.sel { background: rgba(15, 23, 42, 0.05); }
     .lang-row {
       padding: 10px 12px;
       display: flex;
@@ -407,10 +397,8 @@
     }
     .config-row:hover { background: rgba(15, 23, 42, 0.05); }
 
-    /* Language sub-menu (slides in from right within popover) */
+    /* Language sub-menu (replaces popover body when active) */
     .lang-list {
-      position: absolute;
-      inset: 6px;
       background: #ffffff;
       border-radius: 8px;
       padding: 2px;
@@ -474,36 +462,17 @@
     <!-- Settings popover -->
     <div class="settings-pop" id="settings-pop" data-page="main">
       <div class="settings-row">
-        <span>Auto-apply after dictation</span>
-        <button class="toggle" id="toggle-auto" aria-label="Auto apply">
+        <span>Auto-paste after dictation</span>
+        <button class="toggle" id="toggle-auto" aria-label="Auto paste">
           <span class="knob"></span>
         </button>
       </div>
-      <div class="settings-divider"></div>
-      <button class="transform-item" data-transform="none">
-        <span>None</span>
-        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
-          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <button class="transform-item" data-transform="professional">
-        <span>Polish</span>
-        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
-          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <button class="transform-item" data-transform="casual">
-        <span>Prompt Engineer</span>
-        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
-          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <button class="transform-item" data-transform="friendly">
-        <span>Email Reply</span>
-        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
-          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
+      <div class="settings-row">
+        <span>Text transform</span>
+        <button class="toggle" id="toggle-transform" aria-label="Text transform">
+          <span class="knob"></span>
+        </button>
+      </div>
       <div class="settings-divider"></div>
       <div class="lang-row" id="lang-row">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -570,21 +539,9 @@
         <div class="pill-divider"></div>
 
         <div class="pill-actions">
-          <button class="pill-btn" id="btn-transform" aria-label="Transform">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M5 1L5.9 3.6L8.5 4.5L5.9 5.4L5 8L4.1 5.4L1.5 4.5L4.1 3.6L5 1Z" fill="#0f172a" />
-              <path d="M10.5 7L11 8.5L12.5 9L11 9.5L10.5 11L10 9.5L8.5 9L10 8.5L10.5 7Z" fill="#0f172a" />
-            </svg>
-          </button>
           <button class="pill-btn" id="btn-settings" aria-label="Settings">
             <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
               <path d="M2.5 4.2L5.5 7.2L8.5 4.2" stroke="#0f172a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
-          <button class="pill-btn" id="btn-note" aria-label="Note">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-              <rect x="2.5" y="1.5" width="8" height="10" rx="1.2" stroke="#0f172a" stroke-width="1.3" />
-              <path d="M4.5 4.5H8.5M4.5 6.5H8.5M4.5 8.5H7" stroke="#0f172a" stroke-width="1.3" stroke-linecap="round" />
             </svg>
           </button>
         </div>
@@ -596,13 +553,20 @@
     /* ─── Build waveform & loading-dots bars dynamically ───────────────── */
     const WAVE_HEIGHTS = [0.35, 0.55, 0.85, 0.45, 0.7, 0.95, 0.6, 0.4, 0.75, 0.55, 0.3, 0.6, 0.85, 0.5, 0.7];
     const wf = document.getElementById('waveform');
+    const waveBars = [];
     WAVE_HEIGHTS.forEach((h, i) => {
       const bar = document.createElement('div');
       bar.className = 'bar';
       bar.style.height = `${Math.max(h * 22, 3)}px`;
       bar.style.animationDelay = `${i * 0.06}s`;
       wf.appendChild(bar);
+      waveBars.push(bar);
     });
+
+    function clearWaveLive() {
+      wf.classList.remove('live');
+      waveBars.forEach((b) => { b.style.transform = ''; });
+    }
     const ld = document.getElementById('loading-dots');
     for (let i = 0; i < 13; i++) {
       const dot = document.createElement('span');
@@ -618,9 +582,9 @@
     let leaveTimer = null;
     let readyHoldTimer = null;
     let settings = {
-      transform: 'none',
       language: 'hi-en',
-      autoApply: false,
+      autoPaste: true,
+      aiImprovement: true,
     };
 
     const LANG_LABELS = {
@@ -662,6 +626,11 @@
       if (next !== 'expanded') {
         setSettingsOpen(false);
       }
+      // Leaving the recording phase: stop driving bars from live mic data
+      // and fall back to the CSS keyframe (only visible again on next record).
+      if (next !== 'recording') {
+        clearWaveLive();
+      }
     }
 
     function setSettingsOpen(open) {
@@ -680,16 +649,11 @@
     }
 
     function renderSettingsUI() {
-      // Transform selection
-      document.querySelectorAll('.transform-item').forEach((el) => {
-        const sel = el.dataset.transform === settings.transform;
-        el.classList.toggle('sel', sel);
-        const check = el.querySelector('.check');
-        if (check) check.style.display = sel ? 'block' : 'none';
-      });
-      // Toggle
-      const toggle = document.getElementById('toggle-auto');
-      toggle.classList.toggle('on', !!settings.autoApply);
+      // Toggles
+      document.getElementById('toggle-auto')
+        .classList.toggle('on', !!settings.autoPaste);
+      document.getElementById('toggle-transform')
+        .classList.toggle('on', !!settings.aiImprovement);
       // Language label
       document.getElementById('lang-label').textContent =
         LANG_LABELS[settings.language] || settings.language;
@@ -791,6 +755,22 @@
       }, 220);
     });
 
+    /* The settings popover is a DOM sibling of the pill, so moving the cursor
+       from the pill up into the popover fires mouseleave on pill-wrap. Treat
+       the popover as a continuation of the hover region. */
+    const settingsPop = document.getElementById('settings-pop');
+    settingsPop.addEventListener('mouseenter', () => {
+      clearTimeout(leaveTimer);
+    });
+    settingsPop.addEventListener('mouseleave', () => {
+      leaveTimer = setTimeout(() => {
+        if (phase === 'expanded') {
+          applyPhase('rest');
+          callTauri('set_pill_phase', { phase: 'rest' });
+        }
+      }, 220);
+    });
+
     /* ─── Click pill: start/stop recording ─────────────────────────────── */
     document.getElementById('pill').addEventListener('click', (e) => {
       // Ignore clicks on the right-side action buttons.
@@ -807,36 +787,19 @@
       e.stopPropagation();
       setSettingsOpen(!settingsOpen);
     });
-    document.getElementById('btn-transform').addEventListener('click', (e) => {
-      e.stopPropagation();
-      // Cycle through transforms — quick affordance from main pill
-      const order = ['none', 'professional', 'casual', 'friendly'];
-      const idx = order.indexOf(settings.transform);
-      const next = order[(idx + 1) % order.length];
-      settings.transform = next;
-      renderSettingsUI();
-      emitTauri('pill-settings-update', { transform: next });
-    });
-    document.getElementById('btn-note').addEventListener('click', (e) => {
-      e.stopPropagation();
-      emitTauri('pill-open-scribble', {});
-    });
 
     /* Settings popover interactions */
-    document.querySelectorAll('.transform-item').forEach((el) => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const t = el.dataset.transform;
-        settings.transform = t;
-        renderSettingsUI();
-        emitTauri('pill-settings-update', { transform: t });
-      });
-    });
     document.getElementById('toggle-auto').addEventListener('click', (e) => {
       e.stopPropagation();
-      settings.autoApply = !settings.autoApply;
+      settings.autoPaste = !settings.autoPaste;
       renderSettingsUI();
-      emitTauri('pill-settings-update', { autoApply: settings.autoApply });
+      emitTauri('pill-settings-update', { autoPaste: settings.autoPaste });
+    });
+    document.getElementById('toggle-transform').addEventListener('click', (e) => {
+      e.stopPropagation();
+      settings.aiImprovement = !settings.aiImprovement;
+      renderSettingsUI();
+      emitTauri('pill-settings-update', { aiImprovement: settings.aiImprovement });
     });
     document.getElementById('lang-row').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -884,15 +847,30 @@
 
           ev.listen('pill-settings-init', (evt) => {
             const p = evt.payload || {};
-            if (p.transform) settings.transform = p.transform;
             if (p.language) settings.language = p.language;
-            if (typeof p.autoApply === 'boolean') settings.autoApply = p.autoApply;
+            if (typeof p.autoPaste === 'boolean') settings.autoPaste = p.autoPaste;
+            if (typeof p.aiImprovement === 'boolean') settings.aiImprovement = p.aiImprovement;
             renderSettingsUI();
           }),
 
           // Back-compat with old events; map to new phase
           ev.listen('pill-set-processing', () => applyPhase('processing')),
           ev.listen('pill-set-listening', () => applyPhase('recording')),
+
+          // Live mic levels from the host. Payload: number[] of 15 floats
+          // in [0..1] — one per bar. Drives the waveform reactively instead
+          // of the default CSS keyframe oscillation.
+          ev.listen('pill-audio-level', (evt) => {
+            if (phase !== 'recording') return;
+            const arr = evt.payload;
+            if (!Array.isArray(arr)) return;
+            if (!wf.classList.contains('live')) wf.classList.add('live');
+            for (let i = 0; i < waveBars.length; i++) {
+              const raw = typeof arr[i] === 'number' ? arr[i] : 0;
+              const v = Math.max(0.12, Math.min(1, raw));
+              waveBars[i].style.transform = `scaleY(${v})`;
+            }
+          }),
         ]);
       } catch (err) {
         console.warn('[pill] listen setup failed', err);

@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { meetingsService } from "./services/meetings.service";
 import { aiService } from "./services/ai.service";
 import { scribblesService } from "./services/scribbles.service";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -37,7 +37,6 @@ import type {
   MicrophonePermissionState,
   RoleModelState,
   TabType,
-  TonePreset,
   Transcription,
   WhisperModelRole,
 } from "./lib/app-types";
@@ -247,7 +246,6 @@ function App() {
 
   // AI editing (legacy — kept for settings migration)
   const [_aiEditing, setAiEditing] = useState(false);
-  const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
   // AI Improvement toggle (user-controllable — controls Gemini AI cleanup)
   const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
@@ -303,8 +301,11 @@ function App() {
   const pendingStopRef = useRef(false);
   const warmStreamRef = useRef<MediaStream | null>(null);
   const voiceEngineWarmupRef = useRef(false);
+  const meterCtxRef = useRef<AudioContext | null>(null);
+  const meterSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const meterAnalyserRef = useRef<AnalyserNode | null>(null);
+  const meterRafRef = useRef<number | null>(null);
   const aiEditingRef = useRef(false);
-  const tonePresetRef = useRef<TonePreset>("none");
   const transcriptionLanguageRef = useRef<string>("hi-en");
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
@@ -643,7 +644,6 @@ function App() {
     (async () => {
       const [
         savedAiEditing,
-        savedTone,
         savedAutoPaste,
         savedDict,
         permsDone,
@@ -664,7 +664,6 @@ function App() {
         savedMinutesDataResetVersion,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
-        loadSetting<TonePreset>("tonePreset", "none"),
         loadSetting<boolean>("autoPaste", true),
         loadSetting<string[]>("dictWords", []),
         loadSetting<boolean>("permissionsDone", false),
@@ -725,8 +724,6 @@ function App() {
       }
       setAiEditing(savedAiEditing);
       aiEditingRef.current = savedAiEditing;
-      setTonePreset(savedTone);
-      tonePresetRef.current = savedTone;
       setAutoPaste(savedAutoPaste);
       autoPasteRef.current = savedAutoPaste;
       setDictWords(savedDict);
@@ -849,39 +846,34 @@ function App() {
     // ── Edge-handle pill events ───────────────────────────────────────────
     // Settings updates from the pill's popover — persist + sync state.
     const unlistenPillSettings = listen<{
-      transform?: TonePreset;
       language?: string;
-      autoApply?: boolean;
+      autoPaste?: boolean;
+      aiImprovement?: boolean;
     }>("pill-settings-update", (ev) => {
       const p = ev.payload || {};
-      if (p.transform !== undefined) {
-        setTonePreset(p.transform);
-        tonePresetRef.current = p.transform;
-        void saveSetting("tonePreset", p.transform);
-      }
       if (p.language !== undefined) {
         setTranscriptionLanguage(p.language);
         transcriptionLanguageRef.current = p.language;
         void saveSetting("transcriptionLanguage", p.language);
       }
-      if (p.autoApply !== undefined) {
-        setAutoPaste(p.autoApply);
-        autoPasteRef.current = p.autoApply;
-        void saveSetting("autoPaste", p.autoApply);
+      if (p.autoPaste !== undefined) {
+        setAutoPaste(p.autoPaste);
+        autoPasteRef.current = p.autoPaste;
+        void saveSetting("autoPaste", p.autoPaste);
       }
-    });
-
-    // Note button on the pill jumps to the Scribble tab.
-    const unlistenPillNote = listen("pill-open-scribble", () => {
-      setActiveTab("scribble");
+      if (p.aiImprovement !== undefined) {
+        setAiImprovementEnabled(p.aiImprovement);
+        aiImprovementEnabledRef.current = p.aiImprovement;
+        void saveSetting("aiImprovementEnabled", p.aiImprovement);
+      }
     });
 
     // When the pill window has wired its listeners, push current settings.
     const unlistenPillReady = listen("pill-ready", () => {
       invoke("pill_push_settings", {
-        transform: tonePresetRef.current,
         language: transcriptionLanguageRef.current,
-        autoApply: autoPasteRef.current,
+        autoPaste: autoPasteRef.current,
+        aiImprovement: aiImprovementEnabledRef.current,
       }).catch(console.warn);
     });
 
@@ -891,7 +883,6 @@ function App() {
       unlistenErr.then((f) => f());
       unlistenReg.then((f) => f());
       unlistenPillSettings.then((f) => f());
-      unlistenPillNote.then((f) => f());
       unlistenPillReady.then((f) => f());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads settings, registers hotkey listeners; uses refs for mutable state
@@ -1241,6 +1232,69 @@ function App() {
       .catch((err) => console.warn("[whisper] failed to inspect meeting model:", err));
   }, [prepareWhisperModel, setupComplete]);
 
+  // ── Recording-pill waveform meter ──────────────────────────────────────────
+  // Sample the live mic stream and push 15 normalized band levels to the pill
+  // window so its waveform bars react to the user's voice instead of the
+  // default CSS keyframe oscillation.
+
+  const PILL_WAVE_BARS = 15;
+
+  const startAudioMeter = (stream: MediaStream) => {
+    stopAudioMeter();
+    try {
+      const AudioCtor = window.AudioContext;
+      if (!AudioCtor) return;
+      const ctx = new AudioCtor();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.6;
+      source.connect(analyser);
+      meterCtxRef.current = ctx;
+      meterSourceRef.current = source;
+      meterAnalyserRef.current = analyser;
+
+      const bufLen = analyser.frequencyBinCount;
+      const data = new Uint8Array(bufLen);
+      const usable = Math.min(60, bufLen);
+      const binsPerBar = Math.max(1, Math.floor(usable / PILL_WAVE_BARS));
+
+      const tick = () => {
+        const a = meterAnalyserRef.current;
+        if (!a) return;
+        a.getByteFrequencyData(data);
+        const levels = new Array<number>(PILL_WAVE_BARS);
+        for (let i = 0; i < PILL_WAVE_BARS; i++) {
+          let sum = 0;
+          const startBin = i * binsPerBar;
+          const endBin = Math.min(startBin + binsPerBar, usable);
+          for (let j = startBin; j < endBin; j++) sum += data[j];
+          const avg = sum / Math.max(1, endBin - startBin) / 255;
+          levels[i] = Math.min(1, Math.pow(avg, 0.7));
+        }
+        emit("pill-audio-level", levels).catch(() => {});
+        meterRafRef.current = requestAnimationFrame(tick);
+      };
+      meterRafRef.current = requestAnimationFrame(tick);
+    } catch (e) {
+      console.warn("[meter] start failed", e);
+    }
+  };
+
+  const stopAudioMeter = () => {
+    if (meterRafRef.current !== null) {
+      cancelAnimationFrame(meterRafRef.current);
+      meterRafRef.current = null;
+    }
+    try { meterSourceRef.current?.disconnect(); } catch {}
+    try { meterAnalyserRef.current?.disconnect(); } catch {}
+    try { meterCtxRef.current?.close(); } catch {}
+    meterSourceRef.current = null;
+    meterAnalyserRef.current = null;
+    meterCtxRef.current = null;
+    emit("pill-audio-level", new Array(PILL_WAVE_BARS).fill(0)).catch(() => {});
+  };
+
   // ── Hotkey recording ───────────────────────────────────────────────────────
 
   const startHotkeyRecording = async () => {
@@ -1304,6 +1358,7 @@ function App() {
     };
 
     mediaRecorder.start(100);
+    startAudioMeter(stream);
     isRecordingRef.current = true;
     setIsRecording(true);
     setStatus("Recording... Release to stop");
@@ -1318,6 +1373,7 @@ function App() {
     ) {
       mediaRecorderRef.current.stop();
     }
+    stopAudioMeter();
     // Switch pill to processing (dots) — don't hide yet
     invoke("set_pill_processing").catch(console.warn);
   };
@@ -1692,16 +1748,24 @@ function App() {
       }
 
       let formattedText = rawText;
+      let title = "";
       if (aiImprovementEnabledRef.current) {
-        setScribbleStatus("Cleaning up…");
-        setStatus("Cleaning up Scribble...");
+        setScribbleStatus("Polishing…");
+        setStatus("Polishing Scribble...");
         try {
-          const cleaned = await aiService.processText(rawText, "transcribe_cleanup");
-          if (cleaned.trim()) {
-            formattedText = cleaned.trim();
+          const formatted = await aiService.formatScribble(rawText);
+          if (formatted.trim()) {
+            formattedText = formatted.trim();
           }
         } catch (aiErr) {
-          console.warn("[scribble] cleanup failed, saving raw transcript:", aiErr);
+          console.warn("[scribble] format failed, saving raw transcript:", aiErr);
+        }
+
+        setScribbleStatus("Titling…");
+        try {
+          title = await aiService.generateScribbleTitle(formattedText);
+        } catch (titleErr) {
+          console.warn("[scribble] title generation failed, using fallback:", titleErr);
         }
       }
 
@@ -1709,7 +1773,7 @@ function App() {
       setStatus("Saving Scribble...");
       const { error } = await scribblesService.createScribble({
         user_id: user.id,
-        title: buildFallbackScribbleTitle(formattedText),
+        title: title || buildFallbackScribbleTitle(formattedText),
         raw_text: rawText,
         original_formatted_text: formattedText,
         edited_text: null,
@@ -1956,6 +2020,11 @@ function App() {
     setAiImprovementEnabled(enabled);
     aiImprovementEnabledRef.current = enabled;
     saveSetting("aiImprovementEnabled", enabled);
+    invoke("pill_push_settings", {
+      language: transcriptionLanguageRef.current,
+      autoPaste: autoPasteRef.current,
+      aiImprovement: enabled,
+    }).catch(console.warn);
   }, []);
 
   const handleContextAwareDictationChange = useCallback((enabled: boolean) => {
@@ -2187,9 +2256,9 @@ function App() {
                     transcriptionLanguageRef.current = lang;
                     saveSetting("transcriptionLanguage", lang);
                     invoke("pill_push_settings", {
-                      transform: tonePresetRef.current,
                       language: lang,
-                      autoApply: autoPasteRef.current,
+                      autoPaste: autoPasteRef.current,
+                      aiImprovement: aiImprovementEnabledRef.current,
                     }).catch(console.warn);
                   }}
                   selectedMicId={selectedMicId}
