@@ -8,6 +8,12 @@ interface MarkdownViewProps {
   className?: string;
 }
 
+function stripCitationTokens(markdown: string): string {
+  return markdown
+    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/[ \t]+\n/g, "\n");
+}
+
 export function MarkdownView({ children, className }: MarkdownViewProps) {
   return (
     <div
@@ -31,7 +37,7 @@ export function MarkdownView({ children, className }: MarkdownViewProps) {
           ),
         }}
       >
-        {children}
+        {stripCitationTokens(children)}
       </ReactMarkdown>
     </div>
   );

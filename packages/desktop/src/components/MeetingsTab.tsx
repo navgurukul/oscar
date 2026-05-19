@@ -821,7 +821,7 @@ export function MeetingsTab({
   };
 
   const handleCopy = async (markdown: string) => {
-    await navigator.clipboard.writeText(markdown);
+    await navigator.clipboard.writeText(stripEvidenceComments(markdown));
     setCopied(true);
     setTimeout(() => setCopied(false), 2_000);
   };

@@ -129,7 +129,10 @@ function uniqueStrings(values: string[]): string[] {
 }
 
 function stripCitationToken(value: string): string {
-  return value.replace(/\[\[seg:([A-Za-z0-9._:-]+)\]\]\s*$/g, "").trim();
+  return value
+    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function normalizeHeadingKey(value: string): string {
@@ -358,11 +361,17 @@ function splitSegmentBatches(
   );
 }
 
+function isRetryableGeminiError(err: unknown): boolean {
+  const msg = (err as Error)?.message ?? "";
+  return /503|502|529|overloaded|unavailable|high demand|try again/i.test(msg);
+}
+
 async function callGemini(
   geminiApiKey: string,
   system: string,
   user: string,
   maxTokens: number,
+  label: string = "callGemini",
 ): Promise<string> {
   const genAI = new GoogleGenerativeAI(geminiApiKey);
   const model = genAI.getGenerativeModel({
@@ -370,14 +379,56 @@ async function callGemini(
     systemInstruction: system,
   });
 
-  const result = await model.generateContent({
-    contents: [{ role: "user", parts: [{ text: user }] }],
-    generationConfig: { maxOutputTokens: maxTokens, temperature: 0.2 },
-  });
+  const MAX_ATTEMPTS = 4;
+  const BASE_DELAY_MS = 2_000;
 
-  const output = result.response.text().trim();
-  if (!output) throw new Error("Empty response from AI service.");
-  return output;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      // thinkingBudget=0 disables 2.5-flash reasoning tokens so the whole
+      // maxOutputTokens budget goes to the answer. Without this, thinking can
+      // consume the full budget and response.text() returns "".
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: user }] }],
+        generationConfig: {
+          maxOutputTokens: maxTokens,
+          temperature: 0.2,
+          thinkingConfig: { thinkingBudget: 0 },
+        } as Record<string, unknown>,
+      });
+
+      const response = result.response;
+      const output = response.text().trim();
+      if (!output) {
+        const candidate = response.candidates?.[0];
+        const finishReason = candidate?.finishReason ?? "UNKNOWN";
+        const safetyRatings = candidate?.safetyRatings ?? [];
+        const promptFeedback = response.promptFeedback ?? null;
+        const usage = response.usageMetadata ?? null;
+        console.warn(
+          `[meeting-enhance] empty Gemini response label=${label} ` +
+            `finish=${finishReason} ` +
+            `maxOut=${maxTokens} ` +
+            `safety=${JSON.stringify(safetyRatings)} ` +
+            `promptFeedback=${JSON.stringify(promptFeedback)} ` +
+            `usage=${JSON.stringify(usage)}`,
+        );
+        throw new Error(
+          `Empty response from AI service (label=${label}, finish=${finishReason}).`,
+        );
+      }
+      return output;
+    } catch (err) {
+      const retryable = isRetryableGeminiError(err);
+      if (!retryable || attempt === MAX_ATTEMPTS) throw err;
+      const delay = BASE_DELAY_MS * 2 ** (attempt - 1);
+      console.warn(
+        `[meeting-enhance] Gemini 503 label=${label} attempt=${attempt}/${MAX_ATTEMPTS} retry in ${delay}ms`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw new Error(`callGemini: unreachable (label=${label})`);
 }
 
 function parseCleanedSegmentLines(
@@ -548,6 +599,7 @@ async function cleanTranscriptSegments(
         systemPrompt,
         userPrompt,
         2_400,
+        `cleanup-${index + 1}/${batches.length}`,
       );
       cleanedSegments.push(...parseCleanedSegmentLines(cleanedOutput, batch));
     } catch (error) {
@@ -593,7 +645,15 @@ async function reduceTranscriptBatches(
       .filter(Boolean)
       .join("\n\n");
 
-    reductions.push(await callGemini(geminiApiKey, systemPrompt, userPrompt, 1_100));
+    reductions.push(
+      await callGemini(
+        geminiApiKey,
+        systemPrompt,
+        userPrompt,
+        1_100,
+        `reduce-${index + 1}/${segmentBatches.length}`,
+      ),
+    );
   }
 
   return reductions
@@ -818,7 +878,7 @@ function buildFinalMarkdown(
         continue;
       }
 
-      const citationMatch = rawBullet.match(/\[\[seg:([A-Za-z0-9._:-]+)\]\]\s*$/);
+      const citationMatch = rawBullet.match(/\[\[seg:([A-Za-z0-9._:-]+)\]\]/);
       const visibleBullet = stripCitationToken(rawBullet);
       const normalizedVisible = normalizeText(visibleBullet);
       if (!visibleBullet) continue;
@@ -885,7 +945,13 @@ async function generateUncitedFallbackMarkdown(
     .filter(Boolean)
     .join("\n\n");
 
-  const fallbackPass = await callGemini(geminiApiKey, systemPrompt, userPrompt, 2_200);
+  const fallbackPass = await callGemini(
+    geminiApiKey,
+    systemPrompt,
+    userPrompt,
+    2_200,
+    "fallback-uncited",
+  );
   return buildFinalMarkdown(request, expectedSections, fallbackPass);
 }
 
@@ -961,7 +1027,13 @@ async function generateFinalMarkdown(
     .filter(Boolean)
     .join("\n\n");
 
-  let firstPass = await callGemini(geminiApiKey, systemPrompt, userPrompt, 1_800);
+  let firstPass = await callGemini(
+    geminiApiKey,
+    systemPrompt,
+    userPrompt,
+    1_800,
+    "final-first",
+  );
   let finalOutput = buildFinalMarkdown(request, expectedSections, firstPass);
 
   if (
@@ -975,7 +1047,13 @@ async function generateFinalMarkdown(
       `Previous answer:\n${sanitizeModelMarkdown(firstPass)}`,
     ].join("\n\n");
 
-    firstPass = await callGemini(geminiApiKey, systemPrompt, repairPrompt, 1_800);
+    firstPass = await callGemini(
+      geminiApiKey,
+      systemPrompt,
+      repairPrompt,
+      1_800,
+      "final-repair",
+    );
     finalOutput = buildFinalMarkdown(request, expectedSections, firstPass);
   }
 
