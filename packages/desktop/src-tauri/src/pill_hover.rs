@@ -14,7 +14,7 @@
 
 use std::time::{Duration, Instant};
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(45);
 const LEAVE_DEBOUNCE: Duration = Duration::from_millis(220);
@@ -47,8 +47,18 @@ pub(crate) fn start(app: AppHandle) {
             // Hysteresis: small trigger zone before expand, larger keep-open
             // zone once expanded — avoids both an over-sensitive bottom edge
             // and a too-eager collapse when cursor moves up to the pill body.
+            //
+            // When the pill window is taller than the default expanded height
+            // (e.g. settings popover open at 380 px), grow the keep-zone to
+            // match the actual window height so the cursor can reach the
+            // popover items without triggering a collapse.
             let zone_h_logical = if last_in_zone {
-                KEEP_HEIGHT_LOGICAL
+                let win_h_logical = app
+                    .get_webview_window("recording-pill")
+                    .and_then(|w| w.inner_size().ok())
+                    .map(|s| s.height as f64 / scale)
+                    .unwrap_or(KEEP_HEIGHT_LOGICAL);
+                win_h_logical.max(KEEP_HEIGHT_LOGICAL)
             } else {
                 TRIGGER_HEIGHT_LOGICAL
             };
