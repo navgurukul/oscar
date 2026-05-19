@@ -107,6 +107,7 @@ pub fn run() {
             hotkey::is_recording_hotkey_registered,
             filesystem::check_file_exists,
             filesystem::delete_file,
+            filesystem::append_perf_log,
             calendar::get_calendar_events,
             hardware::detect_hardware,
             hardware::recommend_whisper_model,

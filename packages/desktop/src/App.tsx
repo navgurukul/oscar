@@ -1234,8 +1234,8 @@ function App() {
 
   // ── Recording-pill waveform meter ──────────────────────────────────────────
   // Sample the live mic stream and push 15 normalized band levels to the pill
-  // window so its waveform bars react to the user's voice instead of the
-  // default CSS keyframe oscillation.
+  // window so its waveform bars react to the user's voice on top of their
+  // baseline CSS motion.
 
   const PILL_WAVE_BARS = 15;
 
@@ -1481,9 +1481,14 @@ function App() {
     timings["decode+mixdown"] = Math.round(performance.now() - tDecode0);
 
     try {
+      // Captured BEFORE the await so we observe the pre-load state. After
+      // ensureWhisperModelLoaded resolves, whisperLoadedRef.current is always
+      // true, which would defeat the cold/warm bucketing.
+      const wasModelWarm = whisperLoadedRef.current;
       const tWhisperLoad0 = performance.now();
       await ensureWhisperModelLoaded("dictation");
       timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
+      metrics["cold-load"] = wasModelWarm ? "0" : "1";
 
       const tAudioArray0 = performance.now();
       const audioDataForIpc = Array.from(audioData);
@@ -1499,6 +1504,30 @@ function App() {
         language: getWhisperLanguage(transcriptionLanguage, "dictation"),
       });
       timings["whisper-transcribe"] = Math.round(performance.now() - tWhisper0);
+
+      // ── Per-stage metrics for offline analysis ─────────────────────────────
+      // audio-sec is post-trim (what Whisper actually saw). rtf =
+      // inference-ms / audio-ms — under 1.0 means faster than realtime.
+      const audioSec = audioData.length / 16000;
+      metrics["audio-sec"] = audioSec.toFixed(2);
+      metrics["model"] = dictationModel.activeVariant ?? "unknown";
+      if (audioSec > 0) {
+        metrics["rtf"] = (
+          timings["whisper-transcribe"] / (audioSec * 1000)
+        ).toFixed(2);
+      }
+      if (result.perf) {
+        // Sub-stage timing returned from the Rust side. Mirrors the names in
+        // whisper.rs / state.rs::TranscriptionPerf.
+        timings["whisper-vad"] = result.perf.vadMs;
+        timings["whisper-state"] = result.perf.stateCreateMs;
+        timings["whisper-infer"] = result.perf.inferenceMs;
+        timings["whisper-segments"] = result.perf.segmentsMs;
+        timings["whisper-rust-total"] = result.perf.totalMs;
+        metrics["raw-segments"] = result.perf.rawSegments;
+        metrics["drop-no-speech"] = result.perf.droppedNoSpeech;
+        metrics["drop-hallu"] = result.perf.droppedHallucination;
+      }
 
       if (!result.text) {
         console.warn("[process] ABORT: no speech detected (whisper empty)");
@@ -1581,6 +1610,10 @@ function App() {
             targetApp: _targetApp || undefined,
           });
           timings["paste"] = Math.round(performance.now() - tPaste0);
+          // User-felt latency: stop → paste-done. Excludes persistence work
+          // that runs afterwards. This is the number that matches "how long
+          // until my text shows up" for the user.
+          metrics["paste-felt-ms"] = Math.round(performance.now() - tStart);
           if (pasteResult === "CLIPBOARD_ONLY") {
             // Accessibility not granted — text is in clipboard, guide user
             setStatus(
@@ -1593,6 +1626,7 @@ function App() {
           }
         } catch (pe) {
           timings["paste"] = Math.round(performance.now() - tPaste0);
+          metrics["paste-felt-ms"] = Math.round(performance.now() - tStart);
           console.error("[paste] FAILED:", pe);
           setStatus(
             isMac
@@ -1650,6 +1684,29 @@ function App() {
       const parts = [...timingParts, ...metricParts]
         .join(" ");
       console.info(`[stream-timing] total=${totalMs}ms ${parts}`);
+
+      // ── Persist one JSONL record per dictation to <app-data>/perf.jsonl ────
+      // Fire-and-forget: a disk-write failure must never affect dictation UX.
+      // The append_perf_log Rust command resolves the per-platform app data
+      // dir; it logs the resolved path on the first successful append so users
+      // know where to grab the file.
+      try {
+        const record = {
+          ts: new Date().toISOString(),
+          flow: "stream-dictation",
+          platform: navigator.platform,
+          userAgent: navigator.userAgent,
+          hadError,
+          totalMs,
+          timings,
+          metrics,
+        };
+        invoke("append_perf_log", {
+          jsonLine: JSON.stringify(record),
+        }).catch((e) => console.warn("[perf] append_perf_log failed:", e));
+      } catch (perfErr) {
+        console.warn("[perf] failed to build perf record:", perfErr);
+      }
     }
 
     // Don't stop the stream — keep it warm for next recording
