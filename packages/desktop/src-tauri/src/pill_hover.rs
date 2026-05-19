@@ -19,7 +19,12 @@ use tauri::AppHandle;
 const POLL_INTERVAL: Duration = Duration::from_millis(45);
 const LEAVE_DEBOUNCE: Duration = Duration::from_millis(220);
 const HOT_ZONE_WIDTH_LOGICAL: f64 = 360.0;
-const HOT_ZONE_HEIGHT_LOGICAL: f64 = 90.0;
+/// Trigger zone — cursor must reach the bottom edge handle to expand.
+/// Matches the visible handle height (5px) plus a small tolerance.
+const TRIGGER_HEIGHT_LOGICAL: f64 = 14.0;
+/// Keep-expanded zone — once expanded, the pill stays open while the
+/// cursor is anywhere over the visible pill body (44px) + handle margin.
+const KEEP_HEIGHT_LOGICAL: f64 = 80.0;
 
 pub(crate) fn start(app: AppHandle) {
     std::thread::spawn(move || {
@@ -39,7 +44,15 @@ pub(crate) fn start(app: AppHandle) {
             let m_bottom_phys = m_pos.y as f64 + m_size.height as f64;
             let m_center_x_phys = m_pos.x as f64 + m_size.width as f64 / 2.0;
 
-            let zone_h_phys = HOT_ZONE_HEIGHT_LOGICAL * scale;
+            // Hysteresis: small trigger zone before expand, larger keep-open
+            // zone once expanded — avoids both an over-sensitive bottom edge
+            // and a too-eager collapse when cursor moves up to the pill body.
+            let zone_h_logical = if last_in_zone {
+                KEEP_HEIGHT_LOGICAL
+            } else {
+                TRIGGER_HEIGHT_LOGICAL
+            };
+            let zone_h_phys = zone_h_logical * scale;
             let zone_w_phys = HOT_ZONE_WIDTH_LOGICAL * scale;
 
             let zone_top = m_bottom_phys - zone_h_phys;
@@ -51,12 +64,20 @@ pub(crate) fn start(app: AppHandle) {
                 && cursor.y >= zone_top
                 && cursor.y <= m_bottom_phys;
 
-            let phase = crate::pill::current_pill_phase();
-            let can_auto_transition = matches!(phase, "rest" | "ready" | "expanded");
+            // The stored phase tracks the "real" pill state (rest, recording,
+            // processing, inserted, error). `store_pill_phase` deliberately
+            // skips the transient hover states ("ready", "expanded",
+            // "settings"), so we cannot use the stored phase to detect whether
+            // the pill is currently expanded — that's what `last_in_zone`
+            // tracks instead. We only auto-transition when the underlying
+            // state is "rest"; anything else (recording/processing/etc.) is a
+            // user-driven flow we must not disturb.
+            let stored_phase = crate::pill::current_pill_phase();
+            let is_resting = stored_phase == "rest";
 
             if in_zone {
                 leave_started = None;
-                if !last_in_zone && can_auto_transition && phase != "expanded" {
+                if !last_in_zone && is_resting {
                     crate::pill::apply_phase_from_rust(&app, "expanded");
                 }
                 last_in_zone = true;
@@ -66,7 +87,8 @@ pub(crate) fn start(app: AppHandle) {
                 }
                 if let Some(t) = leave_started {
                     if t.elapsed() >= LEAVE_DEBOUNCE {
-                        if can_auto_transition && phase == "expanded" {
+                        if is_resting {
+                            // Re-apply "rest" to shrink the window back down.
                             crate::pill::apply_phase_from_rust(&app, "rest");
                         }
                         last_in_zone = false;
