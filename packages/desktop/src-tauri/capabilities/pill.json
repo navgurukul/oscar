@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pill",
+  "description": "Recording-pill webview: needs core event emit/listen so the settings popover (auto-paste, AI cleanup, language) and the pill-ready handshake can talk to the main window.",
+  "windows": ["recording-pill"],
+  "permissions": ["core:event:default"]
+}

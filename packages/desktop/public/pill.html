@@ -315,7 +315,7 @@
       position: absolute;
       left: 50%;
       bottom: 76px;
-      transform: translateX(-30%) translateY(8px);
+      transform: translateX(-50%) translateY(8px);
       width: 260px;
       background: #ffffff;
       border: 1px solid rgba(15, 23, 42, 0.08);
@@ -336,7 +336,7 @@
     body[data-settings-open="true"] .settings-pop {
       opacity: 1;
       pointer-events: auto;
-      transform: translateX(-30%) translateY(0);
+      transform: translateX(-50%) translateY(0);
     }
     .settings-row {
       display: flex;
@@ -397,10 +397,8 @@
     }
     .config-row:hover { background: rgba(15, 23, 42, 0.05); }
 
-    /* Language sub-menu (slides in from right within popover) */
+    /* Language sub-menu (replaces popover body when active) */
     .lang-list {
-      position: absolute;
-      inset: 6px;
       background: #ffffff;
       border-radius: 8px;
       padding: 2px;
