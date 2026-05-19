@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { API_CONFIG, ERROR_MESSAGES, RATE_LIMITS } from "@/lib/constants";
 import {
   SYSTEM_PROMPTS,
@@ -11,6 +10,9 @@ import {
   getClientIdentifier,
 } from "@/lib/middleware/rate-limit";
 import {
+  applyCors,
+  authenticateRequest,
+  corsPreflightResponse,
   createPlainTextStreamResponse,
   getGeminiApiKey,
   parseJsonBody,
@@ -24,32 +26,36 @@ const LONG_TEXT_THRESHOLD = 2500;
 const CHUNK_SIZE = 1600;
 const MAX_TOKENS_BUFFER = 200;
 
+export function OPTIONS() {
+  return corsPreflightResponse();
+}
+
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
-  }
+  const authResult = await authenticateRequest(req);
+  if (!authResult.success) return authResult.response;
+  const { user, supabase } = authResult;
 
   let apiKey: string;
   try {
     apiKey = getGeminiApiKey();
   } catch {
-    return NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 });
+    return applyCors(
+      NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 })
+    );
   }
 
   const clientId = getClientIdentifier(user.id, req);
   const rateLimitResult = await applyRateLimit(clientId, "ai-format", RATE_LIMITS.AI_FORMAT);
-  if (rateLimitResult) return rateLimitResult;
+  if (rateLimitResult) return applyCors(rateLimitResult);
 
   const bodyResult = await parseJsonBody<{ rawText?: unknown }>(req);
-  if (!bodyResult.success) return bodyResult.response;
+  if (!bodyResult.success) return applyCors(bodyResult.response);
 
   const inputResult = validateAndWrapInput(bodyResult.data.rawText, {
     requiredError: ERROR_MESSAGES.RAW_TEXT_REQUIRED,
     tagName: "transcript",
   });
-  if (!inputResult.success) return inputResult.response;
+  if (!inputResult.success) return applyCors(inputResult.response);
 
   const rawText = inputResult.text;
 
@@ -125,12 +131,14 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return createPlainTextStreamResponse(stream);
+    return applyCors(createPlainTextStreamResponse(stream));
   } catch (err: unknown) {
     const error = err as Error;
-    return NextResponse.json(
-      { error: ERROR_MESSAGES.AI_REQUEST_FAILED, details: error?.message || String(err) },
-      { status: 500 }
+    return applyCors(
+      NextResponse.json(
+        { error: ERROR_MESSAGES.AI_REQUEST_FAILED, details: error?.message || String(err) },
+        { status: 500 }
+      )
     );
   }
 }

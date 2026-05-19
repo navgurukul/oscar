@@ -1692,16 +1692,24 @@ function App() {
       }
 
       let formattedText = rawText;
+      let title = "";
       if (aiImprovementEnabledRef.current) {
-        setScribbleStatus("Cleaning up…");
-        setStatus("Cleaning up Scribble...");
+        setScribbleStatus("Polishing…");
+        setStatus("Polishing Scribble...");
         try {
-          const cleaned = await aiService.processText(rawText, "transcribe_cleanup");
-          if (cleaned.trim()) {
-            formattedText = cleaned.trim();
+          const formatted = await aiService.formatScribble(rawText);
+          if (formatted.trim()) {
+            formattedText = formatted.trim();
           }
         } catch (aiErr) {
-          console.warn("[scribble] cleanup failed, saving raw transcript:", aiErr);
+          console.warn("[scribble] format failed, saving raw transcript:", aiErr);
+        }
+
+        setScribbleStatus("Titling…");
+        try {
+          title = await aiService.generateScribbleTitle(formattedText);
+        } catch (titleErr) {
+          console.warn("[scribble] title generation failed, using fallback:", titleErr);
         }
       }
 
@@ -1709,7 +1717,7 @@ function App() {
       setStatus("Saving Scribble...");
       const { error } = await scribblesService.createScribble({
         user_id: user.id,
-        title: buildFallbackScribbleTitle(formattedText),
+        title: title || buildFallbackScribbleTitle(formattedText),
         raw_text: rawText,
         original_formatted_text: formattedText,
         edited_text: null,

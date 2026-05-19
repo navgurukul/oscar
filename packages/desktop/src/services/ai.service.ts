@@ -1,5 +1,7 @@
 import { supabase } from "../supabase";
 import { applyTranscriptPostProcessing } from "@oscar/shared/prompts";
+import { API_CONFIG, MEETING_CONFIG } from "@oscar/shared/constants";
+import { WEB_APP_URL } from "../lib/web-app-url";
 import type {
   EnhancedMeetingNoteRequest,
   EnhancedMeetingNoteResponse,
@@ -9,7 +11,6 @@ import type {
   DictationContextSnapshot,
   DictationRoutingResult,
 } from "../types/scribble.types";
-import { MEETING_CONFIG } from "@oscar/shared/constants";
 
 export type DesktopAIMode =
   | "transcribe_cleanup"
@@ -288,6 +289,44 @@ async function getSessionAccessToken(): Promise<string> {
   return session.access_token;
 }
 
+// ── Web AI route client ────────────────────────────────────────────────────
+// Calls the web app's /api/ai/* routes with the user's Supabase JWT so the
+// desktop Scribble flow produces identical output to the web Scribble flow.
+
+async function extractWebRouteError(response: Response): Promise<string> {
+  const fallback = `Request failed (${response.status}).`;
+  const body = await response.text();
+  if (!body.trim()) return fallback;
+  try {
+    const parsed = JSON.parse(body) as { error?: string; details?: string };
+    return parsed.error || parsed.details || fallback;
+  } catch {
+    return body.trim();
+  }
+}
+
+async function callWebAiRoute<T>(
+  path: string,
+  body: unknown,
+  parse: (response: Response) => Promise<T>,
+): Promise<T> {
+  const accessToken = await getSessionAccessToken();
+  const response = await fetch(`${WEB_APP_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractWebRouteError(response));
+  }
+
+  return parse(response);
+}
+
 async function invokeAIProcess(
   accessToken: string,
   request: AIProcessRequest,
@@ -465,6 +504,39 @@ export const aiService = {
         context: options?.context,
         routing: options?.routing,
         promptProfile: options?.promptProfile,
+      },
+    );
+  },
+
+  // Polished Scribble formatting. Routes through the web app's /api/ai/format
+  // so the desktop output matches the web Scribble output exactly (single
+  // Gemini prompt, single rate-limit bucket).
+  async formatScribble(rawText: string): Promise<string> {
+    if (!rawText.trim()) {
+      throw new Error("No text provided for AI processing.");
+    }
+
+    return callWebAiRoute(
+      API_CONFIG.FORMAT_ENDPOINT,
+      { rawText },
+      async (response) => (await response.text()).trim(),
+    );
+  },
+
+  // 4-10 word Scribble title via the web app's /api/ai/title.
+  async generateScribbleTitle(text: string): Promise<string> {
+    if (!text.trim()) {
+      throw new Error("No text provided for title generation.");
+    }
+
+    return callWebAiRoute<string>(
+      API_CONFIG.TITLE_ENDPOINT,
+      { text },
+      async (response) => {
+        const data = (await response.json()) as { title?: string };
+        const title = data.title?.trim();
+        if (!title) throw new Error("Empty title response from AI.");
+        return title;
       },
     );
   },
