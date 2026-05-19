@@ -35,7 +35,7 @@ const SITE_RULES: Array<{
     appKey: "confluence",
     hosts: ["atlassian.net", "confluence.atlassian.com"],
   },
-  { category: "chat", appKey: "slack", hosts: ["app.slack.com", "slack.com"] },
+  { category: "email", appKey: "slack", hosts: ["app.slack.com", "slack.com"] },
   { category: "chat", appKey: "discord", hosts: ["discord.com", "discordapp.com"] },
   {
     category: "chat",
@@ -81,7 +81,7 @@ const APP_RULES: Array<{
   { category: "docs", appKey: "word", matches: ["microsoft word", "winword.exe", "com.microsoft.word"] },
   { category: "docs", appKey: "obsidian", matches: ["obsidian", "md.obsidian"] },
   { category: "docs", appKey: "craft", matches: ["craft", "com.lukilabs.lukiapp"] },
-  { category: "chat", appKey: "slack", matches: ["slack"] },
+  { category: "email", appKey: "slack", matches: ["slack"] },
   { category: "chat", appKey: "discord", matches: ["discord"] },
   { category: "chat", appKey: "teams", matches: ["microsoft teams", "teams", "teams.exe"] },
   { category: "chat", appKey: "messages", matches: ["messages", "com.apple.messages"] },
