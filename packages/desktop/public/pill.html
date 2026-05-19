@@ -735,6 +735,22 @@
       }, 220);
     });
 
+    /* The settings popover is a DOM sibling of the pill, so moving the cursor
+       from the pill up into the popover fires mouseleave on pill-wrap. Treat
+       the popover as a continuation of the hover region. */
+    const settingsPop = document.getElementById('settings-pop');
+    settingsPop.addEventListener('mouseenter', () => {
+      clearTimeout(leaveTimer);
+    });
+    settingsPop.addEventListener('mouseleave', () => {
+      leaveTimer = setTimeout(() => {
+        if (phase === 'expanded') {
+          applyPhase('rest');
+          callTauri('set_pill_phase', { phase: 'rest' });
+        }
+      }, 220);
+    });
+
     /* ─── Click pill: start/stop recording ─────────────────────────────── */
     document.getElementById('pill').addEventListener('click', (e) => {
       // Ignore clicks on the right-side action buttons.
