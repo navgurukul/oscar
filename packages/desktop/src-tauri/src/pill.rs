@@ -42,15 +42,27 @@ fn phase_height(phase: &str) -> f64 {
     }
 }
 
-fn current_pill_phase() -> &'static str {
+pub(crate) fn current_pill_phase() -> &'static str {
     CURRENT_PILL_PHASE
         .lock()
         .map(|phase| *phase)
         .unwrap_or("rest")
 }
 
+/// Called from background threads (e.g. the macOS cursor-hover poller) to
+/// drive the pill into a new phase without going through the JS layer.
+/// Hops to the main thread because NSWindow/NSPanel resizes are not safe
+/// off-thread.
+pub(crate) fn apply_phase_from_rust(app: &tauri::AppHandle, phase: &str) {
+    let normalized = normalize_phase(phase);
+    let app_clone = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        sync_pill_phase(&app_clone, normalized);
+    });
+}
+
 fn store_pill_phase(phase: &'static str) {
-    if phase == "settings" {
+    if matches!(phase, "ready" | "expanded" | "settings") {
         return;
     }
 
@@ -71,23 +83,19 @@ fn apply_phase_script<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, phase
 }
 
 fn sync_pill_phase(app: &tauri::AppHandle, phase: &'static str) {
-    let visual_phase = if phase == "settings" {
-        current_pill_phase()
-    } else {
-        store_pill_phase(phase);
-        phase
-    };
-
     create_pill_window(app);
 
     if let Some(w) = app.get_webview_window("recording-pill") {
         resize_pill(&w, phase_height(phase));
         let _ = w.show();
-        apply_phase_script(&w, visual_phase);
+        if phase != "settings" {
+            apply_phase_script(&w, phase);
+        }
     }
 
     if phase != "settings" {
-        OscarEvent::PillSetPhase(visual_phase.into()).dispatch(app);
+        store_pill_phase(phase);
+        OscarEvent::PillSetPhase(phase.into()).dispatch(app);
     }
 }
 

@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import { corsHeaders } from "../_shared/cors.ts";
 
 type MeetingTypeHint =
@@ -61,8 +62,7 @@ interface FinalMarkdownResult {
   transcriptBulletCount: number;
 }
 
-const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL = "gemini-2.5-flash-lite";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const MAX_SEGMENT_BATCH_CHARS = 12_000;
 const MAX_SEGMENT_BATCH_SIZE = 80;
 const MAX_CLEANUP_BATCH_CHARS = 8_000;
@@ -364,41 +364,19 @@ async function callGemini(
   user: string,
   maxTokens: number,
 ): Promise<string> {
-  const upstream = await fetch(
-    `${GEMINI_API_BASE_URL}/models/${GEMINI_MODEL}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "x-goog-api-key": geminiApiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [
-          { role: "user", parts: [{ text: user }] },
-        ],
-        generationConfig: {
-          maxOutputTokens: maxTokens,
-          temperature: 0.2,
-        },
-      }),
-    },
-  );
+  const genAI = new GoogleGenerativeAI(geminiApiKey);
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    systemInstruction: system,
+  });
 
-  if (!upstream.ok) {
-    const errBody = await upstream.text();
-    throw new Error(`Gemini API error ${upstream.status}: ${errBody}`);
-  }
+  const result = await model.generateContent({
+    contents: [{ role: "user", parts: [{ text: user }] }],
+    generationConfig: { maxOutputTokens: maxTokens, temperature: 0.2 },
+  });
 
-  const data = await upstream.json();
-  const parts = data?.candidates?.[0]?.content?.parts;
-  const output = Array.isArray(parts)
-    ? parts.map((p: { text?: string }) => (typeof p?.text === "string" ? p.text : "")).join("").trim()
-    : "";
-  if (!output) {
-    throw new Error("Empty response from AI service.");
-  }
-
+  const output = result.response.text().trim();
+  if (!output) throw new Error("Empty response from AI service.");
   return output;
 }
 

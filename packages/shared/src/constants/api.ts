@@ -9,7 +9,7 @@ export const API_CONFIG = {
   GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1beta",
 
   // Inference model
-  GEMINI_MODEL: "gemini-2.5-flash-lite",
+  GEMINI_MODEL: "gemini-2.5-flash",
 
   // Format API settings
   FORMAT_TEMPERATURE: 0.0,

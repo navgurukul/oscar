@@ -103,7 +103,7 @@ async function runLiveGeminiChecks(cases) {
     throw new Error("GEMINI_API_KEY required for --live regression checks.");
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   for (const testCase of cases) {

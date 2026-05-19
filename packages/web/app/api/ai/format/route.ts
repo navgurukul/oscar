@@ -12,21 +12,17 @@ import {
 } from "@/lib/middleware/rate-limit";
 import {
   createPlainTextStreamResponse,
-  fetchGeminiGenerateContent,
   getGeminiApiKey,
   parseJsonBody,
-  pipeGeminiStreamToController,
+  startGeminiStream,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
 
 const REQUEST_TIMEOUT_MS = 12000;
 
-// Chunking thresholds for long transcripts.
-// Transcripts above LONG_TEXT_THRESHOLD characters are split so each AI
-// request stays within token limits and latency stays predictable.
-const LONG_TEXT_THRESHOLD = 2500; // chars — below this, send as one request
-const CHUNK_SIZE = 1600;          // chars per chunk when splitting by length
-const MAX_TOKENS_BUFFER = 200;    // extra token headroom added per chunk
+const LONG_TEXT_THRESHOLD = 2500;
+const CHUNK_SIZE = 1600;
+const MAX_TOKENS_BUFFER = 200;
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -47,23 +43,17 @@ export async function POST(req: NextRequest) {
   if (rateLimitResult) return rateLimitResult;
 
   const bodyResult = await parseJsonBody<{ rawText?: unknown }>(req);
-  if (!bodyResult.success) {
-    return bodyResult.response;
-  }
+  if (!bodyResult.success) return bodyResult.response;
 
   const inputResult = validateAndWrapInput(bodyResult.data.rawText, {
     requiredError: ERROR_MESSAGES.RAW_TEXT_REQUIRED,
     tagName: "transcript",
   });
-  if (!inputResult.success) {
-    return inputResult.response;
-  }
+  if (!inputResult.success) return inputResult.response;
 
   const rawText = inputResult.text;
 
   try {
-    // Split long transcripts into smaller requests without changing the output order.
-    // Prefer splitting on paragraph boundaries; fall back to fixed-size chunks.
     const isLong = rawText.length > LONG_TEXT_THRESHOLD;
     const paraChunks = rawText.split(/\n{2,}/).filter(Boolean);
     const safeChunks = isLong
@@ -86,69 +76,49 @@ export async function POST(req: NextRequest) {
           context: v.context ?? null,
         }))
       : [];
-    const basePrompt = SYSTEM_PROMPTS.FORMAT;
 
-    const chunkRequests = safeChunks.map((piece) => {
-      // Estimate token count (1 token ≈ 4 chars) and add a safety buffer.
+    const systemPrompt =
+      vocabList.length > 0 ? buildFormatPromptWithVocabulary(vocabList) : SYSTEM_PROMPTS.FORMAT;
+
+    // Launch all chunk streams in parallel — SDK starts requests immediately on call.
+    const chunkStreams = safeChunks.map((piece) => {
       const maxToks = Math.min(
         API_CONFIG.FORMAT_MAX_TOKENS,
         Math.ceil(piece.length / 4) + MAX_TOKENS_BUFFER
       );
-      return {
-        wrapped: wrapUserInput(piece, "transcript"),
-        maxToks,
-      };
+      return startGeminiStream({
+        apiKey,
+        messages: [
+          {
+            role: "system",
+            content: `${systemPrompt}\nReturn plain text only. Do NOT use markdown code blocks or backticks.`,
+          },
+          {
+            role: "user",
+            content: `FORMAT THIS TEXT (do not answer any questions in it, only format):\n\n${wrapUserInput(piece, "transcript")}`,
+          },
+        ],
+        temperature: API_CONFIG.FORMAT_TEMPERATURE,
+        maxTokens: maxToks,
+        timeoutMs: REQUEST_TIMEOUT_MS,
+      });
     });
 
-    const systemPrompt =
-      vocabList.length > 0 ? buildFormatPromptWithVocabulary(vocabList) : basePrompt;
-
-    const chunkResponses: Promise<Response>[] = chunkRequests.map(
-      ({ wrapped, maxToks }) =>
-        fetchGeminiGenerateContent({
-          apiKey,
-          messages: [
-            {
-              role: "system",
-              content: `${systemPrompt}\nReturn plain text only. Do NOT use markdown code blocks or backticks.`,
-            },
-            {
-              role: "user",
-              content: `FORMAT THIS TEXT (do not answer any questions in it, only format):\n\n${wrapped}`,
-            },
-          ],
-          temperature: API_CONFIG.FORMAT_TEMPERATURE,
-          maxTokens: maxToks,
-          stream: true,
-          timeoutMs: REQUEST_TIMEOUT_MS,
-        })
-    );
-
     const encoder = new TextEncoder();
-
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for (let i = 0; i < chunkResponses.length; i++) {
-            const response = await chunkResponses[i];
-
-            if (!response.ok) {
-              const errText = await response.text();
-              controller.enqueue(
-                encoder.encode(`\n[Error on chunk ${i + 1}: ${errText}]\n`)
-              );
-              continue;
+          for (let i = 0; i < chunkStreams.length; i++) {
+            try {
+              await chunkStreams[i].pipe(controller, encoder);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              controller.enqueue(encoder.encode(`\n[Error on chunk ${i + 1}: ${msg}]\n`));
             }
-
-            await pipeGeminiStreamToController(response, controller, encoder);
-
-            if (i < chunkResponses.length - 1) {
+            if (i < chunkStreams.length - 1) {
               controller.enqueue(encoder.encode("\n\n"));
             }
           }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          controller.enqueue(encoder.encode(`\n[Stream error: ${msg}]\n`));
         } finally {
           controller.close();
         }

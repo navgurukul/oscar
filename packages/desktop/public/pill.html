@@ -64,27 +64,6 @@
       opacity: 0;
     }
 
-    /* "Click to dictate" hint above ready handle */
-    .ready-hint {
-      position: absolute;
-      left: 50%; bottom: 14px;
-      transform: translateX(-50%) translateY(4px);
-      opacity: 0;
-      transition: opacity .15s, transform .15s;
-      font-size: 10px;
-      font-weight: 500;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      color: #22d3ee;
-      pointer-events: none;
-      white-space: nowrap;
-      z-index: 6;
-    }
-    body[data-phase="ready"] .ready-hint {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-
     /* ─── Invisible hit zone ───────────────────────────────────────────────
        At rest the window is only 56 px tall — the hit zone fills the whole
        window. When expanded/recording/processing the window grows up to
@@ -96,6 +75,10 @@
       inset: 0;
       pointer-events: auto;
       z-index: 5;
+      /* Near-zero alpha so the WebView claims the transparent region for
+         cursor hit-testing on macOS NSPanel — pure transparent can drop
+         mouse-move events. */
+      background: rgba(0, 0, 0, 0.001);
     }
 
     /* ─── Full Paper pill (expanded states) ────────────────────────────── */
@@ -229,11 +212,25 @@
       letter-spacing: .02em;
     }
 
+    /* "Click to dictate" body (expanded hover state) */
+    .ready-body {
+      display: flex;
+      align-items: center;
+      height: 22px;
+    }
+    .ready-body .ready-text {
+      font-size: 12px;
+      font-weight: 500;
+      color: #0f172a;
+      letter-spacing: .01em;
+      white-space: nowrap;
+    }
+
     /* Only show the active state body */
     .pill-body > [data-body] { display: none; }
     body[data-phase="idle"]      .pill-body [data-body="idle"],
-    body[data-phase="expanded"]  .pill-body [data-body="idle"]    { display: flex; }
     body[data-phase="recording"] .pill-body [data-body="recording"] { display: flex; }
+    body[data-phase="expanded"]  .pill-body [data-body="ready"]    { display: flex; }
     body[data-phase="processing"] .pill-body [data-body="processing"] { display: flex; }
     body[data-phase="inserted"]  .pill-body [data-body="idle"]    { display: flex; }
     body[data-phase="error"]     .pill-body [data-body="error"]   { display: flex; }
@@ -457,7 +454,6 @@
 
     <!-- Edge handle (rest/ready) -->
     <div class="handle"></div>
-    <div class="ready-hint">Click to dictate</div>
 
     <!-- Inserted toast -->
     <div class="toast" id="toast">
@@ -551,6 +547,10 @@
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
             <span class="dot"></span>
+          </div>
+          <!-- Click-to-dictate label (expanded hover state) -->
+          <div class="ready-body" data-body="ready">
+            <span class="ready-text">Click to dictate</span>
           </div>
           <!-- Recording waveform -->
           <div class="waveform" data-body="recording" id="waveform"></div>
@@ -659,7 +659,7 @@
         clearTimeout(leaveTimer);
       }
       // Closing pill collapses settings too.
-      if (next === 'rest' || next === 'ready' || next === 'inserted') {
+      if (next !== 'expanded') {
         setSettingsOpen(false);
       }
     }
@@ -721,20 +721,49 @@
     }
 
     /* ─── Hit zone / handle hover ──────────────────────────────────────── */
+    const READY_HOLD_MS = 40;
+
+    function expandNow() {
+      if (phase === 'rest' || phase === 'ready') {
+        applyPhase('expanded');
+        callTauri('set_pill_phase', { phase: 'expanded' });
+      }
+    }
+    function scheduleExpand() {
+      clearTimeout(readyHoldTimer);
+      readyHoldTimer = setTimeout(expandNow, READY_HOLD_MS);
+    }
+
     const hitZone = document.getElementById('hit-zone');
     hitZone.addEventListener('mouseenter', () => {
       clearTimeout(leaveTimer);
       if (phase === 'rest') {
         applyPhase('ready');
         callTauri('set_pill_phase', { phase: 'ready' });
-        // After a 180ms hold inside the zone, expand to full pill.
+      }
+      if (phase === 'ready' || phase === 'rest') {
+        scheduleExpand();
+      }
+    });
+    // Mousemove fallback — covers macOS NSPanel quirks where mouseenter
+    // can miss on the very first cursor entry while window not key.
+    hitZone.addEventListener('mousemove', () => {
+      if (phase === 'rest' || phase === 'ready') {
+        clearTimeout(leaveTimer);
+        if (phase === 'rest') {
+          applyPhase('ready');
+          callTauri('set_pill_phase', { phase: 'ready' });
+        }
+        scheduleExpand();
+      }
+    });
+    hitZone.addEventListener('click', () => {
+      // Click on the bottom handle area expands the pill instead of jumping
+      // straight to recording. Recording starts only via an explicit click on
+      // the expanded pill body (handled below).
+      if (phase === 'rest' || phase === 'ready') {
         clearTimeout(readyHoldTimer);
-        readyHoldTimer = setTimeout(() => {
-          if (phase === 'ready') {
-            applyPhase('expanded');
-            callTauri('set_pill_phase', { phase: 'expanded' });
-          }
-        }, 180);
+        expandNow();
       }
     });
     hitZone.addEventListener('mouseleave', () => {

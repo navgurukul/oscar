@@ -26,6 +26,8 @@ mod meeting;
 mod paste;
 mod permissions;
 mod pill;
+#[cfg(target_os = "macos")]
+mod pill_hover;
 mod state;
 mod system_audio;
 mod vad;
@@ -176,6 +178,15 @@ pub fn run() {
             {
                 log::info!("[setup] Pre-creating pill window...");
                 create_pill_window(app.handle());
+            }
+
+            // macOS NSPanel never becomes key, so WebKit hover events stay
+            // silent while the user is in another app. A cursor poller drives
+            // the pill phase via CoreGraphics cursor position instead.
+            #[cfg(target_os = "macos")]
+            {
+                log::info!("[setup] Starting pill cursor-hover poller...");
+                pill_hover::start(app.handle().clone());
             }
 
             // Install the macOS status-bar tray (additive — pill window remains

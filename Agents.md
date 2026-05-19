@@ -190,7 +190,7 @@ On desktop, the stream / dictation flow has its own dedicated entry point — th
 
 **Entry points**:
 
-- **Edge handle (hover)**: a 72×5 px handle docked flush to the bottom of the primary monitor. Cursor enters the bottom 56 px hit zone → handle widens with a cyan glow → after a 180 ms hold the full Paper pill rises from the edge → click to start recording.
+- **Edge handle (hover/click)**: a 72×5 px handle docked flush to the bottom of the primary monitor. Cursor enters the bottom 56 px hit zone → handle widens with a cyan glow and shows "Click to dictate" → click starts recording. The full Paper pill is reserved for active feedback states so idle hover never covers the user's app.
 - **Global hotkey `Ctrl+Space`** ([`packages/desktop/src-tauri/src/hotkey.rs`](./packages/desktop/src-tauri/src/hotkey.rs)): hold to record, release to stop. Captures frontmost-app context at press time.
 
 **Pipeline (different from the Scribble/Minutes path)**:
@@ -214,7 +214,6 @@ The AI cleanup uses the `transcribe_cleanup` mode in [`packages/desktop/src/serv
 |---|---|---|
 | `rest` | 72×5 handle flush at edge | 56 px |
 | `ready` | 96×6 handle, cyan-400 glow, "Click to dictate" hint | 56 px |
-| `expanded` | full Paper pill with idle dots | 200 px |
 | `recording` | 15-bar cyan waveform | 200 px |
 | `processing` | 13 pulsing dots (1.1 s stagger × 0.07 s) | 200 px |
 | `inserted` | cyan-500 "Inserted into document" toast (1500 ms dwell) | 200 px |

@@ -190,9 +190,18 @@ pub fn set_window_above_fullscreen(ns_window_ptr: *mut c_void) {
         // NSWindowStyleMaskNonactivatingPanel = 1 << 7 = 128
         set_style(ns_window_ptr, sel_set_style, current_style | 128);
 
+        // 5. Enable mouse-moved events so WebKit hover/mouseenter fire even
+        //    while this panel is not the key window. Non-key NSWindows drop
+        //    mouseMoved by default — the dictation pill needs them to detect
+        //    the hover-to-expand handle.
+        let sel_set_mouse_moved =
+            sel_registerName(b"setAcceptsMouseMovedEvents:\0".as_ptr() as *const _);
+        set_bool(ns_window_ptr, sel_set_mouse_moved, true);
+
         log::info!(
             "[pill] NSPanel configured: level=1000, floating=YES, hidesOnDeactivate=NO, \
-             behavior=canJoinAll|stationary|ignoresCycle|fullScreenAux, style |= NonactivatingPanel"
+             behavior=canJoinAll|stationary|ignoresCycle|fullScreenAux, style |= NonactivatingPanel, \
+             acceptsMouseMovedEvents=YES"
         );
     }
 }
