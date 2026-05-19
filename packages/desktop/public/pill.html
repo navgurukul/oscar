@@ -364,23 +364,6 @@
     }
     .toggle.on { background: #06b6d4; }
     .toggle.on .knob { left: 16px; }
-    .transform-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      padding: 10px 12px;
-      border: none;
-      cursor: pointer;
-      background: transparent;
-      color: #0f172a;
-      border-radius: 8px;
-      font-size: 13px;
-      font-family: inherit;
-      text-align: left;
-    }
-    .transform-item:hover,
-    .transform-item.sel { background: rgba(15, 23, 42, 0.05); }
     .lang-row {
       padding: 10px 12px;
       display: flex;
@@ -480,31 +463,6 @@
         </button>
       </div>
       <div class="settings-divider"></div>
-      <button class="transform-item" data-transform="none">
-        <span>None</span>
-        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
-          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <button class="transform-item" data-transform="professional">
-        <span>Polish</span>
-        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
-          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <button class="transform-item" data-transform="casual">
-        <span>Prompt Engineer</span>
-        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
-          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <button class="transform-item" data-transform="friendly">
-        <span>Email Reply</span>
-        <svg class="check" width="14" height="14" viewBox="0 0 14 14" fill="none" style="display:none">
-          <path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="#06b6d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <div class="settings-divider"></div>
       <div class="lang-row" id="lang-row">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
           <circle cx="7" cy="7" r="5.5" stroke="rgba(15,23,42,.5)" stroke-width="1.3" />
@@ -570,12 +528,6 @@
         <div class="pill-divider"></div>
 
         <div class="pill-actions">
-          <button class="pill-btn" id="btn-transform" aria-label="Transform">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M5 1L5.9 3.6L8.5 4.5L5.9 5.4L5 8L4.1 5.4L1.5 4.5L4.1 3.6L5 1Z" fill="#0f172a" />
-              <path d="M10.5 7L11 8.5L12.5 9L11 9.5L10.5 11L10 9.5L8.5 9L10 8.5L10.5 7Z" fill="#0f172a" />
-            </svg>
-          </button>
           <button class="pill-btn" id="btn-settings" aria-label="Settings">
             <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
               <path d="M2.5 4.2L5.5 7.2L8.5 4.2" stroke="#0f172a" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
@@ -618,7 +570,6 @@
     let leaveTimer = null;
     let readyHoldTimer = null;
     let settings = {
-      transform: 'none',
       language: 'hi-en',
       autoApply: false,
     };
@@ -680,13 +631,6 @@
     }
 
     function renderSettingsUI() {
-      // Transform selection
-      document.querySelectorAll('.transform-item').forEach((el) => {
-        const sel = el.dataset.transform === settings.transform;
-        el.classList.toggle('sel', sel);
-        const check = el.querySelector('.check');
-        if (check) check.style.display = sel ? 'block' : 'none';
-      });
       // Toggle
       const toggle = document.getElementById('toggle-auto');
       toggle.classList.toggle('on', !!settings.autoApply);
@@ -807,31 +751,12 @@
       e.stopPropagation();
       setSettingsOpen(!settingsOpen);
     });
-    document.getElementById('btn-transform').addEventListener('click', (e) => {
-      e.stopPropagation();
-      // Cycle through transforms — quick affordance from main pill
-      const order = ['none', 'professional', 'casual', 'friendly'];
-      const idx = order.indexOf(settings.transform);
-      const next = order[(idx + 1) % order.length];
-      settings.transform = next;
-      renderSettingsUI();
-      emitTauri('pill-settings-update', { transform: next });
-    });
     document.getElementById('btn-note').addEventListener('click', (e) => {
       e.stopPropagation();
       emitTauri('pill-open-scribble', {});
     });
 
     /* Settings popover interactions */
-    document.querySelectorAll('.transform-item').forEach((el) => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const t = el.dataset.transform;
-        settings.transform = t;
-        renderSettingsUI();
-        emitTauri('pill-settings-update', { transform: t });
-      });
-    });
     document.getElementById('toggle-auto').addEventListener('click', (e) => {
       e.stopPropagation();
       settings.autoApply = !settings.autoApply;
@@ -884,7 +809,6 @@
 
           ev.listen('pill-settings-init', (evt) => {
             const p = evt.payload || {};
-            if (p.transform) settings.transform = p.transform;
             if (p.language) settings.language = p.language;
             if (typeof p.autoApply === 'boolean') settings.autoApply = p.autoApply;
             renderSettingsUI();

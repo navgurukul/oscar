@@ -37,7 +37,6 @@ import type {
   MicrophonePermissionState,
   RoleModelState,
   TabType,
-  TonePreset,
   Transcription,
   WhisperModelRole,
 } from "./lib/app-types";
@@ -247,7 +246,6 @@ function App() {
 
   // AI editing (legacy — kept for settings migration)
   const [_aiEditing, setAiEditing] = useState(false);
-  const [_tonePreset, setTonePreset] = useState<TonePreset>("none");
 
   // AI Improvement toggle (user-controllable — controls Gemini AI cleanup)
   const [aiImprovementEnabled, setAiImprovementEnabled] = useState(true);
@@ -304,7 +302,6 @@ function App() {
   const warmStreamRef = useRef<MediaStream | null>(null);
   const voiceEngineWarmupRef = useRef(false);
   const aiEditingRef = useRef(false);
-  const tonePresetRef = useRef<TonePreset>("none");
   const transcriptionLanguageRef = useRef<string>("hi-en");
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
@@ -643,7 +640,6 @@ function App() {
     (async () => {
       const [
         savedAiEditing,
-        savedTone,
         savedAutoPaste,
         savedDict,
         permsDone,
@@ -664,7 +660,6 @@ function App() {
         savedMinutesDataResetVersion,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
-        loadSetting<TonePreset>("tonePreset", "none"),
         loadSetting<boolean>("autoPaste", true),
         loadSetting<string[]>("dictWords", []),
         loadSetting<boolean>("permissionsDone", false),
@@ -725,8 +720,6 @@ function App() {
       }
       setAiEditing(savedAiEditing);
       aiEditingRef.current = savedAiEditing;
-      setTonePreset(savedTone);
-      tonePresetRef.current = savedTone;
       setAutoPaste(savedAutoPaste);
       autoPasteRef.current = savedAutoPaste;
       setDictWords(savedDict);
@@ -849,16 +842,10 @@ function App() {
     // ── Edge-handle pill events ───────────────────────────────────────────
     // Settings updates from the pill's popover — persist + sync state.
     const unlistenPillSettings = listen<{
-      transform?: TonePreset;
       language?: string;
       autoApply?: boolean;
     }>("pill-settings-update", (ev) => {
       const p = ev.payload || {};
-      if (p.transform !== undefined) {
-        setTonePreset(p.transform);
-        tonePresetRef.current = p.transform;
-        void saveSetting("tonePreset", p.transform);
-      }
       if (p.language !== undefined) {
         setTranscriptionLanguage(p.language);
         transcriptionLanguageRef.current = p.language;
@@ -879,7 +866,6 @@ function App() {
     // When the pill window has wired its listeners, push current settings.
     const unlistenPillReady = listen("pill-ready", () => {
       invoke("pill_push_settings", {
-        transform: tonePresetRef.current,
         language: transcriptionLanguageRef.current,
         autoApply: autoPasteRef.current,
       }).catch(console.warn);
@@ -2195,7 +2181,6 @@ function App() {
                     transcriptionLanguageRef.current = lang;
                     saveSetting("transcriptionLanguage", lang);
                     invoke("pill_push_settings", {
-                      transform: tonePresetRef.current,
                       language: lang,
                       autoApply: autoPasteRef.current,
                     }).catch(console.warn);

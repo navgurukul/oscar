@@ -51,7 +51,6 @@ export interface HotkeyContextEventPayload {
   targetAppName?: string | null;
 }
 
-export type TonePreset = "none" | "professional" | "casual" | "friendly";
 export type MicrophonePermissionState = "granted" | "denied" | "prompt" | "unknown";
 export type WhisperModelRole = "dictation" | "minutes";
 
