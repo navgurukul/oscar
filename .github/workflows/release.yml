@@ -220,6 +220,18 @@ jobs:
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
         run: pnpm build
 
+      # Activate the MSVC developer environment globally before building. The
+      # Vulkan path through whisper-rs-sys spawns a nested CMake sub-build for
+      # vulkan-shaders-gen which does not inherit cl.exe / INCLUDE / LIB unless
+      # they are on PATH at job scope. Without this step the sub-build fails
+      # with "No CMAKE_C_COMPILER could be found" even though the parent
+      # whisper.cpp build configures fine.
+      - name: Set up MSVC developer environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Build Tauri app
         working-directory: packages/desktop
         env:
