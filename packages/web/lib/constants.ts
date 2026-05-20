@@ -18,8 +18,19 @@ export {
   SUBSCRIPTION_CONFIG,
   PRICING,
   PRICING_USD,
+  ACTIVE_PRO_SUBSCRIPTION_STATUSES,
+  getSubscriptionEntitlement,
+  isActiveProSubscriptionStatus,
+  isCancelledSubscriptionInGracePeriod,
+  isFutureBillingPeriodEnd,
 } from "@oscar/shared/constants";
-export type { Currency } from "@oscar/shared/constants";
+export type {
+  Currency,
+  SubscriptionEntitlement,
+  SubscriptionEntitlementInput,
+  SubscriptionStatus,
+  SubscriptionTier,
+} from "@oscar/shared/constants";
 
 // API_CONFIG — web adds streaming flags, transform endpoint, different top_p/title_max_length
 export const API_CONFIG = {

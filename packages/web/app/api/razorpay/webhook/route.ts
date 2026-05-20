@@ -14,11 +14,33 @@ import {
 } from "@/lib/middleware/rate-limit";
 import { RATE_LIMITS } from "@/lib/constants";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
+import { getActiveOrg } from "@/lib/server/organization";
 import type {
   RazorpayWebhookPayload,
   RazorpaySubscriptionStatus,
   RazorpaySubscriptionEntity,
 } from "@/lib/types/subscription.types";
+
+/**
+ * Determines which org + user owns a Razorpay subscription event.
+ * Reads `organization_id` from the notes when present (Phase 4+ subs), falls
+ * back to looking up the user's active org for legacy subs that only carry
+ * `user_id`.
+ */
+async function resolveSubscriptionOwners(
+  subscription: RazorpaySubscriptionEntity
+): Promise<{ organizationId: string | null; userId: string | null }> {
+  const orgId = subscription.notes?.organization_id ?? null;
+  const userId = subscription.notes?.user_id ?? null;
+  if (orgId) {
+    return { organizationId: orgId, userId };
+  }
+  if (userId) {
+    const active = await getActiveOrg(userId);
+    return { organizationId: active?.organization.id ?? null, userId };
+  }
+  return { organizationId: null, userId: null };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -186,18 +208,21 @@ async function markEventProcessed(
 async function handleSubscriptionActivated(
   subscription: RazorpaySubscriptionEntity
 ) {
-  const userId = subscription.notes?.user_id;
-
-  if (!userId) {
-    console.error("No user_id in subscription notes");
+  const { organizationId, userId } = await resolveSubscriptionOwners(subscription);
+  if (!organizationId) {
+    console.error(
+      "[webhook] activated: could not resolve organization for subscription",
+      subscription.id
+    );
     return;
   }
 
-  await subscriptionService.updateFromRazorpaySubscription(
+  await subscriptionService.updateOrgFromRazorpaySubscription(
     subscription,
-    userId
+    organizationId,
+    userId ?? ""
   );
-  console.log(`Subscription activated for user ${userId}`);
+  console.log(`Subscription activated for org ${organizationId}`);
 }
 
 /**
@@ -206,18 +231,34 @@ async function handleSubscriptionActivated(
 async function handleSubscriptionCharged(
   subscription: RazorpaySubscriptionEntity
 ) {
-  // Update current period dates
-  const { data } = await subscriptionService.getByRazorpaySubscriptionId(
+  // Look up our local row to discover the org id (which is the authoritative
+  // pointer in Phase 4). Fall back to notes for newly-created subs that have
+  // not been mirrored yet.
+  const { data: localRow } = await subscriptionService.getByRazorpaySubscriptionId(
     subscription.id
   );
 
-  if (data) {
-    await subscriptionService.updateFromRazorpaySubscription(
-      subscription,
-      data.user_id
-    );
-    console.log(`Subscription charged for user ${data.user_id}`);
+  let organizationId = localRow?.organization_id ?? null;
+  let userId = localRow?.user_id ?? null;
+  if (!organizationId) {
+    const resolved = await resolveSubscriptionOwners(subscription);
+    organizationId = resolved.organizationId;
+    userId = resolved.userId ?? userId;
   }
+  if (!organizationId) {
+    console.error(
+      "[webhook] charged: could not resolve organization for subscription",
+      subscription.id
+    );
+    return;
+  }
+
+  await subscriptionService.updateOrgFromRazorpaySubscription(
+    subscription,
+    organizationId,
+    userId ?? ""
+  );
+  console.log(`Subscription charged for org ${organizationId}`);
 }
 
 /**

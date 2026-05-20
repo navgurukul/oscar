@@ -65,25 +65,53 @@ export async function POST(request: NextRequest) {
         razorpay_subscription_id
       );
 
-      // Ownership check: the subscription must carry this user's ID in its
-      // metadata notes. Without this, a malicious user could supply another
-      // customer's subscription_id and have their own account upgraded.
-      const ownerUserId = razorpaySubscription.notes?.user_id;
-      if (!ownerUserId || ownerUserId !== user.id) {
-        console.error(
-          `Ownership mismatch: subscription ${razorpay_subscription_id} ` +
-            `belongs to user ${ownerUserId}, not ${user.id}`
-        );
+      // Phase 4 ownership check: prefer the workspace id baked into the
+      // subscription notes, fall back to user_id for legacy subs. Either way
+      // the caller must be a member of the workspace that owns the sub.
+      const noteOrgId = razorpaySubscription.notes?.organization_id;
+      const noteUserId = razorpaySubscription.notes?.user_id;
+      let organizationId: string | null = null;
+
+      if (noteOrgId) {
+        const { getMemberRole } = await import("@/lib/server/organization");
+        const role = await getMemberRole(user.id, noteOrgId);
+        if (!role) {
+          console.error(
+            `Verify mismatch: subscription ${razorpay_subscription_id} belongs to org ${noteOrgId} but user ${user.id} is not a member`
+          );
+          return NextResponse.json(
+            { error: "Subscription does not belong to your workspace" },
+            { status: 403 }
+          );
+        }
+        organizationId = noteOrgId;
+      } else {
+        if (!noteUserId || noteUserId !== user.id) {
+          console.error(
+            `Verify mismatch: subscription ${razorpay_subscription_id} legacy user ${noteUserId}, caller ${user.id}`
+          );
+          return NextResponse.json(
+            { error: "Subscription does not belong to this account" },
+            { status: 403 }
+          );
+        }
+        const { getActiveOrg } = await import("@/lib/server/organization");
+        const active = await getActiveOrg(user.id);
+        organizationId = active?.organization.id ?? null;
+      }
+
+      if (!organizationId) {
         return NextResponse.json(
-          { error: "Subscription does not belong to this account" },
-          { status: 403 }
+          { error: "Unable to resolve workspace for subscription" },
+          { status: 400 }
         );
       }
 
       // Update subscription in database
       const { data: updatedSubscription, error: updateError } =
-        await subscriptionService.updateFromRazorpaySubscription(
+        await subscriptionService.updateOrgFromRazorpaySubscription(
           razorpaySubscription,
+          organizationId,
           user.id
         );
 

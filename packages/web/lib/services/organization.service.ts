@@ -66,6 +66,13 @@ export const organizationService = {
     });
   },
 
+  async transferOwnership(id: string, newOwnerId: string): Promise<void> {
+    await api(`/api/org/${id}/transfer-ownership`, {
+      method: "PATCH",
+      body: JSON.stringify({ user_id: newOwnerId }),
+    });
+  },
+
   async listInvites(orgId: string): Promise<OrganizationInvite[]> {
     return api(`/api/org/invites?organization_id=${encodeURIComponent(orgId)}`);
   },

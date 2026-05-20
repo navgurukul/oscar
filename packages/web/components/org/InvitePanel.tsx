@@ -64,11 +64,19 @@ export function InvitePanel({ organizationId }: Props) {
       setLatest(invite);
       if (withEmail) setEmail("");
       await load();
+      let description = "Anyone with this link can join.";
+      if (withEmail) {
+        if (invite.email_status === "sent") {
+          description = `Invite emailed to ${invite.email ?? "your teammate"}. They can also use the link below.`;
+        } else if (invite.email_status === "failed") {
+          description = `Email delivery failed${invite.email_error ? `: ${invite.email_error}` : ""}. Share the link manually.`;
+        } else {
+          description = "Email isn't configured on this environment yet — share the invite link manually.";
+        }
+      }
       toast({
         title: withEmail ? "Email invite created" : "Invite link ready",
-        description: withEmail
-          ? "Share the link with the invited teammate (email delivery ships in Phase 4)."
-          : "Anyone with this link can join.",
+        description,
       });
     } catch (err) {
       toast({

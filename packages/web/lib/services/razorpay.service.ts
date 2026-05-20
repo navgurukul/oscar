@@ -63,12 +63,16 @@ export const razorpayService = {
   },
 
   /**
-   * Create a subscription for a customer
+   * Create a subscription for a customer. Both the org id and the inserting
+   * user id are stamped on the Razorpay notes so the webhook handler can map
+   * events back to a workspace (org_id authoritative) plus a legacy user_id
+   * fallback for older subscriptions created before Phase 4.
    */
   async createSubscription(
     customerId: string,
     billingCycle: BillingCycle,
-    userId: string
+    userId: string,
+    organizationId?: string
   ): Promise<RazorpaySubscriptionEntity> {
     const razorpay = getRazorpayInstance();
     const planId = getPlanId(billingCycle);
@@ -83,6 +87,7 @@ export const razorpayService = {
       notes: {
         user_id: userId,
         billing_cycle: billingCycle,
+        ...(organizationId ? { organization_id: organizationId } : {}),
       },
     } as Parameters<typeof razorpay.subscriptions.create>[0];
 

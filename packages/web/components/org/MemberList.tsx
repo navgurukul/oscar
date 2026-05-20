@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Users, UserMinus, Shield } from "lucide-react";
+import { Users, UserMinus, Shield, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -11,6 +11,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { organizationService } from "@/lib/services/organization.service";
 import type {
@@ -48,6 +59,33 @@ export function MemberList({ organizationId, currentUserId, currentRole }: Props
 
   const canManage = currentRole === "owner" || currentRole === "admin";
   const canChangeRoles = currentRole === "owner";
+  const canTransferOwnership = currentRole === "owner";
+
+  const transferOwnership = async (userId: string) => {
+    setBusyId(userId);
+    try {
+      await organizationService.transferOwnership(organizationId, userId);
+      setMembers((prev) =>
+        prev.map((m) => {
+          if (m.user_id === userId) return { ...m, role: "owner" };
+          if (m.user_id === currentUserId) return { ...m, role: "admin" };
+          return m;
+        })
+      );
+      toast({
+        title: "Ownership transferred",
+        description: "You are now an admin of this workspace.",
+      });
+    } catch (err) {
+      toast({
+        title: "Transfer failed",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const remove = async (userId: string) => {
     if (!canManage) return;
@@ -136,6 +174,44 @@ export function MemberList({ organizationId, currentUserId, currentRole }: Props
                         {m.role}
                       </span>
                     )}
+                    {canTransferOwnership && !isOwner && !isSelf ? (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={busyId === m.user_id}
+                            className="h-8 w-8 p-0 text-gray-400 hover:text-amber-300 hover:bg-amber-400/10"
+                            aria-label="Transfer ownership"
+                          >
+                            <Crown className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="bg-slate-900 border-slate-800 text-white">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Make {m.display_name ?? m.email ?? "this member"} the owner?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-slate-400">
+                              They will gain full control of this workspace including billing
+                              and member management. You will be demoted to admin and lose the
+                              ability to transfer ownership back without their consent.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel className="bg-slate-800 border-slate-700 text-white">
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => void transferOwnership(m.user_id)}
+                              className="bg-amber-500 hover:bg-amber-600 text-slate-900"
+                            >
+                              Transfer ownership
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    ) : null}
                     {canManage && !isOwner && !isSelf ? (
                       <Button
                         variant="ghost"

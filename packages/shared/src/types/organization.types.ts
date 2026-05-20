@@ -40,6 +40,8 @@ export interface OrganizationInvite {
 export interface OrganizationInviteCreated extends OrganizationInvite {
   token: string;
   url: string;
+  email_status?: "sent" | "skipped" | "failed";
+  email_error?: string | null;
 }
 
 export interface UserActiveOrg {

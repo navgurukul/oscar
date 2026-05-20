@@ -8,21 +8,21 @@ import {
 } from "lucide-react";
 import { supabase } from "../supabase";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { SUBSCRIPTION_CONFIG, PRICING } from "@oscar/shared/constants";
-
-type SubscriptionStatus =
-  | "active"
-  | "cancelled"
-  | "expired"
-  | "past_due"
-  | null;
+import {
+  SUBSCRIPTION_CONFIG,
+  PRICING,
+  getSubscriptionEntitlement,
+  type SubscriptionStatus,
+  type SubscriptionTier,
+} from "@oscar/shared/constants";
 
 interface BillingSectionProps {
   userId: string;
 }
 
 interface SubscriptionData {
-  status: SubscriptionStatus;
+  tier: SubscriptionTier | null;
+  status: SubscriptionStatus | null;
   billingCycle: "monthly" | "yearly" | null;
   currentPeriodEnd: string | null;
   recordingsThisMonth: number;
@@ -54,6 +54,7 @@ function openExternal(url: string) {
 export function BillingSection({ userId }: BillingSectionProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [subscription, setSubscription] = useState<SubscriptionData>({
+    tier: null,
     status: null,
     billingCycle: null,
     currentPeriodEnd: null,
@@ -74,7 +75,7 @@ export function BillingSection({ userId }: BillingSectionProps) {
     try {
       const { data: subData } = await supabase
         .from("subscriptions")
-        .select("status, billing_cycle, current_period_end")
+        .select("tier, status, billing_cycle, current_period_end")
         .eq("user_id", userId)
         .maybeSingle();
 
@@ -93,18 +94,21 @@ export function BillingSection({ userId }: BillingSectionProps) {
         .select("*", { count: "exact", head: true })
         .eq("user_id", userId);
 
-      const isPro = subData?.status === "active";
+      const entitlement = getSubscriptionEntitlement({
+        tier: subData?.tier,
+        status: subData?.status,
+        currentPeriodEnd: subData?.current_period_end,
+      });
 
       setSubscription({
+        tier: subData?.tier || null,
         status: subData?.status || null,
         billingCycle: subData?.billing_cycle || null,
         currentPeriodEnd: subData?.current_period_end || null,
         recordingsThisMonth: recordingsCount || 0,
-        recordingsLimit: isPro
-          ? null
-          : SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS,
+        recordingsLimit: entitlement.recordingsLimit,
         vocabularyCount: vocabCount || 0,
-        vocabularyLimit: isPro ? null : SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY,
+        vocabularyLimit: entitlement.vocabularyLimit,
       });
     } catch (e) {
       console.error("Failed to load subscription data:", e);
@@ -129,8 +133,13 @@ export function BillingSection({ userId }: BillingSectionProps) {
     return Math.min((current / limit) * 100, 100);
   };
 
-  const isProUser = subscription.status === "active";
-  const isCancelling = subscription.status === "cancelled";
+  const entitlement = getSubscriptionEntitlement({
+    tier: subscription.tier,
+    status: subscription.status,
+    currentPeriodEnd: subscription.currentPeriodEnd,
+  });
+  const isProUser = entitlement.isPro;
+  const isCancelling = entitlement.isCancelling;
 
   if (isLoading) {
     return (
@@ -142,85 +151,88 @@ export function BillingSection({ userId }: BillingSectionProps) {
 
   return (
     <div className="billing-compact">
-      {/* Current Plan Card */}
-      <div className="st-card st-card--grouped">
-        <div className="billing-plan-row">
-          <div className="billing-plan-badge-wrap">
+      {/* ── Hero plan card ── */}
+      <div className="st-card st-card--grouped billing-hero-card">
+        <div className="billing-hero">
+          <div className="billing-hero-left">
             <span
-              className={`billing-plan-icon ${isProUser ? "pro" : "free"}`}
+              className={`billing-hero-icon ${isProUser ? "pro" : "free"}`}
             >
-              <Crown size={16} />
+              <Crown size={20} />
             </span>
-            <div>
-              <span className="billing-plan-name">
+            <div className="billing-hero-text">
+              <span className="billing-hero-name">
                 {isProUser ? "Pro Plan" : "Free Plan"}
               </span>
-              <span className="billing-plan-price">
+              <span className="billing-hero-price">
                 {isProUser
                   ? `₹${
                       subscription.billingCycle === "monthly"
                         ? PRICING.MONTHLY
                         : PRICING.YEARLY
-                    }/${subscription.billingCycle === "monthly" ? "month" : "year"}`
+                    } / ${subscription.billingCycle === "monthly" ? "month" : "year"}`
                   : "No payment required"}
               </span>
             </div>
           </div>
-          {isProUser ? (
-            <span
-              className={
-                isCancelling
-                  ? "billing-status-cancelling"
-                  : "billing-status-active"
-              }
-            >
-              <Check size={13} />
-              {isCancelling ? "Cancelling" : "Active"}
-            </span>
-          ) : (
-            <button
-              className="st-btn-primary-sm"
-              onClick={handleUpgrade}
-              disabled={isUpgrading}
-            >
-              {isUpgrading ? (
-                <Loader2 size={14} className="spin" />
-              ) : (
-                <Crown size={14} />
-              )}
-              {isUpgrading ? "Loading…" : "Upgrade to Pro"}
-            </button>
-          )}
+          <div className="billing-hero-right">
+            {isProUser ? (
+              <span
+                className={
+                  isCancelling
+                    ? "billing-status-cancelling"
+                    : "billing-status-active"
+                }
+              >
+                <Check size={13} />
+                {isCancelling ? "Cancelling" : "Active"}
+              </span>
+            ) : (
+              <button
+                className="st-btn-primary-sm"
+                onClick={handleUpgrade}
+                disabled={isUpgrading}
+              >
+                {isUpgrading ? (
+                  <Loader2 size={14} className="spin" />
+                ) : (
+                  <Crown size={14} />
+                )}
+                {isUpgrading ? "Loading…" : "Upgrade to Pro"}
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Pro details: cycle + next billing */}
         {isProUser && (
           <>
-            <div className="st-divider" />
-            <div className="billing-detail-row">
-              <span className="billing-detail-label">
-                <CreditCard size={13} />
-                Billing cycle
-              </span>
-              <span className="billing-detail-val">
-                {subscription.billingCycle === "monthly"
-                  ? "Monthly"
-                  : subscription.billingCycle === "yearly"
-                    ? "Yearly"
-                    : "—"}
-              </span>
+            <div className="billing-meta-grid">
+              <div className="billing-meta-cell">
+                <span className="billing-meta-cell-label">
+                  <CreditCard size={11} />
+                  Billing cycle
+                </span>
+                <span className="billing-meta-cell-val">
+                  {subscription.billingCycle === "monthly"
+                    ? "Monthly"
+                    : subscription.billingCycle === "yearly"
+                      ? "Yearly"
+                      : "—"}
+                </span>
+              </div>
+              <div className="billing-meta-cell">
+                <span className="billing-meta-cell-label">
+                  <Calendar size={11} />
+                  {isCancelling ? "Access until" : "Next billing"}
+                </span>
+                <span className="billing-meta-cell-val">
+                  {formatDate(subscription.currentPeriodEnd)}
+                </span>
+              </div>
             </div>
-            <div className="billing-detail-row">
-              <span className="billing-detail-label">
-                <Calendar size={13} />
-                {isCancelling ? "Access until" : "Next billing date"}
-              </span>
-              <span className="billing-detail-val">
-                {formatDate(subscription.currentPeriodEnd)}
-              </span>
-            </div>
+
             {!isCancelling && (
-              <div className="billing-actions">
+              <div className="billing-hero-actions">
                 <button
                   className="st-btn-ghost-sm"
                   onClick={() => openExternal(SETTINGS_URL)}
@@ -233,77 +245,85 @@ export function BillingSection({ userId }: BillingSectionProps) {
         )}
       </div>
 
-      {/* Usage */}
+      {/* ── Usage ── */}
       <div className="st-section-label">Usage</div>
-      <div className="st-card st-card--grouped">
-        <div className="billing-usage">
-          <div className="billing-usage-item">
-            <div className="billing-usage-hd">
-              <span className="billing-usage-label">Recordings this month</span>
-              <span className="billing-usage-val">
-                {subscription.recordingsLimit === null ? (
-                  <span className="billing-unlimited">Unlimited</span>
-                ) : (
-                  `${subscription.recordingsThisMonth} / ${subscription.recordingsLimit}`
-                )}
-              </span>
-            </div>
-            {subscription.recordingsLimit !== null && (
-              <div className="billing-bar">
-                <div
-                  className={`billing-bar-fill${
-                    pct(
-                      subscription.recordingsThisMonth,
-                      subscription.recordingsLimit,
-                    ) > 80
-                      ? " warning"
-                      : ""
-                  }`}
-                  style={{
-                    width: `${pct(subscription.recordingsThisMonth, subscription.recordingsLimit)}%`,
-                  }}
-                />
-              </div>
+      <div className="billing-usage-grid">
+        <div className="billing-usage-card">
+          <span className="billing-usage-card-label">
+            Recordings this month
+          </span>
+          <span className="billing-usage-card-val">
+            {subscription.recordingsLimit === null ? (
+              <span className="billing-unlimited-inline">Unlimited</span>
+            ) : (
+              <>
+                {subscription.recordingsThisMonth}
+                <span className="billing-usage-card-limit">
+                  {" / "}
+                  {subscription.recordingsLimit}
+                </span>
+              </>
             )}
-          </div>
+          </span>
+          {subscription.recordingsLimit !== null && (
+            <div className="billing-usage-card-bar">
+              <div
+                className={`billing-usage-card-fill${
+                  pct(
+                    subscription.recordingsThisMonth,
+                    subscription.recordingsLimit,
+                  ) > 80
+                    ? " warning"
+                    : ""
+                }`}
+                style={{
+                  width: `${pct(subscription.recordingsThisMonth, subscription.recordingsLimit)}%`,
+                }}
+              />
+            </div>
+          )}
+        </div>
 
-          <div className="billing-usage-item">
-            <div className="billing-usage-hd">
-              <span className="billing-usage-label">Vocabulary entries</span>
-              <span className="billing-usage-val">
-                {subscription.vocabularyLimit === null ? (
-                  <span className="billing-unlimited">Unlimited</span>
-                ) : (
-                  `${subscription.vocabularyCount} / ${subscription.vocabularyLimit}`
-                )}
-              </span>
-            </div>
-            {subscription.vocabularyLimit !== null && (
-              <div className="billing-bar">
-                <div
-                  className={`billing-bar-fill${
-                    pct(
-                      subscription.vocabularyCount,
-                      subscription.vocabularyLimit,
-                    ) > 80
-                      ? " warning"
-                      : ""
-                  }`}
-                  style={{
-                    width: `${pct(subscription.vocabularyCount, subscription.vocabularyLimit)}%`,
-                  }}
-                />
-              </div>
+        <div className="billing-usage-card">
+          <span className="billing-usage-card-label">Vocabulary entries</span>
+          <span className="billing-usage-card-val">
+            {subscription.vocabularyLimit === null ? (
+              <span className="billing-unlimited-inline">Unlimited</span>
+            ) : (
+              <>
+                {subscription.vocabularyCount}
+                <span className="billing-usage-card-limit">
+                  {" / "}
+                  {subscription.vocabularyLimit}
+                </span>
+              </>
             )}
-          </div>
+          </span>
+          {subscription.vocabularyLimit !== null && (
+            <div className="billing-usage-card-bar">
+              <div
+                className={`billing-usage-card-fill${
+                  pct(
+                    subscription.vocabularyCount,
+                    subscription.vocabularyLimit,
+                  ) > 80
+                    ? " warning"
+                    : ""
+                }`}
+                style={{
+                  width: `${pct(subscription.vocabularyCount, subscription.vocabularyLimit)}%`,
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Pro Benefits (free users) */}
+      {/* ── Pro Benefits (free users) ── */}
       {!isProUser && (
         <>
-          <div className="st-section-label">Why Upgrade to Pro?</div>
-          <div className="st-card st-card--grouped billing-benefits">
+          <div className="st-section-label">Why upgrade to Pro?</div>
+          <div className="st-card billing-benefits">
             <ul className="billing-benefits-list">
               <li>
                 <Check size={14} />

@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { razorpayService } from "@/lib/services/razorpay.service";
 import { subscriptionService } from "@/lib/services/subscription.service";
+import { getActiveOrg, getMemberRole } from "@/lib/server/organization";
 
 export async function POST() {
   try {
@@ -23,9 +24,25 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user's subscription
+    // Phase 4: gate cancellation behind workspace admin/owner role.
+    const active = await getActiveOrg(user.id);
+    if (!active) {
+      return NextResponse.json(
+        { error: "No active workspace" },
+        { status: 400 }
+      );
+    }
+    const role = await getMemberRole(user.id, active.organization.id);
+    if (role !== "owner" && role !== "admin") {
+      return NextResponse.json(
+        { error: "Only workspace owners or admins can cancel billing" },
+        { status: 403 }
+      );
+    }
+
+    // Get the org's subscription
     const { data: subscription, error: subError } =
-      await subscriptionService.getUserSubscription(user.id);
+      await subscriptionService.getOrgSubscription(active.organization.id);
 
     if (subError) {
       console.error("Error fetching subscription:", subError);
@@ -63,8 +80,8 @@ export async function POST() {
         true // Cancel at cycle end
       );
 
-      // Update local subscription status
-      await subscriptionService.updateSubscription(user.id, {
+      // Update the org subscription status
+      await subscriptionService.updateOrgSubscription(active.organization.id, {
         status: "cancelled",
       });
 

@@ -28,6 +28,7 @@ export type RazorpaySubscriptionStatus =
 export interface DBSubscription {
   id: string;
   user_id: string;
+  organization_id: string | null;
   razorpay_customer_id: string | null;
   razorpay_subscription_id: string | null;
   razorpay_plan_id: string | null;
@@ -45,6 +46,7 @@ export interface DBSubscription {
  */
 export interface DBSubscriptionInsert {
   user_id: string;
+  organization_id?: string;
   razorpay_customer_id?: string;
   razorpay_subscription_id?: string;
   razorpay_plan_id?: string;
@@ -60,13 +62,13 @@ export interface DBSubscriptionInsert {
  */
 export interface DBSubscriptionUpdate {
   razorpay_customer_id?: string;
-  razorpay_subscription_id?: string;
-  razorpay_plan_id?: string;
+  razorpay_subscription_id?: string | null;
+  razorpay_plan_id?: string | null;
   tier?: SubscriptionTier;
-  billing_cycle?: BillingCycle;
+  billing_cycle?: BillingCycle | null;
   status?: RazorpaySubscriptionStatus;
-  current_period_start?: string;
-  current_period_end?: string;
+  current_period_start?: string | null;
+  current_period_end?: string | null;
 }
 
 // ============================================
