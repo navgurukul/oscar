@@ -8,7 +8,7 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 use crate::events::{DownloadProgress, OscarEvent};
 use crate::hardware::HardwareProfile;
 use crate::state::{
-    AppState, TranscriptSegmentResult, TranscriptSpeaker, TranscriptionResult,
+    AppState, TranscriptSegmentResult, TranscriptSpeaker, TranscriptionPerf, TranscriptionResult,
 };
 
 /// Cached hardware profile — detection is cheap but we still want a single
@@ -307,15 +307,22 @@ pub(crate) fn transcribe_audio_inner(
     app_state: &Arc<Mutex<AppState>>,
     source: Option<&str>,
 ) -> Result<TranscriptionResult, String> {
+    // Wall-clock for the whole inner call — caller already times the IPC
+    // boundary in JS, so this lets us separate "Rust work" from "IPC + JSON".
+    let t_inner_start = std::time::Instant::now();
+
     if audio_data.is_empty() {
         return Ok(TranscriptionResult {
             text: String::new(),
             error: None,
             segments: None,
+            perf: None,
         });
     }
 
+    let t_vad = std::time::Instant::now();
     let (speech_audio, has_speech) = filter_speech(audio_data);
+    let vad_ms = t_vad.elapsed().as_millis() as u64;
     if !has_speech {
         log::info!(
             "[whisper] Skipping inference — VAD found no speech in {} samples",
@@ -325,6 +332,7 @@ pub(crate) fn transcribe_audio_inner(
             text: String::new(),
             error: None,
             segments: None,
+            perf: None,
         });
     }
 
@@ -336,11 +344,13 @@ pub(crate) fn transcribe_audio_inner(
         speech_audio.len() as f64 / 16000.0,
         language
     );
+    let speech_samples = speech_audio.len() as u64;
     let audio_data: &[f32] = &speech_audio;
 
     // Lock briefly to grab a handle to the shared context, then release —
     // otherwise the AppState mutex is held for the whole inference (multiple
     // seconds on long meetings) and other commands stall behind it.
+    let t_state = std::time::Instant::now();
     let context = {
         let locked = app_state.lock().map_err(|e| e.to_string())?;
         locked
@@ -375,12 +385,17 @@ pub(crate) fn transcribe_audio_inner(
         log::error!("[whisper] Failed to create state: {}", e);
         e.to_string()
     })?;
+    let state_create_ms = t_state.elapsed().as_millis() as u64;
+
     log::info!("[whisper] Running inference...");
+    let t_infer = std::time::Instant::now();
     state.full(params, audio_data).map_err(|e| {
         log::error!("[whisper] Inference failed: {}", e);
         e.to_string()
     })?;
+    let inference_ms = t_infer.elapsed().as_millis() as u64;
 
+    let t_segments = std::time::Instant::now();
     let num_segments = state.full_n_segments();
     log::info!("[whisper] Inference complete — {} segments", num_segments);
     let mut full_text = String::new();
@@ -454,8 +469,35 @@ pub(crate) fn transcribe_audio_inner(
         );
     }
 
+    let segments_ms = t_segments.elapsed().as_millis() as u64;
+    let total_ms = t_inner_start.elapsed().as_millis() as u64;
+
     let result_len = full_text.trim().len();
     log::info!("[whisper] Transcription result: {} chars", result_len);
+    log::info!(
+        "[whisper-perf] vad={}ms state={}ms infer={}ms segments={}ms total={}ms raw_seg={} drop_no_speech={} drop_hallu={} speech_samples={}",
+        vad_ms,
+        state_create_ms,
+        inference_ms,
+        segments_ms,
+        total_ms,
+        num_segments,
+        dropped_no_speech,
+        dropped_hallucination,
+        speech_samples,
+    );
+
+    let perf = TranscriptionPerf {
+        vad_ms,
+        state_create_ms,
+        inference_ms,
+        segments_ms,
+        total_ms,
+        speech_samples,
+        raw_segments: num_segments as u32,
+        dropped_no_speech: dropped_no_speech as u32,
+        dropped_hallucination: dropped_hallucination as u32,
+    };
 
     Ok(TranscriptionResult {
         text: full_text.trim().to_string(),
@@ -465,6 +507,7 @@ pub(crate) fn transcribe_audio_inner(
         } else {
             Some(structured_segments)
         },
+        perf: Some(perf),
     })
 }
 
@@ -473,6 +516,11 @@ pub(crate) fn merge_transcription_results(
 ) -> TranscriptionResult {
     let mut segments = Vec::new();
     let mut text_parts = Vec::new();
+    // Aggregate per-chunk perf so meeting flow reports stage totals across all
+    // segments. Dictation only ever produces a single inner result, so this
+    // path is a no-op there.
+    let mut perf_acc = TranscriptionPerf::default();
+    let mut perf_any = false;
 
     for result in results {
         let trimmed_text = result.text.trim();
@@ -482,6 +530,19 @@ pub(crate) fn merge_transcription_results(
 
         if let Some(mut result_segments) = result.segments {
             segments.append(&mut result_segments);
+        }
+
+        if let Some(p) = result.perf {
+            perf_any = true;
+            perf_acc.vad_ms += p.vad_ms;
+            perf_acc.state_create_ms += p.state_create_ms;
+            perf_acc.inference_ms += p.inference_ms;
+            perf_acc.segments_ms += p.segments_ms;
+            perf_acc.total_ms += p.total_ms;
+            perf_acc.speech_samples += p.speech_samples;
+            perf_acc.raw_segments += p.raw_segments;
+            perf_acc.dropped_no_speech += p.dropped_no_speech;
+            perf_acc.dropped_hallucination += p.dropped_hallucination;
         }
     }
 
@@ -513,6 +574,7 @@ pub(crate) fn merge_transcription_results(
         } else {
             Some(segments)
         },
+        perf: if perf_any { Some(perf_acc) } else { None },
     }
 }
 

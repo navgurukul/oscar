@@ -18,12 +18,16 @@ use tauri::{AppHandle, Manager};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(45);
 const LEAVE_DEBOUNCE: Duration = Duration::from_millis(220);
-const HOT_ZONE_WIDTH_LOGICAL: f64 = 360.0;
-/// Trigger zone — cursor must reach the bottom edge handle to expand.
-/// Matches the visible handle height (5px) plus a small tolerance.
-const TRIGGER_HEIGHT_LOGICAL: f64 = 14.0;
-/// Keep-expanded zone — once expanded, the pill stays open while the
-/// cursor is anywhere over the visible pill body (44px) + handle margin.
+/// Trigger zone — cursor must reach the narrow bottom-edge strip around the
+/// visible handle (~96 px) to expand. Matches the rest NSPanel footprint so
+/// the expand zone exactly tracks the area that can't pass clicks anyway.
+const TRIGGER_WIDTH_LOGICAL: f64 = 140.0;
+const TRIGGER_HEIGHT_LOGICAL: f64 = 16.0;
+/// Keep-expanded zone — once expanded, the pill stays open while the cursor
+/// is anywhere over the full expanded pill body (360 wide). Width and height
+/// both expand so the user can sweep across the whole pill / settings popover
+/// without triggering a collapse.
+const KEEP_WIDTH_LOGICAL: f64 = 360.0;
 const KEEP_HEIGHT_LOGICAL: f64 = 80.0;
 
 pub(crate) fn start(app: AppHandle) {
@@ -52,18 +56,18 @@ pub(crate) fn start(app: AppHandle) {
             // (e.g. settings popover open at 380 px), grow the keep-zone to
             // match the actual window height so the cursor can reach the
             // popover items without triggering a collapse.
-            let zone_h_logical = if last_in_zone {
+            let (zone_w_logical, zone_h_logical) = if last_in_zone {
                 let win_h_logical = app
                     .get_webview_window("recording-pill")
                     .and_then(|w| w.inner_size().ok())
                     .map(|s| s.height as f64 / scale)
                     .unwrap_or(KEEP_HEIGHT_LOGICAL);
-                win_h_logical.max(KEEP_HEIGHT_LOGICAL)
+                (KEEP_WIDTH_LOGICAL, win_h_logical.max(KEEP_HEIGHT_LOGICAL))
             } else {
-                TRIGGER_HEIGHT_LOGICAL
+                (TRIGGER_WIDTH_LOGICAL, TRIGGER_HEIGHT_LOGICAL)
             };
             let zone_h_phys = zone_h_logical * scale;
-            let zone_w_phys = HOT_ZONE_WIDTH_LOGICAL * scale;
+            let zone_w_phys = zone_w_logical * scale;
 
             let zone_top = m_bottom_phys - zone_h_phys;
             let zone_left = m_center_x_phys - zone_w_phys / 2.0;

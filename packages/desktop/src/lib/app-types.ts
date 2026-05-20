@@ -13,6 +13,27 @@ export type TabType =
   | "billing"
   | "settings";
 
+export interface TranscriptionPerf {
+  /** VAD pre-filter wall-clock ms (`filter_speech` in whisper.rs). */
+  vadMs: number;
+  /** Time to acquire shared context handle + create per-call WhisperState. */
+  stateCreateMs: number;
+  /** `state.full(params, audio)` wall-clock ms — the dominant inference cost. */
+  inferenceMs: number;
+  /** Segment extraction + hallucination filter loop ms. */
+  segmentsMs: number;
+  /** Total wall-clock ms inside `transcribe_audio_inner`. */
+  totalMs: number;
+  /** Speech-audio length fed to inference, in samples (16 kHz mono). */
+  speechSamples: number;
+  /** Raw segments Whisper produced before filtering. */
+  rawSegments: number;
+  /** Segments dropped by `no_speech_probability` gate. */
+  droppedNoSpeech: number;
+  /** Segments dropped by `is_hallucination_segment`. */
+  droppedHallucination: number;
+}
+
 export interface Transcription {
   text: string;
   error?: string;
@@ -25,6 +46,8 @@ export interface Transcription {
       diarization_label?: string;
     };
   }>;
+  /** Populated by `transcribe_audio_inner`; absent when Whisper was skipped. */
+  perf?: TranscriptionPerf;
 }
 
 

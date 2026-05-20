@@ -34,6 +34,37 @@ interface AIProcessRequest {
   promptProfile?: AIProcessPromptProfile;
 }
 
+/**
+ * Per-call wire-level timing for an `ai-process` invocation. All values are
+ * milliseconds. Populated best-effort from `PerformanceResourceTiming` for the
+ * matching Supabase functions URL — when the entry is missing (eg. it was
+ * evicted from the buffer or the runtime doesn't surface it) we still emit
+ * `prep` and `roundtrip` from `performance.now()` deltas so the caller gets a
+ * usable wall-clock number.
+ */
+export interface AIProcessTiming {
+  /** Pre-invoke prep (auth lookup, JSON serialisation, supabase client work). */
+  prepMs: number;
+  /** Wall-clock for the entire `supabase.functions.invoke` call. */
+  roundtripMs: number;
+  /** DNS lookup ms for the matched resource entry. `undefined` if not found. */
+  dnsMs?: number;
+  /** TCP connect ms. `undefined` if not found or connection reused. */
+  tcpMs?: number;
+  /** TLS handshake ms. `undefined` if not found or connection reused. */
+  tlsMs?: number;
+  /**
+   * Time-to-first-byte (responseStart - requestStart). Closest local proxy
+   * for "server compute + queue + outbound network" — when this dominates
+   * `roundtripMs`, the slowness is server-side, not client-side.
+   */
+  ttfbMs?: number;
+  /** Body download time (responseEnd - responseStart). */
+  downloadMs?: number;
+  /** True when a PerformanceResourceTiming entry was matched. */
+  matchedResource: boolean;
+}
+
 const EDGE_FUNCTION_FETCH_ERROR = "Failed to send a request to the Edge Function";
 const EDGE_FUNCTION_RELAY_ERROR = "Relay Error invoking the Edge Function";
 const EDGE_FUNCTION_NON_2XX_ERROR = "Edge Function returned a non-2xx status code";
@@ -50,6 +81,91 @@ const {
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+/**
+ * Locate the `PerformanceResourceTiming` entry for the most recent fetch to a
+ * URL containing `urlNeedle` that started at or after `tBeforeInvoke`. We
+ * search backwards because resource entries accumulate chronologically and
+ * the call we just made is almost always the tail.
+ *
+ * Returns `undefined` if no match was found (eg. buffer evicted, runtime did
+ * not record the entry, or the URL was mis-needled).
+ */
+function findRecentResourceEntry(
+  urlNeedle: string,
+  tBeforeInvoke: number,
+): PerformanceResourceTiming | undefined {
+  if (typeof performance === "undefined" || !performance.getEntriesByType) {
+    return undefined;
+  }
+
+  const entries = performance.getEntriesByType(
+    "resource",
+  ) as PerformanceResourceTiming[];
+
+  // Walk backwards — the call we just made is almost always at the tail.
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    if (entry.startTime < tBeforeInvoke) {
+      // We've passed our invocation boundary in time order — no need to look
+      // further back through historical entries.
+      return undefined;
+    }
+    if (entry.name && entry.name.includes(urlNeedle)) {
+      return entry;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Build an {@link AIProcessTiming} record. The `prep` and `roundtrip` fields
+ * come straight from the caller's `performance.now()` deltas; the rest are
+ * filled best-effort from the matched resource entry.
+ */
+function buildAIProcessTiming(
+  tStart: number,
+  tBeforeInvoke: number,
+  tAfterInvoke: number,
+  resourceUrlNeedle: string,
+): AIProcessTiming {
+  const prepMs = Math.round(tBeforeInvoke - tStart);
+  const roundtripMs = Math.round(tAfterInvoke - tBeforeInvoke);
+
+  const entry = findRecentResourceEntry(resourceUrlNeedle, tBeforeInvoke);
+  if (!entry) {
+    return { prepMs, roundtripMs, matchedResource: false };
+  }
+
+  const dnsMs = Math.max(0, entry.domainLookupEnd - entry.domainLookupStart);
+  const tcpMs = Math.max(0, entry.connectEnd - entry.connectStart);
+  // secureConnectionStart === 0 means "no TLS handshake for this entry" (eg.
+  // reused connection). Treat as undefined rather than zero so callers can
+  // distinguish "fast TLS" from "no TLS step".
+  const tlsMs =
+    entry.secureConnectionStart > 0
+      ? Math.max(0, entry.connectEnd - entry.secureConnectionStart)
+      : undefined;
+  // `requestStart` can also be 0 when the resource came from cache; guard the
+  // subtraction so we don't emit a wildly negative TTFB in that case.
+  const ttfbMs =
+    entry.requestStart > 0
+      ? Math.max(0, entry.responseStart - entry.requestStart)
+      : undefined;
+  const downloadMs = Math.max(0, entry.responseEnd - entry.responseStart);
+
+  return {
+    prepMs,
+    roundtripMs,
+    dnsMs: Math.round(dnsMs),
+    tcpMs: Math.round(tcpMs),
+    tlsMs: tlsMs !== undefined ? Math.round(tlsMs) : undefined,
+    ttfbMs: ttfbMs !== undefined ? Math.round(ttfbMs) : undefined,
+    downloadMs: Math.round(downloadMs),
+    matchedResource: true,
+  };
 }
 
 function estimateRequestSize(value: unknown): number {
@@ -330,8 +446,14 @@ async function callWebAiRoute<T>(
 async function invokeAIProcess(
   accessToken: string,
   request: AIProcessRequest,
+  onTiming?: (timing: AIProcessTiming) => void,
 ): Promise<string> {
-  const { data, error } = await supabase.functions.invoke<AIProcessResponse>(
+  const tStart = performance.now();
+  // Capture the boundary just before the network call — anything before this
+  // counts as `prepMs`, anything between this and `tAfterInvoke` is the wire
+  // roundtrip.
+  const tBeforeInvoke = performance.now();
+  const result = await supabase.functions.invoke<AIProcessResponse>(
     "ai-process",
     {
       headers: {
@@ -342,6 +464,27 @@ async function invokeAIProcess(
       },
     },
   );
+  const tAfterInvoke = performance.now();
+
+  if (onTiming) {
+    try {
+      // Match by the Supabase functions URL fragment — works for any project
+      // ref since `<project>.supabase.co/functions/v1/ai-process` always
+      // contains this needle.
+      const timing = buildAIProcessTiming(
+        tStart,
+        tBeforeInvoke,
+        tAfterInvoke,
+        "/functions/v1/ai-process",
+      );
+      onTiming(timing);
+    } catch (timingErr) {
+      // Timing is purely diagnostic; never let it affect the call result.
+      console.warn("[ai] failed to build invoke timing:", timingErr);
+    }
+  }
+
+  const { data, error } = result;
 
   if (error) {
     throw new Error(await extractInvokeError(error));
@@ -489,6 +632,13 @@ export const aiService = {
       context?: DictationContextSnapshot;
       routing?: DictationRoutingResult;
       promptProfile?: AIProcessPromptProfile;
+      /**
+       * Optional callback invoked once with per-call wire timing. Used by the
+       * dictation perf instrumentation to record DNS/TCP/TLS/TTFB/download
+       * breakdown into `perf.jsonl`. Errors thrown inside the callback are
+       * swallowed and never affect the caller.
+       */
+      onTiming?: (timing: AIProcessTiming) => void;
     },
   ): Promise<string> {
     if (!text.trim()) {
@@ -505,6 +655,7 @@ export const aiService = {
         routing: options?.routing,
         promptProfile: options?.promptProfile,
       },
+      options?.onTiming,
     );
   },
 

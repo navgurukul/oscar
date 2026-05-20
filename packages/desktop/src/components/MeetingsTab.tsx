@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { buildMeetingContextPack } from "@oscar/shared";
 import { aiService } from "../services/ai.service";
 import {
   FileText,
@@ -115,6 +116,7 @@ interface MeetingsTabProps {
   onConnectCalendar: () => void;
   onCalendarTokenInvalid: () => Promise<CalendarReconnectResult>;
   savedMeetings: SavedMeetingRecord[];
+  vocabularyTerms?: string[];
   onSaveMeeting: (meeting: SavedMeetingRecord) => void;
   onDeleteMeeting: (id: string) => void;
   minutesTranscriptionStatus: MinutesTranscriptionStatus;
@@ -462,6 +464,7 @@ export function MeetingsTab({
   onConnectCalendar,
   onCalendarTokenInvalid,
   savedMeetings,
+  vocabularyTerms = [],
   onSaveMeeting,
   onDeleteMeeting,
   minutesTranscriptionStatus,
@@ -637,6 +640,23 @@ export function MeetingsTab({
   const hasTranscriptInput =
     transcriptSegments.length > 0 || transcript.trim().length > 0;
 
+  const attachContextPack = useCallback(
+    (request: EnhancedMeetingNoteRequest): EnhancedMeetingNoteRequest => {
+      try {
+        return {
+          ...request,
+          context_pack: buildMeetingContextPack(request, {
+            vocabulary: vocabularyTerms,
+          }),
+        };
+      } catch (contextError) {
+        console.warn("[minutes] context pack build failed:", contextError);
+        return request;
+      }
+    },
+    [vocabularyTerms],
+  );
+
   const buildNoteRequest = useCallback((): EnhancedMeetingNoteRequest => {
     const title =
       meetingTitle.trim() ||
@@ -652,7 +672,7 @@ export function MeetingsTab({
         ? transcriptSegments
         : buildFallbackTranscriptSegments(transcript, startedAt);
 
-    return {
+    return attachContextPack({
       meeting_title: title,
       meeting_local_datetime: buildMeetingLocalDatetime(startedAt),
       attendees_compact: attendeesCompact,
@@ -661,8 +681,9 @@ export function MeetingsTab({
       my_notes_markdown: manualNotes.trim(),
       transcript_segments: effectiveTranscriptSegments,
       meeting_type_hint: meetingTypeHint,
-    };
+    });
   }, [
+    attachContextPack,
     attendees,
     manualNotes,
     meetingStartedAt,
@@ -679,7 +700,7 @@ export function MeetingsTab({
       setRegenerateError("");
       setRegenerating(true);
       try {
-        const request: EnhancedMeetingNoteRequest = {
+        const request = attachContextPack({
           meeting_title: saved.meetingTitle,
           meeting_local_datetime: saved.meetingLocalDatetime,
           attendees_compact: saved.attendeesCompact,
@@ -691,7 +712,7 @@ export function MeetingsTab({
               ? saved.transcriptSegments
               : buildFallbackTranscriptSegments(saved.transcript, saved.startedAt),
           meeting_type_hint: saved.meetingTypeHint,
-        };
+        });
         const newMarkdown = await aiService.generateEnhancedMeetingNote(request);
         const updated: SavedMeetingRecord = {
           ...saved,
@@ -707,7 +728,7 @@ export function MeetingsTab({
         setRegenerating(false);
       }
     },
-    [onSaveMeeting, regenerating],
+    [attachContextPack, onSaveMeeting, regenerating],
   );
 
   const processTranscript = useCallback(async () => {
@@ -821,7 +842,7 @@ export function MeetingsTab({
   };
 
   const handleCopy = async (markdown: string) => {
-    await navigator.clipboard.writeText(markdown);
+    await navigator.clipboard.writeText(stripEvidenceComments(markdown));
     setCopied(true);
     setTimeout(() => setCopied(false), 2_000);
   };

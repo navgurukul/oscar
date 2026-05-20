@@ -60,25 +60,43 @@
     body[data-phase="recording"] .handle,
     body[data-phase="processing"] .handle,
     body[data-phase="inserted"] .handle,
+    body[data-phase="copied"] .handle,
     body[data-phase="error"] .handle {
       opacity: 0;
     }
 
     /* ─── Invisible hit zone ───────────────────────────────────────────────
-       At rest the window is only 56 px tall — the hit zone fills the whole
-       window. When expanded/recording/processing the window grows up to
-       200 px; the hit zone still fills the whole window so the cursor that
-       triggered the expand stays "inside" through the resize, preventing a
-       resize → cursor-out → collapse → resize loop (the flicker). */
+       At rest/ready the hit zone hugs the visible handle (~72–96 px wide,
+       5–6 px tall) with a small hover buffer. Surrounding window pixels stay
+       transparent so clicks pass through to apps below.
+       When expanded/recording/processing the hit zone fills the whole window
+       so the cursor that triggered the expand stays "inside" through the
+       resize, preventing a resize → cursor-out → collapse → resize loop. */
     .hit-zone {
       position: absolute;
-      inset: 0;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      width: 140px;
+      height: 12px;
       pointer-events: auto;
       z-index: 5;
       /* Near-zero alpha so the WebView claims the transparent region for
          cursor hit-testing on macOS NSPanel — pure transparent can drop
          mouse-move events. */
       background: rgba(0, 0, 0, 0.001);
+    }
+    body[data-phase="expanded"] .hit-zone,
+    body[data-phase="recording"] .hit-zone,
+    body[data-phase="processing"] .hit-zone,
+    body[data-phase="inserted"] .hit-zone,
+    body[data-phase="copied"] .hit-zone,
+    body[data-phase="error"] .hit-zone {
+      left: 0;
+      bottom: 0;
+      transform: none;
+      width: 100%;
+      height: 100%;
     }
 
     /* ─── Full Paper pill (expanded states) ────────────────────────────── */
@@ -97,6 +115,7 @@
     body[data-phase="recording"] .pill-wrap,
     body[data-phase="processing"] .pill-wrap,
     body[data-phase="inserted"] .pill-wrap,
+    body[data-phase="copied"] .pill-wrap,
     body[data-phase="error"] .pill-wrap {
       transform: translateX(-50%) translateY(0) scale(1);
       opacity: 1;
@@ -187,22 +206,27 @@
     }
     .waveform .bar {
       width: 2.5px;
+      transform-origin: center;
+      transform: scaleY(var(--audio-scale, 0.34));
+      transition: transform 0.06s linear;
+      will-change: transform;
+    }
+    .waveform .bar-fill {
+      display: block;
+      width: 100%;
+      height: 100%;
       background: #06b6d4;
       border-radius: 2px;
       transform-origin: center;
-      transform: scaleY(0.2);
-      animation: mm-wave 0.9s ease-in-out infinite alternate;
+      animation: mm-wave 1.15s ease-in-out infinite alternate;
+      will-change: transform;
     }
     @keyframes mm-wave {
-      0%   { transform: scaleY(0.35); }
-      100% { transform: scaleY(1); }
+      0%   { transform: scaleY(0.9); }
+      100% { transform: scaleY(1.08); }
     }
-    /* When live mic levels are streaming in, override the keyframe and let
-       inline transform from the audio meter drive the bars instead. */
-    .waveform.live .bar {
-      animation: none;
-      transition: transform 0.06s linear;
-    }
+    /* Live mic levels change the outer bar scale; inner fill keeps the
+       subtle keyframe motion moving underneath. */
 
     /* Error glyph */
     .error-body {
@@ -240,6 +264,7 @@
     body[data-phase="expanded"]  .pill-body [data-body="ready"]    { display: flex; }
     body[data-phase="processing"] .pill-body [data-body="processing"] { display: flex; }
     body[data-phase="inserted"]  .pill-body [data-body="idle"]    { display: flex; }
+    body[data-phase="copied"]    .pill-body [data-body="idle"]    { display: flex; }
     body[data-phase="error"]     .pill-body [data-body="error"]   { display: flex; }
 
     /* ─── Inserted toast ───────────────────────────────────────────────── */
@@ -263,7 +288,8 @@
       pointer-events: none;
       z-index: 8;
     }
-    body[data-phase="inserted"] .toast {
+    body[data-phase="inserted"] .toast,
+    body[data-phase="copied"] .toast {
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
@@ -558,14 +584,17 @@
       const bar = document.createElement('div');
       bar.className = 'bar';
       bar.style.height = `${Math.max(h * 22, 3)}px`;
-      bar.style.animationDelay = `${i * 0.06}s`;
+      const fill = document.createElement('span');
+      fill.className = 'bar-fill';
+      fill.style.animationDelay = `${i * 0.06}s`;
+      bar.appendChild(fill);
       wf.appendChild(bar);
       waveBars.push(bar);
     });
 
     function clearWaveLive() {
       wf.classList.remove('live');
-      waveBars.forEach((b) => { b.style.transform = ''; });
+      waveBars.forEach((b) => { b.style.removeProperty('--audio-scale'); });
     }
     const ld = document.getElementById('loading-dots');
     for (let i = 0; i < 13; i++) {
@@ -603,6 +632,7 @@
         case 'recording':
         case 'processing':
         case 'inserted':
+        case 'copied':
         case 'error':
           return next;
         default:
@@ -614,12 +644,18 @@
       next = normalizePhase(next);
       phase = next;
       document.body.setAttribute('data-phase', next);
+      // Swap toast copy to match the actual outcome.
+      const toastText = document.getElementById('toast-text');
+      if (toastText) {
+        if (next === 'copied') toastText.textContent = 'Copied to clipboard';
+        else if (next === 'inserted') toastText.textContent = 'Inserted into document';
+      }
       // Any pending hover-driven transitions must not stomp an externally-set
       // phase (e.g. Ctrl+Space → recording). Clear timers when entering any
       // non-hover phase.
       if (next !== 'ready') clearTimeout(readyHoldTimer);
       if (next === 'recording' || next === 'processing' ||
-          next === 'inserted' || next === 'error') {
+          next === 'inserted' || next === 'copied' || next === 'error') {
         clearTimeout(leaveTimer);
       }
       // Closing pill collapses settings too.
@@ -685,7 +721,7 @@
     }
 
     /* ─── Hit zone / handle hover ──────────────────────────────────────── */
-    const READY_HOLD_MS = 40;
+    const READY_HOLD_MS = 180;
 
     function expandNow() {
       if (phase === 'rest' || phase === 'ready') {
@@ -858,8 +894,8 @@
           ev.listen('pill-set-listening', () => applyPhase('recording')),
 
           // Live mic levels from the host. Payload: number[] of 15 floats
-          // in [0..1] — one per bar. Drives the waveform reactively instead
-          // of the default CSS keyframe oscillation.
+          // in [0..1] — one per bar. Audio sets amplitude while the nested
+          // fill keeps the waveform subtly moving between meter updates.
           ev.listen('pill-audio-level', (evt) => {
             if (phase !== 'recording') return;
             const arr = evt.payload;
@@ -867,8 +903,9 @@
             if (!wf.classList.contains('live')) wf.classList.add('live');
             for (let i = 0; i < waveBars.length; i++) {
               const raw = typeof arr[i] === 'number' ? arr[i] : 0;
-              const v = Math.max(0.12, Math.min(1, raw));
-              waveBars[i].style.transform = `scaleY(${v})`;
+              const v = Math.max(0, Math.min(1, raw));
+              const scale = 0.28 + v * 0.72;
+              waveBars[i].style.setProperty('--audio-scale', scale.toFixed(3));
             }
           }),
         ]);

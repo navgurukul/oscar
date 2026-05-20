@@ -433,6 +433,7 @@ export function useMinutesRecorder({
               );
               sessionUsesSystemAudioRef.current = false;
               systemAudioActiveRef.current = false;
+              void invoke("stop_system_audio_capture").catch(() => {});
             })
         : Promise.resolve();
 
@@ -543,6 +544,10 @@ export function useMinutesRecorder({
     });
 
     if (systemAudioEnabled && systemAudioSupported) {
+      // Clear any stale capture state from a prior session (component unmount,
+      // hot-reload, or rotation error) before starting. Backend stop is
+      // idempotent on macOS (sck_stop_capture) and Windows (WASAPI state check).
+      await invoke("stop_system_audio_capture").catch(() => {});
       try {
         await invoke("start_system_audio_capture");
         systemAudioActiveRef.current = true;
@@ -632,6 +637,24 @@ export function useMinutesRecorder({
       stopVadMonitor();
       if (timerRef.current) clearInterval(timerRef.current);
       if (segmentTimerRef.current) clearTimeout(segmentTimerRef.current);
+      stopRequestedRef.current = true;
+      const activeRecorder = mediaRecorderRef.current;
+      if (activeRecorder && activeRecorder.state === "recording") {
+        try {
+          activeRecorder.stop();
+        } catch (err) {
+          console.warn("[meeting-record] mediaRecorder.stop on unmount:", err);
+        }
+      }
+      if (systemAudioActiveRef.current) {
+        systemAudioActiveRef.current = false;
+        void invoke("stop_system_audio_capture").catch((err) => {
+          console.warn(
+            "[meeting-record] stop_system_audio_capture on unmount:",
+            err,
+          );
+        });
+      }
     };
   }, [stopVadMonitor]);
 

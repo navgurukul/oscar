@@ -13,9 +13,15 @@ use tauri::{LogicalPosition, LogicalSize, Manager};
 
 use crate::events::OscarEvent;
 
-// Window width is fixed; height grows per state.
-const PILL_W: f64 = 360.0;
-const PILL_H_REST: f64 = 56.0;          // 5px handle + ~50px ready-hint headroom
+// Both width and height grow per state. At rest the NSPanel is sized to
+// hug the visible handle (with a small hover buffer) so transparent pixels
+// don't capture cursor events and block clicks on apps underneath. macOS
+// NSPanel with `set_ignore_cursor_events(false)` still claims the cursor
+// across its full frame regardless of pixel alpha — the only reliable way
+// to let clicks pass through is to shrink the frame itself.
+const PILL_W_REST: f64 = 140.0;         // handle (~96px) + small hover buffer
+const PILL_W_EXPANDED: f64 = 360.0;     // full Paper pill + actions
+const PILL_H_REST: f64 = 16.0;          // 5–6 px handle + ~10 px hover buffer
 const PILL_H_EXPANDED: f64 = 200.0;     // pill + toast space
 const PILL_H_SETTINGS: f64 = 380.0;     // pill + settings popover
 static CURRENT_PILL_PHASE: Mutex<&'static str> = Mutex::new("rest");
@@ -28,17 +34,18 @@ fn normalize_phase(phase: &str) -> &'static str {
         "recording" => "recording",
         "processing" => "processing",
         "inserted" => "inserted",
+        "copied" => "copied",
         "error" => "error",
         "settings" => "settings",
         _ => "rest",
     }
 }
 
-fn phase_height(phase: &str) -> f64 {
+fn phase_size(phase: &str) -> (f64, f64) {
     match phase {
-        "rest" | "ready" => PILL_H_REST,
-        "settings" => PILL_H_SETTINGS,
-        _ => PILL_H_EXPANDED,
+        "rest" | "ready" => (PILL_W_REST, PILL_H_REST),
+        "settings" => (PILL_W_EXPANDED, PILL_H_SETTINGS),
+        _ => (PILL_W_EXPANDED, PILL_H_EXPANDED),
     }
 }
 
@@ -86,7 +93,8 @@ fn sync_pill_phase(app: &tauri::AppHandle, phase: &'static str) {
     create_pill_window(app);
 
     if let Some(w) = app.get_webview_window("recording-pill") {
-        resize_pill(&w, phase_height(phase));
+        let (pw, ph) = phase_size(phase);
+        resize_pill(&w, pw, ph);
         let _ = w.show();
         if phase != "settings" {
             apply_phase_script(&w, phase);
@@ -110,7 +118,11 @@ fn sync_tray_phase(phase: &str) {
 
 /// Reposition the pill so its bottom edge sits flush with the primary
 /// monitor's bottom edge. Called after every resize.
-fn reposition_flush_bottom<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, height: f64) {
+fn reposition_flush_bottom<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    width: f64,
+    height: f64,
+) {
     if let Ok(Some(monitor)) = window.primary_monitor() {
         let size = monitor.size();
         let pos = monitor.position();
@@ -119,7 +131,7 @@ fn reposition_flush_bottom<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, 
         let lh = size.height as f64 / scale;
         let lx = pos.x as f64 / scale;
         let ly = pos.y as f64 / scale;
-        let x = lx + lw / 2.0 - PILL_W / 2.0;
+        let x = lx + lw / 2.0 - width / 2.0;
         let y = ly + lh - height;
         let _ = window.set_position(LogicalPosition::new(x, y));
     }
@@ -146,7 +158,7 @@ pub(crate) fn create_pill_window(app: &tauri::AppHandle) {
             let lh = size.height as f64 / scale;
             let lx = pos.x as f64 / scale;
             let ly = pos.y as f64 / scale;
-            (lx + lw / 2.0 - PILL_W / 2.0, ly + lh - PILL_H_REST)
+            (lx + lw / 2.0 - PILL_W_REST / 2.0, ly + lh - PILL_H_REST)
         })
         .unwrap_or((800.0, 900.0));
 
@@ -156,7 +168,7 @@ pub(crate) fn create_pill_window(app: &tauri::AppHandle) {
         WebviewUrl::App("pill.html".into()),
     )
     .title("")
-    .inner_size(PILL_W, PILL_H_REST)
+    .inner_size(PILL_W_REST, PILL_H_REST)
     .position(pos_x, pos_y)
     .decorations(false)
     .transparent(true)
@@ -219,10 +231,10 @@ fn reapply_macos_level<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     }
 }
 
-/// Resize the pill to one of three heights and keep its bottom edge flush.
-fn resize_pill<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, height: f64) {
-    let _ = window.set_size(LogicalSize::new(PILL_W, height));
-    reposition_flush_bottom(window, height);
+/// Resize the pill to one of three phase sizes and keep its bottom edge flush.
+fn resize_pill<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, width: f64, height: f64) {
+    let _ = window.set_size(LogicalSize::new(width, height));
+    reposition_flush_bottom(window, width, height);
     #[cfg(target_os = "macos")]
     reapply_macos_level(window);
 }

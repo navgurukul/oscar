@@ -76,11 +76,38 @@ pub(crate) struct TranscriptSegmentResult {
     pub(crate) speaker: TranscriptSpeaker,
 }
 
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TranscriptionPerf {
+    /// VAD pre-filter wall-clock ms (`filter_speech`).
+    pub(crate) vad_ms: u64,
+    /// Time to acquire shared context handle + create per-call `WhisperState`.
+    pub(crate) state_create_ms: u64,
+    /// `state.full(params, audio)` wall-clock ms — the dominant cost.
+    pub(crate) inference_ms: u64,
+    /// Segment extraction + hallucination filter loop ms.
+    pub(crate) segments_ms: u64,
+    /// Total wall-clock ms inside `transcribe_audio_inner`.
+    pub(crate) total_ms: u64,
+    /// Speech-audio length fed to inference, in samples (16 kHz mono).
+    pub(crate) speech_samples: u64,
+    /// Raw segments Whisper produced before filtering.
+    pub(crate) raw_segments: u32,
+    /// Segments dropped by `no_speech_probability` gate.
+    pub(crate) dropped_no_speech: u32,
+    /// Segments dropped by `is_hallucination_segment`.
+    pub(crate) dropped_hallucination: u32,
+}
+
 #[derive(Serialize, Deserialize)]
 pub(crate) struct TranscriptionResult {
     pub(crate) text: String,
     pub(crate) error: Option<String>,
     pub(crate) segments: Option<Vec<TranscriptSegmentResult>>,
+    /// Per-stage timing — populated by `transcribe_audio_inner`. `None` when
+    /// inference was skipped (empty audio or VAD found no speech).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) perf: Option<TranscriptionPerf>,
 }
 
 #[derive(Serialize, Clone, Default, Debug)]

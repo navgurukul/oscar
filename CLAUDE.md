@@ -36,7 +36,7 @@ oscar/
 | Styling | Tailwind CSS 3.3, CVA | Tailwind CSS |
 | UI primitives | Radix UI + shadcn/ui (New York style) | Radix UI + shadcn/ui |
 | Auth & DB | Supabase (PostgreSQL + Auth) | — |
-| AI | Google Gemini API (Flash 2.5 Lite) | whisper-rs (local Whisper) |
+| AI | Google Gemini 2.5 Flash | whisper-rs (local Whisper) + Mercury 2 (dictation cleanup via `ai-process` Edge Function) + Google Gemini 2.5 Flash (meeting enhance) |
 | Payments | Razorpay | — |
 | STT | ONNX Runtime Web + speech-to-speech | whisper-rs (CUDA/Vulkan) |
 | Animation | motion, tsparticles | — |

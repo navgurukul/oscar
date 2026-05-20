@@ -280,7 +280,7 @@ function App() {
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
 
   // Personal dictionary (local state; synced to Supabase when logged in)
-  const [_dictWords, setDictWords] = useState<string[]>([]);
+  const [dictWords, setDictWords] = useState<string[]>([]);
   const [, setDictSyncing] = useState(false);
 
   // Refs
@@ -877,6 +877,43 @@ function App() {
       }).catch(console.warn);
     });
 
+    // ── In-app Ctrl+Space fallback ───────────────────────────────────────
+    // The Tauri global-shortcut plugin's macOS backend (NSEvent global
+    // monitor) does NOT fire when Oscar itself is the foreground app — the
+    // key event is delivered to the focused webview first and the global
+    // monitor only sees events targeted at other apps. So when Oscar's
+    // window is focused, Ctrl+Space appears dead. Mirror the hotkey flow
+    // via a webview-level keydown so the dictation pill still expands.
+    let inAppHotkeyDown = false;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || !e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      if (e.repeat || inAppHotkeyDown) {
+        e.preventDefault();
+        return;
+      }
+      inAppHotkeyDown = true;
+      e.preventDefault();
+      invoke("pill_request_record_start").catch(console.warn);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!inAppHotkeyDown) return;
+      if (e.code === "Space" || e.code === "ControlLeft" || e.code === "ControlRight") {
+        inAppHotkeyDown = false;
+        invoke("pill_request_record_stop").catch(console.warn);
+      }
+    };
+    const onWindowBlur = () => {
+      // Safety net — if user alt-tabs while holding the keys, force a stop
+      // so the recording doesn't get stuck on.
+      if (inAppHotkeyDown) {
+        inAppHotkeyDown = false;
+        invoke("pill_request_record_stop").catch(console.warn);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
+
     return () => {
       unlistenStart.then((f) => f());
       unlistenStop.then((f) => f());
@@ -884,6 +921,9 @@ function App() {
       unlistenReg.then((f) => f());
       unlistenPillSettings.then((f) => f());
       unlistenPillReady.then((f) => f());
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads settings, registers hotkey listeners; uses refs for mutable state
   }, []);
@@ -1090,9 +1130,16 @@ function App() {
         preset,
       );
 
+      // Track the *currently authoritative* variant through every code path
+      // below so the caller can read it without waiting for React to re-render
+      // after `updateRoleModel`. Fixes the `model="unknown"` attribution bug
+      // in stream-dictation perf logs, where `dictationModel.activeVariant`
+      // was read from a stale closure mid-handler.
+      let resolvedVariant: WhisperModelVariant | null = resolved?.variant ?? null;
+
       updateRoleModel(role, {
         recommendation,
-        activeVariant: resolved?.variant ?? null,
+        activeVariant: resolvedVariant,
         resolvedPath: resolved?.path ?? null,
         fallbackUsed: resolved?.fallbackUsed ?? false,
         downloadState: resolved ? "ready" : "idle",
@@ -1111,8 +1158,9 @@ function App() {
 
         try {
           path = await downloadRecommendedModel(recommendation.spec);
+          resolvedVariant = recommendation.spec.variant;
           updateRoleModel(role, {
-            activeVariant: recommendation.spec.variant,
+            activeVariant: resolvedVariant,
             resolvedPath: path,
             fallbackUsed: false,
             downloadState: "ready",
@@ -1130,9 +1178,10 @@ function App() {
           const retry = await resolveModelForRole(role, preset);
           if (retry.resolved) {
             path = retry.resolved.path;
+            resolvedVariant = retry.resolved.variant;
             updateRoleModel(role, {
               recommendation: retry.recommendation,
-              activeVariant: retry.resolved.variant,
+              activeVariant: resolvedVariant,
               resolvedPath: retry.resolved.path,
               fallbackUsed: retry.resolved.fallbackUsed,
               downloadState: "ready",
@@ -1144,7 +1193,7 @@ function App() {
 
       if (!path) {
         if (!options.load && options.autoDownload === false) {
-          return { role, path: null };
+          return { role, path: null, variant: null };
         }
         throw new Error(
           role === "minutes"
@@ -1154,7 +1203,7 @@ function App() {
       }
 
       if (!options.load) {
-        return { role, path };
+        return { role, path, variant: resolvedVariant };
       }
 
       await invoke("ensure_whisper_model_loaded", { role, path });
@@ -1167,7 +1216,7 @@ function App() {
 
       setWhisperLoadedAndRef(true);
       setWhisperModelPath(path);
-      return { role, path };
+      return { role, path, variant: resolvedVariant };
     },
     [downloadRecommendedModel, updateRoleModel],
   );
@@ -1234,8 +1283,8 @@ function App() {
 
   // ── Recording-pill waveform meter ──────────────────────────────────────────
   // Sample the live mic stream and push 15 normalized band levels to the pill
-  // window so its waveform bars react to the user's voice instead of the
-  // default CSS keyframe oscillation.
+  // window so its waveform bars react to the user's voice on top of their
+  // baseline CSS motion.
 
   const PILL_WAVE_BARS = 15;
 
@@ -1391,6 +1440,15 @@ function App() {
     const timings: Record<string, number> = {};
     const metrics: Record<string, string | number> = {};
     let hadError = false;
+    // ── Transcript capture for offline quality analysis ──────────────────────
+    // Hoisted out of the try-block so the `finally` can persist them to
+    // perf.jsonl regardless of which exit path the handler takes. WARNING:
+    // raw + final text are PII — perf.jsonl is intended for internal
+    // dogfooding only. Gate or hash these fields before shipping to end
+    // users (eg. via a `perfLogTranscripts` setting).
+    let rawWhisperText: string | null = null;
+    let finalCleanedText: string | null = null;
+    let pasteHappened = false;
 
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
@@ -1481,9 +1539,20 @@ function App() {
     timings["decode+mixdown"] = Math.round(performance.now() - tDecode0);
 
     try {
+      // Captured BEFORE the await so we observe the pre-load state. After
+      // ensureWhisperModelLoaded resolves, whisperLoadedRef.current is always
+      // true, which would defeat the cold/warm bucketing.
+      const wasModelWarm = whisperLoadedRef.current;
       const tWhisperLoad0 = performance.now();
-      await ensureWhisperModelLoaded("dictation");
+      // ensureWhisperModelLoaded returns the freshly-resolved variant so we
+      // can attribute perf to a model name without hitting the stale-closure
+      // bug we'd get from reading `dictationModel.activeVariant` here
+      // (React doesn't re-render between the setState in prepareWhisperModel
+      // and this line within the same handler).
+      const ensured = await ensureWhisperModelLoaded("dictation");
       timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
+      metrics["cold-load"] = wasModelWarm ? "0" : "1";
+      const activeVariant = ensured.variant ?? dictationModel.activeVariant ?? null;
 
       const tAudioArray0 = performance.now();
       const audioDataForIpc = Array.from(audioData);
@@ -1500,12 +1569,39 @@ function App() {
       });
       timings["whisper-transcribe"] = Math.round(performance.now() - tWhisper0);
 
+      // ── Per-stage metrics for offline analysis ─────────────────────────────
+      // audio-sec is post-trim (what Whisper actually saw). rtf =
+      // inference-ms / audio-ms — under 1.0 means faster than realtime.
+      const audioSec = audioData.length / 16000;
+      metrics["audio-sec"] = audioSec.toFixed(2);
+      metrics["model"] = activeVariant ?? "unknown";
+      if (audioSec > 0) {
+        metrics["rtf"] = (
+          timings["whisper-transcribe"] / (audioSec * 1000)
+        ).toFixed(2);
+      }
+      if (result.perf) {
+        // Sub-stage timing returned from the Rust side. Mirrors the names in
+        // whisper.rs / state.rs::TranscriptionPerf.
+        timings["whisper-vad"] = result.perf.vadMs;
+        timings["whisper-state"] = result.perf.stateCreateMs;
+        timings["whisper-infer"] = result.perf.inferenceMs;
+        timings["whisper-segments"] = result.perf.segmentsMs;
+        timings["whisper-rust-total"] = result.perf.totalMs;
+        metrics["raw-segments"] = result.perf.rawSegments;
+        metrics["drop-no-speech"] = result.perf.droppedNoSpeech;
+        metrics["drop-hallu"] = result.perf.droppedHallucination;
+      }
+
       if (!result.text) {
         console.warn("[process] ABORT: no speech detected (whisper empty)");
         setStatus("⚠️ No speech detected. Try speaking louder or closer.");
         return;
       }
 
+      // Snapshot the raw Whisper output BEFORE any cleanup so perf.jsonl can
+      // compare raw → AI-polished output across runs and across teammates.
+      rawWhisperText = result.text;
       let finalText = result.text;
       const aiCleanupEnabled = aiImprovementEnabledRef.current;
       const effectiveContextAwareDictation =
@@ -1532,6 +1628,24 @@ function App() {
             "transcribe_cleanup",
             {
               promptProfile: "stream",
+              // Capture wire-level breakdown so perf.jsonl can distinguish
+              // "server is slow" (ttfb dominates) from "network is slow"
+              // (dns/tcp/tls dominate) for the ai-cleanup stage.
+              onTiming: (t) => {
+                timings["cleanup-prep"] = t.prepMs;
+                timings["cleanup-roundtrip"] = t.roundtripMs;
+                if (t.matchedResource) {
+                  if (t.dnsMs !== undefined) timings["cleanup-dns"] = t.dnsMs;
+                  if (t.tcpMs !== undefined) timings["cleanup-tcp"] = t.tcpMs;
+                  if (t.tlsMs !== undefined) timings["cleanup-tls"] = t.tlsMs;
+                  if (t.ttfbMs !== undefined) timings["cleanup-ttfb"] = t.ttfbMs;
+                  if (t.downloadMs !== undefined)
+                    timings["cleanup-download"] = t.downloadMs;
+                  metrics["cleanup-resource-matched"] = "1";
+                } else {
+                  metrics["cleanup-resource-matched"] = "0";
+                }
+              },
               ...(activeDictationContext && dictationRouting
                 ? {
                     context: activeDictationContext,
@@ -1559,6 +1673,12 @@ function App() {
         }
       }
 
+      // Snapshot whatever text we'd actually paste (cleaned if successful,
+      // raw if cleanup was skipped/failed). Captured even in the
+      // `cleanupReturnedEmpty` early-return below so perf.jsonl still records
+      // what Whisper produced versus what the server suppressed.
+      finalCleanedText = cleanupReturnedEmpty ? "" : finalText;
+
       if (cleanupReturnedEmpty) {
         console.info("[process] AI cleanup returned empty — treating as silence");
         setStatus("⚠️ No speech detected. Try speaking louder or closer.");
@@ -1581,6 +1701,10 @@ function App() {
             targetApp: _targetApp || undefined,
           });
           timings["paste"] = Math.round(performance.now() - tPaste0);
+          // User-felt latency: stop → paste-done. Excludes persistence work
+          // that runs afterwards. This is the number that matches "how long
+          // until my text shows up" for the user.
+          metrics["paste-felt-ms"] = Math.round(performance.now() - tStart);
           if (pasteResult === "CLIPBOARD_ONLY") {
             // Accessibility not granted — text is in clipboard, guide user
             setStatus(
@@ -1589,10 +1713,12 @@ function App() {
                 : "📋 Copied! Press Ctrl+V to paste.",
             );
           } else {
+            pasteHappened = true;
             setStatus("Pasted! ✓");
           }
         } catch (pe) {
           timings["paste"] = Math.round(performance.now() - tPaste0);
+          metrics["paste-felt-ms"] = Math.round(performance.now() - tStart);
           console.error("[paste] FAILED:", pe);
           setStatus(
             isMac
@@ -1622,7 +1748,20 @@ function App() {
       timings["persist"] = Math.round(performance.now() - tPersist0);
 
       if (!shouldPaste) {
-        setStatus("Done! ✓");
+        // Auto-paste is off: still write the result to the OS clipboard so the
+        // user can manually press ⌘V / Ctrl+V wherever they want.
+        try {
+          await invoke("copy_to_clipboard", { text: finalText });
+          const isMac = navigator.platform.toLowerCase().includes("mac");
+          setStatus(
+            isMac
+              ? "📋 Copied to clipboard. Press ⌘V to paste."
+              : "📋 Copied to clipboard. Press Ctrl+V to paste.",
+          );
+        } catch (ce) {
+          console.warn("[clipboard] copy failed:", ce);
+          setStatus("Done! ✓");
+        }
       }
     } catch (e) {
       hadError = true;
@@ -1634,10 +1773,12 @@ function App() {
       }, 1500);
     } finally {
       setIsProcessing(false);
-      // Success path: show the "Inserted" toast for the design dwell, then
-      // collapse the pill back to its resting edge handle.
+      // Success path: show the outcome toast — "Inserted" when auto-paste
+      // landed the text in the focused app, "Copied" when only the clipboard
+      // was set. Then collapse the pill back to its resting edge handle.
       if (!hadError) {
-        invoke("set_pill_phase", { phase: "inserted" }).catch(console.warn);
+        const finalPhase = pasteHappened ? "inserted" : "copied";
+        invoke("set_pill_phase", { phase: finalPhase }).catch(console.warn);
         setTimeout(() => {
           invoke("hide_recording_pill").catch(console.warn);
         }, 1500);
@@ -1650,6 +1791,57 @@ function App() {
       const parts = [...timingParts, ...metricParts]
         .join(" ");
       console.info(`[stream-timing] total=${totalMs}ms ${parts}`);
+
+      // ── Persist one JSONL record per dictation to <app-data>/perf.jsonl ────
+      // Fire-and-forget: a disk-write failure must never affect dictation UX.
+      // The append_perf_log Rust command resolves the per-platform app data
+      // dir; it logs the resolved path on the first successful append so users
+      // know where to grab the file.
+      //
+      // PRIVACY: `rawTranscript` and `finalTranscript` are raw user speech.
+      // perf.jsonl is intended for internal dogfooding — gate behind a
+      // setting (eg. `perfLogTranscripts`) or hash before shipping to end
+      // users. Do NOT upload the file to public locations as-is.
+      try {
+        const rawChars = rawWhisperText ? rawWhisperText.length : 0;
+        const finalChars = finalCleanedText ? finalCleanedText.length : 0;
+        // Cheap word count — split on whitespace runs. Good enough for
+        // verbosity-shift signals; not language-aware.
+        const rawWords = rawWhisperText
+          ? rawWhisperText.trim().split(/\s+/).filter(Boolean).length
+          : 0;
+        const finalWords = finalCleanedText
+          ? finalCleanedText.trim().split(/\s+/).filter(Boolean).length
+          : 0;
+        const record = {
+          ts: new Date().toISOString(),
+          flow: "stream-dictation",
+          platform: navigator.platform,
+          userAgent: navigator.userAgent,
+          hadError,
+          totalMs,
+          timings,
+          metrics,
+          // Transcripts + summary stats. `charDelta` < 0 means cleanup
+          // shortened the text (filler removal); > 0 means cleanup expanded
+          // it (rare, usually grammar fixes adding words).
+          transcripts: {
+            raw: rawWhisperText,
+            final: finalCleanedText,
+            rawChars,
+            finalChars,
+            charDelta: finalChars - rawChars,
+            rawWords,
+            finalWords,
+            wordDelta: finalWords - rawWords,
+          },
+        };
+        invoke("append_perf_log", {
+          jsonLine: JSON.stringify(record),
+        }).catch((e) => console.warn("[perf] append_perf_log failed:", e));
+      } catch (perfErr) {
+        console.warn("[perf] failed to build perf record:", perfErr);
+      }
     }
 
     // Don't stop the stream — keep it warm for next recording
@@ -2208,6 +2400,7 @@ function App() {
                     return refreshState;
                   }}
                   savedMeetings={savedMeetings}
+                  vocabularyTerms={dictWords}
                   onSaveMeeting={(meeting) => {
                     const updated = [meeting, ...savedMeetings.filter((m) => m.id !== meeting.id)];
                     setSavedMeetings(updated);

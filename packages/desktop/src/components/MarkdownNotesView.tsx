@@ -1,7 +1,11 @@
 import type { ReactNode } from "react";
 
 export function stripEvidenceComments(markdown: string): string {
-  return markdown.replace(/<!--[\s\S]*?-->/g, "").trim();
+  return markdown
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
 }
 
 export function markdownPreview(markdown: string, maxLength = 120): string {
