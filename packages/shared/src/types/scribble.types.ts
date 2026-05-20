@@ -55,6 +55,10 @@ export interface DBScribble extends DictationScribbleMetadata {
   is_starred: boolean;
   // Folder/category name
   folder: string | null;
+  // Organization sharing (Phase 2)
+  organization_id?: string | null;
+  shared_with_org?: boolean;
+  shared_at?: string | null;
 }
 
 // Insert type for creating a new scribble

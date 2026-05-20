@@ -1,16 +1,24 @@
-//! macOS cursor-hover poller for the dictation pill.
+//! Cross-platform cursor-hover poller for the dictation pill (macOS + Windows).
 //!
-//! Why this exists: the pill window is a non-activating NSPanel so it never
-//! becomes the key window. WebKit installs its own tracking areas with the
-//! default `NSTrackingActiveInActiveApp` activation, so CSS :hover and
-//! `mouseenter` only fire when Oscar itself is the foreground app. The whole
-//! point of the dictation pill is hovering it while the user is in another
-//! app — exactly the case where DOM hover stays silent.
+//! Why this exists:
+//! - macOS: the pill is a non-activating NSPanel so it never becomes the key
+//!   window. WebKit installs its own tracking areas with the default
+//!   `NSTrackingActiveInActiveApp` activation, so CSS :hover and `mouseenter`
+//!   only fire when Oscar itself is the foreground app. The whole point of
+//!   the dictation pill is hovering it while the user is in another app —
+//!   exactly the case where DOM hover stays silent.
+//! - Windows: the pill is an always-on-top non-activating window only 16 px
+//!   tall at rest. WebView2 dispatches WM_MOUSEMOVE while another app holds
+//!   focus, but the thin rest strip and instant resize on expand make the
+//!   DOM-only path racy (mouseenter/mouseleave can fire on the wrong frame
+//!   during a resize). Driving phase off the OS cursor position gives the
+//!   same reliable behavior macOS gets.
 //!
 //! The fix: a small polling thread reads the global cursor position via
-//! Tauri's `app.cursor_position()` (CoreGraphics under the hood, works
-//! regardless of focus). When the cursor enters/leaves the bottom-edge hot
-//! zone we hop to the main thread and drive the pill phase directly.
+//! Tauri's `app.cursor_position()` (CoreGraphics on macOS, `GetCursorPos` on
+//! Windows — works regardless of focus). When the cursor enters/leaves the
+//! bottom-edge hot zone we hop to the main thread and drive the pill phase
+//! directly.
 
 use std::time::{Duration, Instant};
 

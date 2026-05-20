@@ -3,6 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
+import { OrgSwitcher } from "@/components/org/OrgSwitcher";
 
 export function FloatingNavbar() {
   const pathname = usePathname();
@@ -35,6 +36,11 @@ export function FloatingNavbar() {
             {UI_STRINGS.APP_NAME}
           </span>
         </Link>
+        {!isAuthPage && (
+          <div className="flex items-center gap-3">
+            <OrgSwitcher />
+          </div>
+        )}
       </div>
     </nav>
   );

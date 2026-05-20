@@ -80,6 +80,20 @@ interface EnhancedMeetingNoteRequest {
   transcript_segments: MeetingTranscriptSegment[];
   meeting_type_hint: MeetingTypeHint;
   context_pack?: MeetingContextPack;
+  // Optional workspace-context block built by the desktop caller from the
+  // user's active org vocabulary + reference documents. Appended to every
+  // Gemini system prompt verbatim when present. Empty / missing = baseline.
+  org_context_block?: string;
+}
+
+function withOrgContext(
+  systemPrompt: string,
+  request: Pick<EnhancedMeetingNoteRequest, "org_context_block">,
+): string {
+  const raw = typeof request.org_context_block === "string"
+    ? request.org_context_block.trim()
+    : "";
+  return raw ? `${systemPrompt}\n\n---\n\n${raw}` : systemPrompt;
 }
 
 interface EnhancedMeetingNoteResponse {
@@ -734,7 +748,7 @@ async function cleanTranscriptSegments(
     try {
       const cleanedOutput = await callGemini(
         geminiApiKey,
-        systemPrompt,
+        withOrgContext(systemPrompt, request),
         userPrompt,
         2_400,
         `cleanup-${index + 1}/${batches.length}`,
@@ -786,7 +800,7 @@ async function reduceTranscriptBatches(
     reductions.push(
       await callGemini(
         geminiApiKey,
-        systemPrompt,
+        withOrgContext(systemPrompt, request),
         userPrompt,
         1_100,
         `reduce-${index + 1}/${segmentBatches.length}`,
@@ -1086,7 +1100,7 @@ async function generateUncitedFallbackMarkdown(
 
   const fallbackPass = await callGemini(
     geminiApiKey,
-    systemPrompt,
+    withOrgContext(systemPrompt, request),
     userPrompt,
     2_200,
     "fallback-uncited",
@@ -1174,7 +1188,7 @@ async function generateFinalMarkdown(
 
   let firstPass = await callGemini(
     geminiApiKey,
-    systemPrompt,
+    withOrgContext(systemPrompt, request),
     userPrompt,
     1_800,
     "final-first",
@@ -1194,7 +1208,7 @@ async function generateFinalMarkdown(
 
     firstPass = await callGemini(
       geminiApiKey,
-      systemPrompt,
+      withOrgContext(systemPrompt, request),
       repairPrompt,
       1_800,
       "final-repair",

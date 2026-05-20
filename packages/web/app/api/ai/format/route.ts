@@ -19,6 +19,8 @@ import {
   startGeminiStream,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
+import { buildOrgContext, joinSystemPrompt } from "@/lib/server/orgContext";
+import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 
 const REQUEST_TIMEOUT_MS = 12000;
 
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
   const rateLimitResult = await applyRateLimit(clientId, "ai-format", RATE_LIMITS.AI_FORMAT);
   if (rateLimitResult) return applyCors(rateLimitResult);
 
-  const bodyResult = await parseJsonBody<{ rawText?: unknown }>(req);
+  const bodyResult = await parseJsonBody<{ rawText?: unknown; documentIds?: unknown }>(req);
   if (!bodyResult.success) return applyCors(bodyResult.response);
 
   const inputResult = validateAndWrapInput(bodyResult.data.rawText, {
@@ -58,6 +60,9 @@ export async function POST(req: NextRequest) {
   if (!inputResult.success) return applyCors(inputResult.response);
 
   const rawText = inputResult.text;
+  const documentIds = Array.isArray(bodyResult.data.documentIds)
+    ? bodyResult.data.documentIds.filter((id): id is string => typeof id === "string")
+    : undefined;
 
   try {
     const isLong = rawText.length > LONG_TEXT_THRESHOLD;
@@ -70,21 +75,39 @@ export async function POST(req: NextRequest) {
             .filter(Boolean) ?? [rawText]
       : [rawText];
 
-    const { data: vocabRaw } = await supabase
-      .from("user_vocabulary")
-      .select("term, pronunciation, context")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    const vocabList = Array.isArray(vocabRaw)
-      ? vocabRaw.map((v) => ({
-          term: v.term,
-          pronunciation: v.pronunciation ?? null,
-          context: v.context ?? null,
-        }))
-      : [];
+    let vocabList: { term: string; pronunciation: string | null; context: string | null }[] = [];
+    let docsBlock = "";
 
-    const systemPrompt =
+    if (isOrgFeatureEnabled()) {
+      const orgCtx = await buildOrgContext(user.id, {
+        documentIds,
+        docLimit: 3,
+        docTokenBudget: 1800,
+      });
+      vocabList = orgCtx.vocabulary.map((v) => ({
+        term: v.term,
+        pronunciation: v.pronunciation,
+        context: v.context,
+      }));
+      docsBlock = orgCtx.docsPromptBlock;
+    } else {
+      const { data: vocabRaw } = await supabase
+        .from("user_vocabulary")
+        .select("term, pronunciation, context")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      vocabList = Array.isArray(vocabRaw)
+        ? vocabRaw.map((v) => ({
+            term: v.term,
+            pronunciation: v.pronunciation ?? null,
+            context: v.context ?? null,
+          }))
+        : [];
+    }
+
+    const baseSystemPrompt =
       vocabList.length > 0 ? buildFormatPromptWithVocabulary(vocabList) : SYSTEM_PROMPTS.FORMAT;
+    const systemPrompt = joinSystemPrompt(baseSystemPrompt, docsBlock);
 
     // Launch all chunk streams in parallel — SDK starts requests immediately on call.
     const chunkStreams = safeChunks.map((piece) => {

@@ -44,6 +44,12 @@ interface AIProcessRequest {
   context?: DictationContextSnapshot;
   routing?: DictationRoutingResult;
   promptProfile?: PromptProfile;
+  // Optional workspace-context block built by the desktop caller from the
+  // user's active org vocabulary + reference documents. Appended to the
+  // system prompt verbatim when present, so the Mercury cleanup respects
+  // team-specific spellings and background material. Empty / missing =
+  // baseline behaviour.
+  orgContextBlock?: string;
 }
 
 interface AIProcessResponse {
@@ -368,7 +374,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { text, mode, context, routing }: AIProcessRequest = await req.json();
+    const {
+      text,
+      mode,
+      context,
+      routing,
+      orgContextBlock,
+    }: AIProcessRequest = await req.json();
     if (!text || typeof text !== "string" || !text.trim()) {
       return new Response(JSON.stringify({ error: "Missing or empty 'text' field." }), {
         status: 400,
@@ -407,12 +419,22 @@ Deno.serve(async (req: Request) => {
 
     const effectivePromptProfile =
       mode === "transcribe_cleanup" ? "stream" : undefined;
-    const { system, user: prompt } = buildPrompt(
+    const { system: baseSystem, user: prompt } = buildPrompt(
       mode,
       text,
       context,
       routing,
     );
+
+    // Append the workspace context block when present. Trimmed so an empty
+    // string from the caller does not waste tokens. Stream cleanup keeps the
+    // context too — that is the whole point of the parity work; the budget is
+    // capped client-side by truncating excerpts in buildOrgContext.
+    const trimmedOrgContext =
+      typeof orgContextBlock === "string" ? orgContextBlock.trim() : "";
+    const system = trimmedOrgContext
+      ? `${baseSystem}\n\n---\n\n${trimmedOrgContext}`
+      : baseSystem;
 
     // Cleanup output should be close to input length. Stream dictation gets a
     // tighter cap because it blocks paste; longer modes keep the safer ceiling.

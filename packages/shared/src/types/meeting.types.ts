@@ -76,6 +76,10 @@ export interface EnhancedMeetingNoteRequest {
   transcript_segments: MeetingTranscriptSegment[];
   meeting_type_hint: MeetingTypeHint;
   context_pack?: MeetingContextPack;
+  // Optional workspace-context block built from the active org's vocabulary +
+  // reference documents. Appended to the Gemini system prompt by the
+  // meeting-enhance Edge function. Empty / missing = baseline behaviour.
+  org_context_block?: string;
 }
 
 export interface EnhancedMeetingNoteResponse {
@@ -105,4 +109,9 @@ export interface SavedMeetingRecord {
   myNotesMarkdown: string;
   notesMarkdown: string;
   createdAt: string;
+  // Organization sharing (Phase 2)
+  sharedWithOrg?: boolean;
+  organizationId?: string | null;
+  sharedAt?: string | null;
+  userId?: string | null;
 }

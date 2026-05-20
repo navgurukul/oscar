@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import { orgContextService } from "./orgContext.service";
 import { applyTranscriptPostProcessing } from "@oscar/shared/prompts";
 import { API_CONFIG, MEETING_CONFIG } from "@oscar/shared/constants";
 import { WEB_APP_URL } from "../lib/web-app-url";
@@ -32,6 +33,9 @@ interface AIProcessRequest {
   context?: DictationContextSnapshot;
   routing?: DictationRoutingResult;
   promptProfile?: AIProcessPromptProfile;
+  // Workspace context (active-org vocabulary + reference docs) packaged by
+  // orgContextService. Appended to the Mercury system prompt when present.
+  orgContextBlock?: string;
 }
 
 /**
@@ -646,6 +650,10 @@ export const aiService = {
     }
 
     const accessToken = await getSessionAccessToken();
+    // Best-effort org context — failure here must not block paste, so the
+    // service swallows errors and returns an empty block when anything goes
+    // wrong (no active workspace, RLS denial, network blip, ...).
+    const orgContext = await orgContextService.getBlock({ docLimit: 2 });
     return invokeAIProcess(
       accessToken,
       {
@@ -654,6 +662,7 @@ export const aiService = {
         context: options?.context,
         routing: options?.routing,
         promptProfile: options?.promptProfile,
+        orgContextBlock: orgContext.block || undefined,
       },
       options?.onTiming,
     );
@@ -696,11 +705,15 @@ export const aiService = {
     request: EnhancedMeetingNoteRequest,
   ): Promise<string> {
     const accessToken = await getSessionAccessToken();
-    const compactedRequest = buildCompactedMeetingRequest(request);
+    const orgContext = await orgContextService.getBlock({ docLimit: 3 });
+    const requestWithContext: EnhancedMeetingNoteRequest = orgContext.block
+      ? { ...request, org_context_block: orgContext.block }
+      : request;
+    const compactedRequest = buildCompactedMeetingRequest(requestWithContext);
     const startWithCompactedRequest =
-      shouldCompactMeetingRequest(request) &&
-      meetingRequestChanged(request, compactedRequest);
-    const initialRequest = startWithCompactedRequest ? compactedRequest : request;
+      shouldCompactMeetingRequest(requestWithContext) &&
+      meetingRequestChanged(requestWithContext, compactedRequest);
+    const initialRequest = startWithCompactedRequest ? compactedRequest : requestWithContext;
 
     try {
       return await invokeMeetingEnhance(accessToken, initialRequest);
