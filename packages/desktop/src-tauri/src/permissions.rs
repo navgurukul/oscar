@@ -80,9 +80,11 @@ pub fn check_system_audio_permission() -> bool {
     {
         crate::macos_paste::is_screen_capture_trusted()
     }
+    // Windows (WASAPI loopback) and Linux (PulseAudio monitor) need no OS-level
+    // permission gate — if the backend is available, capture is allowed.
     #[cfg(not(target_os = "macos"))]
     {
-        !crate::system_audio::backend().is_supported()
+        crate::system_audio::backend().is_supported()
     }
 }
 
@@ -94,6 +96,6 @@ pub fn request_system_audio_permission() -> bool {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        !crate::system_audio::backend().is_supported()
+        crate::system_audio::backend().is_supported()
     }
 }

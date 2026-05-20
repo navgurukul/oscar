@@ -23,6 +23,8 @@ mod mac_tray;
 #[cfg(target_os = "macos")]
 mod macos_paste;
 mod meeting;
+#[cfg(target_os = "windows")]
+mod mic_permission;
 mod paste;
 mod permissions;
 mod pill;
@@ -161,6 +163,16 @@ pub fn run() {
                     use tauri::TitleBarStyle;
                     let _ = main_window.set_title_bar_style(TitleBarStyle::Overlay);
                     log::info!("[setup] macOS overlay titlebar set");
+                }
+            }
+
+            // Replace WebView2's "tauri.localhost wants to use your microphone"
+            // popup with a silent auto-grant — the in-app onboarding screen
+            // already gates mic access on Windows.
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(main_window) = app.get_webview_window("main") {
+                    mic_permission::install(&main_window);
                 }
             }
 
