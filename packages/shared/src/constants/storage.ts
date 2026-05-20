@@ -15,4 +15,7 @@ export const ROUTES = {
   SETTINGS: "/settings",
   BILLING: "/billing",
   PRICING: "/pricing",
+  TEAM: "/team",
+  ORG_SETTINGS: "/settings/organization",
+  INVITE: "/invite",
 } as const;

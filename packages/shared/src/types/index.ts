@@ -3,3 +3,4 @@ export * from "./dictation.types";
 export * from "./scribble.types";
 export * from "./meeting.types";
 export * from "./vocabulary.types";
+export * from "./organization.types";
