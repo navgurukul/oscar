@@ -311,7 +311,7 @@ function addRepeatedTranscriptCandidates(
     }
   }
 
-  [...counts.values()]
+  Array.from(counts.values())
     .filter((entry) => entry.count >= 2)
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
     .slice(0, maxCandidates)
@@ -380,7 +380,7 @@ export function buildMeetingContextPack(
   addLowConfidenceSingletons(itemsByKey, rawTranscript, Math.ceil(maxTranscriptCandidates / 2));
 
   return {
-    items: [...itemsByKey.values()].slice(0, MAX_CONTEXT_ITEMS),
+    items: Array.from(itemsByKey.values()).slice(0, MAX_CONTEXT_ITEMS),
     summary_policy: {
       require_uncertainty_labels: true,
       glossary_suggests_only: true,
