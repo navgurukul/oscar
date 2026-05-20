@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { API_CONFIG, ERROR_MESSAGES, RATE_LIMITS } from "@/lib/constants";
 import { SYSTEM_PROMPTS, USER_PROMPTS } from "@/lib/prompts";
+import { buildOrgContext } from "@/lib/server/orgContext";
+import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import {
   applyRateLimit,
   getClientIdentifier,
@@ -48,11 +50,23 @@ export async function POST(req: NextRequest) {
   });
   if (!inputResult.success) return applyCors(inputResult.response);
 
+  let systemPrompt: string = SYSTEM_PROMPTS.TITLE;
+  if (isOrgFeatureEnabled()) {
+    const orgCtx = await buildOrgContext(user.id, { includeDocs: false });
+    if (orgCtx.vocabulary.length > 0) {
+      const vocabLine = orgCtx.vocabulary
+        .slice(0, 30)
+        .map((v) => v.term)
+        .join(", ");
+      systemPrompt = `${SYSTEM_PROMPTS.TITLE}\n\nPrefer these exact spellings when applicable: ${vocabLine}.`;
+    }
+  }
+
   try {
     const title = await generateText({
       apiKey,
       messages: [
-        { role: "system", content: SYSTEM_PROMPTS.TITLE },
+        { role: "system", content: systemPrompt },
         { role: "user", content: `${USER_PROMPTS.TITLE_TEMPLATE}${inputResult.wrappedText}` },
       ],
       temperature: API_CONFIG.TITLE_TEMPERATURE,

@@ -32,6 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { FeedbackWidget } from "@/components/results/FeedbackWidget";
 import { ShareToggle } from "@/components/org/ShareToggle";
+import { PublishDialog } from "@/components/org/PublishDialog";
 import type { DBScribble, FeedbackReason } from "@/lib/types/scribble.types";
 
 export default function ScribbleDetailPage() {
@@ -537,6 +538,14 @@ export default function ScribbleDetailPage() {
                         prev ? { ...prev, shared_with_org: next } : prev
                       )
                     }
+                  />
+                )}
+                {scribble?.shared_with_org && (
+                  <PublishDialog
+                    scribbleId={scribble.id}
+                    scribbleTitle={scribble.title || "Scribble"}
+                    shared={scribble.shared_with_org ?? false}
+                    bodyOverride={editedText || undefined}
                   />
                 )}
 

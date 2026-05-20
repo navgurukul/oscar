@@ -14,6 +14,8 @@ import {
   startGeminiStream,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
+import { buildOrgContext, joinSystemPrompt } from "@/lib/server/orgContext";
+import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 
 const REQUEST_TIMEOUT_MS = 12000;
 const TRANSFORM_MODES = new Set(["summary", "bullets"]);
@@ -44,7 +46,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 });
   }
 
-  const bodyResult = await parseJsonBody<{ text?: unknown; mode?: unknown; title?: unknown }>(req);
+  const bodyResult = await parseJsonBody<{
+    text?: unknown;
+    mode?: unknown;
+    title?: unknown;
+    documentIds?: unknown;
+  }>(req);
   if (!bodyResult.success) return bodyResult.response;
 
   const rawMode = typeof bodyResult.data.mode === "string" ? bodyResult.data.mode.trim() : "";
@@ -63,13 +70,29 @@ export async function POST(req: NextRequest) {
     getOptionalTrimmedString(bodyResult.data.title) ?? ""
   );
 
+  const documentIds = Array.isArray(bodyResult.data.documentIds)
+    ? bodyResult.data.documentIds.filter((id): id is string => typeof id === "string")
+    : undefined;
+
+  let orgPromptBlock = "";
+  if (isOrgFeatureEnabled()) {
+    const orgCtx = await buildOrgContext(user.id, {
+      documentIds,
+      docLimit: 4,
+      docTokenBudget: 2400,
+    });
+    orgPromptBlock = orgCtx.promptBlock;
+  }
+
   try {
+    const baseSystem = `${getSystemPrompt(mode)}\nReturn plain text only. Do NOT wrap output in markdown code blocks or backticks.`;
+    const systemPrompt = joinSystemPrompt(baseSystem, orgPromptBlock);
     const pending = startGeminiStream({
       apiKey,
       messages: [
         {
           role: "system",
-          content: `${getSystemPrompt(mode)}\nReturn plain text only. Do NOT wrap output in markdown code blocks or backticks.`,
+          content: systemPrompt,
         },
         {
           role: "user",
