@@ -25,6 +25,7 @@ import { MeetingNotesEditor } from "./MeetingNotesEditor";
 import { MeetingMetadataEditor } from "./MeetingMetadataEditor";
 import { DeleteMeetingDialog } from "./DeleteMeetingDialog";
 import { MarkdownView } from "./MarkdownView";
+import { copyMarkdownAsRichText } from "@oscar/shared";
 import type {
   SavedMeetingRecord,
   MeetingTranscriptSegment,
@@ -123,7 +124,7 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
   const hasMyNotes = !!meeting.myNotesMarkdown?.trim();
 
   async function handleCopy(text: string) {
-    await navigator.clipboard.writeText(stripCitationTokens(text));
+    await copyMarkdownAsRichText(text);
     toast({ title: "Copied!", description: "Notes copied to clipboard." });
   }
 

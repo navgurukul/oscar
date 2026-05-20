@@ -9,3 +9,4 @@ export * from "./prompts";
 
 // Shared meeting helpers
 export * from "./meetings/context-pack";
+export * from "./meetings/markdown-clipboard";

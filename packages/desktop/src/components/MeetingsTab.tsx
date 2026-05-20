@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { buildMeetingContextPack } from "@oscar/shared";
+import { buildMeetingContextPack, copyMarkdownAsRichText } from "@oscar/shared";
 import { aiService } from "../services/ai.service";
 import {
   FileText,
@@ -842,7 +842,7 @@ export function MeetingsTab({
   };
 
   const handleCopy = async (markdown: string) => {
-    await navigator.clipboard.writeText(stripEvidenceComments(markdown));
+    await copyMarkdownAsRichText(markdown);
     setCopied(true);
     setTimeout(() => setCopied(false), 2_000);
   };
