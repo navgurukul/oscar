@@ -1090,9 +1090,16 @@ function App() {
         preset,
       );
 
+      // Track the *currently authoritative* variant through every code path
+      // below so the caller can read it without waiting for React to re-render
+      // after `updateRoleModel`. Fixes the `model="unknown"` attribution bug
+      // in stream-dictation perf logs, where `dictationModel.activeVariant`
+      // was read from a stale closure mid-handler.
+      let resolvedVariant: WhisperModelVariant | null = resolved?.variant ?? null;
+
       updateRoleModel(role, {
         recommendation,
-        activeVariant: resolved?.variant ?? null,
+        activeVariant: resolvedVariant,
         resolvedPath: resolved?.path ?? null,
         fallbackUsed: resolved?.fallbackUsed ?? false,
         downloadState: resolved ? "ready" : "idle",
@@ -1111,8 +1118,9 @@ function App() {
 
         try {
           path = await downloadRecommendedModel(recommendation.spec);
+          resolvedVariant = recommendation.spec.variant;
           updateRoleModel(role, {
-            activeVariant: recommendation.spec.variant,
+            activeVariant: resolvedVariant,
             resolvedPath: path,
             fallbackUsed: false,
             downloadState: "ready",
@@ -1130,9 +1138,10 @@ function App() {
           const retry = await resolveModelForRole(role, preset);
           if (retry.resolved) {
             path = retry.resolved.path;
+            resolvedVariant = retry.resolved.variant;
             updateRoleModel(role, {
               recommendation: retry.recommendation,
-              activeVariant: retry.resolved.variant,
+              activeVariant: resolvedVariant,
               resolvedPath: retry.resolved.path,
               fallbackUsed: retry.resolved.fallbackUsed,
               downloadState: "ready",
@@ -1144,7 +1153,7 @@ function App() {
 
       if (!path) {
         if (!options.load && options.autoDownload === false) {
-          return { role, path: null };
+          return { role, path: null, variant: null };
         }
         throw new Error(
           role === "minutes"
@@ -1154,7 +1163,7 @@ function App() {
       }
 
       if (!options.load) {
-        return { role, path };
+        return { role, path, variant: resolvedVariant };
       }
 
       await invoke("ensure_whisper_model_loaded", { role, path });
@@ -1167,7 +1176,7 @@ function App() {
 
       setWhisperLoadedAndRef(true);
       setWhisperModelPath(path);
-      return { role, path };
+      return { role, path, variant: resolvedVariant };
     },
     [downloadRecommendedModel, updateRoleModel],
   );
@@ -1391,6 +1400,14 @@ function App() {
     const timings: Record<string, number> = {};
     const metrics: Record<string, string | number> = {};
     let hadError = false;
+    // ── Transcript capture for offline quality analysis ──────────────────────
+    // Hoisted out of the try-block so the `finally` can persist them to
+    // perf.jsonl regardless of which exit path the handler takes. WARNING:
+    // raw + final text are PII — perf.jsonl is intended for internal
+    // dogfooding only. Gate or hash these fields before shipping to end
+    // users (eg. via a `perfLogTranscripts` setting).
+    let rawWhisperText: string | null = null;
+    let finalCleanedText: string | null = null;
     let pasteHappened = false;
 
     const chunkCount = audioChunksRef.current.length;
@@ -1487,9 +1504,15 @@ function App() {
       // true, which would defeat the cold/warm bucketing.
       const wasModelWarm = whisperLoadedRef.current;
       const tWhisperLoad0 = performance.now();
-      await ensureWhisperModelLoaded("dictation");
+      // ensureWhisperModelLoaded returns the freshly-resolved variant so we
+      // can attribute perf to a model name without hitting the stale-closure
+      // bug we'd get from reading `dictationModel.activeVariant` here
+      // (React doesn't re-render between the setState in prepareWhisperModel
+      // and this line within the same handler).
+      const ensured = await ensureWhisperModelLoaded("dictation");
       timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
       metrics["cold-load"] = wasModelWarm ? "0" : "1";
+      const activeVariant = ensured.variant ?? dictationModel.activeVariant ?? null;
 
       const tAudioArray0 = performance.now();
       const audioDataForIpc = Array.from(audioData);
@@ -1511,7 +1534,7 @@ function App() {
       // inference-ms / audio-ms — under 1.0 means faster than realtime.
       const audioSec = audioData.length / 16000;
       metrics["audio-sec"] = audioSec.toFixed(2);
-      metrics["model"] = dictationModel.activeVariant ?? "unknown";
+      metrics["model"] = activeVariant ?? "unknown";
       if (audioSec > 0) {
         metrics["rtf"] = (
           timings["whisper-transcribe"] / (audioSec * 1000)
@@ -1536,6 +1559,9 @@ function App() {
         return;
       }
 
+      // Snapshot the raw Whisper output BEFORE any cleanup so perf.jsonl can
+      // compare raw → AI-polished output across runs and across teammates.
+      rawWhisperText = result.text;
       let finalText = result.text;
       const aiCleanupEnabled = aiImprovementEnabledRef.current;
       const effectiveContextAwareDictation =
@@ -1562,6 +1588,24 @@ function App() {
             "transcribe_cleanup",
             {
               promptProfile: "stream",
+              // Capture wire-level breakdown so perf.jsonl can distinguish
+              // "server is slow" (ttfb dominates) from "network is slow"
+              // (dns/tcp/tls dominate) for the ai-cleanup stage.
+              onTiming: (t) => {
+                timings["cleanup-prep"] = t.prepMs;
+                timings["cleanup-roundtrip"] = t.roundtripMs;
+                if (t.matchedResource) {
+                  if (t.dnsMs !== undefined) timings["cleanup-dns"] = t.dnsMs;
+                  if (t.tcpMs !== undefined) timings["cleanup-tcp"] = t.tcpMs;
+                  if (t.tlsMs !== undefined) timings["cleanup-tls"] = t.tlsMs;
+                  if (t.ttfbMs !== undefined) timings["cleanup-ttfb"] = t.ttfbMs;
+                  if (t.downloadMs !== undefined)
+                    timings["cleanup-download"] = t.downloadMs;
+                  metrics["cleanup-resource-matched"] = "1";
+                } else {
+                  metrics["cleanup-resource-matched"] = "0";
+                }
+              },
               ...(activeDictationContext && dictationRouting
                 ? {
                     context: activeDictationContext,
@@ -1588,6 +1632,12 @@ function App() {
           );
         }
       }
+
+      // Snapshot whatever text we'd actually paste (cleaned if successful,
+      // raw if cleanup was skipped/failed). Captured even in the
+      // `cleanupReturnedEmpty` early-return below so perf.jsonl still records
+      // what Whisper produced versus what the server suppressed.
+      finalCleanedText = cleanupReturnedEmpty ? "" : finalText;
 
       if (cleanupReturnedEmpty) {
         console.info("[process] AI cleanup returned empty — treating as silence");
@@ -1707,7 +1757,22 @@ function App() {
       // The append_perf_log Rust command resolves the per-platform app data
       // dir; it logs the resolved path on the first successful append so users
       // know where to grab the file.
+      //
+      // PRIVACY: `rawTranscript` and `finalTranscript` are raw user speech.
+      // perf.jsonl is intended for internal dogfooding — gate behind a
+      // setting (eg. `perfLogTranscripts`) or hash before shipping to end
+      // users. Do NOT upload the file to public locations as-is.
       try {
+        const rawChars = rawWhisperText ? rawWhisperText.length : 0;
+        const finalChars = finalCleanedText ? finalCleanedText.length : 0;
+        // Cheap word count — split on whitespace runs. Good enough for
+        // verbosity-shift signals; not language-aware.
+        const rawWords = rawWhisperText
+          ? rawWhisperText.trim().split(/\s+/).filter(Boolean).length
+          : 0;
+        const finalWords = finalCleanedText
+          ? finalCleanedText.trim().split(/\s+/).filter(Boolean).length
+          : 0;
         const record = {
           ts: new Date().toISOString(),
           flow: "stream-dictation",
@@ -1717,6 +1782,19 @@ function App() {
           totalMs,
           timings,
           metrics,
+          // Transcripts + summary stats. `charDelta` < 0 means cleanup
+          // shortened the text (filler removal); > 0 means cleanup expanded
+          // it (rare, usually grammar fixes adding words).
+          transcripts: {
+            raw: rawWhisperText,
+            final: finalCleanedText,
+            rawChars,
+            finalChars,
+            charDelta: finalChars - rawChars,
+            rawWords,
+            finalWords,
+            wordDelta: finalWords - rawWords,
+          },
         };
         invoke("append_perf_log", {
           jsonLine: JSON.stringify(record),
