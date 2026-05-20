@@ -105,4 +105,9 @@ export interface SavedMeetingRecord {
   myNotesMarkdown: string;
   notesMarkdown: string;
   createdAt: string;
+  // Organization sharing (Phase 2)
+  sharedWithOrg?: boolean;
+  organizationId?: string | null;
+  sharedAt?: string | null;
+  userId?: string | null;
 }

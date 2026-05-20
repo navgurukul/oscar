@@ -26,6 +26,7 @@ import { MeetingMetadataEditor } from "./MeetingMetadataEditor";
 import { DeleteMeetingDialog } from "./DeleteMeetingDialog";
 import { MarkdownView } from "./MarkdownView";
 import { copyMarkdownAsRichText } from "@oscar/shared";
+import { ShareToggle } from "@/components/org/ShareToggle";
 import type {
   SavedMeetingRecord,
   MeetingTranscriptSegment,
@@ -211,8 +212,14 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
             </div>
           </button>
 
-          {/* Actions dropdown */}
-          <div className="pt-5 pr-3 sm:pr-4">
+          {/* Share + actions */}
+          <div className="pt-5 pr-3 sm:pr-4 flex items-start gap-1">
+            <ShareToggle
+              kind="meeting"
+              id={meeting.id}
+              shared={meeting.sharedWithOrg ?? false}
+              onChange={(next) => void onUpdate(meeting.id, { sharedWithOrg: next })}
+            />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg hover:bg-slate-800 transition-colors duration-150" aria-label="Meeting actions">

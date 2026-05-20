@@ -31,6 +31,7 @@ import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { FeedbackWidget } from "@/components/results/FeedbackWidget";
+import { ShareToggle } from "@/components/org/ShareToggle";
 import type { DBScribble, FeedbackReason } from "@/lib/types/scribble.types";
 
 export default function ScribbleDetailPage() {
@@ -525,6 +526,19 @@ export default function ScribbleDetailPage() {
                     <p><span className="font-semibold">Star</span> — Mark as favourite</p>
                   </TooltipContent>
                 </Tooltip>
+
+                {scribble && (
+                  <ShareToggle
+                    kind="scribble"
+                    id={scribble.id}
+                    shared={scribble.shared_with_org ?? false}
+                    onChange={(next) =>
+                      setScribble((prev) =>
+                        prev ? { ...prev, shared_with_org: next } : prev
+                      )
+                    }
+                  />
+                )}
 
                 {isSaving && <Spinner className="w-4 h-4 text-cyan-500" />}
 
