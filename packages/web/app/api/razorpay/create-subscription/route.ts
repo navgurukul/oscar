@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { razorpayService } from "@/lib/services/razorpay.service";
 import { subscriptionService } from "@/lib/services/subscription.service";
+import { getActiveOrg, getMemberRole } from "@/lib/server/organization";
 import {
   applyRateLimit,
   getClientIdentifier,
@@ -63,34 +64,50 @@ export async function POST(request: NextRequest) {
 
     const billingCycle: BillingCycle = planType;
 
-    // Get or create subscription record
+    // Phase 4: subscriptions are org-scoped. Resolve the caller's active
+    // workspace and gate on admin/owner role — only admins can attach a
+    // payment plan to a workspace.
+    const active = await getActiveOrg(user.id);
+    if (!active) {
+      return NextResponse.json(
+        { error: "No active workspace" },
+        { status: 400 }
+      );
+    }
+    const role = await getMemberRole(user.id, active.organization.id);
+    if (role !== "owner" && role !== "admin") {
+      return NextResponse.json(
+        { error: "Only workspace owners or admins can manage billing" },
+        { status: 403 }
+      );
+    }
+
+    // Get or create the org's subscription record
     const { data: subscription, error: subError } =
-      await subscriptionService.getOrCreateSubscription(user.id);
+      await subscriptionService.getOrCreateOrgSubscription(active.organization.id, user.id);
 
     if (subError) {
-      console.error("Error getting subscription:", subError);
+      console.error("Error getting org subscription:", subError);
       return NextResponse.json(
         { error: "Failed to get subscription record" },
         { status: 500 }
       );
     }
 
-    // Get or create Razorpay customer
+    // Get or create Razorpay customer (one customer per org)
     let razorpayCustomerId = subscription?.razorpay_customer_id;
 
     if (!razorpayCustomerId) {
       try {
         const customer = await razorpayService.createCustomer(
-          user.email || "User",
+          active.organization.name || user.email || "Workspace",
           user.email || ""
         );
         razorpayCustomerId = customer.id;
 
-        // Store customer ID
-        await subscriptionService.updateRazorpayCustomerId(
-          user.id,
-          razorpayCustomerId
-        );
+        await subscriptionService.updateOrgSubscription(active.organization.id, {
+          razorpay_customer_id: razorpayCustomerId,
+        });
       } catch (error) {
         console.error("Error creating Razorpay customer:", error);
         return NextResponse.json(
@@ -100,12 +117,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create Razorpay subscription
+    // Create Razorpay subscription stamped with both org id and user id.
     try {
       const razorpaySubscription = await razorpayService.createSubscription(
         razorpayCustomerId,
         billingCycle,
-        user.id
+        user.id,
+        active.organization.id
       );
 
       const response: CreateSubscriptionResponse = {

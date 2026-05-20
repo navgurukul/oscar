@@ -5,6 +5,7 @@
 
 import { SUBSCRIPTION_CONFIG } from "@/lib/constants";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
+import { getActiveOrg } from "@/lib/server/organization";
 import { subscriptionService } from "./subscription.service";
 
 /**
@@ -17,133 +18,139 @@ function getCurrentMonthYear(): string {
   return `${year}-${month}`;
 }
 
+/**
+ * Resolves a user id to their active organization id. Centralised so every
+ * user-keyed wrapper can reuse the same lookup.
+ */
+async function resolveUserOrgId(userId: string): Promise<string | null> {
+  const active = await getActiveOrg(userId);
+  return active?.organization.id ?? null;
+}
+
 export const usageService = {
   /**
-   * Get monthly recording usage for a user
+   * Shared monthly recording counter for the org's active row.
    */
-  async getMonthlyUsage(userId: string): Promise<number> {
+  async getOrgMonthlyUsage(organizationId: string): Promise<number> {
     const supabase = getSupabaseAdmin();
     const monthYear = getCurrentMonthYear();
-
     const { data, error } = await supabase
       .from("usage_tracking")
       .select("recording_count")
-      .eq("user_id", userId)
+      .eq("organization_id", organizationId)
       .eq("month_year", monthYear)
-      .single();
-
-    if (error && error.code === "PGRST116") {
-      // No usage record for this month
+      .maybeSingle();
+    if (error && error.code !== "PGRST116") {
+      console.error("Error fetching org usage:", error);
       return 0;
     }
-
-    if (error) {
-      console.error("Error fetching usage:", error);
-      return 0;
-    }
-
-    return data?.recording_count || 0;
+    return data?.recording_count ?? 0;
   },
 
   /**
-   * Increment recording usage for a user atomically.
-   * Uses INSERT ... ON CONFLICT DO UPDATE to avoid the read-then-write
-   * race condition where two concurrent requests could both read the same
-   * count and each write count+1 instead of count+2.
-   * Returns the new count.
+   * Atomic increment of the org's shared monthly recording counter.
+   * Falls back to non-atomic upsert if the RPC is not yet deployed.
    */
-  async incrementRecordingUsage(userId: string): Promise<number> {
+  async incrementOrgRecordingUsage(
+    organizationId: string,
+    userId: string
+  ): Promise<number> {
     const supabase = getSupabaseAdmin();
     const monthYear = getCurrentMonthYear();
 
-    // Atomic upsert: if row exists increment in-place, otherwise insert with 1.
-    // The raw SQL expression `recording_count + 1` is evaluated by Postgres in a
-    // single statement, so concurrent calls cannot clobber each other.
-    const { data, error } = await supabase.rpc("increment_recording_usage", {
+    const { data, error } = await supabase.rpc("increment_org_recording_usage", {
+      p_org_id: organizationId,
       p_user_id: userId,
       p_month_year: monthYear,
     });
 
-    if (error) {
-      // Fall back to non-atomic upsert if the RPC is not yet deployed,
-      // so existing deployments degrade gracefully rather than hard-crash.
-      console.error(
-        "increment_recording_usage RPC failed, falling back:",
-        error.message
-      );
+    if (!error) return (data as number) ?? 1;
 
-      const { data: existing } = await supabase
+    console.error(
+      "increment_org_recording_usage RPC failed, falling back:",
+      error.message
+    );
+
+    const { data: existing } = await supabase
+      .from("usage_tracking")
+      .select("id, recording_count")
+      .eq("organization_id", organizationId)
+      .eq("month_year", monthYear)
+      .maybeSingle();
+
+    if (existing) {
+      const newCount = existing.recording_count + 1;
+      const { error: updateError } = await supabase
         .from("usage_tracking")
-        .select("id, recording_count")
-        .eq("user_id", userId)
-        .eq("month_year", monthYear)
-        .single();
-
-      if (existing) {
-        const newCount = existing.recording_count + 1;
-        const { error: updateError } = await supabase
-          .from("usage_tracking")
-          .update({
-            recording_count: newCount,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existing.id);
-
-        if (updateError) {
-          throw updateError;
-        }
-
-        return newCount;
-      } else {
-        const { error: insertError } = await supabase.from("usage_tracking").insert({
-          user_id: userId,
-          month_year: monthYear,
-          recording_count: 1,
-        });
-
-        if (insertError) {
-          throw insertError;
-        }
-
-        return 1;
-      }
+        .update({
+          recording_count: newCount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+      if (updateError) throw updateError;
+      return newCount;
     }
 
-    return (data as number) ?? 1;
+    const { error: insertError } = await supabase.from("usage_tracking").insert({
+      organization_id: organizationId,
+      user_id: userId,
+      month_year: monthYear,
+      recording_count: 1,
+    });
+    if (insertError) throw insertError;
+    return 1;
   },
 
   /**
-   * Check if user can create a new recording
-   * 
-   * Compares current monthly usage against tier limits:
-   * - Free tier: LIMITED to FREE_MONTHLY_RECORDINGS (10 per month)
-   * - Pro tier: UNLIMITED recordings
-   * 
-   * @returns {allowed: boolean, remaining: number | null, current: number}
-   *   - allowed: true if user can record, false if limit reached
-   *   - remaining: recordings left this month (null for pro users)
-   *   - current: total recordings this month
+   * Back-compat user-keyed monthly usage — routes through active org.
+   */
+  async getMonthlyUsage(userId: string): Promise<number> {
+    const orgId = await resolveUserOrgId(userId);
+    if (!orgId) return 0;
+    return this.getOrgMonthlyUsage(orgId);
+  },
+
+  /**
+   * Back-compat user-keyed increment — routes through active org.
+   */
+  async incrementRecordingUsage(userId: string): Promise<number> {
+    const orgId = await resolveUserOrgId(userId);
+    if (!orgId) {
+      throw new Error("Cannot increment usage: user has no active workspace.");
+    }
+    return this.incrementOrgRecordingUsage(orgId, userId);
+  },
+
+  /**
+   * Org-scoped recording quota check.
+   *   Free: shared FREE_ORG_MONTHLY_RECORDINGS across all members.
+   *   Pro:  unlimited.
+   */
+  async canOrgRecord(
+    organizationId: string
+  ): Promise<{ allowed: boolean; remaining: number | null; current: number }> {
+    const isProOrg = await subscriptionService.isOrgPro(organizationId);
+    if (isProOrg) {
+      return { allowed: true, remaining: null, current: 0 };
+    }
+    const currentUsage = await this.getOrgMonthlyUsage(organizationId);
+    const limit = SUBSCRIPTION_CONFIG.FREE_ORG_MONTHLY_RECORDINGS;
+    return {
+      allowed: currentUsage < limit,
+      remaining: Math.max(0, limit - currentUsage),
+      current: currentUsage,
+    };
+  },
+
+  /**
+   * Back-compat user-keyed gate — routes through active org.
    */
   async canUserRecord(
     userId: string
   ): Promise<{ allowed: boolean; remaining: number | null; current: number }> {
-    // Check if user is pro
-    const isProUser = await subscriptionService.isProUser(userId);
-
-    if (isProUser) {
-      return { allowed: true, remaining: null, current: 0 };
-    }
-
-    // Get current usage via get_monthly_usage() database function
-    const currentUsage = await this.getMonthlyUsage(userId);
-    const limit = SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS; // 10 for free tier
-    const remaining = Math.max(0, limit - currentUsage);
-
-    return {
-      allowed: currentUsage < limit,
-      remaining,
-      current: currentUsage,
-    };
+    const orgId = await resolveUserOrgId(userId);
+    if (!orgId) return { allowed: false, remaining: 0, current: 0 };
+    return this.canOrgRecord(orgId);
   },
 
   /**
@@ -192,7 +199,9 @@ export const usageService = {
   },
 
   /**
-   * Get comprehensive usage stats for a user
+   * Comprehensive usage stats for a user, scoped to their active org.
+   * recordingsThisMonth + recordingsLimit reflect the shared org counter.
+   * scribblesCount + scribblesLimit stay user-scoped (per-creator cap).
    */
   async getUsageStats(userId: string): Promise<{
     recordingsThisMonth: number;
@@ -203,18 +212,21 @@ export const usageService = {
     canRecord: boolean;
     canCreateScribble: boolean;
   }> {
-    const isProUser = await subscriptionService.isProUser(userId);
-    const recordingsThisMonth = await this.getMonthlyUsage(userId);
+    const orgId = await resolveUserOrgId(userId);
+    const isProUser = orgId ? await subscriptionService.isOrgPro(orgId) : false;
+    const recordingsThisMonth = orgId
+      ? await this.getOrgMonthlyUsage(orgId)
+      : 0;
     const scribblesCount = await this.getUserScribbleCount(userId);
 
     const recordingsLimit = isProUser
       ? null
-      : SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS;
+      : SUBSCRIPTION_CONFIG.FREE_ORG_MONTHLY_RECORDINGS;
     const scribblesLimit = isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES;
 
     const canRecord = isProUser
       ? true
-      : recordingsThisMonth < SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS;
+      : recordingsThisMonth < SUBSCRIPTION_CONFIG.FREE_ORG_MONTHLY_RECORDINGS;
     const canCreateScribble = isProUser
       ? true
       : scribblesCount < SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES;

@@ -1,6 +1,12 @@
 export const SUBSCRIPTION_CONFIG = {
   FREE_MONTHLY_RECORDINGS: 10,
+  // Free org tier: shared recording quota across every workspace member.
+  // Each member's recording (web + desktop) increments the same counter.
+  FREE_ORG_MONTHLY_RECORDINGS: 25,
   FREE_MAX_SCRIBBLES: 20,
+  // Semantic alias used by getSubscriptionEntitlement — the product calls
+  // Notes "Scribbles" now, so both names point at the same cap.
+  FREE_MAX_NOTES: 20,
   FREE_MAX_VOCABULARY: 5,
 } as const;
 

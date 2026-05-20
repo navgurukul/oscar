@@ -299,6 +299,24 @@ export async function updateMemberRole(
   return true;
 }
 
+export async function transferOwnership(
+  organizationId: string,
+  currentOwnerId: string,
+  newOwnerId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.rpc("transfer_org_ownership", {
+    p_org_id: organizationId,
+    p_current_owner: currentOwnerId,
+    p_new_owner: newOwnerId,
+  });
+  if (error) {
+    console.error("[org] transferOwnership failed", error);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
 export async function createInvite(params: {
   organizationId: string;
   invitedBy: string;

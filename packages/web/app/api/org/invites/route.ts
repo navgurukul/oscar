@@ -5,6 +5,8 @@ import {
   getMemberRole,
   listInvites,
 } from "@/lib/server/organization";
+import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
+import { isEmailEnabled, sendInviteEmail } from "@/lib/server/email";
 import type { InvitedRole } from "@oscar/shared/types";
 
 function isInvitedRole(value: unknown): value is InvitedRole {
@@ -58,5 +60,42 @@ export async function POST(request: Request) {
   if (!invite) {
     return NextResponse.json({ error: "Failed to create invite" }, { status: 500 });
   }
-  return NextResponse.json(invite, { status: 201 });
+
+  // Best-effort email when the invite is email-pinned and Resend is configured.
+  // Failures are surfaced as `email_status` so the UI can fall back to "share
+  // the link manually" instead of pretending mail went out.
+  let email_status: "sent" | "skipped" | "failed" = "skipped";
+  let email_error: string | null = null;
+  if (email && isEmailEnabled()) {
+    const admin = getSupabaseAdmin();
+    const { data: orgRow } = await admin
+      .from("organizations")
+      .select("name")
+      .eq("id", orgId)
+      .maybeSingle();
+
+    const inviterName =
+      (auth.user.user_metadata?.full_name as string | undefined) ??
+      (auth.user.user_metadata?.name as string | undefined) ??
+      null;
+
+    const result = await sendInviteEmail({
+      toEmail: email,
+      organizationName: orgRow?.name ?? "your team",
+      inviterName,
+      inviterEmail: auth.user.email ?? null,
+      inviteUrl: invite.url,
+      expiresAt: invite.expires_at,
+    });
+
+    if (result.ok) {
+      email_status = "sent";
+    } else {
+      email_status = "failed";
+      email_error = result.reason;
+      console.warn("[invite] email delivery failed", result.reason);
+    }
+  }
+
+  return NextResponse.json({ ...invite, email_status, email_error }, { status: 201 });
 }
