@@ -103,9 +103,17 @@ export const meetingsService = {
     data: SavedMeetingRecord[] | null;
     error: Error | null;
   }> {
+    // Scope to the signed-in user so workspace-shared meetings from teammates
+    // do not leak into the desktop "my meetings" list until desktop has a
+    // dedicated team view.
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData.user?.id;
+    if (!userId) return { data: null, error: new Error("Not signed in") };
+
     const { data, error } = await supabase
       .from("meetings")
       .select("*")
+      .eq("user_id", userId)
       .order("started_at", { ascending: false });
 
     if (error) return { data: null, error: error as Error };

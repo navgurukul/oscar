@@ -18,4 +18,5 @@ export const ROUTES = {
   TEAM: "/team",
   ORG_SETTINGS: "/settings/organization",
   INVITE: "/invite",
+  STREAMS: "/streams",
 } as const;

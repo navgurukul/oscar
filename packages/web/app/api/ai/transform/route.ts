@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
       documentIds,
       docLimit: 4,
       docTokenBudget: 2400,
+      queryText: inputResult.text,
     });
     orgPromptBlock = orgCtx.promptBlock;
   }

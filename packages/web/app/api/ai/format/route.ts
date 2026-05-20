@@ -83,6 +83,7 @@ export async function POST(req: NextRequest) {
         documentIds,
         docLimit: 3,
         docTokenBudget: 1800,
+        queryText: rawText,
       });
       vocabList = orgCtx.vocabulary.map((v) => ({
         term: v.term,

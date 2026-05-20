@@ -140,6 +140,7 @@ export async function POST(req: NextRequest) {
     documentIds,
     docLimit: documentIds ? documentIds.length : 5,
     docTokenBudget: 4000,
+    queryText: `${safeTitle}\n\n${bodySource}`,
   });
   const contextBlock = orgCtx.promptBlock
     ? `\n\n---\n\n${orgCtx.promptBlock}`

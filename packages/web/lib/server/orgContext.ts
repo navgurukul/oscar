@@ -6,6 +6,7 @@
 import { createHash } from "crypto";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { getActiveOrg } from "./organization";
+import { embedText, isEmbeddingsEnabled } from "./embeddings";
 
 export interface VocabularyTerm {
   term: string;
@@ -53,6 +54,15 @@ export interface BuildOrgContextOptions {
   includeVocab?: boolean;
   docTokenBudget?: number;
   docLimit?: number;
+  /**
+   * Optional query text used to drive semantic retrieval over the org's
+   * documents. When provided AND embeddings are enabled, buildOrgContext
+   * embeds the query and ranks docs by cosine similarity instead of recency.
+   * Ignored when documentIds is set (explicit selection wins).
+   */
+  queryText?: string;
+  /** Minimum cosine similarity to keep a semantic match. Default 0.55. */
+  minSimilarity?: number;
 }
 
 function fingerprint(parts: string[]): string {
@@ -140,25 +150,67 @@ export async function buildOrgContext(
 
   let docs: DocContextEntry[] = [];
   if (includeDocs) {
-    let docQuery = supabase
-      .from("documents")
-      .select("id, title, summary, tags, extracted_text, updated_at")
-      .eq("organization_id", orgId);
+    const trimmedQuery = options.queryText?.trim() ?? "";
+    const useSemantic =
+      !options.documentIds?.length &&
+      trimmedQuery.length >= 24 &&
+      isEmbeddingsEnabled();
 
-    if (options.documentIds && options.documentIds.length > 0) {
-      docQuery = docQuery.in("id", options.documentIds);
-    } else {
-      docQuery = docQuery.order("updated_at", { ascending: false }).limit(docLimit);
+    if (useSemantic) {
+      try {
+        const queryEmbedding = await embedText(trimmedQuery);
+        const { data: matches, error: matchError } = await supabase.rpc("match_documents", {
+          p_query_embedding: `[${queryEmbedding.join(",")}]`,
+          p_organization_id: orgId,
+          p_match_count: docLimit,
+          p_min_score: options.minSimilarity ?? 0.55,
+        });
+        if (matchError) {
+          console.warn("[orgContext] match_documents failed, falling back:", matchError);
+        } else if (matches && matches.length > 0) {
+          docs = matches.slice(0, docLimit).map((row: {
+            id: string;
+            title: string;
+            summary: string | null;
+            tags: string[] | null;
+            extracted_text: string | null;
+          }) => ({
+            id: row.id,
+            title: row.title,
+            summary: row.summary,
+            tags: row.tags ?? [],
+            excerpt: truncateExcerpt(row.extracted_text ?? "", maxExcerptChars),
+          }));
+        }
+      } catch (err) {
+        console.warn("[orgContext] semantic retrieval threw, falling back:", err);
+      }
     }
 
-    const { data } = await docQuery;
-    docs = (data ?? []).slice(0, docLimit).map((row) => ({
-      id: row.id,
-      title: row.title,
-      summary: row.summary ?? null,
-      tags: row.tags ?? [],
-      excerpt: truncateExcerpt(row.extracted_text ?? "", maxExcerptChars),
-    }));
+    // Recency / explicit-id fallback. Runs when semantic path is disabled,
+    // returns nothing, or fails — guaranteeing the format prompt still gets
+    // some context.
+    if (docs.length === 0) {
+      let docQuery = supabase
+        .from("documents")
+        .select("id, title, summary, tags, extracted_text, updated_at")
+        .eq("organization_id", orgId);
+
+      if (options.documentIds && options.documentIds.length > 0) {
+        docQuery = docQuery.in("id", options.documentIds);
+      } else {
+        docQuery = docQuery.order("updated_at", { ascending: false }).limit(docLimit);
+      }
+
+      const { data } = await docQuery;
+      docs = (data ?? []).slice(0, docLimit).map((row) => ({
+        id: row.id,
+        title: row.title,
+        summary: row.summary ?? null,
+        tags: row.tags ?? [],
+        excerpt: truncateExcerpt(row.extracted_text ?? "", maxExcerptChars),
+      }));
+    }
   }
 
   const cacheKey = fingerprint([

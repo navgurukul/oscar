@@ -5,6 +5,17 @@ import type {
   DBScribbleUpdate,
 } from "../types/scribble.types";
 
+/**
+ * Returns the signed-in user's id, or null if the session is gone. Used to
+ * scope desktop list queries to the user's own rows so workspace-shared
+ * scribbles from teammates do not surface in the "my scribbles" list until
+ * desktop ships a dedicated team view.
+ */
+async function getCurrentUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
+}
+
 const PRIMARY_TABLE = "scribbles";
 const LEGACY_TABLE = "notes";
 
@@ -63,10 +74,13 @@ export const scribblesService = {
    * Get all scribbles for the current user (excluding soft-deleted)
    */
   async getScribbles(): Promise<{ data: DBScribble[] | null; error: Error | null }> {
+    const userId = await getCurrentUserId();
+    if (!userId) return { data: null, error: new Error("Not signed in") };
     return runScribbleQuery((table) =>
       supabase
         .from(table)
         .select("*")
+        .eq("user_id", userId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
     );
@@ -161,10 +175,13 @@ export const scribblesService = {
     data: DBScribble[] | null;
     error: Error | null;
   }> {
+    const userId = await getCurrentUserId();
+    if (!userId) return { data: null, error: new Error("Not signed in") };
     return runScribbleQuery((table) =>
       supabase
         .from(table)
         .select("*")
+        .eq("user_id", userId)
         .not("deleted_at", "is", null)
         .order("deleted_at", { ascending: false })
     );
