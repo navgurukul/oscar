@@ -143,7 +143,7 @@ All AI agent configs centralized in [`/lib/constants.ts`](file:///Users/souvik/D
 ```typescript
 API_CONFIG = {
   GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1beta",
-  GEMINI_MODEL: "gemini-2.5-flash-lite",
+  GEMINI_MODEL: "gemini-2.5-flash",
   FORMAT_TEMPERATURE: // Configured value
   FORMAT_TOP_P: // Configured value
   FORMAT_MAX_TOKENS: // Configured value
@@ -153,6 +153,8 @@ API_CONFIG = {
   TITLE_MAX_LENGTH: 60,
 }
 ```
+
+Desktop dictation cleanup (the `ai-process` Edge Function, used by the Stream pill) does not use Gemini — it calls Inception Labs Mercury 2 via the OpenAI-compatible endpoint and requires `MERCURY_API_KEY` set as a Supabase secret.
 
 ### Environment Variables
 
@@ -200,13 +202,13 @@ Pill click / Ctrl+Space
   → capture frontmost app  (frontmost.rs)
   → MediaRecorder (mp4 / webm, 100 ms chunks)
   → whisper-rs transcription  (whisper.rs, local model)
-  → aiService.processText(text, "transcribe_cleanup")  — micro Gemini prompt
+  → aiService.processText(text, "transcribe_cleanup")  — micro Mercury 2 prompt (ai-process Edge Function)
   → paste_transcription  (clipboard + synthetic Cmd/Ctrl+V via paste.rs)
   → pill shows "Inserted into document" toast (1500 ms)
   → pill collapses back to the edge handle
 ```
 
-The AI cleanup uses the `transcribe_cleanup` mode in [`packages/desktop/src/services/ai.service.ts`](./packages/desktop/src/services/ai.service.ts) — a smaller, faster prompt than the Scribble formatter because stream inserts go directly into the user's focused field. The Title Agent is **not** invoked for stream inserts (there is no scribble to title).
+The AI cleanup uses the `transcribe_cleanup` mode in [`packages/desktop/src/services/ai.service.ts`](./packages/desktop/src/services/ai.service.ts) — a smaller, faster prompt than the Scribble formatter because stream inserts go directly into the user's focused field. The upstream model is Mercury 2 (Inception Labs) via the `ai-process` Edge Function; reasoning is disabled (`reasoning_effort: "minimal"`) and temperature is pinned to 0.5 so the tight stream-cleanup token budget reaches the output. The Title Agent is **not** invoked for stream inserts (there is no scribble to title).
 
 **Pill state machine** (driven by `set_pill_phase` Tauri command + `pill-set-phase` event in [`packages/desktop/public/pill.html`](./packages/desktop/public/pill.html)):
 

@@ -50,8 +50,8 @@ interface AIProcessResponse {
   text: string;
 }
 
-const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL = "gemini-2.5-flash-lite";
+const MERCURY_API_BASE_URL = "https://api.inceptionlabs.ai/v1";
+const MERCURY_MODEL = "mercury-2";
 const DICTATION_PROMPT_VERSION = "context-v1";
 const DICTATION_CATEGORIES = [
   "default",
@@ -397,9 +397,9 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!geminiApiKey) {
-      return new Response(JSON.stringify({ error: "GEMINI_API_KEY is not configured on the server." }), {
+    const mercuryApiKey = Deno.env.get("MERCURY_API_KEY");
+    if (!mercuryApiKey) {
+      return new Response(JSON.stringify({ error: "MERCURY_API_KEY is not configured on the server." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -424,33 +424,36 @@ Deno.serve(async (req: Request) => {
             Math.max(256, Math.ceil(text.length / 4 * 1.5) + 64),
           );
 
-    const tGemini0 = performance.now();
+    const tMercury0 = performance.now();
     const upstream = await fetch(
-      `${GEMINI_API_BASE_URL}/models/${GEMINI_MODEL}:generateContent`,
+      `${MERCURY_API_BASE_URL}/chat/completions`,
       {
         method: "POST",
         headers: {
-          "x-goog-api-key": geminiApiKey,
+          "Authorization": `Bearer ${mercuryApiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: [
-            { role: "user", parts: [{ text: prompt }] },
+          model: MERCURY_MODEL,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: prompt },
           ],
-          generationConfig: {
-            maxOutputTokens,
-            temperature: 0.3,
-          },
+          max_tokens: maxOutputTokens,
+          // Mercury 2 spends reasoning tokens before output; on the tight
+          // stream-cleanup budget that starved the completion to 0. Disable.
+          reasoning_effort: "minimal",
+          // Mercury rejects temperature < 0.5 (auto-clamps to 0.75 with warning).
+          temperature: 0.5,
         }),
       },
     );
-    const tGeminiFirstByte = performance.now();
+    const tMercuryFirstByte = performance.now();
 
     if (!upstream.ok) {
       const errBody = await upstream.text();
       return new Response(
-        JSON.stringify({ error: `Gemini API error ${upstream.status}: ${errBody}` }),
+        JSON.stringify({ error: `Mercury API error ${upstream.status}: ${errBody}` }),
         {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -459,24 +462,34 @@ Deno.serve(async (req: Request) => {
     }
 
     const data = await upstream.json();
-    const tGeminiDone = performance.now();
-    const parts = data?.candidates?.[0]?.content?.parts;
-    const output = Array.isArray(parts)
-      ? parts.map((p: { text?: string }) => (typeof p?.text === "string" ? p.text : "")).join("").trim()
-      : "";
+    const tMercuryDone = performance.now();
+    const choice = data?.choices?.[0];
+    const output =
+      typeof choice?.message?.content === "string"
+        ? choice.message.content.trim()
+        : "";
 
-    const finishReason = data?.candidates?.[0]?.finishReason ?? "UNKNOWN";
-    const usage = data?.usageMetadata ?? {};
+    const finishReason = choice?.finish_reason ?? "UNKNOWN";
+    const usage = data?.usage ?? {};
+    const promptTokens = Number(usage?.prompt_tokens ?? 0);
+    const cachedInputTokens = Number(usage?.cached_input_tokens ?? 0);
+    const cacheHitPct =
+      promptTokens > 0
+        ? Math.round((cachedInputTokens / promptTokens) * 100)
+        : 0;
     console.info(
       `[ai-process-timing] mode=${mode} inputChars=${text.length} ` +
         `profile=${effectivePromptProfile ?? "default"} ` +
         `maxOut=${maxOutputTokens} ` +
         `outChars=${output.length} ` +
-        `geminiHeaders=${Math.round(tGeminiFirstByte - tGemini0)}ms ` +
-        `geminiBody=${Math.round(tGeminiDone - tGeminiFirstByte)}ms ` +
-        `total=${Math.round(tGeminiDone - tGemini0)}ms ` +
-        `edgeTotal=${Math.round(tGeminiDone - tRequest0)}ms ` +
+        `mercuryHeaders=${Math.round(tMercuryFirstByte - tMercury0)}ms ` +
+        `mercuryBody=${Math.round(tMercuryDone - tMercuryFirstByte)}ms ` +
+        `total=${Math.round(tMercuryDone - tMercury0)}ms ` +
+        `edgeTotal=${Math.round(tMercuryDone - tRequest0)}ms ` +
         `finish=${finishReason} ` +
+        `promptTokens=${promptTokens} ` +
+        `cachedInputTokens=${cachedInputTokens} ` +
+        `cacheHitPct=${cacheHitPct} ` +
         `usage=${JSON.stringify(usage)}`,
     );
 
