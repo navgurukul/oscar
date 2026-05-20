@@ -877,6 +877,43 @@ function App() {
       }).catch(console.warn);
     });
 
+    // ── In-app Ctrl+Space fallback ───────────────────────────────────────
+    // The Tauri global-shortcut plugin's macOS backend (NSEvent global
+    // monitor) does NOT fire when Oscar itself is the foreground app — the
+    // key event is delivered to the focused webview first and the global
+    // monitor only sees events targeted at other apps. So when Oscar's
+    // window is focused, Ctrl+Space appears dead. Mirror the hotkey flow
+    // via a webview-level keydown so the dictation pill still expands.
+    let inAppHotkeyDown = false;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || !e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      if (e.repeat || inAppHotkeyDown) {
+        e.preventDefault();
+        return;
+      }
+      inAppHotkeyDown = true;
+      e.preventDefault();
+      invoke("pill_request_record_start").catch(console.warn);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!inAppHotkeyDown) return;
+      if (e.code === "Space" || e.code === "ControlLeft" || e.code === "ControlRight") {
+        inAppHotkeyDown = false;
+        invoke("pill_request_record_stop").catch(console.warn);
+      }
+    };
+    const onWindowBlur = () => {
+      // Safety net — if user alt-tabs while holding the keys, force a stop
+      // so the recording doesn't get stuck on.
+      if (inAppHotkeyDown) {
+        inAppHotkeyDown = false;
+        invoke("pill_request_record_stop").catch(console.warn);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
+
     return () => {
       unlistenStart.then((f) => f());
       unlistenStop.then((f) => f());
@@ -884,6 +921,9 @@ function App() {
       unlistenReg.then((f) => f());
       unlistenPillSettings.then((f) => f());
       unlistenPillReady.then((f) => f());
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: loads settings, registers hotkey listeners; uses refs for mutable state
   }, []);
