@@ -26,7 +26,7 @@ mod meeting;
 mod paste;
 mod permissions;
 mod pill;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 mod pill_hover;
 mod state;
 mod system_audio;
@@ -183,9 +183,12 @@ pub fn run() {
             }
 
             // macOS NSPanel never becomes key, so WebKit hover events stay
-            // silent while the user is in another app. A cursor poller drives
-            // the pill phase via CoreGraphics cursor position instead.
-            #[cfg(target_os = "macos")]
+            // silent while the user is in another app. On Windows the always-
+            // on-top non-activating pill can also miss DOM mouseenter when
+            // another app holds focus and the cursor crosses the 16 px rest
+            // strip. A cursor poller drives the pill phase via the OS cursor
+            // position on both platforms.
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             {
                 log::info!("[setup] Starting pill cursor-hover poller...");
                 pill_hover::start(app.handle().clone());
