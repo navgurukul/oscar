@@ -523,22 +523,22 @@ export function SettingsTab({
           <div className="st-content">
             <h2 className="st-content-title">Account</h2>
 
-            {/* Profile */}
-            <div className="st-card st-card--grouped">
-              <div className="st-profile-row">
-                <div className="st-avatar">{getInitials(userEmail)}</div>
-                <div className="st-profile-info">
-                  <span className="st-profile-email">
-                    <Mail size={13} />
-                    {userEmail || "Not signed in"}
+            {/* Profile hero */}
+            <div className="account-hero">
+              <div className="account-hero-avatar">
+                {getInitials(userEmail)}
+              </div>
+              <div className="account-hero-info">
+                <span className="account-hero-email">
+                  <Mail size={14} />
+                  {userEmail || "Not signed in"}
+                </span>
+                {userEmail && (
+                  <span className="account-hero-meta">
+                    <Lock size={11} />
+                    Signed in with Google
                   </span>
-                  {userEmail && (
-                    <span className="st-profile-note">
-                      <Lock size={11} />
-                      Signed in with Google
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
             </div>
 
@@ -597,23 +597,6 @@ export function SettingsTab({
 
               <div className="st-row">
                 <div className="st-row-text">
-                  <div className="st-row-label">Delete Account</div>
-                  <div className="st-row-desc">
-                    Permanently remove your account and data
-                  </div>
-                </div>
-                <button
-                  className="st-btn-danger-ghost-sm"
-                  onClick={() => openExternalPage(`${WEB_APP_URL}/settings`)}
-                >
-                  Delete
-                </button>
-              </div>
-
-              <div className="st-divider" />
-
-              <div className="st-row">
-                <div className="st-row-text">
                   <div className="st-row-label">Clear Local Data</div>
                   <div className="st-row-desc">
                     Reset app, remove downloads, sign out
@@ -646,6 +629,23 @@ export function SettingsTab({
                     Clear
                   </button>
                 )}
+              </div>
+
+              <div className="st-divider" />
+
+              <div className="st-row">
+                <div className="st-row-text">
+                  <div className="st-row-label">Delete Account</div>
+                  <div className="st-row-desc">
+                    Permanently remove your account and data
+                  </div>
+                </div>
+                <button
+                  className="st-btn-danger-ghost-sm"
+                  onClick={() => openExternalPage(`${WEB_APP_URL}/settings`)}
+                >
+                  Delete
+                </button>
               </div>
             </div>
           </div>

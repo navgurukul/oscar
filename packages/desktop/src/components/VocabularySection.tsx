@@ -2,7 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { BookOpen, Plus, Trash2, Edit2, Check, X, Loader2 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { supabase } from "../supabase";
-import { SUBSCRIPTION_CONFIG } from "@oscar/shared/constants";
+import {
+  SUBSCRIPTION_CONFIG,
+  getSubscriptionEntitlement,
+} from "@oscar/shared/constants";
 
 interface VocabularyEntry {
   id: string;
@@ -47,11 +50,16 @@ export function VocabularySection({ userId }: VocabularySectionProps) {
     try {
       const { data } = await supabase
         .from("subscriptions")
-        .select("status")
+        .select("tier, status, current_period_end")
         .eq("user_id", userId)
-        .eq("status", "active")
         .maybeSingle();
-      setIsProUser(!!data);
+      setIsProUser(
+        getSubscriptionEntitlement({
+          tier: data?.tier,
+          status: data?.status,
+          currentPeriodEnd: data?.current_period_end,
+        }).isPro,
+      );
     } catch {
       setIsProUser(false);
     }

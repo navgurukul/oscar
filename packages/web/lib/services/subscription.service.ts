@@ -12,17 +12,11 @@ import type {
   BillingCycle,
 } from "@/lib/types/subscription.types";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
-
-/**
- * Razorpay statuses that map to an active ("pro") subscription tier.
- * "created" is included because a subscription in the created state has been
- * successfully authorised but not yet charged for the first cycle.
- */
-const ACTIVE_RAZORPAY_STATUSES: readonly RazorpaySubscriptionStatus[] = [
-  "active",
-  "authenticated",
-  "created",
-];
+import {
+  getSubscriptionEntitlement,
+  isActiveProSubscriptionStatus,
+  isCancelledSubscriptionInGracePeriod,
+} from "@/lib/constants";
 
 export const subscriptionService = {
   /**
@@ -142,9 +136,21 @@ export const subscriptionService = {
   ): Promise<{ data: DBSubscription | null; error: Error | null }> {
     const supabase = getSupabaseAdmin();
 
-    // Determine tier based on status
-    const isActiveTier = ACTIVE_RAZORPAY_STATUSES.includes(razorpaySubscription.status);
-    const tier = isActiveTier ? "pro" : "free";
+    const currentPeriodStart = razorpaySubscription.current_start
+      ? new Date(razorpaySubscription.current_start * 1000).toISOString()
+      : undefined;
+    const currentPeriodEnd = razorpaySubscription.current_end
+      ? new Date(razorpaySubscription.current_end * 1000).toISOString()
+      : undefined;
+
+    const tier =
+      isActiveProSubscriptionStatus(razorpaySubscription.status) ||
+      isCancelledSubscriptionInGracePeriod({
+        status: razorpaySubscription.status,
+        currentPeriodEnd,
+      })
+        ? "pro"
+        : "free";
 
     // Determine billing cycle from plan notes or subscription
     const billingCycle =
@@ -157,12 +163,8 @@ export const subscriptionService = {
       tier,
       billing_cycle: billingCycle,
       status: razorpaySubscription.status,
-      current_period_start: razorpaySubscription.current_start
-        ? new Date(razorpaySubscription.current_start * 1000).toISOString()
-        : undefined,
-      current_period_end: razorpaySubscription.current_end
-        ? new Date(razorpaySubscription.current_end * 1000).toISOString()
-        : undefined,
+      current_period_start: currentPeriodStart,
+      current_period_end: currentPeriodEnd,
     };
 
     // Try to update existing subscription
@@ -203,9 +205,25 @@ export const subscriptionService = {
   ): Promise<{ data: DBSubscription | null; error: Error | null }> {
     const supabase = getSupabaseAdmin();
 
-    // Determine tier based on new status
-    const isActiveTier = ACTIVE_RAZORPAY_STATUSES.includes(newStatus);
-    const tier = isActiveTier ? "pro" : "free";
+    const { data: existing, error: fetchError } = await supabase
+      .from("subscriptions")
+      .select("tier, current_period_end")
+      .eq("razorpay_subscription_id", razorpaySubscriptionId)
+      .maybeSingle();
+
+    if (fetchError) {
+      return { data: null, error: fetchError as Error };
+    }
+
+    const tier =
+      isActiveProSubscriptionStatus(newStatus) ||
+      isCancelledSubscriptionInGracePeriod({
+        tier: existing?.tier,
+        status: newStatus,
+        currentPeriodEnd: existing?.current_period_end,
+      })
+        ? "pro"
+        : "free";
 
     const { data, error } = await supabase
       .from("subscriptions")
@@ -225,7 +243,11 @@ export const subscriptionService = {
    */
   async isProUser(userId: string): Promise<boolean> {
     const { data } = await this.getUserSubscription(userId);
-    return data?.tier === "pro" && data?.status === "active";
+    return getSubscriptionEntitlement({
+      tier: data?.tier,
+      status: data?.status,
+      currentPeriodEnd: data?.current_period_end,
+    }).isPro;
   },
 
   /**

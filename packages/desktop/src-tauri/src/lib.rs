@@ -36,10 +36,25 @@ mod whisper;
 use crate::events::OscarEvent;
 use crate::hotkey::register_recording_hotkey;
 use crate::pill::create_pill_window;
-use crate::state::{set_pending_deep_link, AppState, HotkeyState, PENDING_DEEP_LINK};
+use crate::state::{set_pending_deep_link, AppState, HotkeyState};
 
 #[cfg(target_os = "linux")]
 use crate::state::LINUX_TRAY;
+
+fn focus_main_window(app_handle: &tauri::AppHandle) {
+    if let Some(main_window) = app_handle.get_webview_window("main") {
+        let _ = main_window.unminimize();
+        let _ = main_window.show();
+        let _ = main_window.set_focus();
+    }
+}
+
+fn forward_deep_link(app_handle: &tauri::AppHandle, url: String) {
+    log::info!("[deep-link] received: {}", url);
+    set_pending_deep_link(url.clone());
+    focus_main_window(app_handle);
+    OscarEvent::DeepLink(url).dispatch(app_handle);
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -48,15 +63,37 @@ pub fn run() {
     log::info!("========================================");
     log::info!("OSCAR v{} starting", env!("CARGO_PKG_VERSION"));
     log::info!("OS: {} {}", std::env::consts::OS, std::env::consts::ARCH);
-    log::info!("DISPLAY={}", std::env::var("DISPLAY").unwrap_or_else(|_| "(not set)".into()));
-    log::info!("XDG_SESSION_TYPE={}", std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "(not set)".into()));
-    log::info!("WAYLAND_DISPLAY={}", std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "(not set)".into()));
+    log::info!(
+        "DISPLAY={}",
+        std::env::var("DISPLAY").unwrap_or_else(|_| "(not set)".into())
+    );
+    log::info!(
+        "XDG_SESSION_TYPE={}",
+        std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "(not set)".into())
+    );
+    log::info!(
+        "WAYLAND_DISPLAY={}",
+        std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "(not set)".into())
+    );
     log::info!("========================================");
 
     let is_recording = Arc::new(AtomicBool::new(false));
 
     log::info!("[init] Initializing Tauri plugins...");
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    {
+        // Must be registered before the deep-link plugin. On Windows/Linux the
+        // OS starts a new process for custom-scheme URLs; this plugin forwards
+        // that launch to the already-running process instead.
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            log::info!("[single-instance] additional launch: {:?}", argv);
+            focus_main_window(app);
+        }));
+    }
+
+    builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -131,25 +168,22 @@ pub fn run() {
 
             // Set up deep link handler (may not be available on all Linux desktops)
             log::info!("[setup] Registering deep link handler...");
+            match app.deep_link().get_current() {
+                Ok(Some(urls)) => {
+                    for url in urls {
+                        let url_str = url.to_string();
+                        log::info!("[deep-link] current launch URL: {}", url_str);
+                        set_pending_deep_link(url_str);
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => log::warn!("[setup] Could not read current deep link: {}", e),
+            }
+
             if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 app.deep_link().on_open_url(move |event| {
                     for url in event.urls() {
-                        let url_str = url.to_string();
-                        log::info!("[deep-link] received: {}", url_str);
-
-                        // Store the deep link
-                        set_pending_deep_link(url_str.clone());
-
-                        // Bring the main window to the foreground so the user
-                        // sees Oscar after returning from the browser callback.
-                        if let Some(main_window) = app_handle.get_webview_window("main") {
-                            let _ = main_window.unminimize();
-                            let _ = main_window.show();
-                            let _ = main_window.set_focus();
-                        }
-
-                        // Emit to frontend
-                        OscarEvent::DeepLink(url_str).dispatch(&app_handle);
+                        forward_deep_link(&app_handle, url.to_string());
                     }
                 });
             })) {
@@ -223,16 +257,6 @@ pub fn run() {
 
             log::info!("[setup] ✓ Setup complete — app ready");
             Ok(())
-        })
-        .on_window_event(|window, event| {
-            // Handle deep link when app is already running
-            if let tauri::WindowEvent::Focused(true) = event {
-                if let Ok(mut pending) = PENDING_DEEP_LINK.lock() {
-                    if let Some(url) = pending.take() {
-                        OscarEvent::DeepLink(url).dispatch(window.app_handle());
-                    }
-                }
-            }
         })
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {
