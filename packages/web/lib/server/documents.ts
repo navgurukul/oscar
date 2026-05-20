@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { parseDocument } from "./documentParse";
+import { buildDocumentEmbeddingInput, embedText } from "./embeddings";
 
 const BUCKET = "org-documents";
 
@@ -57,6 +58,22 @@ export async function uploadDocument(params: {
     params.filename.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() ||
     "Untitled document";
 
+  // Best-effort embedding before insert so retrieval can use it immediately.
+  // A failure here must NOT block the upload — fall back to recency ranking
+  // until a later backfill fills the column in.
+  let embedding: number[] | null = null;
+  try {
+    const input = buildDocumentEmbeddingInput({
+      title,
+      extractedText: parsed.text,
+    });
+    if (input.trim()) {
+      embedding = await embedText(input);
+    }
+  } catch (err) {
+    console.warn("[documents] embedding generation failed (continuing):", err);
+  }
+
   const { data, error } = await supabase
     .from("documents")
     .insert({
@@ -68,6 +85,7 @@ export async function uploadDocument(params: {
       mime_type: parsed.mimeType,
       size_bytes: params.buffer.byteLength,
       extracted_text: parsed.text,
+      ...(embedding ? { embedding: toVectorLiteral(embedding) } : {}),
     })
     .select("*")
     .single();
@@ -77,6 +95,65 @@ export async function uploadDocument(params: {
     return { error: error?.message ?? "Insert failed" };
   }
   return data as DocumentRow;
+}
+
+// pgvector accepts arrays as `[0.1, 0.2, ...]` string literals over the
+// REST API. Serializing in JS keeps the supabase-js types happy and side-
+// steps the missing vector type definitions.
+function toVectorLiteral(values: number[]): string {
+  return `[${values.join(",")}]`;
+}
+
+/**
+ * One-shot backfill: embeds every document in an org that does not yet have
+ * an embedding. Returns the count successfully embedded. Designed to be
+ * safe to re-run.
+ */
+export async function backfillDocumentEmbeddings(
+  organizationId: string,
+  limit: number = 50
+): Promise<{ embedded: number; skipped: number }> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("documents")
+    .select("id, title, summary, extracted_text")
+    .eq("organization_id", organizationId)
+    .is("embedding", null)
+    .limit(limit);
+  if (error) {
+    console.error("[documents] backfill list failed", error);
+    return { embedded: 0, skipped: 0 };
+  }
+  let embedded = 0;
+  let skipped = 0;
+  for (const row of data ?? []) {
+    try {
+      const input = buildDocumentEmbeddingInput({
+        title: row.title,
+        summary: row.summary,
+        extractedText: row.extracted_text,
+      });
+      if (!input.trim()) {
+        skipped += 1;
+        continue;
+      }
+      const vec = await embedText(input);
+      const { error: updateErr } = await supabase
+        .from("documents")
+        .update({ embedding: toVectorLiteral(vec) })
+        .eq("id", row.id);
+      if (updateErr) {
+        skipped += 1;
+        console.warn("[documents] backfill update failed", updateErr);
+      } else {
+        embedded += 1;
+      }
+    } catch (err) {
+      skipped += 1;
+      console.warn("[documents] backfill embed failed", err);
+    }
+  }
+  return { embedded, skipped };
 }
 
 export async function listDocuments(

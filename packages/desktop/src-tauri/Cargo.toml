@@ -52,6 +52,10 @@ windows = { version = "0.58", features = [
     "Win32_Media_Audio",
     "Win32_System_Com",
 ] }
+# Used to intercept WebView2's microphone-permission popup so users don't see
+# the "tauri.localhost wants to use your microphone" Edge dialog — the in-app
+# onboarding screen is the source of truth instead.
+webview2-com = "0.38"
 whisper-rs = "0.15"
 
 [target.'cfg(target_os = "linux")'.dependencies]

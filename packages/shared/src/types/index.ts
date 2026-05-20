@@ -5,3 +5,4 @@ export * from "./meeting.types";
 export * from "./vocabulary.types";
 export * from "./organization.types";
 export * from "./document.types";
+export * from "./stream.types";
