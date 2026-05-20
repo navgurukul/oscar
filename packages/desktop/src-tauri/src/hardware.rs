@@ -31,10 +31,7 @@ impl GpuBackend {
         {
             return GpuBackend::Cuda;
         }
-        #[cfg(all(
-            any(target_os = "windows", target_os = "linux"),
-            feature = "vulkan",
-        ))]
+        #[cfg(all(target_os = "linux", feature = "vulkan"))]
         {
             return GpuBackend::Vulkan;
         }
