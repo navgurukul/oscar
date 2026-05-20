@@ -9,6 +9,17 @@ use arboard::Clipboard;
 use crate::frontmost::get_frontmost_context_payload;
 use crate::state::PENDING_DEEP_LINK;
 
+/// Writes `text` to the system clipboard without simulating any paste keystroke.
+/// Used on the no-auto-paste branch so the user can manually press ⌘V / Ctrl+V
+/// wherever they want.
+#[tauri::command]
+pub fn copy_to_clipboard(text: String) -> Result<(), String> {
+    let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
+    clipboard.set_text(&text).map_err(|e| e.to_string())?;
+    log::info!("[clipboard] set ({} chars, no paste)", text.len());
+    Ok(())
+}
+
 /// Returns the name of the frontmost application.
 #[tauri::command]
 pub fn get_frontmost_app() -> Result<String, String> {

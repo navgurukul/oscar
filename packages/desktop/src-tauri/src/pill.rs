@@ -28,6 +28,7 @@ fn normalize_phase(phase: &str) -> &'static str {
         "recording" => "recording",
         "processing" => "processing",
         "inserted" => "inserted",
+        "copied" => "copied",
         "error" => "error",
         "settings" => "settings",
         _ => "rest",

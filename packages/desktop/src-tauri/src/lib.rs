@@ -87,6 +87,7 @@ pub fn run() {
             meeting::start_system_audio_capture,
             meeting::stop_system_audio_capture,
             paste::paste_transcription,
+            paste::copy_to_clipboard,
             paste::get_frontmost_app,
             paste::get_pending_deep_link,
             pill::show_recording_pill,

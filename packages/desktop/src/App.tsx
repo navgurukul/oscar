@@ -1391,6 +1391,7 @@ function App() {
     const timings: Record<string, number> = {};
     const metrics: Record<string, string | number> = {};
     let hadError = false;
+    let pasteHappened = false;
 
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
@@ -1622,6 +1623,7 @@ function App() {
                 : "📋 Copied! Press Ctrl+V to paste.",
             );
           } else {
+            pasteHappened = true;
             setStatus("Pasted! ✓");
           }
         } catch (pe) {
@@ -1656,7 +1658,20 @@ function App() {
       timings["persist"] = Math.round(performance.now() - tPersist0);
 
       if (!shouldPaste) {
-        setStatus("Done! ✓");
+        // Auto-paste is off: still write the result to the OS clipboard so the
+        // user can manually press ⌘V / Ctrl+V wherever they want.
+        try {
+          await invoke("copy_to_clipboard", { text: finalText });
+          const isMac = navigator.platform.toLowerCase().includes("mac");
+          setStatus(
+            isMac
+              ? "📋 Copied to clipboard. Press ⌘V to paste."
+              : "📋 Copied to clipboard. Press Ctrl+V to paste.",
+          );
+        } catch (ce) {
+          console.warn("[clipboard] copy failed:", ce);
+          setStatus("Done! ✓");
+        }
       }
     } catch (e) {
       hadError = true;
@@ -1668,10 +1683,12 @@ function App() {
       }, 1500);
     } finally {
       setIsProcessing(false);
-      // Success path: show the "Inserted" toast for the design dwell, then
-      // collapse the pill back to its resting edge handle.
+      // Success path: show the outcome toast — "Inserted" when auto-paste
+      // landed the text in the focused app, "Copied" when only the clipboard
+      // was set. Then collapse the pill back to its resting edge handle.
       if (!hadError) {
-        invoke("set_pill_phase", { phase: "inserted" }).catch(console.warn);
+        const finalPhase = pasteHappened ? "inserted" : "copied";
+        invoke("set_pill_phase", { phase: finalPhase }).catch(console.warn);
         setTimeout(() => {
           invoke("hide_recording_pill").catch(console.warn);
         }, 1500);
