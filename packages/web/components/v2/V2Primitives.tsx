@@ -155,6 +155,7 @@ export function V2WebHeader({
     { label: "TODAY", href: "/" },
     { label: "LIBRARY", href: "/scribble" },
     { label: "MINUTES", href: "/meetings" },
+    { label: "TEAM", href: "/team" },
     { label: "SETTINGS", href: "/settings" },
   ];
   const navLinks = links ?? defaultLinks;
@@ -166,7 +167,7 @@ export function V2WebHeader({
       style={{ borderBottom: `1px solid ${v2.rule}` }}
     >
       <V2Wordmark />
-      <nav className="hidden md:flex items-center gap-9">
+      <nav className="hidden md:flex items-center gap-7 lg:gap-9">
         {navLinks.map((link) => {
           const isActive = link.label.toUpperCase() === activeLabel;
           if (isActive) {
@@ -194,8 +195,9 @@ export function V2WebHeader({
           );
         })}
       </nav>
-      <div className="flex items-center gap-4">
-        {right ?? <LazyOrgSwitcher />}
+      <div className="flex items-center gap-3">
+        <LazyOrgSwitcher />
+        {right}
       </div>
     </header>
   );

@@ -10,12 +10,11 @@ import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import {
   v2,
   v2Serif,
-  v2Mono,
   V2Caps,
   V2Mono,
   V2Wordmark,
-  V2Avatar,
   V2Source,
+  V2WebHeader,
   V2MarketingHeader,
 } from "@/components/v2/V2Primitives";
 
@@ -63,33 +62,7 @@ function formatDate(dateString: string) {
 function SignedInHome({ recents, firstName }: { recents: DBScribble[]; firstName: string }) {
   return (
     <main style={{ background: v2.cream, color: v2.ink, fontFamily: "var(--font-figtree), system-ui" }}>
-      <header
-        className="flex items-center justify-between px-6 md:px-14 py-7"
-        style={{ borderBottom: `1px solid ${v2.rule}` }}
-      >
-        <V2Wordmark />
-        <nav className="hidden md:flex items-center gap-9">
-          <span
-            style={{
-              fontFamily: v2Mono,
-              fontSize: 11,
-              letterSpacing: "0.18em",
-              color: v2.ink,
-              borderBottom: `1px solid ${v2.ink}`,
-              paddingBottom: 2,
-            }}
-          >
-            TODAY
-          </span>
-          <Link href="/scribble"><V2Caps>LIBRARY</V2Caps></Link>
-          <Link href="/meetings"><V2Caps>MINUTES</V2Caps></Link>
-          <Link href="/settings"><V2Caps>SETTINGS</V2Caps></Link>
-        </nav>
-        <div className="flex items-center gap-4">
-          <V2Caps>{firstName.toUpperCase()}</V2Caps>
-          <V2Avatar size={32} initial={firstName.charAt(0).toUpperCase()} />
-        </div>
-      </header>
+      <V2WebHeader active="TODAY" />
 
       <section className="px-6 md:px-14 pt-16 md:pt-24 pb-12">
         <V2Caps>
