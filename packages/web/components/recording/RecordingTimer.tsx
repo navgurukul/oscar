@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { v2 } from "@/components/v2/V2Primitives";
 
 interface RecordingTimerProps {
   seconds: number;
@@ -17,7 +18,10 @@ export function RecordingTimer({ seconds }: RecordingTimerProps) {
 
   return (
     <div className="text-center">
-      <div className="text-2xl font-bold text-cyan-500 font-mono tracking-wider">
+      <div
+        className="text-2xl font-mono tracking-wider"
+        style={{ color: v2.accent, fontWeight: 600 }}
+      >
         {formatTime(seconds)}
       </div>
     </div>

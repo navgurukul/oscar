@@ -18,6 +18,7 @@ import {
   Heading2,
   Link2,
 } from "lucide-react";
+import { v2 } from "@/components/v2/V2Primitives";
 
 interface MeetingNotesEditorProps {
   value: string;
@@ -42,7 +43,7 @@ export function MeetingNotesEditor({
       }),
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { class: "text-cyan-400 underline" },
+        HTMLAttributes: { class: "underline", style: `color: ${v2.accent}` },
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -60,7 +61,8 @@ export function MeetingNotesEditor({
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm prose-invert max-w-none focus:outline-none min-h-[160px] px-4 py-3 text-slate-200 leading-relaxed",
+          "prose prose-sm max-w-none focus:outline-none min-h-[160px] px-4 py-3 leading-relaxed",
+        style: `color: ${v2.ink}`,
       },
     },
     immediatelyRender: false,
@@ -102,18 +104,25 @@ export function MeetingNotesEditor({
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   }
 
-  const btnBase =
-    "p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-700 transition-colors";
-  const btnActive = "text-cyan-400 bg-slate-700/70";
+  const btnBase = "p-1.5 rounded-md transition-colors";
+  const btnInactive = { color: v2.inkSoft };
+  const btnActive = { color: v2.accent, background: v2.accentSoft };
 
   return (
     <div className="space-y-3">
-      <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-cyan-500/30 transition-all">
-        <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-slate-700 bg-slate-800/60">
+      <div
+        className="rounded-xl overflow-hidden transition-all"
+        style={{ background: v2.cream, border: `1px solid ${v2.rule}` }}
+      >
+        <div
+          className="flex items-center gap-0.5 px-2 py-1.5"
+          style={{ borderBottom: `1px solid ${v2.rule}`, background: v2.cream2 }}
+        >
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-            className={`${btnBase} ${editor.isActive("heading", { level: 1 }) ? btnActive : ""}`}
+            className={btnBase}
+            style={editor.isActive("heading", { level: 1 }) ? btnActive : btnInactive}
             title="Heading 1"
           >
             <Heading1 size={14} />
@@ -121,16 +130,18 @@ export function MeetingNotesEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-            className={`${btnBase} ${editor.isActive("heading", { level: 2 }) ? btnActive : ""}`}
+            className={btnBase}
+            style={editor.isActive("heading", { level: 2 }) ? btnActive : btnInactive}
             title="Heading 2"
           >
             <Heading2 size={14} />
           </button>
-          <div className="w-px h-4 bg-slate-700 mx-1" />
+          <div className="w-px h-4 mx-1" style={{ background: v2.rule }} />
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`${btnBase} ${editor.isActive("bold") ? btnActive : ""}`}
+            className={btnBase}
+            style={editor.isActive("bold") ? btnActive : btnInactive}
             title="Bold"
           >
             <Bold size={14} />
@@ -138,16 +149,18 @@ export function MeetingNotesEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={`${btnBase} ${editor.isActive("italic") ? btnActive : ""}`}
+            className={btnBase}
+            style={editor.isActive("italic") ? btnActive : btnInactive}
             title="Italic"
           >
             <Italic size={14} />
           </button>
-          <div className="w-px h-4 bg-slate-700 mx-1" />
+          <div className="w-px h-4 mx-1" style={{ background: v2.rule }} />
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleBulletList().run()}
-            className={`${btnBase} ${editor.isActive("bulletList") ? btnActive : ""}`}
+            className={btnBase}
+            style={editor.isActive("bulletList") ? btnActive : btnInactive}
             title="Bullet list"
           >
             <List size={14} />
@@ -155,7 +168,8 @@ export function MeetingNotesEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleOrderedList().run()}
-            className={`${btnBase} ${editor.isActive("orderedList") ? btnActive : ""}`}
+            className={btnBase}
+            style={editor.isActive("orderedList") ? btnActive : btnInactive}
             title="Numbered list"
           >
             <ListOrdered size={14} />
@@ -163,16 +177,18 @@ export function MeetingNotesEditor({
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleTaskList().run()}
-            className={`${btnBase} ${editor.isActive("taskList") ? btnActive : ""}`}
+            className={btnBase}
+            style={editor.isActive("taskList") ? btnActive : btnInactive}
             title="Task list"
           >
             <ListChecks size={14} />
           </button>
-          <div className="w-px h-4 bg-slate-700 mx-1" />
+          <div className="w-px h-4 mx-1" style={{ background: v2.rule }} />
           <button
             type="button"
             onClick={promptLink}
-            className={`${btnBase} ${editor.isActive("link") ? btnActive : ""}`}
+            className={btnBase}
+            style={editor.isActive("link") ? btnActive : btnInactive}
             title="Link"
           >
             <Link2 size={14} />
@@ -184,14 +200,16 @@ export function MeetingNotesEditor({
         <button
           onClick={onCancel}
           disabled={saving}
-          className="px-3 py-1.5 text-sm text-slate-400 hover:text-white rounded-lg transition-colors duration-150"
+          className="px-3 py-1.5 text-sm rounded-lg transition-colors duration-150"
+          style={{ color: v2.inkSoft }}
         >
           Cancel
         </button>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-4 py-1.5 text-sm bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 disabled:opacity-50 transition-colors duration-150"
+          className="px-4 py-1.5 text-sm rounded-lg disabled:opacity-50 transition-colors duration-150"
+          style={{ background: v2.ink, color: v2.cream }}
         >
           {saving ? "Saving..." : "Save"}
         </button>

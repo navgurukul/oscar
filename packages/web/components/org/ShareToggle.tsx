@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { organizationService } from "@/lib/services/organization.service";
+import { v2 } from "@/components/v2/V2Primitives";
 import type { ActiveOrganization } from "@oscar/shared/types";
 
 interface Props {
@@ -79,11 +80,12 @@ export function ShareToggle({ kind, id, shared, organizationName, onChange, clas
           <button
             onClick={() => void toggle()}
             disabled={busy}
-            className={`p-2 rounded-lg transition-all duration-300 ${
+            className={`p-2 rounded-lg transition-all duration-300 ${className ?? ""}`}
+            style={
               localShared
-                ? "text-cyan-400 bg-cyan-400/10"
-                : "text-gray-500 hover:text-cyan-400 hover:bg-cyan-400/5"
-            } ${className ?? ""}`}
+                ? { color: v2.accent, background: v2.accentSoft }
+                : { color: v2.inkFaint, background: "transparent" }
+            }
           >
             <Icon className="w-4 h-4" />
           </button>

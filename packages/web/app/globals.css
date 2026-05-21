@@ -195,7 +195,7 @@ html.text-size-lg {
 
 .typewriter {
   overflow: hidden;
-  border-right: 3px solid #06b6d4;
+  border-right: 3px solid #b8623d;
   white-space: nowrap;
   animation: blinkCursor 0.7s infinite;
 }

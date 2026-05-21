@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Copy, Download, Share2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { FeedbackWidget } from "@/components/results/FeedbackWidget";
+import { v2, v2Serif } from "@/components/v2/V2Primitives";
 import type { FeedbackReason } from "@/lib/types/scribble.types";
 
 interface ScribbleEditorProps {
@@ -51,7 +52,6 @@ export function ScribbleEditor({
   const [activeTab, setActiveTab] = useState<"scribble" | "transcript">("scribble");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize textarea to fit content
   useEffect(() => {
     const el = textareaRef.current;
     if (el) {
@@ -60,24 +60,38 @@ export function ScribbleEditor({
     }
   }, [formattedScribble, activeTab]);
 
+  const iconBtnStyle = { color: v2.inkSoft };
+
   return (
     <div className="w-full max-w-[650px]">
-      <Card className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl overflow-hidden">
+      <Card
+        className="rounded-2xl overflow-hidden"
+        style={{ background: v2.cream2, border: `1px solid ${v2.rule}`, color: v2.ink }}
+      >
         <CardHeader>
-          {/* Title + action icons */}
           <div className="flex gap-6 justify-between items-center">
-            <h2 className="text-xl font-semibold text-white truncate">
+            <h2
+              className="truncate"
+              style={{
+                fontFamily: v2Serif,
+                fontSize: 22,
+                fontWeight: 500,
+                letterSpacing: "-0.015em",
+                color: v2.ink,
+              }}
+            >
               {title || "Untitled Scribble"}
             </h2>
 
             <div className="hidden md:flex items-center gap-1">
-              {isSaving && <Spinner className="w-4 h-4 text-cyan-500" />}
+              {isSaving && <Spinner className="w-4 h-4" style={{ color: v2.accent }} />}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onCopy}
                 disabled={isCopying}
-                className="text-gray-400 hover:text-cyan-500 disabled:opacity-50"
+                className="disabled:opacity-50 hover:opacity-80"
+                style={iconBtnStyle}
               >
                 {isCopying ? <Spinner className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               </Button>
@@ -86,7 +100,8 @@ export function ScribbleEditor({
                 size="sm"
                 onClick={onDownload}
                 disabled={isDownloading}
-                className="text-gray-400 hover:text-cyan-500 disabled:opacity-50"
+                className="disabled:opacity-50 hover:opacity-80"
+                style={iconBtnStyle}
               >
                 {isDownloading ? <Spinner className="w-4 h-4" /> : <Download className="w-4 h-4" />}
               </Button>
@@ -96,7 +111,8 @@ export function ScribbleEditor({
                   size="sm"
                   onClick={onShare}
                   disabled={isSharing}
-                  className="text-gray-400 hover:text-cyan-500 disabled:opacity-50"
+                  className="disabled:opacity-50 hover:opacity-80"
+                  style={iconBtnStyle}
                 >
                   {isSharing ? <Spinner className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
                 </Button>
@@ -104,27 +120,28 @@ export function ScribbleEditor({
             </div>
           </div>
 
-          <Separator className="w-24 h-0.5 bg-cyan-500" />
+          <Separator className="w-24 h-0.5" style={{ background: v2.accent }} />
 
-          {/* Tabs */}
           <div className="flex gap-1 mt-2">
             <button
               onClick={() => setActiveTab("transcript")}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+              style={
                 activeTab === "transcript"
-                  ? "bg-cyan-500/10 text-cyan-400"
-                  : "text-gray-500 hover:text-gray-300"
-              }`}
+                  ? { background: v2.accentSoft, color: v2.accent }
+                  : { color: v2.inkFaint }
+              }
             >
               Raw Transcript
             </button>
             <button
               onClick={() => setActiveTab("scribble")}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+              style={
                 activeTab === "scribble"
-                  ? "bg-cyan-500/10 text-cyan-400"
-                  : "text-gray-500 hover:text-gray-300"
-              }`}
+                  ? { background: v2.accentSoft, color: v2.accent }
+                  : { color: v2.inkFaint }
+              }
             >
               Scribble
             </button>
@@ -139,21 +156,30 @@ export function ScribbleEditor({
               onChange={(e) => onTextChange?.(e.target.value)}
               onBlur={onSaveEdit}
               placeholder="Your Scribble will appear here..."
-              className="w-full bg-transparent text-md text-gray-300 leading-relaxed focus:outline-none resize-none border-none p-0 min-h-[120px] placeholder:text-gray-600"
+              className="w-full bg-transparent text-md leading-relaxed focus:outline-none resize-none border-none p-0 min-h-[120px]"
+              style={{ color: v2.ink }}
             />
           ) : (
-            <div className="text-md text-start text-gray-300 whitespace-pre-wrap min-h-[120px]">
+            <div
+              className="text-md text-start whitespace-pre-wrap min-h-[120px]"
+              style={{ color: v2.ink }}
+            >
               {rawText || "No transcript available."}
             </div>
           )}
 
-          {/* Mobile action buttons */}
-          <div className="flex md:hidden justify-center items-center mt-6 pt-6 border-t border-slate-700/50">
+          <div
+            className="flex md:hidden justify-center items-center mt-6 pt-6"
+            style={{ borderTop: `1px solid ${v2.rule}` }}
+          >
             <div className="flex gap-4">
               {isSaving && (
                 <div className="flex flex-col items-center gap-1">
-                  <Spinner className="w-5 h-5 text-cyan-500" />
-                  <span className="text-[10px] uppercase tracking-wider font-medium text-gray-400">
+                  <Spinner className="w-5 h-5" style={{ color: v2.accent }} />
+                  <span
+                    className="text-[10px] uppercase tracking-wider font-medium"
+                    style={{ color: v2.inkSoft }}
+                  >
                     Saving
                   </span>
                 </div>
@@ -163,7 +189,8 @@ export function ScribbleEditor({
                 size="sm"
                 onClick={onCopy}
                 disabled={isCopying}
-                className="text-gray-400 hover:text-cyan-500 disabled:opacity-50 flex flex-col items-center gap-1 h-auto py-2"
+                className="disabled:opacity-50 flex flex-col items-center gap-1 h-auto py-2 hover:opacity-80"
+                style={iconBtnStyle}
               >
                 {isCopying ? <Spinner className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                 <span className="text-[10px] uppercase tracking-wider font-medium">Copy</span>
@@ -173,7 +200,8 @@ export function ScribbleEditor({
                 size="sm"
                 onClick={onDownload}
                 disabled={isDownloading}
-                className="text-gray-400 hover:text-cyan-500 disabled:opacity-50 flex flex-col items-center gap-1 h-auto py-2"
+                className="disabled:opacity-50 flex flex-col items-center gap-1 h-auto py-2 hover:opacity-80"
+                style={iconBtnStyle}
               >
                 {isDownloading ? <Spinner className="w-5 h-5" /> : <Download className="w-5 h-5" />}
                 <span className="text-[10px] uppercase tracking-wider font-medium">Download</span>
@@ -184,7 +212,8 @@ export function ScribbleEditor({
                   size="sm"
                   onClick={onShare}
                   disabled={isSharing}
-                  className="text-gray-400 hover:text-cyan-500 disabled:opacity-50 flex flex-col items-center gap-1 h-auto py-2"
+                  className="disabled:opacity-50 flex flex-col items-center gap-1 h-auto py-2 hover:opacity-80"
+                  style={iconBtnStyle}
                 >
                   {isSharing ? <Spinner className="w-5 h-5" /> : <Share2 className="w-5 h-5" />}
                   <span className="text-[10px] uppercase tracking-wider font-medium">Share</span>

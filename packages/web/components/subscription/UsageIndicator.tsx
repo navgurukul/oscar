@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { v2 } from "@/components/v2/V2Primitives";
 
 interface UsageIndicatorProps {
   type: "recordings" | "scribbles" | "vocabulary";
@@ -9,28 +9,39 @@ interface UsageIndicatorProps {
   variant?: "compact" | "full";
 }
 
+const LABEL = {
+  recordings: "Scribble recordings",
+  scribbles: "Scribbles",
+  vocabulary: "vocabulary entries",
+} as const;
+
+const FULL_HEADING = {
+  recordings: "Scribble recordings this month",
+  scribbles: "Total Scribbles",
+  vocabulary: "Vocabulary entries",
+} as const;
+
+const WARN = "#c98a3b";
+const DANGER = "#b3452b";
+
 export function UsageIndicator({
   type,
   current,
   limit,
   variant = "compact",
 }: UsageIndicatorProps) {
-  // Unlimited (pro user)
   if (limit === null) {
     return (
       <div className="flex items-center gap-2">
-        <span className="px-2 py-0.5 text-xs font-medium bg-cyan-500/20 text-cyan-400 rounded-full">
+        <span
+          className="px-2 py-0.5 text-xs font-medium rounded-full"
+          style={{ background: v2.accentSoft, color: v2.accent }}
+        >
           Unlimited
         </span>
         {variant === "full" && (
-          <span className="text-sm text-gray-400">
-            {current}{" "}
-            {type === "recordings"
-              ? "Scribble recordings"
-              : type === "scribbles"
-              ? "Scribbles"
-              : "vocabulary entries"}{" "}
-            {type === "recordings" ? "this month" : "total"}
+          <span className="text-sm" style={{ color: v2.inkSoft }}>
+            {current} {LABEL[type]} {type === "recordings" ? "this month" : "total"}
           </span>
         )}
       </div>
@@ -40,64 +51,49 @@ export function UsageIndicator({
   const percentage = Math.min(100, (current / limit) * 100);
   const remaining = Math.max(0, limit - current);
 
-  // Color based on usage
-  const getColor = () => {
-    if (percentage >= 100) return "bg-red-500";
-    if (percentage >= 80) return "bg-yellow-500";
-    return "bg-cyan-500";
-  };
-
-  const getTextColor = () => {
-    if (percentage >= 100) return "text-red-400";
-    if (percentage >= 80) return "text-yellow-400";
-    return "text-gray-300";
-  };
+  const fillColor = percentage >= 100 ? DANGER : percentage >= 80 ? WARN : v2.accent;
+  const valueColor = percentage >= 100 ? DANGER : percentage >= 80 ? WARN : v2.ink;
 
   if (variant === "compact") {
     return (
       <div className="flex items-center gap-2">
-        <span className={cn("text-sm font-medium", getTextColor())}>
+        <span className="text-sm font-medium" style={{ color: valueColor }}>
           {current} / {limit}
         </span>
-        <div className="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+        <div
+          className="w-16 h-1.5 rounded-full overflow-hidden"
+          style={{ background: v2.rule }}
+        >
           <div
-            className={cn("h-full rounded-full transition-all", getColor())}
-            style={{ width: `${percentage}%` }}
+            className="h-full rounded-full transition-all"
+            style={{ width: `${percentage}%`, background: fillColor }}
           />
         </div>
       </div>
     );
   }
 
-  // Full variant
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-sm">
-        <span className="text-gray-400">
-          {type === "recordings"
-            ? "Scribble recordings this month"
-            : type === "scribbles"
-            ? "Total Scribbles"
-            : "Vocabulary entries"}
-        </span>
-        <span className={cn("font-medium", getTextColor())}>
+        <span style={{ color: v2.inkSoft }}>{FULL_HEADING[type]}</span>
+        <span className="font-medium" style={{ color: valueColor }}>
           {current} / {limit}
         </span>
       </div>
-      <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+      <div
+        className="w-full h-2 rounded-full overflow-hidden"
+        style={{ background: v2.rule }}
+      >
         <div
-          className={cn("h-full rounded-full transition-all", getColor())}
-          style={{ width: `${percentage}%` }}
+          className="h-full rounded-full transition-all"
+          style={{ width: `${percentage}%`, background: fillColor }}
         />
       </div>
-      <p className="text-xs text-gray-500">
+      <p className="text-xs" style={{ color: v2.inkFaint }}>
         {remaining === 0
-          ? `Limit reached. Upgrade to Pro for unlimited ${
-              type === "recordings" ? "Scribble recordings" : type === "scribbles" ? "Scribbles" : type
-            }.`
-          : `${remaining} ${
-              type === "recordings" ? "Scribble recordings" : type === "scribbles" ? "Scribbles" : type
-            } remaining`}
+          ? `Limit reached. Upgrade to Pro for unlimited ${LABEL[type]}.`
+          : `${remaining} ${LABEL[type]} remaining`}
       </p>
     </div>
   );

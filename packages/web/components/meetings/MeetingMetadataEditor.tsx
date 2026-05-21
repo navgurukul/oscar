@@ -6,6 +6,7 @@ import type {
   MeetingTypeHint,
 } from "@oscar/shared/types";
 import { X } from "lucide-react";
+import { v2 } from "@/components/v2/V2Primitives";
 
 const MEETING_TYPES: { value: MeetingTypeHint; label: string }[] = [
   { value: "auto", label: "Meeting" },
@@ -45,7 +46,6 @@ export function MeetingMetadataEditor({
     const raw = newAttendee.trim();
     if (!raw) return;
 
-    // Parse "Name <email>" or plain email
     const match = raw.match(/^(.+?)\s*<(.+?)>$/);
     const attendee: MeetingAttendee = match
       ? { name: match[1].trim(), email: match[2].trim() }
@@ -77,32 +77,39 @@ export function MeetingMetadataEditor({
     }
   }
 
+  const labelStyle = { color: v2.inkFaint, fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase" as const };
+  const inputStyle = {
+    background: v2.cream,
+    border: `1px solid ${v2.rule}`,
+    color: v2.ink,
+  };
+
   return (
-    <div className="p-5 sm:p-6 space-y-4 border-t border-slate-800">
-      {/* Title */}
+    <div className="p-5 sm:p-6 space-y-4" style={{ borderTop: `1px solid ${v2.rule}` }}>
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-slate-500">Title</label>
+        <label className="text-xs font-medium" style={labelStyle}>Title</label>
         <input
           type="text"
           value={editTitle}
           onChange={(e) => setEditTitle(e.target.value)}
-          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all duration-150"
+          className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none transition-all duration-150"
+          style={inputStyle}
         />
       </div>
 
-      {/* Meeting type */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-slate-500">Type</label>
+        <label className="text-xs font-medium" style={labelStyle}>Type</label>
         <div className="flex flex-wrap gap-2">
           {MEETING_TYPES.map((t) => (
             <button
               key={t.value}
               onClick={() => setEditType(t.value)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors duration-150 ${
+              className="px-3 py-1 rounded-full text-xs font-medium transition-colors duration-150"
+              style={
                 editType === t.value
-                  ? "bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/40"
-                  : "bg-slate-800 text-slate-400 hover:text-slate-300"
-              }`}
+                  ? { background: v2.accentSoft, color: v2.accent, border: `1px solid ${v2.accent}` }
+                  : { background: v2.cream2, color: v2.inkSoft, border: `1px solid ${v2.rule}` }
+              }
             >
               {t.label}
             </button>
@@ -110,19 +117,20 @@ export function MeetingMetadataEditor({
         </div>
       </div>
 
-      {/* Attendees */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-slate-500">Attendees</label>
+        <label className="text-xs font-medium" style={labelStyle}>Attendees</label>
         <div className="flex flex-wrap gap-1.5">
           {editAttendees.map((a, i) => (
             <span
               key={i}
-              className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 rounded-full text-xs text-slate-300"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs"
+              style={{ background: v2.cream2, color: v2.ink, border: `1px solid ${v2.rule}` }}
             >
               {a.name || a.email}
               <button
                 onClick={() => removeAttendee(i)}
-                className="text-slate-500 hover:text-red-400 transition-colors"
+                className="transition-colors"
+                style={{ color: v2.inkFaint }}
               >
                 <X size={12} />
               </button>
@@ -136,30 +144,33 @@ export function MeetingMetadataEditor({
             onChange={(e) => setNewAttendee(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addAttendee()}
             placeholder="Add attendee (Name <email>)"
-            className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all duration-150"
+            className="flex-1 rounded-xl px-3 py-1.5 text-xs focus:outline-none transition-all duration-150"
+            style={inputStyle}
           />
           <button
             onClick={addAttendee}
-            className="px-3 py-1.5 text-xs bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors duration-150"
+            className="px-3 py-1.5 text-xs rounded-lg transition-colors duration-150"
+            style={{ background: v2.cream2, color: v2.ink, border: `1px solid ${v2.rule}` }}
           >
             Add
           </button>
         </div>
       </div>
 
-      {/* Actions */}
       <div className="flex gap-2 justify-end pt-2">
         <button
           onClick={onCancel}
           disabled={saving}
-          className="px-3 py-1.5 text-sm text-slate-400 hover:text-white rounded-lg transition-colors duration-150"
+          className="px-3 py-1.5 text-sm rounded-lg transition-colors duration-150"
+          style={{ color: v2.inkSoft }}
         >
           Cancel
         </button>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-4 py-1.5 text-sm bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 disabled:opacity-50 transition-colors duration-150"
+          className="px-4 py-1.5 text-sm rounded-lg disabled:opacity-50 transition-colors duration-150"
+          style={{ background: v2.ink, color: v2.cream }}
         >
           {saving ? "Saving..." : "Save"}
         </button>
