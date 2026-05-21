@@ -177,7 +177,7 @@ export default function DataPrivacySection() {
           {!showClearConfirm ? (
             <div
               className="rounded-lg p-5 flex items-start justify-between gap-6 flex-wrap"
-              style={{ border: "1px solid #d6b3a8" }}
+              style={{ border: `1px solid ${v2.dangerSoft}` }}
             >
               <div>
                 <div
@@ -185,7 +185,7 @@ export default function DataPrivacySection() {
                     fontFamily: v2Serif,
                     fontSize: 20,
                     fontWeight: 500,
-                    color: "#8c2f25",
+                    color: v2.danger,
                   }}
                 >
                   Clear all data
@@ -198,7 +198,7 @@ export default function DataPrivacySection() {
               <button
                 onClick={() => setShowClearConfirm(true)}
                 className="text-[12px] rounded-full px-4 py-2 shrink-0"
-                style={{ color: "#8c2f25", border: "1px solid #d6b3a8" }}
+                style={{ color: v2.danger, border: `1px solid ${v2.dangerSoft}` }}
               >
                 Clear all data
               </button>
@@ -206,9 +206,9 @@ export default function DataPrivacySection() {
           ) : (
             <div
               className="rounded-lg p-5"
-              style={{ background: "rgba(140,47,37,0.05)", border: "1px solid #d6b3a8" }}
+              style={{ background: "rgba(140,47,37,0.05)", border: `1px solid ${v2.dangerSoft}` }}
             >
-              <V2Caps color="#8c2f25">CONFIRM · CANNOT BE UNDONE</V2Caps>
+              <V2Caps color={v2.danger}>CONFIRM · CANNOT BE UNDONE</V2Caps>
               <p className="mt-2 text-[14px]" style={{ color: v2.ink }}>
                 Delete every Scribble and vocabulary entry?
               </p>
@@ -217,7 +217,7 @@ export default function DataPrivacySection() {
                   onClick={handleClearData}
                   disabled={isClearing}
                   className="text-[12px] rounded-full px-4 py-2 disabled:opacity-50"
-                  style={{ background: "#8c2f25", color: v2.cream }}
+                  style={{ background: v2.danger, color: v2.cream }}
                 >
                   {isClearing ? "Clearing…" : "Yes, delete everything"}
                 </button>

@@ -205,7 +205,7 @@ export default function OrgBillingPage() {
                 <button
                   onClick={() => setConfirmCancel(true)}
                   className="text-[12px] rounded-full px-4 py-2"
-                  style={{ border: "1px solid #d6b3a8", color: "#8c2f25" }}
+                  style={{ border: `1px solid ${v2.dangerSoft}`, color: v2.danger }}
                 >
                   Cancel subscription
                 </button>
@@ -239,7 +239,7 @@ export default function OrgBillingPage() {
             {isPro && subscription.status === "cancelled" && (
               <div
                 className="mt-7 rounded-md px-4 py-3 flex items-start gap-2"
-                style={{ background: v2.cream, border: "1px solid #d6b3a8", color: "#8c2f25" }}
+                style={{ background: v2.cream, border: `1px solid ${v2.dangerSoft}`, color: v2.danger }}
               >
                 <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <p className="text-[13px] leading-relaxed">
@@ -296,7 +296,7 @@ export default function OrgBillingPage() {
             className="rounded-2xl w-full max-w-md p-7"
             style={{ background: v2.cream, border: `1px solid ${v2.rule}` }}
           >
-            <V2Caps color="#8c2f25">CANCEL SUBSCRIPTION</V2Caps>
+            <V2Caps color={v2.danger}>CANCEL SUBSCRIPTION</V2Caps>
             <h2
               className="mt-2"
               style={{
@@ -325,7 +325,7 @@ export default function OrgBillingPage() {
                 onClick={() => void cancel()}
                 disabled={cancelling}
                 className="text-[13px] rounded-full px-5 py-2.5 disabled:opacity-50"
-                style={{ border: "1px solid #d6b3a8", color: "#8c2f25" }}
+                style={{ border: `1px solid ${v2.dangerSoft}`, color: v2.danger }}
               >
                 {cancelling ? (
                   <>

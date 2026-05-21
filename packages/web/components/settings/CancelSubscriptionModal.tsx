@@ -56,7 +56,7 @@ export function CancelSubscriptionModal({
         }}
       >
         <div className="px-7 md:px-9 pt-9 pb-9">
-          <V2Caps color="#8c2f25">CANCEL SUBSCRIPTION</V2Caps>
+          <V2Caps color={v2.danger}>CANCEL SUBSCRIPTION</V2Caps>
           <h1
             className="mt-2"
             style={{
@@ -120,7 +120,7 @@ export function CancelSubscriptionModal({
               onClick={onConfirm}
               disabled={isLoading}
               className="text-[13px] rounded-full px-5 py-2.5 disabled:opacity-50"
-              style={{ color: "#8c2f25", border: "1px solid #d6b3a8" }}
+              style={{ color: v2.danger, border: `1px solid ${v2.dangerSoft}` }}
             >
               {isLoading ? (
                 <>

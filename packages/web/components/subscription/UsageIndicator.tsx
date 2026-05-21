@@ -21,8 +21,8 @@ const FULL_HEADING = {
   vocabulary: "Vocabulary entries",
 } as const;
 
-const WARN = "#c98a3b";
-const DANGER = "#b3452b";
+const WARN = v2.accent;
+const DANGER = v2.danger;
 
 export function UsageIndicator({
   type,

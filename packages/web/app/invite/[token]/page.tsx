@@ -162,8 +162,8 @@ export default function InviteAcceptPage({
 
           {status === "error" && (
             <>
-              <V2Caps color="#8c2f25">INVITE COULDN&rsquo;T BE USED</V2Caps>
-              <AlertTriangle className="mt-6" style={{ width: 44, height: 44, color: "#8c2f25" }} />
+              <V2Caps color={v2.danger}>INVITE COULDN&rsquo;T BE USED</V2Caps>
+              <AlertTriangle className="mt-6" style={{ width: 44, height: 44, color: v2.danger }} />
               <h1
                 className="mt-6"
                 style={{

@@ -269,7 +269,7 @@ export default function StreamsPage() {
                         </AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() => void remove(s.id)}
-                          style={{ background: "#8c2f25", color: v2.cream }}
+                          style={{ background: v2.danger, color: v2.cream }}
                         >
                           Delete
                         </AlertDialogAction>

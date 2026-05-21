@@ -187,11 +187,11 @@ export default function AccountSection() {
         style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 24 }}
       >
         <div className="col-span-12 md:col-span-3">
-          <V2Caps color="#8c2f25">DANGER</V2Caps>
+          <V2Caps color={v2.danger}>DANGER</V2Caps>
         </div>
         <div
           className="col-span-12 md:col-span-9 rounded-md p-5 flex items-start justify-between gap-4 flex-wrap"
-          style={{ border: "1px solid #d6b3a8" }}
+          style={{ border: `1px solid ${v2.dangerSoft}` }}
         >
           <div>
             <div
@@ -199,7 +199,7 @@ export default function AccountSection() {
                 fontFamily: v2Serif,
                 fontSize: 20,
                 fontWeight: 500,
-                color: "#8c2f25",
+                color: v2.danger,
               }}
             >
               Delete account
@@ -213,7 +213,7 @@ export default function AccountSection() {
             <AlertDialogTrigger asChild>
               <button
                 className="text-[12px] rounded-full px-4 py-2 inline-flex items-center gap-2 shrink-0"
-                style={{ color: "#8c2f25", border: "1px solid #d6b3a8" }}
+                style={{ color: v2.danger, border: `1px solid ${v2.dangerSoft}` }}
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Delete account
@@ -234,7 +234,7 @@ export default function AccountSection() {
                     gap: 10,
                   }}
                 >
-                  <AlertTriangle style={{ color: "#8c2f25" }} className="w-6 h-6" />
+                  <AlertTriangle style={{ color: v2.danger }} className="w-6 h-6" />
                   Are you absolutely sure?
                 </AlertDialogTitle>
                 <AlertDialogDescription style={{ color: v2.inkSoft }}>
@@ -261,7 +261,7 @@ export default function AccountSection() {
                 <AlertDialogAction
                   onClick={handleDeleteAccount}
                   disabled={isDeleting}
-                  style={{ background: "#8c2f25", color: v2.cream }}
+                  style={{ background: v2.danger, color: v2.cream }}
                 >
                   {isDeleting ? "Deleting…" : "Yes, delete my account"}
                 </AlertDialogAction>

@@ -305,12 +305,12 @@ export default function DocumentViewerPage({
             </div>
 
             <div>
-              <V2Caps color="#8c2f25">DANGER</V2Caps>
+              <V2Caps color={v2.danger}>DANGER</V2Caps>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <button
                     className="mt-2 inline-flex items-center gap-2 text-[12px] rounded-full px-4 py-2"
-                    style={{ border: "1px solid #d6b3a8", color: "#8c2f25" }}
+                    style={{ border: `1px solid ${v2.dangerSoft}`, color: v2.danger }}
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Delete document
                   </button>
@@ -345,7 +345,7 @@ export default function DocumentViewerPage({
                     </AlertDialogCancel>
                     <AlertDialogAction
                       onClick={() => void remove()}
-                      style={{ background: "#8c2f25", color: v2.cream }}
+                      style={{ background: v2.danger, color: v2.cream }}
                     >
                       Delete
                     </AlertDialogAction>

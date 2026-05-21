@@ -188,7 +188,7 @@ export function RecordingControls({
             minHeight: BUTTON_SIZE,
             borderRadius: "50%",
             backgroundColor: isRecording
-              ? "#b3452b"
+              ? "#8c2f25"
               : disabled
               ? "#8b8780"
               : "#b8623d",

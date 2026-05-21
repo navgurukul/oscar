@@ -369,7 +369,7 @@ export default function FolderManagementSection() {
                                 </AlertDialogCancel>
                                 <AlertDialogAction
                                   onClick={() => handleDeleteFolder(folder)}
-                                  style={{ background: "#8c2f25", color: v2.cream }}
+                                  style={{ background: v2.danger, color: v2.cream }}
                                 >
                                   Delete
                                 </AlertDialogAction>

@@ -51,12 +51,12 @@ function PostCallbackContent() {
   if (error) {
     return (
       <div className="text-center max-w-md">
-        <V2Caps color="#8c2f25">02 · DIDN&rsquo;T FINALIZE</V2Caps>
+        <V2Caps color={v2.danger}>02 · DIDN&rsquo;T FINALIZE</V2Caps>
         <svg className="mt-7 mx-auto" width="44" height="44" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="11" stroke="#8c2f25" strokeWidth="1.3" />
+          <circle cx="12" cy="12" r="11" stroke={v2.danger} strokeWidth="1.3" />
           <path
             d="M12 7v6M12 16v0.5"
-            stroke="#8c2f25"
+            stroke={v2.danger}
             strokeWidth="2.4"
             strokeLinecap="round"
           />
@@ -81,7 +81,7 @@ function PostCallbackContent() {
           className="mt-6 rounded-md px-4 py-3"
           style={{ background: v2.cream, border: `1px solid #d6b3a8` }}
         >
-          <V2Caps color="#8c2f25">REPORTED ERROR</V2Caps>
+          <V2Caps color={v2.danger}>REPORTED ERROR</V2Caps>
           <V2Mono style={{ display: "block", fontSize: 12, color: v2.ink, marginTop: 4 }}>
             {error}
           </V2Mono>

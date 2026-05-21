@@ -57,7 +57,7 @@ export function DeleteMeetingDialog({
           <AlertDialogAction
             onClick={onConfirm}
             disabled={isDeleting}
-            style={{ background: "#b3452b", color: v2.cream }}
+            style={{ background: v2.danger, color: v2.cream }}
           >
             {isDeleting ? "Deleting..." : "Delete"}
           </AlertDialogAction>

@@ -21,6 +21,8 @@ export const v2 = {
   ruleHard: "#d8d2c4",
   accent: "#b8623d",
   accentSoft: "#e8c9b8",
+  danger: "#8c2f25",
+  dangerSoft: "#d6b3a8",
   night: "#0f0d0a",
   nightSoft: "#1a1714",
 } as const;

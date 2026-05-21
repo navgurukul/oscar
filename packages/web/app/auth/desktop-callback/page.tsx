@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import { useSearchParams } from "next/navigation";
 import { Spinner } from "@/components/ui/spinner";
 import { createClient } from "@/lib/supabase/client";
+import { v2 } from "@/components/v2/V2Primitives";
 
 function DesktopCallbackContent() {
   const searchParams = useSearchParams();
@@ -217,17 +218,17 @@ function DesktopCallbackContent() {
               fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
               letterSpacing: "0.18em",
               textTransform: "uppercase",
-              color: "#8c2f25",
+              color: v2.danger,
               fontSize: 10,
             }}
           >
             03 · COULDN&rsquo;T HAND OFF
           </span>
           <svg className="mt-6 mx-auto" width="44" height="44" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="11" stroke="#8c2f25" strokeWidth="1.3" />
+            <circle cx="12" cy="12" r="11" stroke={v2.danger} strokeWidth="1.3" />
             <path
               d="M12 7v6M12 16v0.5"
-              stroke="#8c2f25"
+              stroke={v2.danger}
               strokeWidth="2.4"
               strokeLinecap="round"
             />

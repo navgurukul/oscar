@@ -38,7 +38,7 @@ export function CurrentPlanCard({
       ? "CANCELLING"
       : status.toUpperCase();
   const statusColor =
-    status === "active" ? v2.accent : status === "cancelled" ? "#a26d34" : "#8c2f25";
+    status === "active" ? v2.accent : status === "cancelled" ? v2.danger : v2.danger;
 
   return (
     <section
