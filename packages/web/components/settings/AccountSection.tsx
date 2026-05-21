@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { ROUTES } from "@/lib/constants";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +17,24 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { v2, v2Serif, v2Mono, V2Caps } from "@/components/v2/V2Primitives";
+import { v2, v2Serif, v2Mono, V2Caps, V2Mono } from "@/components/v2/V2Primitives";
+
+function describeBrowser(): { device: string; meta: string } {
+  if (typeof navigator === "undefined") return { device: "This browser", meta: "Current session" };
+  const ua = navigator.userAgent;
+  let browser = "Browser";
+  if (/Edg\//.test(ua)) browser = "Edge";
+  else if (/Chrome\//.test(ua) && !/Edg\//.test(ua)) browser = "Chrome";
+  else if (/Firefox\//.test(ua)) browser = "Firefox";
+  else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = "Safari";
+  let platform = "Web";
+  if (/Mac OS X|Macintosh/.test(ua)) platform = "macOS";
+  else if (/Windows/.test(ua)) platform = "Windows";
+  else if (/Linux/.test(ua)) platform = "Linux";
+  else if (/iPhone|iPad/.test(ua)) platform = "iOS";
+  else if (/Android/.test(ua)) platform = "Android";
+  return { device: `${platform} · ${browser}`, meta: "Active now · this device" };
+}
 
 function Row({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -32,9 +51,35 @@ function Row({ label, value }: { label: string; value: string | null | undefined
 }
 
 export default function AccountSection() {
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, signOut } = useAuth();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [device, setDevice] = useState<{ device: string; meta: string }>({
+    device: "This browser",
+    meta: "Current session",
+  });
+
+  useEffect(() => {
+    setDevice(describeBrowser());
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      router.push(ROUTES.HOME);
+      router.refresh();
+    } catch (err) {
+      setIsSigningOut(false);
+      toast({
+        title: "Sign out failed",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    }
+  }, [router, signOut, toast]);
 
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
@@ -93,6 +138,46 @@ export default function AccountSection() {
           <Row label="AUTO-CLEANUP" value="On · Gemini removes filler" />
           <Row label="CONTEXT-AWARE DICTATION" value="On · adapts per active app" />
           <Row label="PROFANITY" value="Filtered" />
+        </div>
+      </section>
+
+      {/* Sessions */}
+      <section
+        className="grid grid-cols-12 gap-6 md:gap-10"
+        style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 24 }}
+      >
+        <div className="col-span-12 md:col-span-3">
+          <V2Caps>SESSIONS</V2Caps>
+        </div>
+        <div className="col-span-12 md:col-span-9">
+          <div
+            className="flex items-center justify-between py-4 gap-4"
+            style={{ borderBottom: `1px solid ${v2.rule}` }}
+          >
+            <div>
+              <div style={{ fontSize: 14, color: v2.ink }}>{device.device}</div>
+              <V2Caps>{device.meta.toUpperCase()}</V2Caps>
+            </div>
+            <div className="flex items-center gap-4">
+              <V2Mono
+                style={{ fontSize: 11, color: v2.accent, letterSpacing: "0.14em" }}
+              >
+                HERE
+              </V2Mono>
+              <button
+                onClick={() => void handleSignOut()}
+                disabled={isSigningOut}
+                className="text-[12px] hover:opacity-80 transition-opacity disabled:opacity-50"
+                style={{ color: v2.inkSoft, fontFamily: v2Mono }}
+              >
+                {isSigningOut ? "Signing out…" : "Sign out"}
+              </button>
+            </div>
+          </div>
+          <p className="mt-3 text-[12px]" style={{ color: v2.inkFaint }}>
+            Signing out clears this browser&rsquo;s session. Your Scribbles and
+            settings stay safe.
+          </p>
         </div>
       </section>
 

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, Suspense, type ReactElement } from "react";
+import { useCallback, useState, useEffect, Suspense, type ReactElement } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
 import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/hooks/use-toast";
 import { ROUTES } from "@/lib/constants";
 import {
   v2,
@@ -110,7 +111,25 @@ const TITLES: Record<Tab, { eyebrow: string; h1: ReactElement; lead: string }> =
 function SettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
+  const { user, signOut, isLoading: authLoading } = useAuth();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleSignOut = useCallback(async () => {
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      router.push(ROUTES.HOME);
+      router.refresh();
+    } catch (err) {
+      setIsSigningOut(false);
+      toast({
+        title: "Sign out failed",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    }
+  }, [router, signOut, toast]);
   const {
     status,
     billingCycle,
@@ -238,6 +257,17 @@ function SettingsContent() {
             {activeTab === "account" && <AccountSection />}
             {activeTab === "folders" && <FolderManagementSection />}
             {activeTab === "privacy" && <DataPrivacySection />}
+          </div>
+
+          <div className="mt-12 md:hidden">
+            <button
+              onClick={() => void handleSignOut()}
+              disabled={isSigningOut}
+              className="w-full rounded-full py-3 text-[13px] transition-opacity hover:opacity-80 disabled:opacity-50"
+              style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+            >
+              {isSigningOut ? "Signing out…" : "Sign out"}
+            </button>
           </div>
         </main>
       </div>
