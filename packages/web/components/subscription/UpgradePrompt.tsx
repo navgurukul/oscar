@@ -30,23 +30,43 @@ export function UpgradePrompt({
     router.push("/pricing");
   };
 
+  const titleMap = {
+    recordings: "Recording limit reached",
+    scribbles: "Scribble limit reached",
+    vocabulary: "Vocabulary limit reached",
+  } as const;
+
+  const unitMap = {
+    recordings: "Scribble recordings this month",
+    scribbles: "Scribble slots",
+    vocabulary: "vocabulary entries",
+  } as const;
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-cyan-700/30 rounded-2xl max-w-md w-full p-6 relative">
-        {/* Close button */}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(15,13,10,0.55)" }}
+    >
+      <div
+        className="rounded-2xl max-w-md w-full p-7 relative"
+        style={{ background: "#f7f4ee", border: "1px solid #e5e0d6", color: "#1a1816" }}
+      >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+          className="absolute top-4 right-4 transition-colors"
+          style={{ color: "#8b8780" }}
         >
           <X className="w-5 h-5" />
         </button>
 
-        {/* Content */}
         <div className="text-center space-y-4">
-          {/* Icon */}
-          <div className="w-16 h-16 mx-auto bg-cyan-500/20 rounded-full flex items-center justify-center">
+          <div
+            className="w-16 h-16 mx-auto rounded-full flex items-center justify-center"
+            style={{ background: "rgba(184,98,61,0.12)" }}
+          >
             <svg
-              className="w-8 h-8 text-cyan-400"
+              className="w-8 h-8"
+              style={{ color: "#b8623d" }}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -60,81 +80,92 @@ export function UpgradePrompt({
             </svg>
           </div>
 
-          {/* Title */}
-          <h2 className="text-xl font-bold text-white">
-            {limitType === "recordings"
-              ? "Scribble Recording Limit Reached"
-              : limitType === "scribbles"
-              ? "Scribble Limit Reached"
-              : "Vocabulary Limit Reached"}
+          <h2
+            style={{
+              fontFamily: '"EB Garamond", Georgia, serif',
+              fontSize: 28,
+              fontWeight: 500,
+              letterSpacing: "-0.015em",
+              color: "#1a1816",
+            }}
+          >
+            {titleMap[limitType]}
           </h2>
 
-          {/* Description */}
-          <p className="text-gray-400">
-            You&apos;ve used all{" "}
-            <span className="text-white font-medium">{limit}</span>{" "}
-            {limitType === "recordings"
-              ? "Scribble recordings this month"
-              : limitType === "scribbles"
-              ? "Scribble slots"
-              : "vocabulary entries"}
-            . Upgrade to Pro for unlimited {limitType}.
+          <p className="text-sm" style={{ color: "#5a5852" }}>
+            You&rsquo;ve used all <span style={{ color: "#1a1816", fontWeight: 500 }}>{limit}</span>{" "}
+            {unitMap[limitType]}. Upgrade to Pro for unlimited {limitType}.
           </p>
 
-          {/* Usage indicator */}
-          <div className="bg-slate-800 rounded-lg p-4">
+          <div
+            className="rounded-lg p-4"
+            style={{ background: "#efeae0", border: "1px solid #e5e0d6" }}
+          >
             <div className="flex items-center justify-between text-sm mb-2">
-              <span className="text-gray-400">Current usage</span>
-              <span className="text-red-400 font-medium">
+              <span style={{ color: "#5a5852" }}>Current usage</span>
+              <span style={{ color: "#b8623d", fontWeight: 500 }}>
                 {currentUsage} / {limit}
               </span>
             </div>
-            <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-              <div className="h-full bg-red-500 rounded-full w-full" />
+            <div
+              className="w-full h-1.5 rounded-full overflow-hidden"
+              style={{ background: "#e5e0d6" }}
+            >
+              <div className="h-full w-full" style={{ background: "#b8623d" }} />
             </div>
           </div>
 
-          {/* Pro benefits */}
-          <div className="text-left bg-slate-800/50 rounded-lg p-4 space-y-2">
-            <p className="text-sm font-medium text-cyan-400">
-              With Pro you get:
+          <div
+            className="text-left rounded-lg p-4 space-y-2"
+            style={{ background: "#efeae0", border: "1px solid #e5e0d6" }}
+          >
+            <p
+              className="text-xs"
+              style={{
+                fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: "#b8623d",
+                fontSize: 10,
+                fontWeight: 600,
+              }}
+            >
+              WITH PRO YOU GET
             </p>
-            <ul className="text-sm text-gray-300 space-y-1">
-              <li className="flex items-center gap-2">
-                <span className="text-cyan-400">✓</span> Unlimited Scribble recordings
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-cyan-400">✓</span> Unlimited Scribbles
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-cyan-400">✓</span> Unlimited vocabulary entries
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-cyan-400">✓</span> Priority AI processing
-              </li>
+            <ul className="text-sm space-y-1" style={{ color: "#1a1816" }}>
+              {[
+                "Unlimited Scribble recordings",
+                "Unlimited Scribbles",
+                "Unlimited vocabulary entries",
+                "Priority AI processing",
+              ].map((line) => (
+                <li key={line} className="flex items-center gap-2">
+                  <span style={{ color: "#b8623d" }}>✓</span> {line}
+                </li>
+              ))}
             </ul>
           </div>
 
-          {/* Price */}
-          <p className="text-gray-400 text-sm">
-            Starting at just{" "}
-            <span className="text-white font-medium">
+          <p className="text-sm" style={{ color: "#5a5852" }}>
+            Starting at{" "}
+            <span style={{ color: "#1a1816", fontWeight: 500 }}>
               ₹{PRICING.MONTHLY}/month (~${PRICING_USD.MONTHLY}/month)
             </span>
           </p>
 
-          {/* Actions */}
           <div className="flex gap-3 pt-2">
             <Button
               variant="outline"
               onClick={onClose}
-              className="flex-1 border-gray-700 text-gray-300 hover:bg-gray-800"
+              className="flex-1"
+              style={{ background: "transparent", border: "1px solid #e5e0d6", color: "#5a5852" }}
             >
-              Maybe Later
+              Maybe later
             </Button>
             <Button
               onClick={handleUpgrade}
-              className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white"
+              className="flex-1"
+              style={{ background: "#1a1816", color: "#f7f4ee" }}
             >
               Upgrade to Pro
             </Button>

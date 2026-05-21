@@ -3,13 +3,11 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Download, Trash2, Save, Tag as TagIcon } from "lucide-react";
+import { Download, Trash2, Save, Tag as TagIcon } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +24,24 @@ import { documentsService } from "@/lib/services/documents.service";
 import { ROUTES } from "@/lib/constants";
 import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { OrgDocumentWithDownload } from "@oscar/shared/types";
+import {
+  v2,
+  v2Serif,
+  V2Caps,
+  V2Mono,
+  V2Avatar,
+  V2TeamHeader,
+} from "@/components/v2/V2Primitives";
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export default function DocumentViewerPage({
   params,
@@ -113,139 +129,248 @@ export default function DocumentViewerPage({
 
   if (!isOrgFeatureEnabled()) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <p className="text-gray-400">Document library requires the organization feature flag.</p>
+      <main
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: v2.cream, color: v2.ink }}
+      >
+        <p style={{ color: v2.inkSoft }}>
+          Document library requires the organization feature flag.
+        </p>
       </main>
     );
   }
 
   if (authLoading || loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <Spinner className="text-cyan-500" />
+      <main
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: v2.cream }}
+      >
+        <Spinner />
       </main>
     );
   }
 
   if (!doc) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-4 gap-3">
-        <p className="text-gray-300">Document not found.</p>
-        <Link href="/team/docs" className="text-cyan-400 hover:text-cyan-300">
+      <main
+        className="min-h-screen flex flex-col items-center justify-center px-4 gap-3"
+        style={{ background: v2.cream, color: v2.ink }}
+      >
+        <p style={{ color: v2.inkSoft }}>Document not found.</p>
+        <Link href="/team/docs" style={{ color: v2.accent }}>
           ← Back to documents
         </Link>
       </main>
     );
   }
 
+  const wordCount = (doc.extracted_text ?? "").trim().split(/\s+/).filter(Boolean).length;
+  const minutes = Math.max(1, Math.round(wordCount / 220));
+
   return (
-    <main className="min-h-screen px-4 pt-28 pb-24 max-w-3xl mx-auto">
-      <Link
-        href="/team/docs"
-        className="inline-flex items-center text-sm text-slate-400 hover:text-cyan-300 mb-4"
-      >
-        <ArrowLeft className="w-4 h-4 mr-1" /> All documents
-      </Link>
+    <main
+      style={{
+        background: v2.cream,
+        color: v2.ink,
+        minHeight: "100vh",
+        fontFamily: "var(--font-figtree), system-ui",
+      }}
+    >
+      <V2TeamHeader active="DOCS" />
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-5">
-        <div className="space-y-3">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="text-xl font-semibold text-white bg-transparent border-slate-800"
-          />
-          <div className="flex items-center gap-3 text-xs text-slate-500">
-            <span>{doc.mime_type ?? "Unknown type"}</span>
-            <span>{new Date(doc.created_at).toLocaleString()}</span>
-            {doc.download_url && (
-              <a
-                href={doc.download_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center text-cyan-400 hover:text-cyan-300"
+      <article className="mx-auto px-6 md:px-14 py-10 md:py-14" style={{ maxWidth: 1080 }}>
+        <Link href="/team/docs">
+          <V2Caps>← BACK TO DOCS · WORKSPACE</V2Caps>
+        </Link>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => void saveMeta()}
+          className="mt-3 w-full bg-transparent outline-none"
+          style={{
+            fontFamily: v2Serif,
+            fontSize: "clamp(40px, 7vw, 64px)",
+            lineHeight: 0.96,
+            letterSpacing: "-0.025em",
+            fontWeight: 500,
+            color: v2.ink,
+          }}
+        />
+
+        <div className="mt-5 flex items-center gap-4 md:gap-6 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <V2Avatar size={26} initial="W" />
+            <span style={{ fontSize: 13, color: v2.ink }}>Workspace doc</span>
+          </div>
+          <V2Caps>
+            POSTED {formatDate(doc.created_at).toUpperCase()} ·{" "}
+            {wordCount > 0 ? `${wordCount} WORDS · ${minutes} MIN READ` : (doc.mime_type ?? "DOCUMENT")}
+          </V2Caps>
+          {doc.download_url && (
+            <a
+              href={doc.download_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto inline-flex items-center gap-1.5 text-[12px] rounded-full px-3.5 py-1.5"
+              style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+            >
+              <Download className="w-3 h-3" /> Original
+            </a>
+          )}
+        </div>
+
+        <div className="mt-12 grid grid-cols-12 gap-8 md:gap-10">
+          <div className="col-span-12 lg:col-span-8">
+            {doc.summary && (
+              <p
+                style={{
+                  fontFamily: v2Serif,
+                  fontSize: 24,
+                  lineHeight: 1.45,
+                  color: v2.ink,
+                  letterSpacing: "-0.005em",
+                }}
               >
-                <Download className="w-3 h-3 mr-1" /> original
-              </a>
+                {doc.summary}
+              </p>
             )}
+
+            <div className="mt-10">
+              <V2Caps>EXTRACTED TEXT</V2Caps>
+              <Textarea
+                readOnly
+                value={doc.extracted_text ?? "(empty)"}
+                className="mt-3 text-sm font-mono"
+                style={{
+                  background: v2.cream2,
+                  border: `1px solid ${v2.rule}`,
+                  color: v2.ink,
+                  minHeight: 360,
+                }}
+              />
+            </div>
           </div>
+
+          <aside
+            className="col-span-12 lg:col-span-4 space-y-8"
+            style={{ borderLeft: `1px solid ${v2.rule}`, paddingLeft: 24 }}
+          >
+            <div>
+              <V2Caps>TAGS</V2Caps>
+              <div className="mt-2 flex items-center gap-2">
+                <Input
+                  value={tagsInput}
+                  onChange={(e) => setTagsInput(e.target.value)}
+                  placeholder="design, onboarding, api…"
+                  className="text-sm flex-1"
+                  style={{
+                    background: v2.cream2,
+                    border: `1px solid ${v2.rule}`,
+                    color: v2.ink,
+                  }}
+                />
+                <button
+                  onClick={() => void saveMeta()}
+                  disabled={savingMeta}
+                  className="rounded-full p-2 disabled:opacity-50"
+                  style={{ color: v2.accent }}
+                  title="Save tags"
+                >
+                  <Save className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {doc.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px]"
+                    style={{ border: `1px solid ${v2.rule}`, color: v2.accent }}
+                  >
+                    <TagIcon className="w-3 h-3" /> {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <V2Caps>METADATA</V2Caps>
+              <div className="mt-3 space-y-2 text-[13px]" style={{ color: v2.inkSoft }}>
+                <div className="flex justify-between">
+                  <span>Created</span>
+                  <V2Mono style={{ fontSize: 11, color: v2.ink }}>
+                    {formatDate(doc.created_at)}
+                  </V2Mono>
+                </div>
+                {doc.mime_type && (
+                  <div className="flex justify-between">
+                    <span>Type</span>
+                    <V2Mono style={{ fontSize: 11, color: v2.ink }}>{doc.mime_type}</V2Mono>
+                  </div>
+                )}
+                {doc.size_bytes && (
+                  <div className="flex justify-between">
+                    <span>Size</span>
+                    <V2Mono style={{ fontSize: 11, color: v2.ink }}>
+                      {(doc.size_bytes / 1024).toFixed(0)} KB
+                    </V2Mono>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <V2Caps color="#8c2f25">DANGER</V2Caps>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button
+                    className="mt-2 inline-flex items-center gap-2 text-[12px] rounded-full px-4 py-2"
+                    style={{ border: "1px solid #d6b3a8", color: "#8c2f25" }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete document
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent
+                  style={{
+                    background: v2.cream,
+                    border: `1px solid ${v2.rule}`,
+                    color: v2.ink,
+                  }}
+                >
+                  <AlertDialogHeader>
+                    <AlertDialogTitle
+                      style={{
+                        fontFamily: v2Serif,
+                        fontSize: 24,
+                        fontWeight: 500,
+                        letterSpacing: "-0.01em",
+                      }}
+                    >
+                      Delete this document?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription style={{ color: v2.inkSoft }}>
+                      It will be removed from the workspace immediately. This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel
+                      style={{ background: "transparent", border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                    >
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => void remove()}
+                      style={{ background: "#8c2f25", color: v2.cream }}
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </aside>
         </div>
-
-        {doc.summary && (
-          <div className="rounded-xl border border-cyan-700/30 bg-cyan-500/5 p-4 text-slate-200 text-sm">
-            <p className="text-cyan-300 text-xs uppercase tracking-wide mb-1">Summary</p>
-            <p>{doc.summary}</p>
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Tags</p>
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="design, onboarding, api..."
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
-              className="bg-slate-800 border-slate-700 text-white text-sm"
-            />
-            <Button
-              onClick={saveMeta}
-              disabled={savingMeta}
-              className="bg-cyan-500 hover:bg-cyan-600 text-white"
-            >
-              <Save className="w-4 h-4 mr-2" /> Save
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {doc.tags.map((tag) => (
-              <Badge
-                key={tag}
-                variant="outline"
-                className="border-cyan-700/40 text-cyan-300"
-              >
-                <TagIcon className="w-3 h-3 mr-1" /> {tag}
-              </Badge>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Extracted text</p>
-          <Textarea
-            readOnly
-            value={doc.extracted_text ?? "(empty)"}
-            className="bg-slate-950 border-slate-800 text-slate-200 text-sm font-mono min-h-[320px]"
-          />
-        </div>
-
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="ghost"
-              className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-            >
-              <Trash2 className="w-4 h-4 mr-2" /> Delete document
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent className="bg-slate-900 border-slate-800 text-white">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this document?</AlertDialogTitle>
-              <AlertDialogDescription className="text-slate-400">
-                It will be removed from the workspace immediately. This cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel className="bg-slate-800 text-white border-slate-700">
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => void remove()}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
+      </article>
     </main>
   );
 }

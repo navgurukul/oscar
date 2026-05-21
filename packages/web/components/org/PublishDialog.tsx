@@ -132,7 +132,8 @@ export function PublishDialog({ scribbleId, scribbleTitle, shared, bodyOverride 
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <button
-          className="p-2 rounded-lg text-cyan-400 hover:bg-cyan-400/10 transition-all duration-300"
+          className="p-2 rounded-full transition-all duration-200"
+          style={{ color: "#b8623d" }}
           aria-label="Publish to workspace"
         >
           <Sparkles className="w-4 h-4" />
@@ -140,26 +141,48 @@ export function PublishDialog({ scribbleId, scribbleTitle, shared, bodyOverride 
       </SheetTrigger>
       <SheetContent
         side="right"
-        className="bg-slate-950 border-l border-slate-800 text-white w-full sm:max-w-xl overflow-y-auto"
+        className="w-full sm:max-w-xl overflow-y-auto"
+        style={{ background: "#f7f4ee", borderLeft: "1px solid #e5e0d6", color: "#1a1816" }}
       >
         <SheetHeader>
-          <SheetTitle className="text-white flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-cyan-400" />
+          <SheetTitle
+            className="flex items-center gap-2"
+            style={{
+              fontFamily: '"EB Garamond", Georgia, serif',
+              fontSize: 24,
+              fontWeight: 500,
+              letterSpacing: "-0.01em",
+              color: "#1a1816",
+            }}
+          >
+            <Sparkles className="w-5 h-5" style={{ color: "#b8623d" }} />
             Publish to workspace
           </SheetTitle>
-          <SheetDescription className="text-slate-400">
-            Polish this scribble into a long-form draft. Anchor on workspace documents to keep claims grounded.
+          <SheetDescription style={{ color: "#5a5852" }}>
+            Polish this Scribble into a long-form draft. Anchor on workspace documents to keep claims grounded.
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-5 mt-5">
           <div className="space-y-2">
-            <Label className="text-gray-300">Tone</Label>
+            <Label
+              style={{
+                fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: "#8b8780",
+                fontSize: 10,
+              }}
+            >
+              TONE
+            </Label>
             <Select value={tone} onValueChange={(v) => setTone(v as Tone)}>
-              <SelectTrigger className="bg-slate-900 border-slate-800 text-white">
+              <SelectTrigger
+                style={{ background: "#efeae0", border: "1px solid #e5e0d6", color: "#1a1816" }}
+              >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
+              <SelectContent style={{ background: "#f7f4ee", border: "1px solid #e5e0d6", color: "#1a1816" }}>
                 <SelectItem value="neutral">Neutral</SelectItem>
                 <SelectItem value="concise">Concise</SelectItem>
                 <SelectItem value="executive">Executive</SelectItem>
@@ -170,13 +193,26 @@ export function PublishDialog({ scribbleId, scribbleTitle, shared, bodyOverride 
           </div>
 
           <div className="space-y-2">
-            <Label className="text-gray-300">Anchor documents (optional)</Label>
+            <Label
+              style={{
+                fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: "#8b8780",
+                fontSize: 10,
+              }}
+            >
+              ANCHOR DOCUMENTS (OPTIONAL)
+            </Label>
             {docOptions.length === 0 ? (
-              <p className="text-slate-500 text-xs">
+              <p className="text-xs" style={{ color: "#8b8780" }}>
                 No documents in your workspace yet. Add one in the Documents tab.
               </p>
             ) : (
-              <ul className="max-h-48 overflow-y-auto rounded-lg border border-slate-800 bg-slate-900">
+              <ul
+                className="max-h-48 overflow-y-auto rounded-lg"
+                style={{ background: "#efeae0", border: "1px solid #e5e0d6" }}
+              >
                 {docOptions.map((d) => {
                   const checked = selectedIds.includes(d.id);
                   return (
@@ -184,25 +220,31 @@ export function PublishDialog({ scribbleId, scribbleTitle, shared, bodyOverride 
                       <button
                         type="button"
                         onClick={() => toggleDoc(d.id)}
-                        className={`w-full text-left px-3 py-2 flex items-center justify-between gap-3 hover:bg-slate-800 transition-colors ${
-                          checked ? "bg-cyan-500/10" : ""
-                        }`}
+                        className="w-full text-left px-3 py-2 flex items-center justify-between gap-3 transition-colors"
+                        style={{
+                          background: checked ? "rgba(184,98,61,0.10)" : "transparent",
+                          color: "#1a1816",
+                        }}
                       >
                         <span className="flex items-center gap-2 min-w-0">
-                          <FileText className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                          <span className="text-sm text-white truncate">{d.title}</span>
+                          <FileText
+                            className="w-4 h-4 flex-shrink-0"
+                            style={{ color: "#b8623d" }}
+                          />
+                          <span className="text-sm truncate">{d.title}</span>
                         </span>
                         <span className="flex items-center gap-2 flex-shrink-0">
                           {d.tags.slice(0, 2).map((t) => (
                             <Badge
                               key={t}
                               variant="outline"
-                              className="border-cyan-700/30 text-cyan-300 text-[10px] py-0"
+                              className="text-[10px] py-0"
+                              style={{ border: "1px solid #b8623d", color: "#b8623d" }}
                             >
                               {t}
                             </Badge>
                           ))}
-                          {checked && <Check className="w-4 h-4 text-cyan-400" />}
+                          {checked && <Check className="w-4 h-4" style={{ color: "#b8623d" }} />}
                         </span>
                       </button>
                     </li>
@@ -215,7 +257,8 @@ export function PublishDialog({ scribbleId, scribbleTitle, shared, bodyOverride 
           <Button
             onClick={() => void generate()}
             disabled={busy}
-            className="w-full bg-cyan-500 hover:bg-cyan-600 text-white"
+            className="w-full"
+            style={{ background: "#1a1816", color: "#f7f4ee" }}
           >
             {busy ? (
               <>
@@ -230,17 +273,28 @@ export function PublishDialog({ scribbleId, scribbleTitle, shared, bodyOverride 
 
           {output && (
             <div className="space-y-3">
-              <Label className="text-gray-300">Draft (Markdown)</Label>
+              <Label
+                style={{
+                  fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                  color: "#8b8780",
+                  fontSize: 10,
+                }}
+              >
+                DRAFT (MARKDOWN)
+              </Label>
               <Textarea
                 value={output}
                 onChange={(e) => setOutput(e.target.value)}
-                className="bg-slate-900 border-slate-800 text-slate-100 font-mono text-sm min-h-[260px]"
+                className="font-mono text-sm min-h-[260px]"
+                style={{ background: "#efeae0", border: "1px solid #e5e0d6", color: "#1a1816" }}
               />
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   onClick={() => void copy()}
-                  className="border-cyan-700/40 text-gray-200 hover:bg-slate-800"
+                  style={{ background: "transparent", border: "1px solid #e5e0d6", color: "#5a5852" }}
                 >
                   {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
                   Copy
@@ -248,7 +302,7 @@ export function PublishDialog({ scribbleId, scribbleTitle, shared, bodyOverride 
                 <Button
                   variant="outline"
                   onClick={download}
-                  className="border-cyan-700/40 text-gray-200 hover:bg-slate-800"
+                  style={{ background: "transparent", border: "1px solid #e5e0d6", color: "#5a5852" }}
                 >
                   <Download className="w-4 h-4 mr-2" /> Download .md
                 </Button>

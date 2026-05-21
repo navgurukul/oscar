@@ -13,6 +13,8 @@ body {
   font-size: var(--font-size-base, 16px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: #f7f4ee;
+  color: #1a1816;
 }
 
 /* Define actual font families */
@@ -47,11 +49,11 @@ html.text-size-lg {
   }
 
   ::selection {
-    background-color: #a5f3fc; /* cyan-200 */
-    color: #111827; /* gray-900 */
+    background-color: #e8c9b8; /* accentSoft */
+    color: #1a1816; /* ink */
   }
 
-  /* Custom Scrollbar Styling - Cyan Theme */
+  /* Custom Scrollbar Styling — terracotta on cream */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -62,18 +64,17 @@ html.text-size-lg {
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(6, 182, 212, 0); /* Hidden by default */
+    background: rgba(184, 98, 61, 0);
     border-radius: 4px;
     transition: background-color 0.2s ease;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(6, 182, 212, 0.8); /* Show on hover */
+    background: rgba(184, 98, 61, 0.7);
   }
 
-  /* Show scrollbar when scrolling */
   ::-webkit-scrollbar-thumb:active {
-    background: rgba(6, 182, 212, 0.8);
+    background: rgba(184, 98, 61, 0.8);
   }
 
   /* Firefox Scrollbar - Hide by default */
@@ -83,7 +84,7 @@ html.text-size-lg {
   }
 
   textarea:hover {
-    scrollbar-color: rgba(6, 182, 212, 0.5) transparent;
+    scrollbar-color: rgba(184, 98, 61, 0.5) transparent;
   }
 
   /* Folder tabs container - Custom cyan scrollbar */

@@ -1,9 +1,7 @@
 "use client";
 
-import { Crown, CreditCard, Calendar } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { PRICING } from "@/lib/constants";
+import { v2, v2Serif, V2Caps, V2Mono } from "@/components/v2/V2Primitives";
 
 type SubscriptionStatus = "active" | "cancelled" | "expired" | "past_due";
 
@@ -17,7 +15,7 @@ interface CurrentPlanCardProps {
 }
 
 function formatDate(dateString: string | null) {
-  if (!dateString) return "N/A";
+  if (!dateString) return "—";
   return new Date(dateString).toLocaleDateString("en-IN", {
     year: "numeric",
     month: "long",
@@ -33,100 +31,96 @@ export function CurrentPlanCard({
   onCancelClick,
   onUpgradeClick,
 }: CurrentPlanCardProps) {
+  const statusLabel =
+    status === "active"
+      ? "ACTIVE"
+      : status === "cancelled"
+      ? "CANCELLING"
+      : status.toUpperCase();
+  const statusColor =
+    status === "active" ? v2.accent : status === "cancelled" ? "#a26d34" : "#8c2f25";
+
   return (
-    <Card className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                isProUser ? "bg-cyan-500/20" : "bg-gray-800"
-              }`}
-            >
-              <Crown
-                className={`w-6 h-6 ${
-                  isProUser ? "text-cyan-400" : "text-gray-400"
-                }`}
-              />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">
-                {isProUser ? "Pro Plan" : "Free Plan"}
-              </h2>
-              <p className="text-gray-400 text-sm">
+    <section
+      className="grid grid-cols-12 gap-6 md:gap-10"
+      style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 24 }}
+    >
+      <div className="col-span-12 md:col-span-3">
+        <V2Caps>CURRENT PLAN</V2Caps>
+      </div>
+      <div
+        className="col-span-12 md:col-span-9 rounded-lg p-7"
+        style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+      >
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <V2Caps color={isProUser ? v2.accent : v2.inkFaint}>
+              {isProUser ? `PRO · ${(billingCycle ?? "monthly").toUpperCase()}` : "FREE"}
+            </V2Caps>
+            <div className="mt-2 flex items-baseline gap-3 flex-wrap">
+              <span
+                style={{
+                  fontFamily: v2Serif,
+                  fontSize: 48,
+                  fontWeight: 500,
+                  letterSpacing: "-0.025em",
+                }}
+              >
                 {isProUser
-                  ? `₹${
-                      billingCycle === "monthly"
-                        ? PRICING.MONTHLY
-                        : PRICING.YEARLY
-                    }/${billingCycle === "monthly" ? "month" : "year"}`
-                  : "No payment required"}
+                  ? `₹${billingCycle === "monthly" ? PRICING.MONTHLY : PRICING.YEARLY}`
+                  : "₹0"}
+              </span>
+              <span style={{ fontSize: 13, color: v2.inkSoft }}>
+                {isProUser
+                  ? `per ${billingCycle === "monthly" ? "month" : "year"}`
+                  : "forever"}
+              </span>
+            </div>
+            {isProUser ? (
+              <p className="mt-3 text-[13px]" style={{ color: v2.inkSoft }}>
+                {status === "cancelled" ? "Access until" : "Next billing date"} ·{" "}
+                <span style={{ color: v2.ink }}>{formatDate(currentPeriodEnd)}</span>
               </p>
-            </div>
-          </div>
-          {isProUser ? (
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                status === "active"
-                  ? "bg-green-500/20 text-cyan-400"
-                  : status === "cancelled"
-                  ? "bg-yellow-500/20 text-yellow-400"
-                  : "bg-red-500/20 text-red-400"
-              }`}
-            >
-              {status === "active"
-                ? "Active"
-                : status === "cancelled"
-                ? "Cancelling"
-                : status.charAt(0).toUpperCase() + status.slice(1)}
-            </span>
-          ) : (
-            <Button
-              onClick={onUpgradeClick}
-              className="bg-cyan-500 hover:bg-cyan-600 text-white self-center"
-            >
-              Upgrade to Pro
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      {isProUser && (
-        <CardContent>
-          {/* Subscription Details */}
-          <div className="space-y-3 mb-6 pb-6 border-b border-gray-800">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400 flex items-center gap-2">
-                <CreditCard className="w-4 h-4" />
-                Billing cycle
-              </span>
-              <span className="text-white">
-                {billingCycle === "monthly" ? "Monthly" : "Yearly"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400 flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                {status === "cancelled" ? "Access until" : "Next billing date"}
-              </span>
-              <span className="text-white">{formatDate(currentPeriodEnd)}</span>
-            </div>
+            ) : (
+              <p className="mt-3 text-[13px]" style={{ color: v2.inkSoft, maxWidth: 400 }}>
+                Enough to feel the difference. Upgrade for unlimited.
+              </p>
+            )}
           </div>
 
-          {/* Actions */}
-          {status !== "cancelled" && (
-            <div className="text-end">
-              <Button
-                variant="outline"
-                onClick={onCancelClick}
-                size="sm"
-                // className="border-cyan-700 text-gray-300 hover:bg-gray-800"
+          <div className="flex items-center gap-3 flex-wrap">
+            {isProUser ? (
+              <V2Caps color={statusColor}>{statusLabel}</V2Caps>
+            ) : (
+              <button
+                onClick={onUpgradeClick}
+                className="text-[12px] rounded-full px-4 py-2 font-medium"
+                style={{ background: v2.ink, color: v2.cream }}
               >
-                Cancel Subscription
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      )}
-    </Card>
+                Upgrade to Pro
+              </button>
+            )}
+          </div>
+        </div>
+
+        {isProUser && status !== "cancelled" && (
+          <div
+            className="mt-7 pt-5 flex items-center justify-between flex-wrap gap-3"
+            style={{ borderTop: `1px solid ${v2.rule}` }}
+          >
+            <V2Mono style={{ fontSize: 11, color: v2.inkFaint }}>
+              Renews automatically — cancel anytime.
+            </V2Mono>
+            <button
+              onClick={onCancelClick}
+              className="text-[12px] rounded-full px-4 py-2"
+              style={{ border: "1px solid #d6b3a8", color: "#8c2f25" }}
+            >
+              Cancel subscription
+            </button>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

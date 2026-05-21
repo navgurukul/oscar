@@ -3,20 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileText, Mic, Users, Filter } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants";
 import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { Organization } from "@oscar/shared/types";
+import {
+  v2,
+  v2Serif,
+  V2Caps,
+  V2Mono,
+  V2TeamHeader,
+} from "@/components/v2/V2Primitives";
 
 type FeedKind = "scribble" | "meeting";
 
@@ -32,11 +30,13 @@ interface FeedItem {
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return new Date(iso)
+    .toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    })
+    .toUpperCase();
 }
 
 export default function TeamFeedPage() {
@@ -98,108 +98,220 @@ export default function TeamFeedPage() {
 
   if (!isOrgFeatureEnabled()) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <p className="text-gray-400">Team feed requires the organization feature flag.</p>
+      <main
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: v2.cream, color: v2.ink }}
+      >
+        <p style={{ color: v2.inkSoft }}>Team feed requires the organization feature flag.</p>
       </main>
     );
   }
 
   if (authLoading || loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <Spinner className="text-cyan-500" />
+      <main
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: v2.cream }}
+      >
+        <Spinner />
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen px-4 pt-28 pb-24 max-w-3xl mx-auto">
-      <header className="mb-6 space-y-1">
-        <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-          <Users className="w-7 h-7 text-cyan-400" />
-          Team feed
-        </h1>
-        <p className="text-slate-400 text-sm">
-          {organization
-            ? `Scribbles and meetings shared with ${organization.name}.`
-            : "Join a workspace to see shared content."}
-        </p>
-      </header>
+    <main
+      style={{
+        background: v2.cream,
+        color: v2.ink,
+        minHeight: "100vh",
+        fontFamily: "var(--font-figtree), system-ui",
+      }}
+    >
+      <V2TeamHeader active="FEED" org={organization?.name || "Workspace"} />
 
-      <div className="mb-5 flex flex-col sm:flex-row gap-3">
-        <Input
-          placeholder="Search the feed..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="bg-slate-900 border-slate-800 text-white"
-        />
-        <Select value={kindFilter} onValueChange={(v) => setKindFilter(v as FeedKind | "all")}>
-          <SelectTrigger className="w-full sm:w-36 bg-slate-900 border-slate-800 text-white">
-            <Filter className="w-4 h-4 mr-2 text-cyan-400" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
-            <SelectItem value="all">All types</SelectItem>
-            <SelectItem value="scribble">Scribbles</SelectItem>
-            <SelectItem value="meeting">Meetings</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={authorFilter} onValueChange={setAuthorFilter}>
-          <SelectTrigger className="w-full sm:w-48 bg-slate-900 border-slate-800 text-white">
-            <SelectValue placeholder="All authors" />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
-            <SelectItem value="all">All authors</SelectItem>
-            {authors.map(([id, label]) => (
-              <SelectItem key={id} value={id}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <div className="grid grid-cols-12 gap-6 md:gap-10 px-6 md:px-14 py-10 md:py-14">
+        <aside className="col-span-12 md:col-span-3">
+          <V2Caps>WORKSPACE</V2Caps>
+          <div className="mt-4 space-y-3 text-[13px]">
+            <button
+              onClick={() => setKindFilter("all")}
+              className="w-full flex items-center justify-between"
+              style={{
+                color: kindFilter === "all" ? v2.ink : v2.inkSoft,
+                fontWeight: kindFilter === "all" ? 500 : 400,
+              }}
+            >
+              <span>{kindFilter === "all" ? "→ " : ""}Feed</span>
+              <V2Mono style={{ fontSize: 11, color: v2.inkFaint }}>{items.length}</V2Mono>
+            </button>
+            <button
+              onClick={() => setKindFilter("scribble")}
+              className="w-full flex items-center justify-between"
+              style={{
+                color: kindFilter === "scribble" ? v2.ink : v2.inkSoft,
+                fontWeight: kindFilter === "scribble" ? 500 : 400,
+              }}
+            >
+              <span>{kindFilter === "scribble" ? "→ " : ""}Scribbles</span>
+              <V2Mono style={{ fontSize: 11, color: v2.inkFaint }}>
+                {items.filter((i) => i.kind === "scribble").length}
+              </V2Mono>
+            </button>
+            <button
+              onClick={() => setKindFilter("meeting")}
+              className="w-full flex items-center justify-between"
+              style={{
+                color: kindFilter === "meeting" ? v2.ink : v2.inkSoft,
+                fontWeight: kindFilter === "meeting" ? 500 : 400,
+              }}
+            >
+              <span>{kindFilter === "meeting" ? "→ " : ""}Meetings</span>
+              <V2Mono style={{ fontSize: 11, color: v2.inkFaint }}>
+                {items.filter((i) => i.kind === "meeting").length}
+              </V2Mono>
+            </button>
+          </div>
 
-      {filtered.length === 0 ? (
-        <div className="py-16 text-center text-slate-400 text-sm">
-          {items.length === 0
-            ? "Nothing shared yet. Open a scribble or meeting and tap the share icon to publish it here."
-            : "No items match your filters."}
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {filtered.map((item) => {
-            const href =
-              item.kind === "scribble"
-                ? `${ROUTES.SCRIBBLE}/${item.id}`
-                : `${ROUTES.MEETINGS}?meeting=${item.id}`;
-            const Icon = item.kind === "scribble" ? FileText : Mic;
-            return (
-              <li key={`${item.kind}:${item.id}`}>
-                <Link
-                  href={href}
-                  className="block rounded-2xl border border-slate-800 bg-slate-900 p-5 hover:border-cyan-700/50 transition-colors"
+          {authors.length > 0 && (
+            <div className="mt-9 pt-6" style={{ borderTop: `1px solid ${v2.rule}` }}>
+              <V2Caps>AUTHORS · {authors.length}</V2Caps>
+              <div className="mt-4 space-y-2 text-[13px]">
+                <button
+                  onClick={() => setAuthorFilter("all")}
+                  className="w-full text-left"
+                  style={{
+                    color: authorFilter === "all" ? v2.ink : v2.inkSoft,
+                    fontWeight: authorFilter === "all" ? 500 : 400,
+                  }}
                 >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <h2 className="text-white font-semibold leading-tight truncate">
-                      <Icon className="w-4 h-4 inline mr-2 -mt-0.5 text-cyan-400" />
-                      {item.title}
-                    </h2>
-                    <span className="text-xs text-slate-500 flex-shrink-0">
-                      {formatDate(item.created_at)}
-                    </span>
-                  </div>
-                  {item.preview && (
-                    <p className="text-slate-400 text-sm line-clamp-2">{item.preview}</p>
-                  )}
-                  <div className="mt-3 text-xs text-slate-500">
-                    by {item.author_name ?? item.author_email ?? "Unknown"}
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                  {authorFilter === "all" ? "→ " : ""}Everyone
+                </button>
+                {authors.map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setAuthorFilter(id)}
+                    className="w-full text-left truncate"
+                    style={{
+                      color: authorFilter === id ? v2.ink : v2.inkSoft,
+                      fontWeight: authorFilter === id ? 500 : 400,
+                    }}
+                  >
+                    {authorFilter === id ? "→ " : ""}
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </aside>
+
+        <main className="col-span-12 md:col-span-9">
+          <V2Caps>
+            {organization?.name?.toUpperCase() || "WORKSPACE"} · FEED
+          </V2Caps>
+          <h1
+            className="mt-2"
+            style={{
+              fontFamily: v2Serif,
+              fontSize: "clamp(36px, 6vw, 56px)",
+              lineHeight: 0.98,
+              letterSpacing: "-0.025em",
+              fontWeight: 500,
+            }}
+          >
+            What the team <em style={{ fontStyle: "italic", color: v2.accent }}>shipped</em>.
+          </h1>
+
+          <div
+            className="mt-8 flex items-center gap-3 max-w-md rounded-full pl-5 pr-4 py-2"
+            style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+          >
+            <V2Mono style={{ fontSize: 11, color: v2.inkFaint }}>SEARCH</V2Mono>
+            <input
+              placeholder="Search the feed..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="flex-1 bg-transparent outline-none text-[14px]"
+              style={{ color: v2.ink }}
+            />
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="py-16 text-center text-[14px]" style={{ color: v2.inkSoft }}>
+              {items.length === 0
+                ? "Nothing shared yet. Share a Scribble or Meeting to publish here."
+                : "No items match your filters."}
+            </div>
+          ) : (
+            <div className="mt-10">
+              {filtered.map((item) => {
+                const href =
+                  item.kind === "scribble"
+                    ? `${ROUTES.SCRIBBLE}/${item.id}`
+                    : `${ROUTES.MEETINGS}?meeting=${item.id}`;
+                return (
+                  <Link
+                    key={`${item.kind}:${item.id}`}
+                    href={href}
+                    className="grid grid-cols-12 gap-4 md:gap-6 py-6"
+                    style={{ borderTop: `1px solid ${v2.rule}` }}
+                  >
+                    <div className="col-span-12 md:col-span-3">
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          style={{
+                            display: "inline-block",
+                            height: 28,
+                            width: 28,
+                            borderRadius: 999,
+                            background: v2.cream2,
+                            color: v2.ink,
+                            fontFamily: v2Serif,
+                            fontWeight: 500,
+                            fontSize: 13,
+                            textAlign: "center",
+                            lineHeight: "28px",
+                          }}
+                        >
+                          {(item.author_name ?? item.author_email ?? "?").charAt(0).toUpperCase()}
+                        </span>
+                        <span style={{ fontSize: 13, color: v2.ink }}>
+                          {item.author_name ?? item.author_email ?? "Unknown"}
+                        </span>
+                      </div>
+                      <V2Caps>
+                        {formatDate(item.created_at)} ·{" "}
+                        {item.kind === "scribble" ? "SCRIBBLE" : "MINUTES"}
+                      </V2Caps>
+                    </div>
+                    <div className="col-span-12 md:col-span-9">
+                      <h3
+                        style={{
+                          fontFamily: v2Serif,
+                          fontSize: 22,
+                          fontWeight: 500,
+                          letterSpacing: "-0.005em",
+                          lineHeight: 1.25,
+                        }}
+                      >
+                        {item.title}
+                      </h3>
+                      {item.preview && (
+                        <p
+                          className="mt-2 text-[14px] leading-relaxed"
+                          style={{ color: v2.inkSoft, maxWidth: 720 }}
+                        >
+                          {item.preview}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </main>
+      </div>
     </main>
   );
 }

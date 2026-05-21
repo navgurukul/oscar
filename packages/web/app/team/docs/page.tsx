@@ -3,16 +3,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileText, Search, Tag as TagIcon } from "lucide-react";
+import { Search } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { DocumentUploader } from "@/components/documents/DocumentUploader";
 import { documentsService } from "@/lib/services/documents.service";
 import { ROUTES } from "@/lib/constants";
 import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { OrgDocument, Organization } from "@oscar/shared/types";
+import {
+  v2,
+  v2Serif,
+  V2Caps,
+  V2Mono,
+  V2TeamHeader,
+} from "@/components/v2/V2Primitives";
 
 function formatSize(bytes: number | null) {
   if (!bytes) return "";
@@ -22,11 +27,13 @@ function formatSize(bytes: number | null) {
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return new Date(iso)
+    .toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    })
+    .toUpperCase();
 }
 
 export default function DocsPage() {
@@ -37,6 +44,7 @@ export default function DocsPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
+  const [activeTag, setActiveTag] = useState<string | null>(null);
 
   const load = useCallback(async (search?: string) => {
     setLoading(true);
@@ -81,111 +89,175 @@ export default function DocsPage() {
     return Array.from(set).sort();
   }, [docs]);
 
+  const filtered = useMemo(() => {
+    if (!activeTag) return docs;
+    return docs.filter((d) => d.tags.includes(activeTag));
+  }, [docs, activeTag]);
+
   if (!isOrgFeatureEnabled()) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <p className="text-gray-400">Document library requires the organization feature flag.</p>
+      <main
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: v2.cream, color: v2.ink }}
+      >
+        <p style={{ color: v2.inkSoft }}>
+          Document library requires the organization feature flag.
+        </p>
       </main>
     );
   }
 
   if (authLoading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <Spinner className="text-cyan-500" />
+      <main
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: v2.cream }}
+      >
+        <Spinner />
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen px-4 pt-28 pb-24 max-w-3xl mx-auto">
-      <header className="mb-6 space-y-1">
-        <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-          <FileText className="w-7 h-7 text-cyan-400" />
-          Documents
+    <main
+      style={{
+        background: v2.cream,
+        color: v2.ink,
+        minHeight: "100vh",
+        fontFamily: "var(--font-figtree), system-ui",
+      }}
+    >
+      <V2TeamHeader active="DOCS" org={organization?.name || "Workspace"} />
+
+      <section className="px-6 md:px-14 pt-12 md:pt-14 pb-8 md:pb-10">
+        <V2Caps>WORKSPACE DOCS · {docs.length}</V2Caps>
+        <h1
+          className="mt-3"
+          style={{
+            fontFamily: v2Serif,
+            fontSize: "clamp(40px, 7vw, 68px)",
+            lineHeight: 0.96,
+            letterSpacing: "-0.025em",
+            fontWeight: 500,
+          }}
+        >
+          Everything we&rsquo;ve <em style={{ fontStyle: "italic", color: v2.accent }}>written</em>{" "}
+          together.
         </h1>
-        <p className="text-slate-400 text-sm">
-          {organization
-            ? `Reference library for ${organization.name}. Anything you add here can anchor AI rewrites.`
-            : "Join a workspace to add documents."}
-        </p>
-      </header>
 
-      <div className="mb-6">
-        <DocumentUploader onUploaded={onUploaded} />
-      </div>
+        <div className="mt-8">
+          <DocumentUploader onUploaded={onUploaded} />
+        </div>
 
-      <div className="mb-4 relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <Input
-          placeholder="Search title, summary, or content..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="pl-10 bg-slate-900 border-slate-800 text-white"
-        />
-      </div>
+        <div
+          className="mt-8 flex items-center gap-3 max-w-xl rounded-full pl-5 pr-4 py-2.5"
+          style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+        >
+          <Search className="h-4 w-4" style={{ color: v2.inkFaint }} />
+          <input
+            placeholder="Search title, summary, content..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="flex-1 bg-transparent outline-none text-[14px]"
+            style={{ color: v2.ink }}
+          />
+        </div>
 
-      {allTags.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {allTags.map((tag) => (
-            <Badge
-              key={tag}
-              variant="outline"
-              className="border-cyan-700/40 text-cyan-300 cursor-pointer hover:bg-cyan-500/10"
-              onClick={() => setQuery(tag)}
+        {allTags.length > 0 && (
+          <div className="mt-6 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setActiveTag(null)}
+              className="rounded-full px-3 py-1 text-[11px] transition"
+              style={{
+                background: activeTag === null ? v2.ink : "transparent",
+                color: activeTag === null ? v2.cream : v2.inkSoft,
+                border: `1px solid ${activeTag === null ? v2.ink : v2.rule}`,
+              }}
             >
-              <TagIcon className="w-3 h-3 mr-1" /> {tag}
-            </Badge>
-          ))}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="py-12 flex justify-center">
-          <Spinner className="text-cyan-500" />
-        </div>
-      ) : docs.length === 0 ? (
-        <div className="py-12 text-center text-slate-400 text-sm">
-          {debounced ? "No documents match your search." : "No documents yet. Drop a file above to start."}
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {docs.map((doc) => (
-            <li key={doc.id}>
-              <Link
-                href={`/team/docs/${doc.id}`}
-                className="block rounded-2xl border border-slate-800 bg-slate-900 p-5 hover:border-cyan-700/50 transition-colors"
+              All
+            </button>
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                className="rounded-full px-3 py-1 text-[11px] transition"
+                style={{
+                  background: activeTag === tag ? v2.accent : "transparent",
+                  color: activeTag === tag ? v2.cream : v2.accent,
+                  border: `1px solid ${activeTag === tag ? v2.accent : v2.rule}`,
+                }}
               >
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <h2 className="text-white font-semibold leading-tight truncate">{doc.title}</h2>
-                  <span className="text-xs text-slate-500 flex-shrink-0">
+                #{tag}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="px-6 md:px-14 pb-16 md:pb-20">
+        {loading ? (
+          <div className="py-12 flex justify-center">
+            <Spinner />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-16 text-center text-[14px]" style={{ color: v2.inkSoft }}>
+            {debounced || activeTag
+              ? "No documents match your filters."
+              : "No documents yet. Drop a file above to start."}
+          </div>
+        ) : (
+          <div>
+            {filtered.map((doc) => (
+              <Link
+                key={doc.id}
+                href={`/team/docs/${doc.id}`}
+                className="grid grid-cols-12 gap-4 md:gap-6 py-5"
+                style={{ borderTop: `1px solid ${v2.rule}` }}
+              >
+                <div className="col-span-12 md:col-span-2">
+                  <V2Mono style={{ fontSize: 11, color: v2.ink }}>
                     {formatDate(doc.created_at)}
-                  </span>
+                  </V2Mono>
                 </div>
-                {doc.summary ? (
-                  <p className="text-slate-400 text-sm line-clamp-2">{doc.summary}</p>
-                ) : doc.extracted_text ? (
-                  <p className="text-slate-400 text-sm line-clamp-2">
-                    {doc.extracted_text.slice(0, 240)}
-                  </p>
-                ) : null}
-                <div className="mt-3 flex items-center gap-3 text-xs text-slate-500">
-                  <span>{formatSize(doc.size_bytes)}</span>
-                  {doc.tags.slice(0, 4).map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="outline"
-                      className="border-cyan-700/30 text-cyan-300 text-[10px] py-0"
+                <div className="col-span-12 md:col-span-7">
+                  <h3
+                    style={{
+                      fontFamily: v2Serif,
+                      fontSize: 19,
+                      fontWeight: 500,
+                      letterSpacing: "-0.005em",
+                    }}
+                  >
+                    {doc.title}
+                  </h3>
+                  {(doc.summary || doc.extracted_text) && (
+                    <p
+                      className="mt-1.5 text-[13px] leading-relaxed line-clamp-2"
+                      style={{ color: v2.inkSoft }}
                     >
-                      {tag}
-                    </Badge>
-                  ))}
+                      {doc.summary || doc.extracted_text?.slice(0, 220)}
+                    </p>
+                  )}
+                  {doc.tags.length > 0 && (
+                    <div className="mt-2 flex items-center gap-3">
+                      {doc.tags.slice(0, 4).map((tag) => (
+                        <span key={tag} style={{ fontSize: 11, color: v2.accent }}>
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="col-span-12 md:col-span-3 text-right">
+                  <V2Mono style={{ fontSize: 11, color: v2.inkFaint }}>
+                    {formatSize(doc.size_bytes)}
+                  </V2Mono>
                 </div>
               </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   );
 }

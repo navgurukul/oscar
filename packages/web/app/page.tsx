@@ -1,896 +1,436 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion } from "motion/react";
-import { LampContainer } from "@/components/ui/lamp";
-import { LayoutTextFlip } from "@/components/ui/layout-text-flip";
-import { AnimatedTestimonials } from "@/components/ui/animated-testimonials";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Check, Mic, Sparkles, FileText, Zap, Clock, Brain, Download, Radio, BookOpen, Users, Lock } from "lucide-react";
-
-// ── Inline app icon SVGs for the Stream section ───────────────────────────────
-const StreamAppIcons = {
-  Slack: () => (
-    <div title="Slack" className="text-slate-400 hover:text-[#E01E5A] transition-colors duration-200">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/></svg>
-    </div>
-  ),
-  Notion: () => (
-    <div title="Notion" className="text-slate-400 hover:text-slate-100 transition-colors duration-200">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.98-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.166V6.354c0-.606-.233-.933-.748-.886l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952l1.448.327s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.14c-.093-.514.28-.886.747-.933zM2.64 1.782l13.168-.933c1.634-.14 2.055-.047 3.082.7l4.25 2.986c.7.513.933.653.933 1.166v16.157c0 1.026-.373 1.633-1.681 1.726l-15.458.933c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.996c0-.84.374-1.54 1.59-1.214z"/></svg>
-    </div>
-  ),
-  VSCode: () => (
-    <div title="VS Code" className="text-slate-400 hover:text-[#007ACC] transition-colors duration-200">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg>
-    </div>
-  ),
-  Gmail: () => (
-    <div title="Gmail" className="text-slate-400 hover:text-[#EA4335] transition-colors duration-200">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"/></svg>
-    </div>
-  ),
-  Discord: () => (
-    <div title="Discord" className="text-slate-400 hover:text-[#5865F2] transition-colors duration-200">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-    </div>
-  ),
-  Figma: () => (
-    <div title="Figma" className="text-slate-400 hover:text-[#F24E1E] transition-colors duration-200">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.014-4.49-4.49S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.02 3.019 3.02h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.355 3.019 3.019 3.019h3.117V8.981H8.148zM8.172 24c-2.489 0-4.515-2.014-4.515-4.49s2.014-4.49 4.49-4.49h4.588v4.441c0 2.503-2.047 4.539-4.563 4.539zm-.024-7.51a3.023 3.023 0 0 0-3.019 3.019c0 1.665 1.365 3.019 3.044 3.019 1.705 0 3.093-1.376 3.093-3.068v-2.97H8.148zm7.704 0h-.098c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h.098c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.49-4.49 4.49zm-.098-7.509c-1.665 0-3.019 1.355-3.019 3.019s1.355 3.019 3.019 3.019h.098c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-.098z"/></svg>
-    </div>
-  ),
-};
-import { FadeIn, listVariants, itemVariants } from "@/components/ui/fade-in";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
-
 import { scribblesService } from "@/lib/services/scribbles.service";
 import type { DBScribble } from "@/lib/types/scribble.types";
-import { PRICING, PRICING_USD, SUBSCRIPTION_CONFIG, type Currency, UI_STRINGS, ROUTES } from "@/lib/constants";
-import type { BillingCycle } from "@/lib/types/subscription.types";
-import img1 from "@/components/ui/assets/image_1.png";
-import img2 from "@/components/ui/assets/image_2.jpg";
-import img3 from "@/components/ui/assets/image_3.jpg";
-import img4 from "@/components/ui/assets/image_4.png";
+import { ROUTES, UI_STRINGS } from "@/lib/constants";
+import {
+  v2,
+  v2Serif,
+  v2Mono,
+  V2Caps,
+  V2Mono,
+  V2Wordmark,
+  V2Avatar,
+  V2Source,
+  V2MarketingHeader,
+} from "@/components/v2/V2Primitives";
 
-const TESTIMONIALS = [
-  {
-    quote:
-      "Oscar has completely improved the way I handle my daily tasks, offering fast and accurate speech-to-text transcription along with seamless editing, sharing, and downloading features, all within a user-friendly platform that keeps everything organized and efficient.",
-    name: "Saloni Panwar",
-    designation: "Frontend Developer",
-    src: img1,
-  },
-  {
-    quote:
-      "The design is minimal, modern, and easy to read. The layout, spacing, and typography make the product look like very attractive.t is more affordable compared to others, making it a better choice for users. Its lower price makes it more attractive and easier for people to use. Because it is more budget-friendly than others, more users will prefer it.",
-    name: "Roshni Jha",
-    designation: "Frontend Developer",
-    src: img2,
-  },
-  {
-    quote:
-      "OSCAR is really helpful for turning voice scribbles into clear text. It saves time and makes capturing ideas much easier. I find it very useful for learning and work",
-    name: "Komal Ahire",
-    designation: "Senior Fullstack Developer",
-    src: img3,
-  },
-  {
-    quote:
-      "Oscar is an amazing and user-friendly tool that quickly converts speech into text with good accuracy. It saves a lot of time, especially for long content, and works smoothly in daily use. The easy sharing feature across different platforms makes it even more convenient and helpful. Overall, it is a great time-saving and productive tool.",
-    name: "Sanjna Panwar",
-    designation: "Senior Backend Developer",
-    src: img4,
-  },
+const TESTIMONIALS: Array<[string, string]> = [
+  ["It's the only writing tool I open before I start writing.", "MIRA PATEL · DESIGNER"],
+  ["I haven't typed a Slack message in three weeks.", "ROSHNI JHA · PM"],
+  ["Oscar caught a detail in a meeting that I missed live.", "SOUVIK DEB · FOUNDER"],
 ];
 
-export default function Home() {
-  const { session, user } = useAuth();
-  const [recentScribbles, setRecentScribbles] = useState<DBScribble[]>([]);
-  const [isLoadingScribbles, setIsLoadingScribbles] = useState(false);
-  const router = useRouter();
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
-  const [currency, setCurrency] = useState<Currency>("INR");
+const MODES: Array<[string, string, string, string]> = [
+  [
+    "01",
+    "Stream",
+    "Dictate into anything.",
+    "Hold Ctrl + Space anywhere. Oscar types cleaned text directly into the app you're in — Slack, Notion, Cursor, Gmail, your terminal.",
+  ],
+  [
+    "02",
+    "Minutes",
+    "Meeting notes, automatic.",
+    "Click record before any call. Oscar captures the whole thing and writes back what mattered — decisions, actions, follow-ups.",
+  ],
+  [
+    "03",
+    "Scribble",
+    "Voice notes, organized.",
+    "Long-form thinking out loud. Oscar shapes your ramble into a Scribble — TL;DR, structure, the parts worth keeping.",
+  ],
+];
 
-  useEffect(() => {
-    if (session) {
-      loadRecentScribbles();
-    }
-  }, [session]);
+function formatDate(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.floor((nowOnly.getTime() - dateOnly.getTime()) / (1000 * 3600 * 24));
+  const time = date
+    .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })
+    .toUpperCase();
+  if (diffDays === 0) return `TODAY · ${time}`;
+  if (diffDays === 1) return `YESTERDAY · ${time}`;
+  return `${diffDays} DAYS AGO`;
+}
 
-  const loadRecentScribbles = async () => {
-    setIsLoadingScribbles(true);
-    const { data, error } = await scribblesService.getScribbles();
-    if (!error && data) {
-      setRecentScribbles(data.slice(0, 3));
-    }
-    setIsLoadingScribbles(false);
-  };
-
-  // Recording CTA is currently disabled; uncomment when re-enabling "New Scribble" button
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-
-    // Use calendar dates (not 24-hour chunks) for accurate "Today/Yesterday" calculation
-    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    const diffDays = Math.floor(
-      (nowOnly.getTime() - dateOnly.getTime()) / (1000 * 3600 * 24)
-    );
-
-    const time = date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }).toUpperCase();
-
-    if (diffDays === 0) return "Today, " + time;
-    if (diffDays === 1) return "Yesterday, " + time;
-
-    return diffDays + " days ago";
-  };
-
-  const handleViewPricing = () => {
-    router.push("/auth?redirectTo=/pricing");
-  };
-
-  const pricingConfig = currency === "USD" ? PRICING_USD : PRICING;
-  const price = billingCycle === "monthly" ? pricingConfig.MONTHLY : pricingConfig.YEARLY;
-  const monthlyEquivalent =
-    billingCycle === "yearly" ? (pricingConfig.YEARLY / 12).toFixed(2) : null;
-  const currencySymbol = currency === "USD" ? "$" : "₹";
-
-  if (session) {
-    const firstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || "there";
-
-    // If no Scribbles exist and not loading, show the empty state UI
-    if (!isLoadingScribbles && recentScribbles.length === 0) {
-      return (
-        <main className="flex flex-col items-center pt-8 pb-24 px-4 bg-[#020617] relative">
-        {/* Top Decoration */}
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
-        
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="text-center max-w-2xl w-full mt-8"
-        >
-            {/* Top Badge */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.4, duration: 0.5 }}
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/50 border border-cyan-500/30 text-cyan-400 text-xs font-medium mb-8 backdrop-blur-sm"
-            >
-              <Sparkles className="w-3 h-3" />
-              <span>AI-Powered Scribbles</span>
-            </motion.div>
-
-            {/* App Name / Logo */}
-            <h1 className="text-6xl md:text-7xl font-bold font-serif text-white mb-6 tracking-tight">
-              Record a Scribble
-            </h1>
-            
-            <div className="flex items-center justify-center gap-3 mb-8">
-              <div className="h-px w-8 bg-gradient-to-r from-transparent to-cyan-500/50" />
-              <p className="text-lg md:text-xl text-gray-400 font-medium italic">
-                Your voice, written your way.
-              </p>
-              <div className="h-px w-8 bg-gradient-to-l from-transparent to-cyan-500/50" />
-            </div>
-
-            {/* Empty State Illustration */}
-            <div className="relative mb-12">
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-cyan-500/5 blur-[100px] rounded-full" />
-              
-              <div className="relative w-28 h-28 md:w-36 md:h-36 bg-gradient-to-b from-slate-900/80 to-slate-950/80 border border-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto backdrop-blur-md shadow-2xl group transition-all duration-500 hover:border-cyan-500/20">
-                <div className="absolute inset-0 border border-cyan-500/10 rounded-[2.5rem] animate-pulse" />
-                
-                <div className="relative">
-                  <FileText className="w-10 h-10 md:w-14 md:h-14 text-cyan-400/70 group-hover:text-cyan-400 transition-colors duration-500" />
-                  <div className="absolute -bottom-1 -right-1 w-5 h-5 md:w-6 md:h-6 bg-cyan-500 rounded-lg flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-500">
-                    <Mic className="w-2.5 h-2.5 md:w-3 md:h-3 text-slate-950" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="text-2xl md:text-3xl font-semibold text-white/90 tracking-tight">
-                Scribble is empty for now.
-              </h3>
-              <p className="text-gray-500 text-lg md:text-xl max-w-md mx-auto leading-relaxed">
-                Tap the mic button below to record your first Scribble.
-              </p>
-            </div>
-          </motion.div>
-
-          {/* Bottom indicator for the floating record button */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1, duration: 1 }}
-            className="absolute bottom-32 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
-          >
-            <div className="w-px h-12 bg-gradient-to-b from-transparent via-cyan-500/20 to-transparent" />
-          </motion.div>
-        </main>
-      );
-    }
-
-    // If Scribbles exist, show the dashboard UI
-    return (
-      <main className="flex flex-col items-center pt-8 pb-24 px-4 bg-[#020617] relative">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-2xl flex flex-col items-center mt-12"
-        >
-          {/* Welcome Text */}
-          <div className="text-center mb-12">
-            <p className="text-cyan-400 font-medium mb-2">Welcome back, {firstName}</p>
-            <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight">
-              Record a Scribble
-            </h1>
-          </div>
-
-        
-
-          {/* Recent Transcriptions Section */}
-          <div className="w-full mb-12">
-            <h2 className="text-gray-400 font-medium mb-6 text-center">Recent Scribbles</h2>
-            
-            <div className="space-y-3">
-              {isLoadingScribbles ? (
-                [1, 2, 3].map((i) => (
-                  <div key={i} className="h-20 bg-slate-900/50 rounded-2xl animate-pulse border border-white/5" />
-                ))
-              ) : recentScribbles.length > 0 ? (
-                recentScribbles.map((scribble) => (
-                  <Link key={scribble.id} href={`${ROUTES.SCRIBBLE}/${scribble.id}`}>
-                    <div className="w-full p-4 mb-3 bg-slate-900/40 hover:bg-slate-900/60 border border-white/5 hover:border-cyan-500/20 rounded-2xl flex flex-col transition-all group">
-                      <div className="flex items-center justify-between gap-4 mb-1">
-                        <div className="flex items-center gap-4 min-w-0 flex-1">
-                          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center shrink-0">
-                            <FileText className="w-5 h-5 text-cyan-400" />
-                          </div>
-                          <h4 className="text-white font-semibold truncate">
-                            {scribble.title || UI_STRINGS.UNTITLED_SCRIBBLE}
-                          </h4>
-                        </div>
-                        <p className="text-gray-500 text-xs ml-4 shrink-0">
-                          {formatDate(scribble.created_at)}
-                        </p>
-                      </div>
-                      <p className="text-gray-400 text-sm line-clamp-1 ml-14">
-                        {scribble.original_formatted_text}
-                      </p>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <div className="text-center py-10 bg-slate-900/20 rounded-2xl border border-dashed border-white/10">
-                  <p className="text-gray-500 italic">No Scribbles yet. Record one and capture your first idea.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
-      </main>
-    );
-  }
-
+function SignedInHome({ recents, firstName }: { recents: DBScribble[]; firstName: string }) {
   return (
-      <main className="flex flex-col items-center pt-8 pb-24 px-4 w-full overflow-x-hidden">
-        {/* Hero Section */}
-        <section className="flex items-center justify-center min-h-[80vh] w-full">
-        <LampContainer >
-          <motion.div
-            initial={{ opacity: 0.5, y: 100 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{
-              delay: 0.3,
-              duration: 0.8,
-              ease: "easeInOut",
+    <main style={{ background: v2.cream, color: v2.ink, fontFamily: "var(--font-figtree), system-ui" }}>
+      <header
+        className="flex items-center justify-between px-6 md:px-14 py-7"
+        style={{ borderBottom: `1px solid ${v2.rule}` }}
+      >
+        <V2Wordmark />
+        <nav className="hidden md:flex items-center gap-9">
+          <span
+            style={{
+              fontFamily: v2Mono,
+              fontSize: 11,
+              letterSpacing: "0.18em",
+              color: v2.ink,
+              borderBottom: `1px solid ${v2.ink}`,
+              paddingBottom: 2,
             }}
-            className="mt-8 text-center px-4"
           >
-            <div className="bg-gradient-to-br from-slate-300 to-slate-500 py-4 bg-clip-text text-4xl font-medium tracking-tight text-transparent md:text-7xl">
-              <LayoutTextFlip
-                text="Bring your ideas to light."
-                words={[
-                  "Let AI write.",
-                  "Let AI refine.",
-                  "Let AI transform.",
-                  "Create effortlessly.",
-                ]}
-                duration={3000}
-              />
-            </div>
-            <p className="mt-10 text-lg md:text-xl text-gray-300 max-w-2xl mx-auto">
-              Desktop Stream for any app. Minutes for meetings. Scribbles for notes.
-            </p>
-           
-            {!session && (
-              <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
-                <Button
-                  onClick={() => router.push("/download")}
-                  size="lg"
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-10 py-7 text-xl font-semibold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-105"
-                >
-                  <Download className="w-6 h-6 mr-3" />
-                  Download Free
-                </Button>
-                <Button
-                  onClick={() => {
-                    document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  size="lg"
-                  variant="outline"
-                  className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300 px-10 py-7 text-lg transition-all duration-300"
-                >
-                  See How It Works
-                </Button>
-              </div>
-            )}
-          </motion.div>
-        </LampContainer>
+            TODAY
+          </span>
+          <Link href="/scribble"><V2Caps>LIBRARY</V2Caps></Link>
+          <Link href="/meetings"><V2Caps>MINUTES</V2Caps></Link>
+          <Link href="/settings"><V2Caps>SETTINGS</V2Caps></Link>
+        </nav>
+        <div className="flex items-center gap-4">
+          <V2Caps>{firstName.toUpperCase()}</V2Caps>
+          <V2Avatar size={32} initial={firstName.charAt(0).toUpperCase()} />
+        </div>
+      </header>
+
+      <section className="px-6 md:px-14 pt-16 md:pt-24 pb-12">
+        <V2Caps>
+          {new Date()
+            .toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+            .toUpperCase()}{" "}
+          · WELCOME BACK
+        </V2Caps>
+        <h1
+          className="mt-4"
+          style={{
+            fontFamily: v2Serif,
+            fontSize: "clamp(48px, 9vw, 92px)",
+            lineHeight: 0.96,
+            letterSpacing: "-0.025em",
+            fontWeight: 500,
+            maxWidth: 920,
+          }}
+        >
+          Hello, {firstName}.<br />
+          Ready to <em style={{ fontStyle: "italic", color: v2.accent }}>listen</em>?
+        </h1>
+        <p className="mt-7 max-w-xl text-[16px] leading-relaxed" style={{ color: v2.inkSoft }}>
+          Press record and Oscar shapes your voice into a Scribble — clean, titled, and filed
+          before you finish your second sentence.
+        </p>
+        <div className="mt-10 flex items-center gap-6 flex-wrap">
+          <Link
+            href={ROUTES.RECORDING}
+            className="inline-flex items-center gap-3 rounded-full px-6 py-3"
+            style={{ background: v2.ink, color: v2.cream, fontSize: 14, fontWeight: 500 }}
+          >
+            <span className="inline-block rounded-full" style={{ height: 7, width: 7, background: v2.accent }} />
+            Record a Scribble
+          </Link>
+          <Link href="/scribble" className="text-[14px]" style={{ color: v2.inkSoft }}>
+            · or open the library
+          </Link>
+        </div>
       </section>
 
-      {!session && (
-        <>
-          {/* Problem Statement Section */}
-      <section className="min-h-[80vh] flex items-center justify-center py-16 sm:py-24 px-4 mt-8 w-full">
-            <div className="max-w-6xl mx-auto w-full">
-              <FadeIn className="text-center mb-16">
-                <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                  Your <span className="text-cyan-500">Best Ideas</span> Vanish Before You Type Them
-                </h2>
-                <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
-                  That perfect thought you had while walking? Gone by the time you open your laptop.
-                </p>
-              </FadeIn>
+      <section className="px-6 md:px-14 pt-12 pb-24" style={{ borderTop: `1px solid ${v2.rule}` }}>
+        <div className="grid grid-cols-12 gap-6 md:gap-10 mb-10">
+          <div className="col-span-12 md:col-span-2">
+            <V2Caps>RECENT · IN ORDER</V2Caps>
+          </div>
+          <div className="col-span-12 md:col-span-10 flex items-center gap-7">
+            <span
+              style={{ fontSize: 13, color: v2.ink, borderBottom: `1px solid ${v2.ink}`, paddingBottom: 1 }}
+            >
+              All
+            </span>
+            <Link href="/scribble" className="text-[13px]" style={{ color: v2.inkSoft }}>
+              Scribble
+            </Link>
+            <Link href="/meetings" className="text-[13px]" style={{ color: v2.inkSoft }}>
+              Minutes
+            </Link>
+            <Link
+              href="/scribble"
+              style={{ marginLeft: "auto", fontSize: 13, color: v2.accent }}
+            >
+              View library →
+            </Link>
+          </div>
+        </div>
 
-              <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-                <FadeIn delay={0.1}>
-                  <div className="bg-slate-900/50 border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl p-6 card-lift group h-full">
-                    <div className="text-cyan-300 mb-4 icon-spring w-fit">
-                      <Clock className="w-10 h-10" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-white mb-3">Ideas Fade Fast</h3>
-                    <p className="text-gray-400">
-                      The perfect words you thought of? Gone before you start typing.
-                    </p>
-                  </div>
-                </FadeIn>
-
-                <FadeIn delay={0.2}>
-                  <div className="bg-slate-900/50 border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl p-6 card-lift group h-full">
-                    <div className="text-cyan-300 mb-4 icon-spring w-fit">
-                      <FileText className="w-10 h-10" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-white mb-3">Voice Scribbles Need Cleanup</h3>
-                    <p className="text-gray-400">
-                      Full of ums and uhs. Too embarrassing to share with anyone.
-                    </p>
-                  </div>
-                </FadeIn>
-
-                <FadeIn delay={0.3}>
-                  <div className="bg-slate-900/50 border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl p-6 card-lift group h-full">
-                    <div className="text-cyan-300 mb-4 icon-spring w-fit">
-                      <Zap className="w-10 h-10" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-white mb-3">Typing Kills Momentum</h3>
-                    <p className="text-gray-400">
-                      Switching to your phone or laptop breaks your flow. By the time you&apos;re typing, the moment&apos;s gone.
-                    </p>
-                  </div>
-                </FadeIn>
-              </div>
-            </div>
-          </section>
-
-          {/* Three Modes Section */}
-          <section id="how-it-works" className="py-24 px-4 mt-8 w-full">
-            <div className="max-w-6xl mx-auto w-full">
-              <FadeIn className="text-center mb-20">
-                <p className="text-cyan-400 text-sm font-semibold uppercase tracking-widest mb-4">Three ways to use OSCAR</p>
-                <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                  One app. Three <span className="text-cyan-500">superpowers.</span>
-                </h2>
-                <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
-                  Whether you&apos;re dictating on the fly, capturing a full meeting, or building a personal knowledge base, OSCAR has a mode built for it
-                </p>
-              </FadeIn>
-
-              {/* oscar Stream */}
-              <FadeIn delay={0.05}>
-              <div className="mb-16 rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 card-lift group w-full">
-                <div className="grid md:grid-cols-2 gap-0 w-full">
-                  <div className="p-10 flex flex-col justify-center">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center icon-spring">
-                        <Radio className="w-5 h-5 text-cyan-400" />
-                      </div>
-                      <span className="text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1">oscar Stream</span>
-                    </div>
-                    <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                      Dictate into <span className="text-cyan-400">anything</span>, anywhere.
-                    </h3>
-                    <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                      Hold <kbd className="key-press inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Ctrl</kbd> + <kbd className="key-press inline-block px-2 py-0.5 text-sm font-mono font-semibold bg-slate-800 border border-slate-600 border-b-2 rounded text-slate-200">Space</kbd> from anywhere on your computer and speak. OSCAR types the cleaned, AI-polished text directly into Slack, Notion, Gmail, VS Code, or any app you&apos;re using.
-                    </p>
-                    <motion.ul
-                      variants={listVariants}
-                      initial="hidden"
-                      whileInView="show"
-                      viewport={{ once: true }}
-                      className="space-y-3"
-                    >
-                      {["Global hotkey. No app switching needed", "AI removes filler words & fixes grammar instantly", "Works in every app on your system", "Hinglish & 30+ language support"].map((f) => (
-                        <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
-                          <Check className="w-4 h-4 text-cyan-400 shrink-0" />
-                          <span>{f}</span>
-                        </motion.li>
-                      ))}
-                    </motion.ul>
-                  </div>
-                  <div className="bg-slate-950/60 p-10 flex items-center justify-center min-h-[280px]">
-                    <div className="text-center space-y-6">
-                      <div className="flex items-center justify-center gap-3">
-                        <kbd className="key-press px-4 py-2.5 text-base font-mono font-bold bg-slate-800 border border-slate-600 border-b-[3px] rounded-lg text-white shadow-lg">Ctrl</kbd>
-                        <span className="text-slate-500 text-lg font-bold">+</span>
-                        <kbd className="key-press px-4 py-2.5 text-base font-mono font-bold bg-slate-800 border border-slate-600 border-b-[3px] rounded-lg text-white shadow-lg">Space</kbd>
-                      </div>
-                      <p className="text-slate-400 text-sm">Hold to speak · Release to insert text</p>
-                      <div className="flex flex-wrap justify-center gap-4 max-w-[260px]">
-                        <StreamAppIcons.Slack />
-                        <StreamAppIcons.Notion />
-                        <StreamAppIcons.VSCode />
-                        <StreamAppIcons.Gmail />
-                        <StreamAppIcons.Discord />
-                        <StreamAppIcons.Figma />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              </FadeIn>
-
-              {/* oscar Minutes */}
-              <FadeIn delay={0.05}>
-              <div className="mb-16 rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 card-lift group w-full">
-                <div className="grid md:grid-cols-2 gap-0 w-full">
-                  <div className="bg-slate-950/60 p-10 flex items-center justify-center min-h-[280px] order-last md:order-first">
-                    <div className="text-left space-y-5 max-w-[280px]">
-                        <div className="w-16 h-16 bg-cyan-500/20 rounded-2xl flex items-center justify-center icon-spring">
-                        <Users className="w-8 h-8 text-cyan-400" />
-                      </div>
-                      <motion.div
-                        variants={listVariants}
-                        initial="hidden"
-                        whileInView="show"
-                        viewport={{ once: true }}
-                        className="space-y-2"
-                      >
-                        {[
-                          { label: "Key Discussion Points" },
-                          { label: "Decisions Made" },
-                          { label: "Action Items" },
-                          { label: "Follow-ups" },
-                        ].map((item) => (
-                          <motion.div key={item.label} variants={itemVariants} className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full shrink-0" />
-                            <span className="text-gray-300">{item.label}</span>
-                          </motion.div>
-                        ))}
-                      </motion.div>
-                      <p className="text-gray-300">AI-generated in seconds after your meeting</p>
-                    </div>
-                  </div>
-                  <div className="p-10 flex flex-col justify-center">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center icon-spring">
-                        <Users className="w-5 h-5 text-cyan-400" />
-                      </div>
-                      <span className="text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1">oscar Minutes</span>
-                    </div>
-                    <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                      Full meeting Minutes, <span className="text-cyan-400">automatically.</span>
-                    </h3>
-                    <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                      Record your Zoom, Teams, or in-person meeting. OSCAR captures both your voice and other participants&apos; audio, transcribes everything, and generates structured AI Minutes the moment you stop.
-                    </p>
-                    <motion.ul
-                      variants={listVariants}
-                      initial="hidden"
-                      whileInView="show"
-                      viewport={{ once: true }}
-                      className="space-y-3"
-                    >
-                      {["Records mic + system audio (Zoom, Teams, etc.)", "AI-structured Minutes: decisions, action items, follow-ups", "Google Calendar integration with one-tap access from your schedule", "Standup, 1:1, brainstorm & custom templates"].map((f) => (
-                        <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
-                          <Check className="w-4 h-4 text-cyan-400 shrink-0" />
-                          <span>{f}</span>
-                        </motion.li>
-                      ))}
-                    </motion.ul>
-                  </div>
-                </div>
-              </div>
-              </FadeIn>
-
-              {/* oscar Scribble */}
-              <FadeIn delay={0.05}>
-              <div className="rounded-2xl border border-cyan-500/20 hover:border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-950 card-lift group w-full">
-                <div className="grid md:grid-cols-2 gap-0 w-full">
-                  <div className="p-10 flex flex-col justify-center">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center icon-spring">
-                        <BookOpen className="w-5 h-5 text-cyan-400" />
-                      </div>
-                      <span className="text-xs font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1">oscar Scribble</span>
-                    </div>
-                    <h3 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                      Your voice scribbles, <span className="text-cyan-400">beautifully organized.</span>
-                    </h3>
-                    <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                      Saved voice notes become Scribbles. They are searchable, editable, and synced across devices. Build your personal knowledge base without typing.
-                    </p>
-                    <motion.ul
-                      variants={listVariants}
-                      initial="hidden"
-                      whileInView="show"
-                      viewport={{ once: true }}
-                      className="space-y-3"
-                    >
-                      {["All your voice scribbles in one searchable place", "Synced to the cloud, accessible anywhere", "AI-cleaned text ready to share or export", "Custom vocabulary for your industry & jargon"].map((f) => (
-                        <motion.li key={f} variants={itemVariants} className="flex items-center gap-3 text-gray-300">
-                          <Check className="w-4 h-4 text-cyan-400 shrink-0" />
-                          <span>{f}</span>
-                        </motion.li>
-                      ))}
-                    </motion.ul>
-                  </div>
-                  <div className="bg-slate-950/60 p-10 flex items-center justify-center min-h-[280px]">
-                    <motion.div
-                      variants={listVariants}
-                      initial="hidden"
-                      whileInView="show"
-                      viewport={{ once: true }}
-                      className="space-y-3 w-full max-w-[260px]"
-                    >
-                      {[
-                        { title: "Product brainstorm", time: "Today, 2:14 PM" },
-                        { title: "Weekly goals", time: "Yesterday, 9:30 AM" },
-                        { title: "Client call ideas", time: "3 days ago" },
-                      ].map((scribble) => (
-                        <motion.div key={scribble.title} variants={itemVariants} className="flex items-center gap-3 p-3 bg-slate-800/60 hover:bg-slate-800/80 rounded-xl border border-slate-700/50 hover:border-cyan-500/30 transition-colors duration-200 cursor-default">
-                          <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 hover:scale-110">
-                            <FileText className="w-4 h-4 text-cyan-400" />
-                          </div>
-                          <div>
-                            <p className="text-sm text-white font-medium">{scribble.title}</p>
-                            <p className="text-xs text-slate-500">{scribble.time}</p>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  </div>
-                </div>
-              </div>
-              </FadeIn>
-            </div>
-          </section>
-
-          {/* Why OSCAR Section */}
-          <section className="md:min-h-screen flex items-center justify-center py-16 px-4 w-full">
-            <div className="max-w-6xl mx-auto w-full">
-              <FadeIn className="text-center mb-16">
-                <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                  Why <span className="text-cyan-500">OSCAR</span>?
-                </h2>
-                <p className="text-gray-300 text-lg md:text-xl max-w-3xl mx-auto">
-                  Built for people who think faster than they type.
-                </p>
-              </FadeIn>
-
-              <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-                <FadeIn delay={0.1}>
-                  <div className="bg-slate-900/70 border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl p-8 card-lift group h-full">
-                    <div className="text-cyan-400 mb-4 icon-spring w-fit">
-                      <Zap className="w-10 h-10" />
-                    </div>
-                    <h3 className="text-2xl font-semibold text-white mb-4">10x Faster Than Typing</h3>
-                    <p className="text-gray-300 mb-4">
-                      You speak at 150+ words per minute. You type at 40. Stop wasting time transcribing your own thoughts.
-                    </p>
-                    <p className="text-cyan-200 text-sm">
-                      Desktop Stream inserts into Slack, email, docs. Zero copy-paste.
-                    </p>
-                  </div>
-                </FadeIn>
-
-                <FadeIn delay={0.2}>
-                  <div className="bg-slate-900/70 border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl p-8 card-lift group h-full">
-                    <div className="text-cyan-400 mb-4 icon-spring w-fit">
-                      <Brain className="w-10 h-10" />
-                    </div>
-                    <h3 className="text-2xl font-semibold text-white mb-4">AI That Understands Context</h3>
-                    <p className="text-gray-300 mb-4">
-                      Not just speech-to-text. OSCAR formats your ideas intelligently, and Minutes turns raw conversation into structured, actionable Minutes.
-                    </p>
-                    <p className="text-cyan-200 text-sm">
-                      Hinglish support, 30+ languages, custom vocabulary
-                    </p>
-                  </div>
-                </FadeIn>
-
-                <FadeIn delay={0.1}>
-                  <div className="bg-slate-900/70 border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl p-8 card-lift group h-full">
-                    <div className="text-cyan-400 mb-4 icon-spring w-fit">
-                      <FileText className="w-10 h-10" />
-                    </div>
-                    <h3 className="text-2xl font-semibold text-white mb-4">Always Shareable</h3>
-                    <p className="text-gray-300 mb-4">
-                      Every Scribble and Minutes summary is clean enough to send directly. No embarrassing filler words or messy raw transcripts.
-                    </p>
-                    <p className="text-cyan-200 text-sm">
-                      Email, copy, or export with one click
-                    </p>
-                  </div>
-                </FadeIn>
-
-                <FadeIn delay={0.2}>
-                  <div className="bg-slate-900/70 border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl p-8 card-lift group h-full">
-                    <div className="text-cyan-400 mb-4 icon-spring w-fit">
-                      <Lock className="w-10 h-10" />
-                    </div>
-                    <h3 className="text-2xl font-semibold text-white mb-4">Runs Locally. Private by Default.</h3>
-                    <p className="text-gray-300 mb-4">
-                      Whisper transcription runs on-device. Your audio never leaves your computer. AI processing is opt-in and uses only the text.
-                    </p>
-                    <p className="text-cyan-200 text-sm">
-                      No audio uploads. No surveillance. Just your ideas.
-                    </p>
-                  </div>
-                </FadeIn>
-              </div>
-            </div>
-          </section>
-
-          {/* Testimonials Section */}
-          <section className="md:min-h-[80vh] flex items-center justify-center py-8 md:py-16 mt-8 w-full">
-            <div className="w-full">
-              <div className="mx-auto max-w-4xl px-4 md:px-8 lg:px-12 text-center mb-6 md:mb-12">
-                <h2 className="text-2xl md:text-5xl font-bold text-white mb-3 md:mb-6">
-                  Loved by <span className="text-cyan-500">Creators & Teams</span>
-                </h2>
-                <p className="text-gray-300 text-lg md:text-xl">
-                  Join thousands capturing ideas on the go.
-                </p>
-              </div>
-              <AnimatedTestimonials testimonials={TESTIMONIALS} autoplay />
-            </div>
-          </section>
-
-          {/* Pricing Section */}
-          <section className="min-h-auto md:min-h-[80vh] flex items-center justify-center py-16 md:py-20 px-4 mt-8 w-full">
-            <div className="max-w-5xl mx-auto w-full">
-              <FadeIn className="text-center mb-8 md:mb-12">
-                <h2 className="text-2xl md:text-4xl font-bold text-white mb-3 md:mb-4">
-                  Simple, Transparent <span className="text-cyan-500">Pricing</span>
-                </h2>
-                <p className="text-gray-400 text-base md:text-lg max-w-2xl mx-auto">
-                  Start free and upgrade when you need more. No hidden fees, cancel anytime.
-                </p>
-              </FadeIn>
-
-              {/* Currency and Billing toggles */}
-              <div className="flex flex-col items-center justify-center mb-12 gap-6">
-                {/* Currency toggle */}
-                <Tabs
-                  value={currency}
-                  onValueChange={(value) => setCurrency(value as Currency)}
-                  className="w-fit"
+        {recents.length === 0 ? (
+          <div
+            className="rounded-xl py-16 px-6 text-center"
+            style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+          >
+            <V2Caps color={v2.accent}>FIRST SCRIBBLE</V2Caps>
+            <h3
+              className="mt-3"
+              style={{
+                fontFamily: v2Serif,
+                fontSize: 36,
+                lineHeight: 1.05,
+                letterSpacing: "-0.02em",
+                fontWeight: 500,
+              }}
+            >
+              Nothing here <em style={{ color: v2.accent }}>yet</em>.
+            </h3>
+            <p className="mt-3 mx-auto max-w-md text-[14px] leading-relaxed" style={{ color: v2.inkSoft }}>
+              Hit record below. Oscar will clean, title, and file the result.
+            </p>
+            <Link
+              href={ROUTES.RECORDING}
+              className="inline-flex items-center gap-3 mt-7 rounded-full px-5 py-2.5"
+              style={{ background: v2.ink, color: v2.cream, fontSize: 14, fontWeight: 500 }}
+            >
+              <span className="inline-block rounded-full" style={{ height: 7, width: 7, background: v2.accent }} />
+              Make your first Scribble
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-10">
+            {recents.map((s) => {
+              const preview = (s.edited_text || s.original_formatted_text || "").slice(0, 280);
+              return (
+                <Link
+                  key={s.id}
+                  href={`${ROUTES.SCRIBBLE}/${s.id}`}
+                  className="grid grid-cols-12 gap-6 md:gap-10 group"
                 >
-                  <TabsList className="bg-gray-900">
-                    <TabsTrigger
-                      value="INR"
-                      className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
-                    >
-                      ₹ INR
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="USD"
-                      className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
-                    >
-                      $ USD
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-
-                {/* Billing toggle */}
-                <Tabs
-                  value={billingCycle}
-                  onValueChange={(value) => setBillingCycle(value as BillingCycle)}
-                  className="w-fit"
-                >
-                  <TabsList className="bg-gray-900">
-                    <TabsTrigger
-                      value="monthly"
-                      className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
-                    >
-                      Monthly
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="yearly"
-                      className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white"
-                    >
-                      Yearly
-                      <span className="ml-2 text-xs bg-white/80 text-cyan-700 px-2 py-0.5 rounded-full">
-                        Save {pricingConfig.YEARLY_SAVINGS_PERCENT}%
-                      </span>
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              {/* Pricing cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-3xl mx-auto">
-                {/* Free Plan */}
-                <FadeIn delay={0.1} className="h-full">
-                <div className="relative bg-slate-900 border border-cyan-700/30 hover:border-cyan-500/40 rounded-2xl shadow-xl p-6 card-lift h-full flex flex-col">
-                  <div className="text-center mb-6">
-                    <h3 className="text-xl font-bold text-white mb-2">Free</h3>
-                    <div className="flex items-baseline justify-center gap-1">
-                      <span className="text-4xl font-bold text-white">{currencySymbol}0</span>
+                  <div className="col-span-12 md:col-span-2 pt-1.5">
+                    <V2Mono style={{ fontSize: 13, color: v2.ink }}>
+                      {formatDate(s.created_at)}
+                    </V2Mono>
+                    <div className="mt-1.5">
+                      <V2Source name="SCRIBBLE" kind={s.folder ? s.folder.toUpperCase() : undefined} />
                     </div>
                   </div>
-
-                  <ul className="space-y-3 mb-8">
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">{SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} Scribble recordings per month</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Up to {SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES} total Scribbles</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Custom vocabulary (up to {SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY} entries)</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">AI-powered text formatting</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Basic voice-to-text</span>
-                    </li>
-                  </ul>
-
-                  <Button
-                    onClick={handleViewPricing}
-                    className="w-full bg-gray-800 hover:bg-gray-700 text-white mt-auto"
-                  >
-                    Get Started
-                  </Button>
-                </div>
-                </FadeIn>
-
-                {/* Pro Plan */}
-                <FadeIn delay={0.2} className="h-full">
-                <div className="relative bg-slate-900 border border-cyan-500/50 ring-1 ring-cyan-500/50 hover:ring-cyan-400/60 rounded-2xl shadow-xl p-6 card-lift h-full flex flex-col">
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="px-3 py-1 text-xs font-medium bg-cyan-500 text-white rounded-full">
-                      Most Popular
-                    </span>
+                  <div className="col-span-12 md:col-span-10">
+                    <h3
+                      style={{
+                        fontFamily: v2Serif,
+                        fontSize: 24,
+                        lineHeight: 1.25,
+                        letterSpacing: "-0.005em",
+                        fontWeight: 500,
+                      }}
+                    >
+                      {s.title || UI_STRINGS.UNTITLED_SCRIBBLE}
+                    </h3>
+                    <p
+                      className="mt-2 text-[14px] leading-relaxed"
+                      style={{ color: v2.inkSoft, maxWidth: 720 }}
+                    >
+                      {preview}
+                      {(s.edited_text || s.original_formatted_text || "").length > 280 ? "…" : ""}
+                    </p>
                   </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-                  <div className="text-center mb-6">
-                    <h3 className="text-xl font-bold text-white mb-2">Pro</h3>
-                    <div className="flex items-baseline justify-center gap-1">
-                      <span className="text-4xl font-bold text-white">
-                        {billingCycle === "yearly" && monthlyEquivalent
-                          ? `${currencySymbol}${monthlyEquivalent}`
-                          : `${currencySymbol}${price}`}
-                      </span>
-                      <span className="text-gray-400">/month</span>
-                    </div>
-                    {billingCycle === "yearly" && (
-                      <>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {currencySymbol}
-                          {price} billed annually
-                        </p>
-                        <p className="text-sm text-cyan-400 mt-1">
-                          Save {pricingConfig.YEARLY_SAVINGS_PERCENT}% vs monthly
-                        </p>
-                      </>
-                    )}
-                    {currency === "USD" && (
-                      <p className="text-xs text-gray-500 mt-2">
-                        Charged in INR (₹{billingCycle === "monthly" ? PRICING.MONTHLY : PRICING.YEARLY})
-                      </p>
-                    )}
-                  </div>
-
-                  <ul className="space-y-3 mb-8">
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Unlimited Scribble recordings</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Unlimited Scribbles</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Unlimited vocabulary entries</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">AI-powered text formatting</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Priority processing</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                      <span className="text-gray-300 text-sm">Priority support</span>
-                    </li>
-                  </ul>
-
-                  <Button
-                    onClick={handleViewPricing}
-                    className="w-full bg-cyan-500 hover:bg-cyan-600 text-white mt-auto"
-                  >
-                    Upgrade to Pro
-                  </Button>
-                </div>
-                </FadeIn>
-              </div>
-            </div>
-          </section>
-
-          {/* Final CTA Section */}
-          <section className="min-h-auto md:min-h-[80vh] flex items-center justify-center py-12 md:py-16 px-4 mt-8 w-full">
-            <FadeIn className="max-w-4xl mx-auto text-center">
-              <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-                Your Voice.<br />
-                <span className="text-cyan-500">Instantly Transformed.</span>
-              </h2>
-              <p className="text-gray-300 text-lg md:text-xl mb-8 max-w-2xl mx-auto">
-                Start free. No credit card required. Your voice, working for you everywhere.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button
-                  onClick={() => router.push("/download")}
-                  size="lg"
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white px-10 py-7 text-xl font-semibold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-105"
-                >
-                  <Download className="w-6 h-6 mr-3" />
-                  Download Free
-                </Button>
-              </div>
-              <p className="text-gray-500 text-sm mt-6">
-                {SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS} free Scribble recordings/month • No credit card • Upgrade anytime
-              </p>
-            </FadeIn>
-          </section>
-        </>
-      )}
+      <footer
+        className="px-6 md:px-14 py-10 flex items-center justify-between"
+        style={{ borderTop: `1px solid ${v2.rule}` }}
+      >
+        <V2Caps>OSCAR · LISTENING SURFACE</V2Caps>
+        <V2Caps>{recents.length} RECENT · OPEN LIBRARY →</V2Caps>
+      </footer>
     </main>
   );
+}
+
+function MarketingLanding({ onStart }: { onStart: () => void }) {
+  return (
+    <main style={{ background: v2.cream, color: v2.ink, fontFamily: "var(--font-figtree), system-ui" }}>
+      <V2MarketingHeader active="PRODUCT" />
+
+      <section className="px-6 md:px-14 pt-20 md:pt-32 pb-20 md:pb-24 text-center">
+        <V2Caps>VOICE-FIRST WRITING · FOR PEOPLE WHO TYPE TOO MUCH</V2Caps>
+        <h1
+          className="mt-6 mx-auto"
+          style={{
+            fontFamily: v2Serif,
+            fontSize: "clamp(56px, 11vw, 132px)",
+            lineHeight: 0.93,
+            letterSpacing: "-0.035em",
+            fontWeight: 500,
+            maxWidth: 1100,
+          }}
+        >
+          You talk.<br />
+          Oscar <em style={{ fontStyle: "italic", color: v2.accent }}>listens</em>,<br />
+          shapes it,<br />
+          hands it back.
+        </h1>
+        <p className="mt-10 mx-auto max-w-xl text-[17px] leading-relaxed" style={{ color: v2.inkSoft }}>
+          A dictation tool that knows what app you&rsquo;re in and writes the way that app deserves. Slack
+          reads like Slack. Code reads like code. Letters read like letters.
+        </p>
+        <div className="mt-10 flex items-center justify-center gap-5 flex-wrap">
+          <button
+            onClick={onStart}
+            className="inline-flex items-center gap-3 rounded-full px-6 py-3 text-[14px] font-medium"
+            style={{ background: v2.ink, color: v2.cream }}
+          >
+            <span className="inline-block rounded-full" style={{ height: 7, width: 7, background: v2.accent }} />
+            Try Oscar free
+          </button>
+          <Link href="/download" className="text-[14px]" style={{ color: v2.inkSoft }}>
+            · or download the desktop app
+          </Link>
+        </div>
+
+        <div
+          className="mt-16 md:mt-20 inline-flex items-center gap-3 rounded-full"
+          style={{
+            background: v2.ink,
+            color: v2.cream,
+            padding: "14px 22px",
+            boxShadow: "0 12px 32px rgba(184,98,61,0.18)",
+          }}
+        >
+          <span
+            className="inline-block rounded-full"
+            style={{ height: 8, width: 8, background: v2.accent, boxShadow: `0 0 14px ${v2.accent}` }}
+          />
+          <span className="inline-flex items-end gap-0.5" style={{ height: 14 }}>
+            {[3, 7, 5, 10, 4, 8, 6, 9, 5, 7, 4, 8].map((h, i) => (
+              <span
+                key={i}
+                className="rounded-full"
+                style={{ background: v2.accent, width: 2, height: h }}
+              />
+            ))}
+          </span>
+          <span style={{ fontSize: 13, color: v2.cream2 }}>· listening · 0:08</span>
+        </div>
+      </section>
+
+      <section className="px-6 md:px-14 py-20 md:py-24" style={{ borderTop: `1px solid ${v2.rule}` }}>
+        <V2Caps>THREE WAYS TO LISTEN</V2Caps>
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-12">
+          {MODES.map(([n, tag, title, body]) => (
+            <article key={n}>
+              <div className="flex items-baseline gap-3">
+                <V2Mono style={{ fontSize: 12, color: v2.accent, letterSpacing: "0.16em" }}>{n}</V2Mono>
+                <V2Caps>{tag.toUpperCase()}</V2Caps>
+              </div>
+              <h3
+                className="mt-3"
+                style={{
+                  fontFamily: v2Serif,
+                  fontSize: 36,
+                  lineHeight: 1.05,
+                  letterSpacing: "-0.02em",
+                  fontWeight: 500,
+                }}
+              >
+                {title}
+              </h3>
+              <p className="mt-4 text-[14px] leading-relaxed" style={{ color: v2.inkSoft }}>
+                {body}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section
+        className="px-6 md:px-14 py-20 md:py-24"
+        style={{ borderTop: `1px solid ${v2.rule}`, background: v2.cream2 }}
+      >
+        <V2Caps>WHAT PEOPLE SAY</V2Caps>
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-12">
+          {TESTIMONIALS.map(([quote, by], i) => (
+            <blockquote key={i}>
+              <p
+                style={{
+                  fontFamily: v2Serif,
+                  fontSize: 24,
+                  lineHeight: 1.32,
+                  letterSpacing: "-0.005em",
+                }}
+              >
+                &ldquo;{quote}&rdquo;
+              </p>
+              <div className="mt-4">
+                <V2Caps>{by}</V2Caps>
+              </div>
+            </blockquote>
+          ))}
+        </div>
+      </section>
+
+      <section className="px-6 md:px-14 py-24 md:py-32 text-center" style={{ borderTop: `1px solid ${v2.rule}` }}>
+        <h2
+          style={{
+            fontFamily: v2Serif,
+            fontSize: "clamp(40px, 7vw, 72px)",
+            lineHeight: 0.98,
+            letterSpacing: "-0.025em",
+            fontWeight: 500,
+          }}
+        >
+          Try Oscar <em style={{ fontStyle: "italic", color: v2.accent }}>today</em>.
+        </h2>
+        <button
+          onClick={onStart}
+          className="mt-9 rounded-full px-7 py-3.5 text-[15px] font-medium"
+          style={{ background: v2.ink, color: v2.cream }}
+        >
+          Get Oscar — it&rsquo;s free
+        </button>
+      </section>
+
+      <footer
+        className="px-6 md:px-14 py-12 flex items-center justify-between flex-wrap gap-4"
+        style={{ borderTop: `1px solid ${v2.rule}` }}
+      >
+        <V2Wordmark />
+        <div className="flex items-center gap-8">
+          <Link href="/privacy"><V2Caps>PRIVACY</V2Caps></Link>
+          <Link href="/terms"><V2Caps>TERMS</V2Caps></Link>
+          <Link href="/refund-policy"><V2Caps>REFUNDS</V2Caps></Link>
+          <V2Caps>© NAVGURUKUL · 2026</V2Caps>
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+export default function Home() {
+  const { session, user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const [recents, setRecents] = useState<DBScribble[]>([]);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await scribblesService.getScribbles();
+      if (!cancelled && !error && data) setRecents(data.slice(0, 5));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  const handleStart = () => {
+    if (session) router.push(ROUTES.RECORDING);
+    else router.push("/auth?redirectTo=/recording");
+  };
+
+  if (session && !authLoading) {
+    const firstName =
+      (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
+      user?.email?.split("@")[0] ||
+      "there";
+    return <SignedInHome recents={recents} firstName={firstName} />;
+  }
+
+  return <MarketingLanding onStart={handleStart} />;
 }

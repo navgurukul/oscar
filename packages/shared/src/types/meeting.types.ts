@@ -114,4 +114,7 @@ export interface SavedMeetingRecord {
   organizationId?: string | null;
   sharedAt?: string | null;
   userId?: string | null;
+  // Public share link (Phase 6)
+  visibility?: "private" | "org" | "public";
+  publicShareToken?: string | null;
 }

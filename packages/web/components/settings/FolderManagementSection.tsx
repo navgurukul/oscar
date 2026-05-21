@@ -2,12 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FolderPlus, Trash2, Edit2, Check, X, Plus } from "lucide-react";
+import { Trash2, Edit2, Check, X, Plus } from "lucide-react";
 import { scribblesService } from "@/lib/services/scribbles.service";
 import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -27,6 +25,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { DBScribble } from "@/lib/types/scribble.types";
+import { v2, v2Serif, V2Caps, V2Mono } from "@/components/v2/V2Primitives";
 
 export default function FolderManagementSection() {
   const router = useRouter();
@@ -52,15 +51,9 @@ export default function FolderManagementSection() {
     setIsLoading(true);
     try {
       const { data, error } = await scribblesService.getFolders();
-      if (!error && data) {
-        setFolders(data);
-      }
+      if (!error && data) setFolders(data);
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to load folders.",
-        variant: "destructive",
-      });
+      toast({ title: "Failed to load folders", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -69,48 +62,30 @@ export default function FolderManagementSection() {
   const loadScribbles = async () => {
     try {
       const { data, error } = await scribblesService.getScribbles();
-      if (!error && data) {
-        setAllScribbles(data);
-      }
+      if (!error && data) setAllScribbles(data);
     } catch {
-      // Silent fail for scribbles loading
+      /* ignore */
     }
   };
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
-      toast({
-        title: "Error",
-        description: "Folder name cannot be empty.",
-        variant: "destructive",
-      });
+      toast({ title: "Folder name required", variant: "destructive" });
       return;
     }
-
     if (!targetScribbleId) {
-      toast({
-        title: "Error",
-        description: "Please select a Scribble to place in this folder.",
-        variant: "destructive",
-      });
+      toast({ title: "Select a Scribble", description: "Folders are created when you place a Scribble inside.", variant: "destructive" });
       return;
     }
-
     if (folders.includes(newFolderName.trim())) {
-      toast({
-        title: "Error",
-        description: "Folder already exists.",
-        variant: "destructive",
-      });
+      toast({ title: "Folder already exists", variant: "destructive" });
       return;
     }
-
     setIsCreatingFolder(true);
     try {
       const { data, error } = await scribblesService.updateScribble(targetScribbleId, {
         folder: newFolderName.trim(),
       });
-
       if (!error && data) {
         setFolders([...folders, newFolderName.trim()]);
         setAllScribbles((prev) =>
@@ -118,29 +93,15 @@ export default function FolderManagementSection() {
         );
         setNewFolderName("");
         setTargetScribbleId("");
-        toast({
-          title: "Success",
-          description: `Folder "${newFolderName.trim()}" created and assigned to your Scribble.`,
-        });
-        // Redirect back to scribbles if coming from scribbles page
+        toast({ title: "Folder created" });
         if (fromScribbles) {
-          setTimeout(() => {
-            router.push("/scribble");
-          }, 500);
+          setTimeout(() => router.push("/scribble"), 500);
         }
       } else {
-        toast({
-          title: "Error",
-          description: "Failed to create folder.",
-          variant: "destructive",
-        });
+        toast({ title: "Failed to create folder", variant: "destructive" });
       }
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to create folder.",
-        variant: "destructive",
-      });
+      toast({ title: "Failed to create folder", variant: "destructive" });
     } finally {
       setIsCreatingFolder(false);
     }
@@ -148,52 +109,29 @@ export default function FolderManagementSection() {
 
   const handleRenameFolder = async (oldName: string) => {
     if (!editValue.trim()) {
-      toast({
-        title: "Error",
-        description: "Folder name cannot be empty.",
-        variant: "destructive",
-      });
+      toast({ title: "Folder name required", variant: "destructive" });
       return;
     }
-
     if (folders.includes(editValue.trim()) && editValue.trim() !== oldName) {
-      toast({
-        title: "Error",
-        description: "Folder name already exists.",
-        variant: "destructive",
-      });
+      toast({ title: "Folder already exists", variant: "destructive" });
       return;
     }
-
     try {
       const scribblesInFolder = allScribbles.filter((n) => n.folder === oldName);
       const { error } = await scribblesService.updateScribbles(
-        scribblesInFolder.map((scribble) => scribble.id),
+        scribblesInFolder.map((s) => s.id),
         { folder: editValue.trim() }
       );
-
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       setFolders(folders.map((f) => (f === oldName ? editValue.trim() : f)));
       setAllScribbles((prev) =>
-        prev.map((n) =>
-          n.folder === oldName ? { ...n, folder: editValue.trim() } : n
-        )
+        prev.map((n) => (n.folder === oldName ? { ...n, folder: editValue.trim() } : n))
       );
       setEditingFolder(null);
       setEditValue("");
-      toast({
-        title: "Success",
-        description: `Folder renamed to "${editValue.trim()}"`,
-      });
+      toast({ title: "Folder renamed" });
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to rename folder.",
-        variant: "destructive",
-      });
+      toast({ title: "Failed to rename folder", variant: "destructive" });
     }
   };
 
@@ -201,182 +139,175 @@ export default function FolderManagementSection() {
     try {
       const scribblesInFolder = allScribbles.filter((n) => n.folder === folderName);
       const { error } = await scribblesService.updateScribbles(
-        scribblesInFolder.map((scribble) => scribble.id),
+        scribblesInFolder.map((s) => s.id),
         { folder: null }
       );
-
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       setFolders(folders.filter((f) => f !== folderName));
       setAllScribbles((prev) =>
-        prev.map((n) =>
-          n.folder === folderName ? { ...n, folder: null } : n
-        )
+        prev.map((n) => (n.folder === folderName ? { ...n, folder: null } : n))
       );
-      toast({
-        title: "Success",
-        description: `Folder "${folderName}" deleted.`,
-      });
+      toast({ title: "Folder deleted" });
     } catch {
-      toast({
-        title: "Error",
-        description: "Failed to delete folder.",
-        variant: "destructive",
-      });
+      toast({ title: "Failed to delete folder", variant: "destructive" });
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Create New Folder */}
-      <Card className="bg-slate-900 border-cyan-700/30">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <FolderPlus className="w-5 h-5 text-cyan-500" />
-            Create New Folder
-          </CardTitle>
-          <CardDescription className="text-gray-400">
-            Folders are created when you place at least one Scribble inside them
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            <div className="flex gap-2 items-stretch">
-              <Input
-                placeholder="e.g., Work"
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === "Enter" && !isCreatingFolder && handleCreateFolder()
-                }
-                className="bg-slate-800 border-slate-700 text-gray-300 focus:border-cyan-500 flex-1"
+    <div className="space-y-10">
+      {/* Create */}
+      <div
+        className="rounded-lg p-6"
+        style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+      >
+        <V2Caps>CREATE NEW FOLDER</V2Caps>
+        <p className="mt-2 text-[12px]" style={{ color: v2.inkSoft }}>
+          Folders are created when you move at least one Scribble into them.
+        </p>
+        <div className="mt-4 flex gap-2 items-center flex-wrap">
+          <Input
+            placeholder="e.g. Pricing"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !isCreatingFolder && handleCreateFolder()}
+            className="flex-1 min-w-[180px]"
+            style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
+          />
+          <Select value={targetScribbleId} onValueChange={setTargetScribbleId}>
+            <SelectTrigger
+              className="w-[220px]"
+              style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
+            >
+              <SelectValue placeholder="Select a Scribble…" />
+            </SelectTrigger>
+            <SelectContent
+              className="max-h-64 overflow-y-auto"
+              style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
+            >
+              {allScribbles.length === 0 ? (
+                <SelectItem value="no-scribbles" disabled>
+                  No Scribbles available
+                </SelectItem>
+              ) : (
+                allScribbles.map((scribble) => (
+                  <SelectItem key={scribble.id} value={scribble.id}>
+                    {(scribble.title || "Untitled Scribble").slice(0, 50)}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          <button
+            onClick={handleCreateFolder}
+            disabled={
+              isCreatingFolder ||
+              !newFolderName.trim() ||
+              !targetScribbleId ||
+              allScribbles.length === 0
+            }
+            className="text-[12px] rounded-full px-4 py-2 font-medium inline-flex items-center gap-1.5 disabled:opacity-40"
+            style={{ background: v2.ink, color: v2.cream }}
+          >
+            {isCreatingFolder ? (
+              <span
+                className="w-3.5 h-3.5 border-2 rounded-full animate-spin inline-block"
+                style={{ borderColor: v2.cream, borderTopColor: "transparent" }}
               />
+            ) : (
+              <Plus className="w-3.5 h-3.5" />
+            )}
+            Create
+          </button>
+        </div>
+      </div>
 
-              <Select value={targetScribbleId} onValueChange={setTargetScribbleId}>
-                <SelectTrigger className="bg-slate-800 border-slate-700 text-gray-300 w-[200px]">
-                  <SelectValue placeholder="Select Scribble..." />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-700 text-gray-300 max-h-64 overflow-y-auto">
-                  {allScribbles.length === 0 ? (
-                    <SelectItem value="no-scribbles" disabled>
-                      No Scribbles available
-                    </SelectItem>
-                  ) : (
-                    allScribbles.map((scribble) => (
-                      <SelectItem key={scribble.id} value={scribble.id}>
-                        {(scribble.title || "Untitled Scribble").slice(0, 50)}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-
-              <Button
-                onClick={handleCreateFolder}
-                disabled={
-                  isCreatingFolder ||
-                  !newFolderName.trim() ||
-                  !targetScribbleId ||
-                  allScribbles.length === 0
-                }
-                className="border-2 hover:bg-cyan-600 px-2 h-9"
-                variant="ghost"
-              >
-                {isCreatingFolder ? (
-                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                ) : (
-                  <Plus className="w-5 h-5 text-white" strokeWidth={2.5} />
-                )}
-              </Button>
-            </div>
+      {/* List */}
+      <div className="pt-7" style={{ borderTop: `1px solid ${v2.rule}` }}>
+        <V2Caps>
+          YOUR FOLDERS · {folders.length}
+          {folders.length > 0 ? ` · ${allScribbles.filter((s) => s.folder).length} SCRIBBLES FILED` : ""}
+        </V2Caps>
+        {isLoading ? (
+          <p className="mt-6 text-[14px]" style={{ color: v2.inkSoft }}>
+            Loading folders…
+          </p>
+        ) : folders.length === 0 ? (
+          <div
+            className="mt-6 rounded-lg p-10 text-center"
+            style={{ background: v2.cream2, border: `1px dashed ${v2.rule}` }}
+          >
+            <p style={{ fontFamily: v2Serif, fontSize: 22, fontWeight: 500, letterSpacing: "-0.005em" }}>
+              No folders yet.
+            </p>
+            <p className="mt-2 text-[13px]" style={{ color: v2.inkSoft }}>
+              Create one above to start organizing your Scribbles.
+            </p>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Folders List */}
-      <Card className="bg-slate-900 border-cyan-700/30">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <FolderPlus className="w-5 h-5 text-cyan-500" />
-            Your Folders
-          </CardTitle>
-          <CardDescription className="text-gray-400">
-            {folders.length === 0
-              ? "No folders yet. Create one to get started!"
-              : `${folders.length} folder${folders.length !== 1 ? "s" : ""} created`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="text-gray-400 text-sm">Loading folders...</div>
-          ) : folders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-cyan-700/30 rounded-lg">
-              <FolderPlus className="w-12 h-12 text-gray-600 mb-3" />
-              <p className="text-gray-400 font-medium mb-1">No folders yet</p>
-              <p className="text-gray-500 text-sm text-center">
-                Start by creating a folder and assigning it to a Scribble.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {folders.map((folder) => {
-                const scribblesCount = allScribbles.filter(
-                  (n) => n.folder === folder
-                ).length;
-                return (
-                  <div
-                    key={folder}
-                    className="flex items-center justify-between bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 hover:border-cyan-500/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 flex-1">
-                      {editingFolder === folder ? (
-                        <Input
-                          autoFocus
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              handleRenameFolder(folder);
-                            } else if (e.key === "Escape") {
-                              setEditingFolder(null);
-                              setEditValue("");
-                            }
-                          }}
-                          className="bg-slate-700 border-slate-600 text-gray-200 focus:border-cyan-500"
-                        />
-                      ) : (
-                        <div className="flex flex-col">
-                          <span className="text-gray-300 font-medium">
-                            {folder}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {scribblesCount} Scribble{scribblesCount !== 1 ? "s" : ""}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
+        ) : (
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+            {folders.map((folder) => {
+              const scribblesCount = allScribbles.filter((n) => n.folder === folder).length;
+              const isEditing = editingFolder === folder;
+              return (
+                <div
+                  key={folder}
+                  className="rounded-lg p-6 group"
+                  style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+                >
+                  <div className="flex items-baseline justify-between">
+                    {isEditing ? (
+                      <Input
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleRenameFolder(folder);
+                          else if (e.key === "Escape") {
+                            setEditingFolder(null);
+                            setEditValue("");
+                          }
+                        }}
+                        className="text-lg"
+                        style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink, fontFamily: v2Serif }}
+                      />
+                    ) : (
+                      <h3
+                        style={{
+                          fontFamily: v2Serif,
+                          fontSize: 26,
+                          fontWeight: 500,
+                          color: v2.ink,
+                          letterSpacing: "-0.015em",
+                        }}
+                      >
+                        {folder}
+                      </h3>
+                    )}
+                    <V2Mono style={{ fontSize: 13, color: v2.accent }}>{scribblesCount}</V2Mono>
+                  </div>
+                  <div className="mt-5 flex items-center justify-between">
+                    <V2Caps>{scribblesCount === 1 ? "1 SCRIBBLE FILED" : `${scribblesCount} SCRIBBLES FILED`}</V2Caps>
                     <div className="flex items-center gap-1">
-                      {editingFolder === folder ? (
+                      {isEditing ? (
                         <>
                           <button
                             onClick={() => handleRenameFolder(folder)}
-                            className="p-2 rounded-lg text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                            className="p-1.5 rounded-full"
+                            style={{ color: v2.accent }}
                             title="Save"
                           >
-                            <Check className="w-4 h-4" />
+                            <Check className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => {
                               setEditingFolder(null);
                               setEditValue("");
                             }}
-                            className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-colors"
+                            className="p-1.5 rounded-full"
+                            style={{ color: v2.inkFaint }}
                             title="Cancel"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="w-3.5 h-3.5" />
                           </button>
                         </>
                       ) : (
@@ -386,39 +317,59 @@ export default function FolderManagementSection() {
                               setEditingFolder(folder);
                               setEditValue(folder);
                             }}
-                            className="p-2 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/5 transition-colors"
-                            title="Rename folder"
+                            className="p-1.5 rounded-full"
+                            style={{ color: v2.inkFaint }}
+                            title="Rename"
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                             <AlertDialog>
+                          <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <button
-                                className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-colors"
-                                title="Delete folder"
+                                className="p-1.5 rounded-full"
+                                style={{ color: v2.inkFaint }}
+                                title="Delete"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </AlertDialogTrigger>
-                            <AlertDialogContent className="bg-slate-900 border-slate-700 w-[90vw] max-w-sm rounded-2xl p-6 sm:p-8 gap-6">
-                              <AlertDialogHeader className="space-y-4">
-                                <AlertDialogTitle className="text-white text-xl font-semibold">
+                            <AlertDialogContent
+                              style={{
+                                background: v2.cream,
+                                border: `1px solid ${v2.rule}`,
+                                color: v2.ink,
+                              }}
+                            >
+                              <AlertDialogHeader>
+                                <AlertDialogTitle
+                                  style={{
+                                    fontFamily: v2Serif,
+                                    fontSize: 24,
+                                    fontWeight: 500,
+                                    letterSpacing: "-0.01em",
+                                  }}
+                                >
                                   Delete folder?
                                 </AlertDialogTitle>
-                                <AlertDialogDescription className="text-gray-400 text-sm leading-relaxed">
-                                  This will remove the &quot;{folder}&quot; folder from all{" "}
+                                <AlertDialogDescription style={{ color: v2.inkSoft }}>
+                                  This will remove the &ldquo;{folder}&rdquo; folder from{" "}
                                   {scribblesCount} Scribble{scribblesCount !== 1 ? "s" : ""}.
-                                  Scribbles will still exist but won&apos;t be organized by
-                                  this folder.
+                                  Scribbles stay, but lose their folder.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
-                              <AlertDialogFooter className="gap-3 sm:gap-3 flex-col sm:flex-row sm:justify-end">
-                                <AlertDialogCancel className="bg-slate-800 text-white border-slate-700 hover:bg-slate-700 h-10 order-2 sm:order-1">
+                              <AlertDialogFooter>
+                                <AlertDialogCancel
+                                  style={{
+                                    background: "transparent",
+                                    border: `1px solid ${v2.rule}`,
+                                    color: v2.inkSoft,
+                                  }}
+                                >
                                   Cancel
                                 </AlertDialogCancel>
                                 <AlertDialogAction
                                   onClick={() => handleDeleteFolder(folder)}
-                                  className="bg-red-600 hover:bg-red-700 text-white h-10 order-1 sm:order-2"
+                                  style={{ background: "#8c2f25", color: v2.cream }}
                                 >
                                   Delete
                                 </AlertDialogAction>
@@ -429,12 +380,12 @@ export default function FolderManagementSection() {
                       )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

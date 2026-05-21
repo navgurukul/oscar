@@ -26,7 +26,7 @@ import { MeetingMetadataEditor } from "./MeetingMetadataEditor";
 import { DeleteMeetingDialog } from "./DeleteMeetingDialog";
 import { MarkdownView } from "./MarkdownView";
 import { copyMarkdownAsRichText } from "@oscar/shared";
-import { ShareToggle } from "@/components/org/ShareToggle";
+import { ShareDialog } from "@/components/org/ShareDialog";
 import type {
   SavedMeetingRecord,
   MeetingTranscriptSegment,
@@ -56,17 +56,25 @@ function formatDate(iso: string) {
 }
 
 function meetingTypeBadge(hint: string) {
-  const map: Record<string, { label: string; cls: string }> = {
-    discovery: { label: "Discovery", cls: "bg-cyan-500/15 text-cyan-300" },
-    "1on1": { label: "1-on-1", cls: "bg-cyan-500/15 text-cyan-300" },
-    standup: { label: "Stand-up", cls: "bg-slate-500/15 text-slate-300" },
-    general: { label: "General", cls: "bg-cyan-500/15 text-cyan-300" },
-    auto: { label: "Meeting", cls: "bg-slate-500/15 text-slate-300" },
+  const map: Record<string, { label: string }> = {
+    discovery: { label: "Discovery" },
+    "1on1": { label: "1-on-1" },
+    standup: { label: "Stand-up" },
+    general: { label: "General" },
+    auto: { label: "Meeting" },
   };
-  const { label, cls } = map[hint] ?? map.auto;
+  const { label } = map[hint] ?? map.auto;
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.7rem] font-medium ${cls}`}
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.7rem] font-medium"
+      style={{
+        fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+        letterSpacing: "0.16em",
+        textTransform: "uppercase",
+        fontSize: 10,
+        color: "#b8623d",
+        background: "rgba(184,98,61,0.10)",
+      }}
     >
       {label}
     </span>
@@ -79,17 +87,16 @@ function TranscriptSegment({ seg }: { seg: MeetingTranscriptSegment }) {
     <div className={`flex gap-3 ${isSpeaker ? "flex-row-reverse" : ""}`}>
       <div className="flex-shrink-0 mt-0.5">
         {isSpeaker ? (
-          <MonitorPlay size={14} className="text-cyan-400" />
+          <MonitorPlay size={14} style={{ color: "#b8623d" }} />
         ) : (
-          <Mic2 size={14} className="text-slate-400" />
+          <Mic2 size={14} style={{ color: "#8b8780" }} />
         )}
       </div>
       <p
-        className={`text-sm leading-relaxed max-w-[85%] ${
-          isSpeaker ? "text-right text-slate-300" : "text-slate-300"
-        }`}
+        className={`text-sm leading-relaxed max-w-[85%] ${isSpeaker ? "text-right" : ""}`}
+        style={{ color: "#1a1816" }}
       >
-        <span className="text-[0.65rem] text-slate-500 mr-1.5">
+        <span className="text-[0.65rem] mr-1.5" style={{ color: "#8b8780" }}>
           {seg.speaker.diarization_label ?? (isSpeaker ? "Them" : "Me")}
         </span>
         {seg.text}
@@ -179,22 +186,37 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
 
   return (
     <>
-      <article className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden transition-all duration-200 hover:border-slate-700">
+      <article
+        className="rounded-2xl overflow-hidden transition-all duration-200"
+        style={{ background: "#efeae0", border: "1px solid #e5e0d6" }}
+      >
         {/* Card header */}
         <div className="flex items-start gap-2">
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="flex-1 text-left p-5 sm:p-6 flex items-start justify-between gap-4 group hover:bg-slate-800/50 transition-colors duration-150"
+            className="flex-1 text-left p-5 sm:p-6 flex items-start justify-between gap-4 group transition-colors duration-150"
             aria-expanded={expanded}
           >
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 {meetingTypeBadge(meeting.meetingTypeHint)}
               </div>
-              <h2 className="text-base sm:text-lg font-semibold text-white leading-snug">
+              <h2
+                className="leading-snug"
+                style={{
+                  fontFamily: '"EB Garamond", Georgia, serif',
+                  fontSize: 22,
+                  fontWeight: 500,
+                  letterSpacing: "-0.01em",
+                  color: "#1a1816",
+                }}
+              >
                 {meeting.meetingTitle || "Untitled Meeting"}
               </h2>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-400">
+              <div
+                className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+                style={{ color: "#5a5852" }}
+              >
                 <span className="flex items-center gap-1.5">
                   <Calendar size={13} className="flex-shrink-0" />
                   {formatDate(meeting.startedAt)}
@@ -207,35 +229,53 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
                 )}
               </div>
             </div>
-            <div className="flex-shrink-0 text-slate-500 group-hover:text-slate-300 transition-colors mt-1">
+            <div
+              className="flex-shrink-0 transition-colors mt-1"
+              style={{ color: "#8b8780" }}
+            >
               {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
             </div>
           </button>
 
           {/* Share + actions */}
           <div className="pt-5 pr-3 sm:pr-4 flex items-start gap-1">
-            <ShareToggle
+            <ShareDialog
               kind="meeting"
               id={meeting.id}
-              shared={meeting.sharedWithOrg ?? false}
-              onChange={(next) => void onUpdate(meeting.id, { sharedWithOrg: next })}
+              visibility={
+                meeting.visibility ??
+                (meeting.sharedWithOrg ? "org" : "private")
+              }
+              publicShareToken={meeting.publicShareToken ?? null}
+              onChange={(next) =>
+                void onUpdate(meeting.id, {
+                  visibility: next.visibility,
+                  publicShareToken: next.public_share_token,
+                  sharedWithOrg: next.visibility !== "private",
+                })
+              }
             />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg hover:bg-slate-800 transition-colors duration-150" aria-label="Meeting actions">
+                <button
+                  className="p-1.5 rounded-full transition-colors duration-150"
+                  style={{ color: "#8b8780" }}
+                  aria-label="Meeting actions"
+                >
                   <MoreVertical size={16} />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                className="bg-slate-800 border-slate-700"
+                style={{ background: "#f7f4ee", border: "1px solid #e5e0d6", color: "#1a1816" }}
               >
                 <DropdownMenuItem
                   onClick={() => {
                     setExpanded(true);
                     setEditingMetadata(true);
                   }}
-                  className="text-slate-300 focus:text-white focus:bg-slate-700 cursor-pointer"
+                  className="cursor-pointer"
+                  style={{ color: "#1a1816" }}
                 >
                   <Pencil size={14} className="mr-2" />
                   Edit details
@@ -243,7 +283,8 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
                 {hasNotes && (
                   <DropdownMenuItem
                     onClick={() => handleCopy(meeting.notesMarkdown)}
-                    className="text-slate-300 focus:text-white focus:bg-slate-700 cursor-pointer"
+                    className="cursor-pointer"
+                    style={{ color: "#1a1816" }}
                   >
                     <Copy size={14} className="mr-2" />
                     Copy notes
@@ -252,7 +293,8 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
                 {hasNotes && (
                   <DropdownMenuItem
                     onClick={handleEmail}
-                    className="text-slate-300 focus:text-white focus:bg-slate-700 cursor-pointer"
+                    className="cursor-pointer"
+                    style={{ color: "#1a1816" }}
                   >
                     <Mail size={14} className="mr-2" />
                     Email notes
@@ -260,7 +302,8 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
                 )}
                 <DropdownMenuItem
                   onClick={() => setDeleteOpen(true)}
-                  className="text-red-400 focus:text-red-300 focus:bg-slate-700 cursor-pointer"
+                  className="cursor-pointer"
+                  style={{ color: "#b8623d" }}
                 >
                   <Trash2 size={14} className="mr-2" />
                   Delete
@@ -283,19 +326,29 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
 
         {/* Expandable body */}
         {expanded && (
-          <div className="border-t border-slate-800 divide-y divide-slate-800">
+          <div style={{ borderTop: "1px solid #e5e0d6" }}>
             {/* AI-generated meeting notes */}
-            <section className="p-5 sm:p-6 space-y-3">
+            <section className="p-5 sm:p-6 space-y-3" style={{ borderBottom: "1px solid #e5e0d6" }}>
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-cyan-400">
-                  Meeting Notes
+                <h3
+                  className="text-sm font-semibold"
+                  style={{
+                    fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+                    letterSpacing: "0.18em",
+                    textTransform: "uppercase",
+                    color: "#b8623d",
+                    fontSize: 10,
+                  }}
+                >
+                  MEETING NOTES
                 </h3>
                 <div className="flex items-center gap-1">
                   {hasNotes && !editingNotes && (
                     <>
                       <button
                         onClick={() => handleCopy(meeting.notesMarkdown)}
-                        className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg transition-colors duration-150"
+                        className="p-1.5 rounded-full transition-colors duration-150"
+                        style={{ color: "#8b8780" }}
                         title="Copy"
                         aria-label="Copy notes"
                       >
@@ -303,7 +356,8 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
                       </button>
                       <button
                         onClick={handleEmail}
-                        className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg transition-colors duration-150"
+                        className="p-1.5 rounded-full transition-colors duration-150"
+                        style={{ color: "#8b8780" }}
                         title="Email"
                         aria-label="Email notes"
                       >
@@ -314,7 +368,8 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
                   {!editingNotes && (
                     <button
                       onClick={() => setEditingNotes(true)}
-                      className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg transition-colors duration-150"
+                      className="p-1.5 rounded-full transition-colors duration-150"
+                      style={{ color: "#8b8780" }}
                       title="Edit"
                       aria-label="Edit meeting notes"
                     >
@@ -330,24 +385,36 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
                   onCancel={() => setEditingNotes(false)}
                 />
               ) : hasNotes ? (
-                <MarkdownView>{meeting.notesMarkdown}</MarkdownView>
+                <div style={{ color: "#1a1816" }}>
+                  <MarkdownView>{meeting.notesMarkdown}</MarkdownView>
+                </div>
               ) : (
-                <p className="text-sm text-slate-500 italic">
+                <p className="text-sm italic" style={{ color: "#8b8780" }}>
                   No AI notes yet. Click edit to add notes.
                 </p>
               )}
             </section>
 
             {/* My personal notes */}
-            <section className="p-5 sm:p-6 space-y-3">
+            <section className="p-5 sm:p-6 space-y-3" style={{ borderBottom: "1px solid #e5e0d6" }}>
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-300">
-                  My Notes
+                <h3
+                  className="text-sm font-semibold"
+                  style={{
+                    fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+                    letterSpacing: "0.18em",
+                    textTransform: "uppercase",
+                    color: "#8b8780",
+                    fontSize: 10,
+                  }}
+                >
+                  MY NOTES
                 </h3>
                 {!editingMyNotes && (
                   <button
                     onClick={() => setEditingMyNotes(true)}
-                    className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg transition-colors duration-150"
+                    className="p-1.5 rounded-full transition-colors duration-150"
+                    style={{ color: "#8b8780" }}
                     title="Edit"
                     aria-label="Edit personal notes"
                   >
@@ -362,11 +429,11 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
                   onCancel={() => setEditingMyNotes(false)}
                 />
               ) : hasMyNotes ? (
-                <MarkdownView className="prose prose-sm prose-invert max-w-none text-slate-300 leading-relaxed">
-                  {meeting.myNotesMarkdown}
-                </MarkdownView>
+                <div className="prose prose-sm max-w-none leading-relaxed" style={{ color: "#1a1816" }}>
+                  <MarkdownView>{meeting.myNotesMarkdown}</MarkdownView>
+                </div>
               ) : (
-                <p className="text-sm text-slate-500 italic">
+                <p className="text-sm italic" style={{ color: "#8b8780" }}>
                   No personal notes. Click edit to add.
                 </p>
               )}
@@ -375,8 +442,17 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
             {/* Transcript segments */}
             {hasTranscript && (
               <section className="p-5 sm:p-6 space-y-3">
-                <h3 className="text-sm font-semibold text-slate-300">
-                  Transcript
+                <h3
+                  className="text-sm font-semibold"
+                  style={{
+                    fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+                    letterSpacing: "0.18em",
+                    textTransform: "uppercase",
+                    color: "#8b8780",
+                    fontSize: 10,
+                  }}
+                >
+                  TRANSCRIPT
                 </h3>
                 <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
                   {meeting.transcriptSegments.map((seg) => (
@@ -389,10 +465,22 @@ export function MeetingCard({ meeting, onUpdate, onDelete }: MeetingCardProps) {
             {/* Fallback: raw transcript text */}
             {!hasTranscript && meeting.transcript && (
               <section className="p-5 sm:p-6 space-y-3">
-                <h3 className="text-sm font-semibold text-slate-300">
-                  Transcript
+                <h3
+                  className="text-sm font-semibold"
+                  style={{
+                    fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+                    letterSpacing: "0.18em",
+                    textTransform: "uppercase",
+                    color: "#8b8780",
+                    fontSize: 10,
+                  }}
+                >
+                  TRANSCRIPT
                 </h3>
-                <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">
+                <p
+                  className="text-sm whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto"
+                  style={{ color: "#1a1816" }}
+                >
                   {meeting.transcript}
                 </p>
               </section>

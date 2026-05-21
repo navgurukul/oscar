@@ -3,13 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, BarChart3, Users, FileText, Mic, BookOpen } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
 import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { ActiveOrganization } from "@oscar/shared/types";
+import {
+  v2,
+  v2Serif,
+  V2Caps,
+  V2Mono,
+  V2Avatar,
+  V2TeamHeader,
+} from "@/components/v2/V2Primitives";
 
 interface AnalyticsResponse {
   member_count: number;
@@ -27,30 +34,9 @@ interface AnalyticsResponse {
 
 function formatMonth(month: string): string {
   const [year, m] = month.split("-").map((s) => Number(s));
-  return new Date(year, m - 1, 1).toLocaleDateString(undefined, {
-    month: "short",
-    year: "2-digit",
-  });
-}
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: number | string;
-  icon: typeof Users;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-      <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-wide">
-        <Icon className="w-4 h-4 text-cyan-400" />
-        {label}
-      </div>
-      <p className="mt-2 text-white text-2xl font-semibold">{value}</p>
-    </div>
-  );
+  return new Date(year, m - 1, 1)
+    .toLocaleDateString(undefined, { month: "short", year: "2-digit" })
+    .toUpperCase();
 }
 
 export default function AnalyticsPage() {
@@ -101,105 +87,209 @@ export default function AnalyticsPage() {
 
   if (!isOrgFeatureEnabled()) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <p className="text-gray-400">Analytics requires the organization feature flag.</p>
+      <main
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: v2.cream, color: v2.ink }}
+      >
+        <p style={{ color: v2.inkSoft }}>Analytics requires the organization feature flag.</p>
       </main>
     );
   }
 
   if (authLoading || loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <Spinner className="text-cyan-500" />
+      <main
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: v2.cream }}
+      >
+        <Spinner />
       </main>
     );
   }
 
   if (active && active.role !== "owner" && active.role !== "admin") {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <p className="text-gray-300">Only owners or admins can view analytics.</p>
+      <main
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: v2.cream, color: v2.ink }}
+      >
+        <p style={{ color: v2.inkSoft }}>Only owners or admins can view analytics.</p>
       </main>
     );
   }
 
   if (!data || !active) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <p className="text-gray-300">No data yet.</p>
+      <main
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: v2.cream, color: v2.ink }}
+      >
+        <p style={{ color: v2.inkSoft }}>No data yet.</p>
       </main>
     );
   }
 
   return (
-    <main className="flex flex-col items-center px-4 pt-8 pb-24">
-      <div className="w-full max-w-3xl mt-16 space-y-6">
-        <Link
-          href={ROUTES.ORG_SETTINGS}
-          className="inline-flex items-center text-sm text-slate-400 hover:text-cyan-300"
-        >
-          <ArrowLeft className="w-4 h-4 mr-1" /> Workspace settings
+    <main
+      style={{
+        background: v2.cream,
+        color: v2.ink,
+        minHeight: "100vh",
+        fontFamily: "var(--font-figtree), system-ui",
+      }}
+    >
+      <V2TeamHeader active="SETTINGS" org={active.organization.name} />
+
+      <section className="px-6 md:px-14 pt-12 md:pt-14 pb-10">
+        <Link href={ROUTES.ORG_SETTINGS}>
+          <V2Caps>← BACK TO ORG SETTINGS</V2Caps>
         </Link>
+        <h1
+          className="mt-3"
+          style={{
+            fontFamily: v2Serif,
+            fontSize: "clamp(40px, 6vw, 56px)",
+            lineHeight: 0.98,
+            letterSpacing: "-0.025em",
+            fontWeight: 500,
+          }}
+        >
+          What the workspace has been{" "}
+          <em style={{ fontStyle: "italic", color: v2.accent }}>saying</em>.
+        </h1>
+        <p className="mt-4 text-[15px] leading-relaxed max-w-xl" style={{ color: v2.inkSoft }}>
+          Usage across {active.organization.name}. Owners and admins only.
+        </p>
+      </section>
 
-        <header className="space-y-1">
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-            <BarChart3 className="w-7 h-7 text-cyan-400" />
-            Analytics
-          </h1>
-          <p className="text-gray-400">Usage for {active.organization.name}.</p>
-        </header>
-
+      <section className="px-6 md:px-14 pb-20 space-y-10">
+        {/* Stat cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Members" value={data.member_count} icon={Users} />
-          <StatCard label="Shared scribbles" value={data.shared_scribbles} icon={FileText} />
-          <StatCard label="Shared meetings" value={data.shared_meetings} icon={Mic} />
-          <StatCard label="Documents" value={data.document_count} icon={BookOpen} />
+          {[
+            ["MEMBERS", data.member_count],
+            ["SHARED SCRIBBLES", data.shared_scribbles],
+            ["SHARED MEETINGS", data.shared_meetings],
+            ["WORKSPACE DOCS", data.document_count],
+          ].map(([k, v]) => (
+            <div
+              key={k as string}
+              className="rounded-lg p-5"
+              style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+            >
+              <V2Caps>{k as string}</V2Caps>
+              <div
+                className="mt-3"
+                style={{
+                  fontFamily: v2Serif,
+                  fontSize: 44,
+                  lineHeight: 1,
+                  fontWeight: 500,
+                  letterSpacing: "-0.02em",
+                  color: v2.ink,
+                }}
+              >
+                {v}
+              </div>
+            </div>
+          ))}
         </div>
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-3">
-          <h2 className="text-white font-semibold">Recordings — last 6 months</h2>
-          <div className="space-y-2">
-            {data.monthly_recordings.map((m) => (
-              <div key={m.month} className="flex items-center gap-3">
-                <span className="w-14 text-xs text-slate-400">{formatMonth(m.month)}</span>
-                <div className="flex-1 h-2 rounded-full bg-slate-800 overflow-hidden">
-                  <div
-                    className="h-full bg-cyan-500"
-                    style={{ width: `${(m.count / maxMonthlyRecordings) * 100}%` }}
-                  />
-                </div>
-                <span className="w-10 text-right text-xs text-slate-300">{m.count}</span>
-              </div>
-            ))}
+        {/* Recordings — last 6 months */}
+        <div
+          className="grid grid-cols-12 gap-6 md:gap-10"
+          style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 28 }}
+        >
+          <div className="col-span-12 md:col-span-3">
+            <V2Caps>RECORDINGS</V2Caps>
+            <p className="mt-2 text-[13px] leading-relaxed" style={{ color: v2.inkSoft }}>
+              Across all members. Last six months.
+            </p>
           </div>
-        </section>
+          <div className="col-span-12 md:col-span-9">
+            {data.monthly_recordings.length === 0 ? (
+              <p className="text-[14px]" style={{ color: v2.inkSoft }}>
+                No recordings yet.
+              </p>
+            ) : (
+              <div className="flex items-end gap-3 md:gap-5" style={{ height: 220 }}>
+                {data.monthly_recordings.map((mo, i) => {
+                  const isLast = i === data.monthly_recordings.length - 1;
+                  return (
+                    <div key={mo.month} className="flex-1 flex flex-col items-center">
+                      <V2Mono style={{ fontSize: 11, color: v2.ink, marginBottom: 6 }}>
+                        {mo.count}
+                      </V2Mono>
+                      <div
+                        style={{
+                          width: "100%",
+                          height: `${(mo.count / maxMonthlyRecordings) * 100}%`,
+                          background: isLast ? v2.accent : v2.inkSoft,
+                          borderRadius: "2px 2px 0 0",
+                          transition: "all 0.3s ease",
+                        }}
+                      />
+                      <V2Caps>{formatMonth(mo.month)}</V2Caps>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-3">
-          <h2 className="text-white font-semibold">
-            Scribbles created this month, by member
-          </h2>
-          {data.member_scribbles_this_month.length === 0 ? (
-            <p className="text-slate-400 text-sm">No scribbles yet this month.</p>
-          ) : (
-            <ul className="space-y-2">
-              {data.member_scribbles_this_month.map((m) => (
-                <li key={m.user_id} className="flex items-center gap-3 text-sm">
-                  <span className="flex-1 text-white truncate">
-                    {m.name ?? m.email ?? m.user_id}
-                  </span>
-                  <div className="w-32 h-2 rounded-full bg-slate-800 overflow-hidden">
+        {/* Per-member scribbles this month */}
+        <div
+          className="grid grid-cols-12 gap-6 md:gap-10"
+          style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 28 }}
+        >
+          <div className="col-span-12 md:col-span-3">
+            <V2Caps>BY MEMBER · THIS MONTH</V2Caps>
+            <p className="mt-2 text-[13px] leading-relaxed" style={{ color: v2.inkSoft }}>
+              Scribbles created this month. Members who never recorded are hidden.
+            </p>
+          </div>
+          <div className="col-span-12 md:col-span-9 space-y-3">
+            {data.member_scribbles_this_month.length === 0 ? (
+              <p className="text-[14px]" style={{ color: v2.inkSoft }}>
+                No scribbles yet this month.
+              </p>
+            ) : (
+              data.member_scribbles_this_month.map((m) => {
+                const name = m.name ?? m.email ?? m.user_id;
+                return (
+                  <div key={m.user_id} className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-3" style={{ width: 200 }}>
+                      <V2Avatar size={26} initial={name.charAt(0).toUpperCase()} />
+                      <span
+                        className="truncate"
+                        style={{ fontSize: 14, color: v2.ink, maxWidth: 160 }}
+                      >
+                        {name}
+                      </span>
+                    </div>
                     <div
-                      className="h-full bg-cyan-500"
-                      style={{ width: `${(m.count / maxMemberCount) * 100}%` }}
-                    />
+                      className="flex-1 rounded-full overflow-hidden"
+                      style={{ height: 6, background: v2.rule, minWidth: 80 }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${(m.count / maxMemberCount) * 100}%`,
+                          background: v2.accent,
+                        }}
+                      />
+                    </div>
+                    <V2Mono style={{ fontSize: 12, color: v2.ink, width: 36, textAlign: "right" }}>
+                      {m.count}
+                    </V2Mono>
+                    <V2Caps>{m.count >= 20 ? "HEAVY" : m.count >= 10 ? "STEADY" : "LIGHT"}</V2Caps>
                   </div>
-                  <span className="w-8 text-right text-xs text-slate-300">{m.count}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </section>
     </main>
   );
 }
