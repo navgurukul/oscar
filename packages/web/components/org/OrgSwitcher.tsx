@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type {
   ActiveOrganization,
   Organization,
@@ -45,10 +44,6 @@ export function OrgSwitcher() {
   }, []);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled()) {
-      setLoading(false);
-      return;
-    }
     void load();
   }, [load]);
 
@@ -69,7 +64,6 @@ export function OrgSwitcher() {
     [active?.organization.id, busy, load, router]
   );
 
-  if (!isOrgFeatureEnabled()) return null;
   if (loading || !active) return null;
 
   return (

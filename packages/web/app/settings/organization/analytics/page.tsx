@@ -7,7 +7,6 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { ActiveOrganization } from "@oscar/shared/types";
 import {
   v2,
@@ -66,7 +65,6 @@ export default function AnalyticsPage() {
   }, []);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled()) return;
     if (authLoading) return;
     if (!user) {
       router.push(`${ROUTES.AUTH}?redirectTo=${ROUTES.ORG_SETTINGS}/analytics`);
@@ -84,17 +82,6 @@ export default function AnalyticsPage() {
     if (!data?.member_scribbles_this_month.length) return 1;
     return Math.max(...data.member_scribbles_this_month.map((m) => m.count), 1);
   }, [data]);
-
-  if (!isOrgFeatureEnabled()) {
-    return (
-      <main
-        className="min-h-screen flex items-center justify-center px-4"
-        style={{ background: v2.cream, color: v2.ink }}
-      >
-        <p style={{ color: v2.inkSoft }}>Analytics requires the organization feature flag.</p>
-      </main>
-    );
-  }
 
   if (authLoading || loading) {
     return (

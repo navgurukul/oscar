@@ -7,7 +7,6 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { ActiveOrganization } from "@oscar/shared/types";
 import {
   v2,
@@ -92,7 +91,6 @@ export default function AuditLogPage() {
   }, []);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled()) return;
     if (authLoading) return;
     if (!user) {
       router.push(`${ROUTES.AUTH}?redirectTo=${ROUTES.ORG_SETTINGS}/audit`);
@@ -118,16 +116,6 @@ export default function AuditLogPage() {
     };
   }, [rows]);
 
-  if (!isOrgFeatureEnabled()) {
-    return (
-      <main
-        className="min-h-screen flex items-center justify-center px-4"
-        style={{ background: v2.cream, color: v2.ink }}
-      >
-        <p style={{ color: v2.inkSoft }}>Audit log requires the organization feature flag.</p>
-      </main>
-    );
-  }
 
   if (authLoading || loading) {
     return (

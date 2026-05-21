@@ -20,7 +20,6 @@ import {
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
 import { buildOrgContext, joinSystemPrompt } from "@/lib/server/orgContext";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 
 const REQUEST_TIMEOUT_MS = 12000;
 
@@ -35,7 +34,7 @@ export function OPTIONS() {
 export async function POST(req: NextRequest) {
   const authResult = await authenticateRequest(req);
   if (!authResult.success) return authResult.response;
-  const { user, supabase } = authResult;
+  const { user } = authResult;
 
   let apiKey: string;
   try {
@@ -75,36 +74,18 @@ export async function POST(req: NextRequest) {
             .filter(Boolean) ?? [rawText]
       : [rawText];
 
-    let vocabList: { term: string; pronunciation: string | null; context: string | null }[] = [];
-    let docsBlock = "";
-
-    if (isOrgFeatureEnabled()) {
-      const orgCtx = await buildOrgContext(user.id, {
-        documentIds,
-        docLimit: 3,
-        docTokenBudget: 1800,
-        queryText: rawText,
-      });
-      vocabList = orgCtx.vocabulary.map((v) => ({
-        term: v.term,
-        pronunciation: v.pronunciation,
-        context: v.context,
-      }));
-      docsBlock = orgCtx.docsPromptBlock;
-    } else {
-      const { data: vocabRaw } = await supabase
-        .from("user_vocabulary")
-        .select("term, pronunciation, context")
-        .order("created_at", { ascending: false })
-        .limit(500);
-      vocabList = Array.isArray(vocabRaw)
-        ? vocabRaw.map((v) => ({
-            term: v.term,
-            pronunciation: v.pronunciation ?? null,
-            context: v.context ?? null,
-          }))
-        : [];
-    }
+    const orgCtx = await buildOrgContext(user.id, {
+      documentIds,
+      docLimit: 3,
+      docTokenBudget: 1800,
+      queryText: rawText,
+    });
+    const vocabList = orgCtx.vocabulary.map((v) => ({
+      term: v.term,
+      pronunciation: v.pronunciation,
+      context: v.context,
+    }));
+    const docsBlock = orgCtx.docsPromptBlock;
 
     const baseSystemPrompt =
       vocabList.length > 0 ? buildFormatPromptWithVocabulary(vocabList) : SYSTEM_PROMPTS.FORMAT;

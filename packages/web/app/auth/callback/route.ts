@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import { getOrCreateDefaultOrg } from "@/lib/server/organization";
 import { NextResponse } from "next/server";
 
@@ -39,7 +38,7 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error && data.session) {
-      if (isOrgFeatureEnabled() && data.session.user) {
+      if (data.session.user) {
         const u = data.session.user;
         const displayName =
           (u.user_metadata?.full_name as string | undefined) ??

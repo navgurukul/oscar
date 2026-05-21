@@ -10,7 +10,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES, SUBSCRIPTION_CONFIG } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type {
   ActiveOrganization,
   OrganizationMemberWithUser,
@@ -51,7 +50,6 @@ export default function OrgBillingPage() {
   }, []);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled()) return;
     if (authLoading) return;
     if (!user) {
       router.push(`${ROUTES.AUTH}?redirectTo=${ROUTES.ORG_SETTINGS}/billing`);
@@ -84,17 +82,6 @@ export default function OrgBillingPage() {
       setCancelling(false);
     }
   }, [subscription, toast]);
-
-  if (!isOrgFeatureEnabled()) {
-    return (
-      <main
-        className="min-h-screen flex items-center justify-center px-4"
-        style={{ background: v2.cream, color: v2.ink }}
-      >
-        <p style={{ color: v2.inkSoft }}>Workspace billing is not enabled.</p>
-      </main>
-    );
-  }
 
   if (authLoading || loading || subscription.isLoading) {
     return (

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
 import { getActiveOrg } from "@/lib/server/organization";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { DBStreamInsert } from "@oscar/shared/types";
 
 async function authedUser() {
@@ -56,11 +55,8 @@ export async function POST(request: Request) {
     );
   }
 
-  let organizationId: string | null = null;
-  if (isOrgFeatureEnabled()) {
-    const active = await getActiveOrg(user.id);
-    organizationId = active?.organization.id ?? null;
-  }
+  const active = await getActiveOrg(user.id);
+  const organizationId = active?.organization.id ?? null;
 
   const insert: DBStreamInsert = {
     user_id: user.id,

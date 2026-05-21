@@ -14,7 +14,6 @@ import {
   parseJsonBody,
 } from "@/lib/server/ai-route";
 import { buildOrgContext } from "@/lib/server/orgContext";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import { usageService } from "@/lib/services/usage.service";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
 
@@ -46,10 +45,6 @@ export function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isOrgFeatureEnabled()) {
-    return applyCors(NextResponse.json({ error: "Not found" }, { status: 404 }));
-  }
-
   const authResult = await authenticateRequest(req);
   if (!authResult.success) return authResult.response;
   const { user } = authResult;

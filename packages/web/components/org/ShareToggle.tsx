@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { organizationService } from "@/lib/services/organization.service";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { ActiveOrganization } from "@oscar/shared/types";
 
 interface Props {
@@ -31,7 +30,6 @@ export function ShareToggle({ kind, id, shared, organizationName, onChange, clas
   useEffect(() => setLocalShared(shared), [shared]);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled()) return;
     if (organizationName) return;
     organizationService.current().then(setActive).catch(() => setActive(null));
   }, [organizationName]);
@@ -71,8 +69,6 @@ export function ShareToggle({ kind, id, shared, organizationName, onChange, clas
       setBusy(false);
     }
   }, [busy, id, kind, localShared, onChange, orgLabel, toast]);
-
-  if (!isOrgFeatureEnabled()) return null;
 
   const Icon = localShared ? Users : Lock;
 

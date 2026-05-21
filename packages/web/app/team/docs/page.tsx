@@ -9,7 +9,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { DocumentUploader } from "@/components/documents/DocumentUploader";
 import { documentsService } from "@/lib/services/documents.service";
 import { ROUTES } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { OrgDocument, Organization } from "@oscar/shared/types";
 import {
   v2,
@@ -60,7 +59,6 @@ export default function DocsPage() {
   }, []);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled()) return;
     if (authLoading) return;
     if (!user) {
       router.push(`${ROUTES.AUTH}?redirectTo=${ROUTES.TEAM}/docs`);
@@ -75,7 +73,7 @@ export default function DocsPage() {
   }, [query]);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled() || authLoading || !user) return;
+    if (authLoading || !user) return;
     void load(debounced);
   }, [debounced, load, authLoading, user]);
 
@@ -93,19 +91,6 @@ export default function DocsPage() {
     if (!activeTag) return docs;
     return docs.filter((d) => d.tags.includes(activeTag));
   }, [docs, activeTag]);
-
-  if (!isOrgFeatureEnabled()) {
-    return (
-      <main
-        className="min-h-screen flex items-center justify-center px-4"
-        style={{ background: v2.cream, color: v2.ink }}
-      >
-        <p style={{ color: v2.inkSoft }}>
-          Document library requires the organization feature flag.
-        </p>
-      </main>
-    );
-  }
 
   if (authLoading) {
     return (

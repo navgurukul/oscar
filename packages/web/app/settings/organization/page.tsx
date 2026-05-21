@@ -11,7 +11,6 @@ import { MemberList } from "@/components/org/MemberList";
 import { InvitePanel } from "@/components/org/InvitePanel";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { ActiveOrganization } from "@oscar/shared/types";
 import Link from "next/link";
 import {
@@ -54,29 +53,6 @@ function OrgSettingsContent() {
     void load();
   }, [authLoading, user, router, load]);
 
-  if (!isOrgFeatureEnabled()) {
-    return (
-      <main
-        className="min-h-screen flex items-center justify-center px-4"
-        style={{ background: v2.cream, color: v2.ink }}
-      >
-        <div className="text-center">
-          <h1
-            className="mb-2"
-            style={{
-              fontFamily: v2Serif,
-              fontSize: 28,
-              fontWeight: 500,
-              letterSpacing: "-0.015em",
-            }}
-          >
-            Workspaces are not enabled
-          </h1>
-          <p style={{ color: v2.inkSoft }}>Ask an admin to enable the organization feature flag.</p>
-        </div>
-      </main>
-    );
-  }
 
   if (authLoading || loading || !user) {
     return (

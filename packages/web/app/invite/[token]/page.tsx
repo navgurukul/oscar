@@ -7,7 +7,6 @@ import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import {
   v2,
   v2Serif,
@@ -47,7 +46,6 @@ export default function InviteAcceptPage({
   }, [router, token]);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled()) return;
     if (authLoading) return;
     if (!user) {
       setStatus("auth_required");
@@ -55,17 +53,6 @@ export default function InviteAcceptPage({
     }
     void accept();
   }, [accept, authLoading, user]);
-
-  if (!isOrgFeatureEnabled()) {
-    return (
-      <main
-        className="min-h-screen flex items-center justify-center px-4"
-        style={{ background: v2.cream, color: v2.ink }}
-      >
-        <p style={{ color: v2.inkSoft }}>Invites are not available in this build.</p>
-      </main>
-    );
-  }
 
   const inviteUrl = `${ROUTES.INVITE}/${encodeURIComponent(token)}`;
 

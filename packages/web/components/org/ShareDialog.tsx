@@ -24,7 +24,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { Visibility } from "@oscar/shared/types";
 
 interface Props {
@@ -146,8 +145,6 @@ export function ShareDialog({
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }, [shareUrl]);
-
-  if (!isOrgFeatureEnabled()) return null;
 
   const ActiveIcon =
     current === "public" ? Globe : current === "org" ? Users : Lock;

@@ -22,7 +22,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { documentsService } from "@/lib/services/documents.service";
 import { ROUTES } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { OrgDocumentWithDownload } from "@oscar/shared/types";
 import {
   v2,
@@ -78,7 +77,6 @@ export default function DocumentViewerPage({
   }, [id, toast]);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled()) return;
     if (authLoading) return;
     if (!user) {
       router.push(`${ROUTES.AUTH}?redirectTo=/team/docs/${id}`);
@@ -126,19 +124,6 @@ export default function DocumentViewerPage({
       });
     }
   }, [doc, router, toast]);
-
-  if (!isOrgFeatureEnabled()) {
-    return (
-      <main
-        className="min-h-screen flex items-center justify-center px-4"
-        style={{ background: v2.cream, color: v2.ink }}
-      >
-        <p style={{ color: v2.inkSoft }}>
-          Document library requires the organization feature flag.
-        </p>
-      </main>
-    );
-  }
 
   if (authLoading || loading) {
     return (

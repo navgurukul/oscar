@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 import { ROUTES } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { Organization } from "@oscar/shared/types";
 import {
   v2,
@@ -65,7 +64,6 @@ export default function TeamFeedPage() {
   }, []);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled()) return;
     if (authLoading) return;
     if (!user) {
       router.push(`${ROUTES.AUTH}?redirectTo=${ROUTES.TEAM}`);
@@ -95,17 +93,6 @@ export default function TeamFeedPage() {
       return true;
     });
   }, [items, kindFilter, authorFilter, query]);
-
-  if (!isOrgFeatureEnabled()) {
-    return (
-      <main
-        className="min-h-screen flex items-center justify-center px-4"
-        style={{ background: v2.cream, color: v2.ink }}
-      >
-        <p style={{ color: v2.inkSoft }}>Team feed requires the organization feature flag.</p>
-      </main>
-    );
-  }
 
   if (authLoading || loading) {
     return (

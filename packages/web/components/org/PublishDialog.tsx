@@ -23,7 +23,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { documentsService } from "@/lib/services/documents.service";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { OrgDocument } from "@oscar/shared/types";
 
 type Tone = "neutral" | "concise" | "executive" | "casual" | "technical";
@@ -126,7 +125,7 @@ export function PublishDialog({ scribbleId, scribbleTitle, shared, bodyOverride 
     [docs]
   );
 
-  if (!isOrgFeatureEnabled() || !shared) return null;
+  if (!shared) return null;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
