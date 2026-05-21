@@ -123,7 +123,10 @@ function OrgSettingsContent() {
       <V2TeamHeader active="SETTINGS" org={orgName} />
       <div className="grid grid-cols-12 px-6 md:px-14 py-10 md:py-14 gap-10">
         <aside className="col-span-12 md:col-span-3">
-          <V2Caps>ORG SETTINGS</V2Caps>
+          <Link href={ROUTES.SETTINGS} className="inline-block mb-5 hover:opacity-80">
+            <V2Caps>← PERSONAL SETTINGS</V2Caps>
+          </Link>
+          <V2Caps>WORKSPACE · {(orgName || "WORKSPACE").toUpperCase()}</V2Caps>
           <nav className="mt-5 space-y-5">
             {SECTIONS.map((s) => {
               const isActive = activeTab === s.id;

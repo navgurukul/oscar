@@ -3,12 +3,15 @@
 import { useCallback, useState, useEffect, Suspense, type ReactElement } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
 import { ROUTES } from "@/lib/constants";
+import { organizationService } from "@/lib/services/organization.service";
+import type { ActiveOrganization } from "@oscar/shared/types";
 import {
   v2,
   v2Serif,
@@ -114,6 +117,22 @@ function SettingsContent() {
   const { toast } = useToast();
   const { user, signOut, isLoading: authLoading } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [activeOrg, setActiveOrg] = useState<ActiveOrganization | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void organizationService
+      .current()
+      .then((org) => {
+        if (alive) setActiveOrg(org);
+      })
+      .catch(() => {
+        /* user may not be in an org — silent fail is fine */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const handleSignOut = useCallback(async () => {
     setIsSigningOut(true);
@@ -182,7 +201,7 @@ function SettingsContent() {
           className="col-span-12 md:col-span-3 px-6 md:px-12 py-8 md:py-14"
           style={{ borderRight: `1px solid ${v2.rule}` }}
         >
-          <V2Caps>SETTINGS</V2Caps>
+          <V2Caps>SETTINGS · PERSONAL</V2Caps>
           <nav className="mt-7 space-y-5">
             {SECTIONS.map((s) => {
               const isActive = activeTab === s.id;
@@ -216,6 +235,49 @@ function SettingsContent() {
               );
             })}
           </nav>
+
+          {activeOrg && (
+            <>
+              <div className="mt-10 pt-7" style={{ borderTop: `1px solid ${v2.rule}` }}>
+                <V2Caps>
+                  WORKSPACE · {(activeOrg.organization.name || "WORKSPACE").toUpperCase()}
+                </V2Caps>
+              </div>
+              <nav className="mt-5 space-y-5">
+                {[
+                  { label: "Details", sub: "Identity · branding", href: ROUTES.ORG_SETTINGS },
+                  { label: "Members & roles", sub: "Who's here", href: `${ROUTES.ORG_SETTINGS}?tab=members` },
+                  { label: "Invites", sub: "Pending invitations", href: `${ROUTES.ORG_SETTINGS}?tab=invites` },
+                  { label: "Billing", sub: "Workspace plan", href: `${ROUTES.ORG_SETTINGS}/billing` },
+                  { label: "Analytics", sub: "Activity · usage", href: `${ROUTES.ORG_SETTINGS}/analytics` },
+                  { label: "Audit log", sub: "Share history", href: `${ROUTES.ORG_SETTINGS}/audit` },
+                ].map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="block hover:opacity-80 transition-opacity"
+                    style={{ borderLeft: "2px solid transparent", paddingLeft: 14 }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: v2Serif,
+                        fontSize: 19,
+                        fontWeight: 500,
+                        color: v2.inkSoft,
+                        letterSpacing: "-0.01em",
+                      }}
+                    >
+                      {item.label}
+                      <span style={{ marginLeft: 8, color: v2.inkFaint, fontSize: 13 }}>→</span>
+                    </div>
+                    <div className="mt-0.5">
+                      <V2Caps>{item.sub.toUpperCase()}</V2Caps>
+                    </div>
+                  </Link>
+                ))}
+              </nav>
+            </>
+          )}
         </aside>
 
         <main className="col-span-12 md:col-span-9 px-6 md:px-14 py-8 md:py-14">

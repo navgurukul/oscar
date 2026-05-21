@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   Check,
   ChevronDown,
-  FileText,
   Plus,
   Settings as SettingsIcon,
-  Users,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -169,45 +167,19 @@ export function OrgSwitcher() {
           );
         })}
         <DropdownMenuSeparator style={{ background: v2.rule }} />
-        <DropdownMenuLabel
-          style={{
-            fontFamily: "var(--font-ibm-plex-mono), ui-monospace, monospace",
-            fontSize: 10,
-            letterSpacing: "0.18em",
-            color: v2.inkFaint,
-            textTransform: "uppercase",
-          }}
-        >
-          Workspace
-        </DropdownMenuLabel>
-        <DropdownMenuItem
-          onClick={() => router.push(ROUTES.TEAM)}
-          className="cursor-pointer"
-        >
-          <Users className="h-4 w-4 mr-2" style={{ color: v2.inkSoft }} />
-          Team feed
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => router.push(`${ROUTES.TEAM}/docs`)}
-          className="cursor-pointer"
-        >
-          <FileText className="h-4 w-4 mr-2" style={{ color: v2.inkSoft }} />
-          Documents
-        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => router.push(ROUTES.ORG_SETTINGS)}
           className="cursor-pointer"
         >
           <SettingsIcon className="h-4 w-4 mr-2" style={{ color: v2.inkSoft }} />
-          Workspace settings
+          <span style={{ fontSize: 13, color: v2.ink }}>Workspace settings</span>
         </DropdownMenuItem>
-        <DropdownMenuSeparator style={{ background: v2.rule }} />
         <DropdownMenuItem
           onClick={() => router.push(`${ROUTES.ORG_SETTINGS}?create=1`)}
           className="cursor-pointer"
         >
           <Plus className="h-4 w-4 mr-2" style={{ color: v2.inkSoft }} />
-          Create workspace
+          <span style={{ fontSize: 13, color: v2.ink }}>Create workspace</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

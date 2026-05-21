@@ -10,6 +10,11 @@ const LazyOrgSwitcher = dynamic(
   { ssr: false }
 );
 
+const LazyAccountMenu = dynamic(
+  () => import("@/components/v2/V2AccountMenu").then((m) => m.V2AccountMenu),
+  { ssr: false }
+);
+
 // ─── Token palette (terracotta direction from the v2 design exploration) ───
 export const v2 = {
   cream: "#f7f4ee",
@@ -141,141 +146,147 @@ export function V2Avatar({
 }
 
 type HeaderNav = { label: string; href: string };
+export type AppHeaderTab = "TODAY" | "LIBRARY" | "MINUTES" | "TEAM" | "SETTINGS";
+export type AppSubNavItem = { label: string; href: string; active?: boolean };
 
-// Editorial top nav used on signed-in app surfaces.
-export function V2WebHeader({
-  active,
-  links,
-  right,
-}: {
-  active?: string;
-  links?: HeaderNav[];
-  right?: ReactNode;
-}) {
-  const pathname = usePathname();
-  const defaultLinks: HeaderNav[] = [
-    { label: "TODAY", href: "/" },
-    { label: "LIBRARY", href: "/scribble" },
-    { label: "MINUTES", href: "/meetings" },
-    { label: "TEAM", href: "/team" },
-    { label: "SETTINGS", href: "/settings" },
-  ];
-  const navLinks = links ?? defaultLinks;
-  const activeLabel = (active ?? navLinks.find((l) => l.href === pathname)?.label ?? "").toUpperCase();
+const APP_HEADER_TABS: Array<{ label: AppHeaderTab; href: string; matchPrefix?: string }> = [
+  { label: "TODAY", href: "/" },
+  { label: "LIBRARY", href: "/scribble", matchPrefix: "/scribble" },
+  { label: "MINUTES", href: "/meetings", matchPrefix: "/meetings" },
+  { label: "TEAM", href: "/team", matchPrefix: "/team" },
+  { label: "SETTINGS", href: "/settings", matchPrefix: "/settings" },
+];
 
-  return (
-    <header
-      className="flex items-center justify-between px-6 md:px-14 py-6"
-      style={{ borderBottom: `1px solid ${v2.rule}` }}
-    >
-      <V2Wordmark />
-      <nav className="hidden md:flex items-center gap-7 lg:gap-9">
-        {navLinks.map((link) => {
-          const isActive = link.label.toUpperCase() === activeLabel;
-          if (isActive) {
-            return (
-              <Link
-                key={link.label}
-                href={link.href}
-                style={{
-                  fontFamily: v2Mono,
-                  fontSize: 11,
-                  letterSpacing: "0.18em",
-                  color: v2.ink,
-                  borderBottom: `1px solid ${v2.ink}`,
-                  paddingBottom: 2,
-                }}
-              >
-                {link.label.toUpperCase()}
-              </Link>
-            );
-          }
-          return (
-            <Link key={link.label} href={link.href} className="hover:opacity-80 transition-opacity">
-              <V2Caps>{link.label.toUpperCase()}</V2Caps>
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="flex items-center gap-3">
-        <LazyOrgSwitcher />
-        {right}
-      </div>
-    </header>
-  );
+function deriveActiveTab(pathname: string | null): AppHeaderTab | undefined {
+  if (!pathname) return undefined;
+  if (pathname === "/") return "TODAY";
+  for (const tab of APP_HEADER_TABS) {
+    if (!tab.matchPrefix) continue;
+    if (pathname === tab.matchPrefix || pathname.startsWith(tab.matchPrefix + "/")) {
+      return tab.label;
+    }
+  }
+  return undefined;
 }
 
-// Team workspace top nav.
-export function V2TeamHeader({
+// V2AppHeader — single chrome for every signed-in surface.
+// Left: wordmark + workspace switcher pill (always visible).
+// Center: primary nav (TODAY/LIBRARY/MINUTES/TEAM/SETTINGS).
+// Right: account avatar dropdown.
+// Optional sub-nav row appears below for nested contexts (e.g. /team FEED · DOCS).
+export function V2AppHeader({
   active,
-  org = "Workspace",
+  subNav,
 }: {
-  active?: "FEED" | "DOCS" | "MEMBERS" | "SETTINGS";
-  org?: string;
+  active?: AppHeaderTab;
+  subNav?: AppSubNavItem[];
 }) {
-  const items: Array<{ label: "FEED" | "DOCS" | "MEMBERS" | "SETTINGS"; href: string }> = [
-    { label: "FEED", href: "/team" },
-    { label: "DOCS", href: "/team/docs" },
-    { label: "MEMBERS", href: "/settings/organization?tab=members" },
-    { label: "SETTINGS", href: "/settings/organization" },
-  ];
+  const pathname = usePathname();
+  const activeLabel = active ?? deriveActiveTab(pathname);
+
   return (
-    <header
-      className="flex items-center justify-between px-6 md:px-14 py-6"
-      style={{ borderBottom: `1px solid ${v2.rule}` }}
-    >
-      <div className="flex items-center gap-6">
-        <V2Wordmark />
-        <div
-          className="flex items-center gap-2.5 rounded-full pl-2 pr-3 py-1"
-          style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
-        >
-          <div
-            style={{
-              height: 22,
-              width: 22,
-              borderRadius: 5,
-              background: v2.accent,
-              color: v2.cream,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: v2Serif,
-              fontWeight: 500,
-              fontSize: 12,
-            }}
-          >
-            {org.charAt(0).toUpperCase()}
-          </div>
-          <span style={{ fontSize: 13, color: v2.ink, fontWeight: 500 }}>{org}</span>
+    <header style={{ borderBottom: `1px solid ${v2.rule}` }}>
+      <div className="flex items-center justify-between px-6 md:px-14 py-6">
+        <div className="flex items-center gap-3 md:gap-4">
+          <V2Wordmark />
+          <LazyOrgSwitcher />
         </div>
+        <nav className="hidden md:flex items-center gap-7 lg:gap-9">
+          {APP_HEADER_TABS.map((tab) => {
+            const isActive = tab.label === activeLabel;
+            if (isActive) {
+              return (
+                <Link
+                  key={tab.label}
+                  href={tab.href}
+                  style={{
+                    fontFamily: v2Mono,
+                    fontSize: 11,
+                    letterSpacing: "0.18em",
+                    color: v2.ink,
+                    borderBottom: `1px solid ${v2.ink}`,
+                    paddingBottom: 2,
+                  }}
+                >
+                  {tab.label}
+                </Link>
+              );
+            }
+            return (
+              <Link key={tab.label} href={tab.href} className="hover:opacity-80 transition-opacity">
+                <V2Caps>{tab.label}</V2Caps>
+              </Link>
+            );
+          })}
+        </nav>
+        <LazyAccountMenu />
       </div>
-      <nav className="hidden md:flex items-center gap-8">
-        {items.map((item) =>
-          item.label === active ? (
+      {subNav && subNav.length > 0 && (
+        <div
+          className="flex items-center gap-6 px-6 md:px-14 pb-4 -mt-2"
+          style={{ borderTop: `1px dashed ${v2.rule}`, paddingTop: 10 }}
+        >
+          {subNav.map((item) => (
             <Link
               key={item.label}
               href={item.href}
+              className="hover:opacity-80 transition-opacity"
               style={{
                 fontFamily: v2Mono,
-                fontSize: 11,
+                fontSize: 10.5,
                 letterSpacing: "0.18em",
-                color: v2.ink,
-                borderBottom: `1px solid ${v2.ink}`,
+                color: item.active ? v2.ink : v2.inkFaint,
+                borderBottom: item.active ? `1px solid ${v2.ink}` : "1px solid transparent",
                 paddingBottom: 2,
               }}
             >
               {item.label}
             </Link>
-          ) : (
-            <Link key={item.label} href={item.href} className="hover:opacity-80 transition-opacity">
-              <V2Caps>{item.label}</V2Caps>
-            </Link>
-          )
-        )}
-      </nav>
+          ))}
+        </div>
+      )}
     </header>
   );
+}
+
+// Back-compat alias — old V2WebHeader signature; delegates to V2AppHeader.
+// `links` and `right` params are now ignored (single unified chrome handles both).
+export function V2WebHeader({
+  active,
+}: {
+  active?: string;
+  links?: HeaderNav[];
+  right?: ReactNode;
+}) {
+  const tab = active
+    ? (active.toUpperCase() as AppHeaderTab)
+    : undefined;
+  return <V2AppHeader active={tab} />;
+}
+
+// Back-compat alias — workspace/team chrome. Now identical primary chrome with
+// optional FEED · DOCS sub-row when active points to a team sub-route.
+// `org` param is ignored — the workspace switcher pill (always visible top-left)
+// already shows the active workspace name.
+export function V2TeamHeader({
+  active,
+}: {
+  active?: "FEED" | "DOCS" | "MEMBERS" | "SETTINGS";
+  org?: string;
+}) {
+  if (active === "FEED" || active === "DOCS") {
+    return (
+      <V2AppHeader
+        active="TEAM"
+        subNav={[
+          { label: "FEED", href: "/team", active: active === "FEED" },
+          { label: "DOCS", href: "/team/docs", active: active === "DOCS" },
+        ]}
+      />
+    );
+  }
+  // MEMBERS/SETTINGS land on workspace settings — those live under /settings.
+  return <V2AppHeader active="SETTINGS" />;
 }
 
 // Public-marketing top nav (no app links, "Get Oscar" CTA).
