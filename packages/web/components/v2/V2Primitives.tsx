@@ -149,6 +149,7 @@ export function V2WebHeader({
     { label: "TODAY", href: "/" },
     { label: "LIBRARY", href: "/scribble" },
     { label: "MINUTES", href: "/meetings" },
+    { label: "TEAM", href: "/team" },
     { label: "SETTINGS", href: "/settings" },
   ];
   const navLinks = links ?? defaultLinks;

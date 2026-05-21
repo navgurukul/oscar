@@ -225,9 +225,22 @@ export default function TeamFeedPage() {
 
           {filtered.length === 0 ? (
             <div className="py-16 text-center text-[14px]" style={{ color: v2.inkSoft }}>
-              {items.length === 0
-                ? "Nothing shared yet. Share a Scribble or Meeting to publish here."
-                : "No items match your filters."}
+              {!organization ? (
+                <div className="flex flex-col items-center gap-4">
+                  <p>You&rsquo;re not in a workspace yet.</p>
+                  <Link
+                    href={`${ROUTES.ORG_SETTINGS}?create=1`}
+                    className="rounded-full px-5 py-2.5 text-[13px] font-medium"
+                    style={{ background: v2.ink, color: v2.cream }}
+                  >
+                    Create a workspace
+                  </Link>
+                </div>
+              ) : items.length === 0 ? (
+                "Nothing shared yet. Share a Scribble or Meeting to publish here."
+              ) : (
+                "No items match your filters."
+              )}
             </div>
           ) : (
             <div className="mt-10">

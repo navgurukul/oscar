@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useEffect, Suspense, type ReactElement } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
@@ -58,6 +59,13 @@ const SECTIONS: Array<{ id: Tab; label: string; sub: string }> = [
   { id: "vocabulary", label: "Vocabulary", sub: "Words Oscar knows" },
   { id: "folders", label: "Folders", sub: "How you group things" },
   { id: "privacy", label: "Data & privacy", sub: "Export · delete" },
+];
+
+const WORKSPACE_LINKS: Array<{ href: string; label: string; sub: string }> = [
+  { href: "/settings/organization", label: "Workspace", sub: "Org details · members" },
+  { href: "/team", label: "Team feed", sub: "Shared Scribbles & meetings" },
+  { href: "/team/docs", label: "Documents", sub: "Workspace library" },
+  { href: "/settings/organization/billing", label: "Workspace billing", sub: "Seats · plan" },
 ];
 
 const TITLES: Record<Tab, { eyebrow: string; h1: ReactElement; lead: string }> = {
@@ -216,6 +224,35 @@ function SettingsContent() {
               );
             })}
           </nav>
+
+          <div className="mt-10 pt-8" style={{ borderTop: `1px solid ${v2.rule}` }}>
+            <V2Caps>WORKSPACE</V2Caps>
+            <nav className="mt-5 space-y-4">
+              {WORKSPACE_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="block"
+                  style={{ borderLeft: "2px solid transparent", paddingLeft: 14 }}
+                >
+                  <div
+                    style={{
+                      fontFamily: v2Serif,
+                      fontSize: 17,
+                      fontWeight: 500,
+                      color: v2.inkSoft,
+                      letterSpacing: "-0.005em",
+                    }}
+                  >
+                    {link.label}
+                  </div>
+                  <div className="mt-0.5">
+                    <V2Caps>{link.sub.toUpperCase()}</V2Caps>
+                  </div>
+                </Link>
+              ))}
+            </nav>
+          </div>
         </aside>
 
         <main className="col-span-12 md:col-span-9 px-6 md:px-14 py-8 md:py-14">
