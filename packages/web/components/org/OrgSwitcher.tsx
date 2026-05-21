@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Plus, Settings as SettingsIcon, Users } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  FileText,
+  Plus,
+  Settings as SettingsIcon,
+  Users,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,12 +72,30 @@ export function OrgSwitcher() {
     [active?.organization.id, busy, load, router]
   );
 
-  if (loading || !active) return null;
+  if (loading) return null;
+
+  if (!active) {
+    return (
+      <button
+        onClick={() => router.push(`${ROUTES.ORG_SETTINGS}?create=1`)}
+        className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[12px] font-medium transition-opacity hover:opacity-80"
+        style={{
+          background: v2.cream2,
+          border: `1px solid ${v2.rule}`,
+          color: v2.inkSoft,
+          fontFamily: "var(--font-figtree), system-ui",
+        }}
+      >
+        <Plus className="h-3.5 w-3.5" style={{ color: v2.accent }} />
+        Create workspace
+      </button>
+    );
+  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors max-w-[220px]"
+        className="flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors max-w-[220px]"
         style={{
           background: v2.cream2,
           border: `1px solid ${v2.rule}`,
@@ -78,20 +103,41 @@ export function OrgSwitcher() {
         }}
         disabled={busy}
       >
-        <Users className="h-4 w-4 flex-shrink-0" style={{ color: v2.accent }} />
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: 20,
+            width: 20,
+            borderRadius: 5,
+            background: v2.accent,
+            color: v2.cream,
+            fontFamily: "var(--font-eb-garamond), Georgia, serif",
+            fontSize: 12,
+            fontWeight: 500,
+          }}
+        >
+          {active.organization.name.charAt(0).toUpperCase()}
+        </span>
         <span className="truncate">{active.organization.name}</span>
-        <ChevronDown className="h-4 w-4 flex-shrink-0" style={{ color: v2.inkFaint }} />
+        <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" style={{ color: v2.inkFaint }} />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-64"
+        className="w-72"
         style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
       >
         <DropdownMenuLabel
-          className="text-xs uppercase tracking-wide"
-          style={{ color: v2.inkFaint }}
+          style={{
+            fontFamily: "var(--font-ibm-plex-mono), ui-monospace, monospace",
+            fontSize: 10,
+            letterSpacing: "0.18em",
+            color: v2.inkFaint,
+            textTransform: "uppercase",
+          }}
         >
-          Switch workspace
+          Workspaces
         </DropdownMenuLabel>
         {memberships.map(({ organization, role }) => {
           const isActive = organization.id === active.organization.id;
@@ -99,24 +145,63 @@ export function OrgSwitcher() {
             <DropdownMenuItem
               key={organization.id}
               onClick={() => void switchTo(organization.id)}
-              className="flex items-center justify-between gap-2 cursor-pointer"
+              className="flex items-center justify-between gap-2 cursor-pointer py-2"
             >
               <div className="flex flex-col min-w-0">
-                <span className="truncate text-sm">{organization.name}</span>
-                <span className="text-xs capitalize" style={{ color: v2.inkFaint }}>{role}</span>
+                <span className="truncate text-[13px]" style={{ color: v2.ink }}>
+                  {organization.name}
+                </span>
+                <span
+                  className="capitalize"
+                  style={{
+                    fontFamily: "var(--font-ibm-plex-mono), ui-monospace, monospace",
+                    fontSize: 10,
+                    letterSpacing: "0.14em",
+                    color: v2.inkFaint,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {role}
+                </span>
               </div>
               {isActive ? <Check className="h-4 w-4" style={{ color: v2.accent }} /> : null}
             </DropdownMenuItem>
           );
         })}
         <DropdownMenuSeparator style={{ background: v2.rule }} />
+        <DropdownMenuLabel
+          style={{
+            fontFamily: "var(--font-ibm-plex-mono), ui-monospace, monospace",
+            fontSize: 10,
+            letterSpacing: "0.18em",
+            color: v2.inkFaint,
+            textTransform: "uppercase",
+          }}
+        >
+          Workspace
+        </DropdownMenuLabel>
+        <DropdownMenuItem
+          onClick={() => router.push(ROUTES.TEAM)}
+          className="cursor-pointer"
+        >
+          <Users className="h-4 w-4 mr-2" style={{ color: v2.inkSoft }} />
+          Team feed
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => router.push(`${ROUTES.TEAM}/docs`)}
+          className="cursor-pointer"
+        >
+          <FileText className="h-4 w-4 mr-2" style={{ color: v2.inkSoft }} />
+          Documents
+        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => router.push(ROUTES.ORG_SETTINGS)}
           className="cursor-pointer"
         >
           <SettingsIcon className="h-4 w-4 mr-2" style={{ color: v2.inkSoft }} />
-          Organization settings
+          Workspace settings
         </DropdownMenuItem>
+        <DropdownMenuSeparator style={{ background: v2.rule }} />
         <DropdownMenuItem
           onClick={() => router.push(`${ROUTES.ORG_SETTINGS}?create=1`)}
           className="cursor-pointer"

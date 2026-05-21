@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import dynamic from "next/dynamic";
 import type { CSSProperties, ReactNode } from "react";
+
+const LazyOrgSwitcher = dynamic(
+  () => import("@/components/org/OrgSwitcher").then((m) => m.OrgSwitcher),
+  { ssr: false }
+);
 
 // ─── Token palette (terracotta direction from the v2 design exploration) ───
 export const v2 = {
@@ -149,7 +155,6 @@ export function V2WebHeader({
     { label: "TODAY", href: "/" },
     { label: "LIBRARY", href: "/scribble" },
     { label: "MINUTES", href: "/meetings" },
-    { label: "TEAM", href: "/team" },
     { label: "SETTINGS", href: "/settings" },
   ];
   const navLinks = links ?? defaultLinks;
@@ -189,7 +194,9 @@ export function V2WebHeader({
           );
         })}
       </nav>
-      <div className="flex items-center gap-4">{right}</div>
+      <div className="flex items-center gap-4">
+        {right ?? <LazyOrgSwitcher />}
+      </div>
     </header>
   );
 }
