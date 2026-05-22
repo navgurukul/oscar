@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
@@ -19,8 +18,11 @@ import {
   v2Serif,
   V2Caps,
   V2Mono,
-  V2TeamHeader,
 } from "@/components/v2/V2Primitives";
+import {
+  createOrgSettingsSections,
+  V2OrgSettingsShell,
+} from "@/components/v2/V2OrgSettingsShell";
 
 export default function OrgBillingPage() {
   const router = useRouter();
@@ -110,41 +112,31 @@ export default function OrgBillingPage() {
   const limit = SUBSCRIPTION_CONFIG.FREE_ORG_MONTHLY_RECORDINGS;
   const used = subscription.recordingsThisMonth;
   const pct = isPro ? null : Math.min(100, Math.round((used / limit) * 100));
+  const billingSub = isPro ? "Pro · workspace" : "Free · workspace";
 
   return (
-    <main
-      style={{
-        background: v2.cream,
-        color: v2.ink,
-        minHeight: "100vh",
-        fontFamily: "var(--font-figtree), system-ui",
-      }}
-    >
-      <V2TeamHeader active="SETTINGS" org={active.organization.name} />
-
-      <section className="px-6 md:px-14 pt-12 md:pt-14 pb-10">
-        <Link href={ROUTES.ORG_SETTINGS}>
-          <V2Caps>← BACK TO ORG SETTINGS</V2Caps>
-        </Link>
-        <h1
-          className="mt-3"
-          style={{
-            fontFamily: v2Serif,
-            fontSize: "clamp(40px, 6vw, 56px)",
-            lineHeight: 0.98,
-            letterSpacing: "-0.025em",
-            fontWeight: 500,
-          }}
-        >
+    <V2OrgSettingsShell
+      active="billing"
+      orgName={active.organization.name}
+      eyebrow="ORG SETTINGS · BILLING"
+      title={
+        <>
           The workspace plan, <em style={{ fontStyle: "italic", color: v2.accent }}>not</em> yours.
-        </h1>
-        <p className="mt-4 text-[15px] leading-relaxed max-w-xl" style={{ color: v2.inkSoft }}>
+        </>
+      }
+      lead={
+        <>
           Plan and usage for <strong>{active.organization.name}</strong>. Different from your
           personal Pro — workspace billing covers shared Minutes and the team feed.
-        </p>
-      </section>
-
-      <section className="px-6 md:px-14 pb-20 space-y-10">
+        </>
+      }
+      sections={createOrgSettingsSections({
+        active: "billing",
+        memberCount: members.length,
+        billingSub,
+      })}
+    >
+      <div className="space-y-10">
         {/* CURRENT PLAN */}
         <div
           className="grid grid-cols-12 gap-6 md:gap-10"
@@ -168,7 +160,7 @@ export default function OrgBillingPage() {
                       fontFamily: v2Serif,
                       fontSize: 48,
                       fontWeight: 500,
-                      letterSpacing: "-0.025em",
+                      letterSpacing: 0,
                     }}
                   >
                     {isPro ? "Pro" : "₹0"}
@@ -254,6 +246,62 @@ export default function OrgBillingPage() {
           </div>
         </div>
 
+        {!isPro && (
+          <div
+            className="grid grid-cols-12 gap-6 md:gap-10"
+            style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 28 }}
+          >
+            <div className="col-span-12 md:col-span-3">
+              <V2Caps>UPGRADE</V2Caps>
+            </div>
+            <div
+              className="col-span-12 md:col-span-9 rounded-lg p-7"
+              style={{ background: v2.ink, color: v2.cream }}
+            >
+              <V2Caps color={v2.accentSoft}>WORKSPACE PRO</V2Caps>
+              <div className="mt-3 flex items-baseline gap-3 flex-wrap">
+                <span
+                  style={{
+                    fontFamily: v2Serif,
+                    fontSize: 48,
+                    fontWeight: 500,
+                    letterSpacing: 0,
+                  }}
+                >
+                  Unlimited
+                </span>
+                <span style={{ fontSize: 13, color: "rgba(247,244,238,0.65)" }}>
+                  shared Minutes, team feed, and workspace usage.
+                </span>
+              </div>
+              <ul className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-[14px] list-none p-0">
+                {[
+                  "Unlimited shared Minutes",
+                  "Shared workspace vocabulary",
+                  "Posted Minutes for team review",
+                  "Org-wide audit log",
+                  "Org-wide analytics",
+                  "Priority workspace support",
+                ].map((feature) => (
+                  <li key={feature} className="flex items-start gap-2" style={{ color: v2.cream }}>
+                    <span style={{ color: v2.accent, fontFamily: "var(--font-ibm-plex-mono), ui-monospace", fontSize: 12, marginTop: 4 }}>·</span>
+                    <span style={{ fontFamily: v2Serif, fontSize: 15 }}>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+              {canManage && (
+                <button
+                  onClick={() => router.push(ROUTES.PRICING)}
+                  className="mt-7 text-[13px] rounded-full px-5 py-2.5 font-medium"
+                  style={{ background: v2.cream, color: v2.ink }}
+                >
+                  Upgrade workspace →
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* SEATS */}
         <div
           className="grid grid-cols-12 gap-6 md:gap-10"
@@ -280,12 +328,42 @@ export default function OrgBillingPage() {
           </div>
         </div>
 
+        {/* WORKSPACE INVOICES */}
+        <div
+          className="grid grid-cols-12 gap-6 md:gap-10"
+          style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 28 }}
+        >
+          <div className="col-span-12 md:col-span-3">
+            <V2Caps>WORKSPACE INVOICES</V2Caps>
+          </div>
+          <div className="col-span-12 md:col-span-9">
+            {[
+              ["THIS CYCLE", isPro ? "Active subscription" : "Free · workspace"],
+              ["LAST CYCLE", isPro ? "Available in Razorpay" : "No charge"],
+              ["ARCHIVE", "Invoices appear after workspace upgrades"],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="grid grid-cols-12 gap-4 py-3 items-center"
+                style={{ borderBottom: `1px solid ${v2.rule}` }}
+              >
+                <V2Mono style={{ fontSize: 12, color: v2.ink, gridColumn: "span 4 / span 4" }}>
+                  {label}
+                </V2Mono>
+                <span className="col-span-8 text-[13px]" style={{ color: v2.inkSoft }}>
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {!canManage && (
           <p className="text-[12px]" style={{ color: v2.inkFaint }}>
             Only workspace owners or admins can change billing.
           </p>
         )}
-      </section>
+      </div>
 
       {confirmCancel && (
         <div
@@ -303,7 +381,7 @@ export default function OrgBillingPage() {
                 fontFamily: v2Serif,
                 fontSize: 32,
                 lineHeight: 1.0,
-                letterSpacing: "-0.025em",
+                letterSpacing: 0,
                 fontWeight: 500,
               }}
             >
@@ -340,6 +418,6 @@ export default function OrgBillingPage() {
           </div>
         </div>
       )}
-    </main>
+    </V2OrgSettingsShell>
   );
 }

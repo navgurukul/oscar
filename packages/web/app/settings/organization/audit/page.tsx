@@ -12,11 +12,13 @@ import {
   v2,
   v2Serif,
   v2Mono,
-  V2Caps,
   V2Mono,
   V2Avatar,
-  V2TeamHeader,
 } from "@/components/v2/V2Primitives";
+import {
+  createOrgSettingsSections,
+  V2OrgSettingsShell,
+} from "@/components/v2/V2OrgSettingsShell";
 
 interface AuditRow {
   id: string;
@@ -150,38 +152,19 @@ export default function AuditLogPage() {
   ];
 
   return (
-    <main
-      style={{
-        background: v2.cream,
-        color: v2.ink,
-        minHeight: "100vh",
-        fontFamily: "var(--font-figtree), system-ui",
-      }}
-    >
-      <V2TeamHeader active="SETTINGS" org={orgName} />
-
-      <section className="px-6 md:px-14 pt-12 md:pt-14 pb-10">
-        <Link href={ROUTES.ORG_SETTINGS}>
-          <V2Caps>← BACK TO ORG SETTINGS</V2Caps>
-        </Link>
-        <h1
-          className="mt-3"
-          style={{
-            fontFamily: v2Serif,
-            fontSize: "clamp(40px, 6vw, 56px)",
-            lineHeight: 0.98,
-            letterSpacing: "-0.025em",
-            fontWeight: 500,
-          }}
-        >
+    <V2OrgSettingsShell
+      active="audit"
+      orgName={orgName}
+      eyebrow="ORG SETTINGS · AUDIT LOG"
+      title={
+        <>
           Who shared <em style={{ fontStyle: "italic", color: v2.accent }}>what</em>, and when.
-        </h1>
-        <p className="mt-4 text-[15px] leading-relaxed max-w-xl" style={{ color: v2.inkSoft }}>
-          Every share / unshare action on Scribbles and Minutes inside {orgName}. Newest first.
-        </p>
-      </section>
-
-      <section className="px-6 md:px-14 pb-20">
+        </>
+      }
+      lead={`Every share / unshare action on Scribbles and Minutes inside ${orgName}. Newest first. Owners and admins only.`}
+      sections={createOrgSettingsSections({ active: "audit" })}
+    >
+      <div>
         {rows.length === 0 ? (
           <div className="py-16 text-center text-[14px]" style={{ color: v2.inkSoft }}>
             Nothing logged yet. Activity will appear here as members share content with the
@@ -276,7 +259,7 @@ export default function AuditLogPage() {
                           color: v2.ink,
                           fontFamily: v2Serif,
                           fontWeight: 500,
-                          letterSpacing: "-0.005em",
+                          letterSpacing: 0,
                         }}
                         className="truncate"
                       >
@@ -296,7 +279,7 @@ export default function AuditLogPage() {
             </p>
           </>
         )}
-      </section>
-    </main>
+      </div>
+    </V2OrgSettingsShell>
   );
 }

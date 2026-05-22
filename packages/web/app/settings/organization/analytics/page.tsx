@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
@@ -14,8 +13,11 @@ import {
   V2Caps,
   V2Mono,
   V2Avatar,
-  V2TeamHeader,
 } from "@/components/v2/V2Primitives";
+import {
+  createOrgSettingsSections,
+  V2OrgSettingsShell,
+} from "@/components/v2/V2OrgSettingsShell";
 
 interface AnalyticsResponse {
   member_count: number;
@@ -83,6 +85,44 @@ export default function AnalyticsPage() {
     return Math.max(...data.member_scribbles_this_month.map((m) => m.count), 1);
   }, [data]);
 
+  const downloadCsv = useCallback(() => {
+    if (!data || !active) return;
+    const rows = [
+      ["metric", "value"],
+      ["members", data.member_count],
+      ["shared_scribbles", data.shared_scribbles],
+      ["shared_meetings", data.shared_meetings],
+      ["workspace_docs", data.document_count],
+      [],
+      ["month", "recordings"],
+      ...data.monthly_recordings.map((m) => [m.month, m.count]),
+      [],
+      ["member", "email", "scribbles_this_month"],
+      ...data.member_scribbles_this_month.map((m) => [
+        m.name ?? "",
+        m.email ?? "",
+        m.count,
+      ]),
+    ];
+    const csv = rows
+      .map((row) =>
+        row
+          .map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`)
+          .join(","),
+      )
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${active.organization.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "") || "workspace"}-analytics.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [active, data]);
+
   if (authLoading || loading) {
     return (
       <main
@@ -117,39 +157,23 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <main
-      style={{
-        background: v2.cream,
-        color: v2.ink,
-        minHeight: "100vh",
-        fontFamily: "var(--font-figtree), system-ui",
-      }}
-    >
-      <V2TeamHeader active="SETTINGS" org={active.organization.name} />
-
-      <section className="px-6 md:px-14 pt-12 md:pt-14 pb-10">
-        <Link href={ROUTES.ORG_SETTINGS}>
-          <V2Caps>← BACK TO ORG SETTINGS</V2Caps>
-        </Link>
-        <h1
-          className="mt-3"
-          style={{
-            fontFamily: v2Serif,
-            fontSize: "clamp(40px, 6vw, 56px)",
-            lineHeight: 0.98,
-            letterSpacing: "-0.025em",
-            fontWeight: 500,
-          }}
-        >
+    <V2OrgSettingsShell
+      active="analytics"
+      orgName={active.organization.name}
+      eyebrow="ORG SETTINGS · ANALYTICS"
+      title={
+        <>
           What the workspace has been{" "}
           <em style={{ fontStyle: "italic", color: v2.accent }}>saying</em>.
-        </h1>
-        <p className="mt-4 text-[15px] leading-relaxed max-w-xl" style={{ color: v2.inkSoft }}>
-          Usage across {active.organization.name}. Owners and admins only.
-        </p>
-      </section>
-
-      <section className="px-6 md:px-14 pb-20 space-y-10">
+        </>
+      }
+      lead={`Usage across ${active.organization.name}. Owners and admins only. Numbers refresh hourly.`}
+      sections={createOrgSettingsSections({
+        active: "analytics",
+        memberCount: data.member_count,
+      })}
+    >
+      <div className="space-y-10">
         {/* Stat cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
@@ -171,7 +195,7 @@ export default function AnalyticsPage() {
                   fontSize: 44,
                   lineHeight: 1,
                   fontWeight: 500,
-                  letterSpacing: "-0.02em",
+                  letterSpacing: 0,
                   color: v2.ink,
                 }}
               >
@@ -276,7 +300,30 @@ export default function AnalyticsPage() {
             )}
           </div>
         </div>
-      </section>
-    </main>
+
+        {/* Export */}
+        <div
+          className="grid grid-cols-12 gap-6 md:gap-10"
+          style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 28 }}
+        >
+          <div className="col-span-12 md:col-span-3">
+            <V2Caps>EXPORT</V2Caps>
+          </div>
+          <div className="col-span-12 md:col-span-9 flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={downloadCsv}
+              className="text-[12px] rounded-full px-4 py-2"
+              style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+            >
+              Download CSV
+            </button>
+            <V2Mono style={{ fontSize: 11, color: v2.inkFaint, marginLeft: "auto" }}>
+              ROUTE · /SETTINGS/ORGANIZATION/ANALYTICS
+            </V2Mono>
+          </div>
+        </div>
+      </div>
+    </V2OrgSettingsShell>
   );
 }
