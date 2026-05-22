@@ -1,8 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
-  Settings2,
   BookOpen,
-  User,
   Search,
   Loader2,
   ExternalLink,
@@ -10,7 +8,8 @@ import {
   Trash2,
   Lock,
   Mail,
-  CreditCard,
+  FolderOpen,
+  Plus,
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { BillingSection } from "./BillingSection";
@@ -23,6 +22,8 @@ import {
   type ModelPreset,
 } from "../lib/whisper-models";
 import type { RoleModelState, WhisperModelRole } from "../lib/app-types";
+import { scribblesService } from "../services/scribbles.service";
+import type { DBScribble } from "../types/scribble.types";
 
 /* ── Types ── */
 
@@ -32,15 +33,24 @@ type SettingsSection =
   | "vocabulary"
   | "general"
   | "account"
+  | "folders"
   | "privacy";
 
-/** Internal active tab */
-type ActiveTab = "general" | "vocabulary" | "billing" | "account";
+/** Internal active tab — matches V2DesktopSettings six-tab IA. */
+type ActiveTab =
+  | "general"
+  | "account"
+  | "vocabulary"
+  | "folders"
+  | "billing"
+  | "privacy";
 
 function resolveTab(section?: SettingsSection): ActiveTab {
   if (section === "billing") return "billing";
-  if (section === "privacy" || section === "account") return "account";
+  if (section === "privacy") return "privacy";
+  if (section === "account") return "account";
   if (section === "vocabulary") return "vocabulary";
+  if (section === "folders") return "folders";
   return "general";
 }
 
@@ -92,6 +102,89 @@ interface MicDevice {
   label: string;
 }
 
+/** Editorial hairline row — col-span-4 label+desc · col-span-8 control/value.
+ *  Matches V2DesktopSettings:741 row geometry. */
+function SettingRow({
+  label,
+  description,
+  children,
+  align = "baseline",
+}: {
+  label: string;
+  description?: string;
+  children: React.ReactNode;
+  align?: "baseline" | "center";
+}) {
+  return (
+    <div
+      className={`grid grid-cols-12 gap-5 py-4 border-b border-cream-300 ${
+        align === "center" ? "items-center" : "items-baseline"
+      }`}
+    >
+      <div className="col-span-4 min-w-0">
+        <div className="text-[14px] font-medium text-ink leading-tight">{label}</div>
+        {description && (
+          <div className="mt-0.5 text-[12px] leading-relaxed text-ink-soft">
+            {description}
+          </div>
+        )}
+      </div>
+      <div className="col-span-8 min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/** Mono value — terracotta when "on/active", ink-faint when "off/neutral". */
+function MonoValue({
+  value,
+  on,
+}: {
+  value: string;
+  on?: boolean;
+}) {
+  return (
+    <span
+      className={`font-mono text-[12px] tracking-[0.04em] ${
+        on === false ? "text-ink-faint" : "text-terracotta"
+      }`}
+    >
+      {value}
+    </span>
+  );
+}
+
+/** 3/9 caps section — V2WebSettings:376 pattern (col-span-3 caps · col-span-9 body). */
+export function SettingsSection({
+  caps,
+  capsAccent = false,
+  children,
+  topBorder = true,
+}: {
+  caps: string;
+  capsAccent?: boolean;
+  children: React.ReactNode;
+  topBorder?: boolean;
+}) {
+  return (
+    <section
+      className={`mt-12 grid grid-cols-12 gap-10 ${
+        topBorder ? "border-t border-cream-300 pt-8" : ""
+      }`}
+    >
+      <div className="col-span-3">
+        <span
+          className={`font-mono text-[10px] tracking-[0.18em] uppercase ${
+            capsAccent ? "text-terracotta" : "text-ink-faint"
+          }`}
+        >
+          {caps}
+        </span>
+      </div>
+      <div className="col-span-9 min-w-0">{children}</div>
+    </section>
+  );
+}
+
 function Toggle({
   checked,
   onChange,
@@ -129,12 +222,14 @@ function openExternalPage(url: string) {
 const NAV_ITEMS: {
   id: ActiveTab;
   label: string;
-  icon: React.ElementType;
+  sub: string;
 }[] = [
-  { id: "general", label: "General", icon: Settings2 },
-  { id: "vocabulary", label: "Vocabulary", icon: BookOpen },
-  { id: "billing", label: "Plans & Billing", icon: CreditCard },
-  { id: "account", label: "Account", icon: User },
+  { id: "general", label: "General", sub: "Behavior" },
+  { id: "account", label: "Account", sub: "You" },
+  { id: "vocabulary", label: "Vocabulary", sub: "Words Oscar knows" },
+  { id: "folders", label: "Folders", sub: "Group what you said" },
+  { id: "billing", label: "Plans & billing", sub: "Subscription" },
+  { id: "privacy", label: "Data & privacy", sub: "Export · delete" },
 ];
 
 /* ── Props ── */
@@ -303,20 +398,22 @@ export function SettingsTab({
 
   return (
     <div className="st-layout">
-      {/* ── Sidebar / Tab bar ── */}
+      {/* ── Sidebar / Tab bar (V2WebSettings: serif label + caps-mono sub) ── */}
       <aside className="st-sidebar">
         <p className="st-sidebar-label">Settings</p>
         <nav className="st-nav">
-          {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
+          {NAV_ITEMS.map(({ id, label, sub }) => (
             <button
               key={id}
               className={`st-nav-btn${activeTab === id ? " active" : ""}`}
               onClick={() => setActiveTab(id)}
             >
-              <span className="st-nav-ico">
-                <Icon size={15} />
+              <span className="flex flex-col gap-0.5 min-w-0">
+                <span className="st-nav-label">{label}</span>
+                <span className="font-mono text-[9px] tracking-[0.18em] uppercase text-ink-faint">
+                  {sub}
+                </span>
               </span>
-              <span className="st-nav-label">{label}</span>
             </button>
           ))}
         </nav>
@@ -333,15 +430,78 @@ export function SettingsTab({
               How Oscar <em>behaves</em>.
             </h2>
 
-            {/* — Recording — */}
-            <div className="st-section-label">Recording</div>
-            <div className="st-card st-card--grouped">
-              <div className="st-row st-row--col">
-                <div className="st-row-label">Microphone</div>
+            {/* Hairline rows — V2DesktopSettings:741 pattern */}
+            <div className="mt-2">
+              <SettingRow
+                label="Global hotkey"
+                description="Hold to listen. Tap to start recording."
+              >
+                <MonoValue value="CTRL + SPACE" />
+              </SettingRow>
+
+              <SettingRow
+                label="Auto-cleanup"
+                description="Remove filler words. Fix punctuation. Format for the active app."
+                align="center"
+              >
+                <div className="flex items-center gap-4">
+                  <MonoValue
+                    value={aiImprovementEnabled ? "ON" : "OFF"}
+                    on={aiImprovementEnabled}
+                  />
+                  <Toggle
+                    checked={aiImprovementEnabled}
+                    onChange={() => onAiImprovementChange(!aiImprovementEnabled)}
+                    label="Auto-cleanup"
+                  />
+                </div>
+              </SettingRow>
+
+              <SettingRow
+                label="Context-aware dictation"
+                description={contextAwareDescription}
+                align="center"
+              >
+                <div className="flex items-center gap-4">
+                  <MonoValue
+                    value={
+                      contextAwareSupported && contextAwareDictationEnabled && aiImprovementEnabled
+                        ? "ON · CONTEXT-V1"
+                        : !contextAwareSupported
+                          ? "UNAVAILABLE"
+                          : "OFF"
+                    }
+                    on={
+                      contextAwareSupported &&
+                      contextAwareDictationEnabled &&
+                      aiImprovementEnabled
+                    }
+                  />
+                  <Toggle
+                    checked={
+                      contextAwareDictationEnabled &&
+                      aiImprovementEnabled &&
+                      contextAwareSupported
+                    }
+                    onChange={() =>
+                      onContextAwareDictationChange(!contextAwareDictationEnabled)
+                    }
+                    label="Context-aware dictation"
+                    disabled={contextAwareDisabled}
+                  />
+                </div>
+              </SettingRow>
+
+              <SettingRow
+                label="Microphone"
+                description="The input device Oscar listens through."
+                align="center"
+              >
                 <select
                   className="st-select"
                   value={selectedMicId}
                   onChange={(e) => onMicChange(e.target.value)}
+                  aria-label="Microphone"
                 >
                   <option value="">System Default</option>
                   {micDevices.map((d) => (
@@ -350,147 +510,108 @@ export function SettingsTab({
                     </option>
                   ))}
                 </select>
-              </div>
+              </SettingRow>
 
               {systemAudioSupported && (
-                <>
-                  <div className="st-divider" />
-                  <div className="st-row">
-                    <div className="st-row-text">
-                      <div className="st-row-label">System Audio</div>
-                      <div className="st-row-desc">
-                        Capture meeting participants' audio
-                      </div>
-                    </div>
+                <SettingRow
+                  label="System audio"
+                  description="Capture meeting participants on top of your mic."
+                  align="center"
+                >
+                  <div className="flex items-center gap-4">
+                    <MonoValue
+                      value={systemAudioEnabled ? "ON" : "OFF"}
+                      on={systemAudioEnabled}
+                    />
                     <Toggle
                       checked={systemAudioEnabled}
-                      onChange={() =>
-                        onSystemAudioToggle?.(!systemAudioEnabled)
-                      }
-                      label="System Audio"
+                      onChange={() => onSystemAudioToggle?.(!systemAudioEnabled)}
+                      label="System audio"
                     />
                   </div>
-                </>
-              )}
-            </div>
-
-            {/* — Language — */}
-            <div className="st-section-label">Language</div>
-            <div className="st-card st-card--grouped">
-              <div className="st-row">
-                <div className="st-row-label">Auto-detect language</div>
-                <Toggle
-                  checked={autoDetect}
-                  onChange={() => onLanguageChange(autoDetect ? "en" : "auto")}
-                  label="Auto-detect language"
-                />
-              </div>
-
-              {autoDetect && (
-                <p className="st-row-hint">
-                  Detects language from your first few seconds of speech.
-                </p>
+                </SettingRow>
               )}
 
-              {!autoDetect && (
-                <>
-                  <div className="st-divider" />
-                  <div className="gen-search-wrap">
-                    <Search size={14} className="gen-search-icon" />
-                    <input
-                      type="text"
-                      className="gen-search"
-                      placeholder="Search languages…"
-                      value={langSearch}
-                      onChange={(e) => setLangSearch(e.target.value)}
-                    />
-                  </div>
-                  <div className="gen-lang-grid">
-                    {filteredLangs.map((lang) => {
-                      const isSelected = transcriptionLanguage === lang.code;
-                      return (
-                        <button
-                          key={lang.code}
-                          className={`gen-lang-tile${isSelected ? " selected" : ""}`}
-                          onClick={() => onLanguageChange(lang.code)}
-                        >
-                          <span className="gen-lang-flag">{lang.flag}</span>
-                          <span className="gen-lang-name">{lang.name}</span>
-                          <span className="gen-lang-native">{lang.native}</span>
-                        </button>
-                      );
-                    })}
-                    {filteredLangs.length === 0 && (
-                      <p className="gen-lang-empty">
-                        No languages match "{langSearch}"
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* — Enhancement — */}
-            <div className="st-section-label">Enhancement</div>
-            <div className="st-card st-card--grouped">
-              <div className="st-row">
-                <div className="st-row-text">
-                  <div className="st-row-label">AI Cleanup</div>
-                  <div className="st-row-desc">
-                    Fix grammar, filler words, and punctuation
-                  </div>
+              <SettingRow
+                label="Language"
+                description={
+                  autoDetect
+                    ? "Auto-detecting from the first seconds of speech."
+                    : `Currently: ${
+                        LANGUAGES.find((l) => l.code === transcriptionLanguage)?.name ??
+                        transcriptionLanguage
+                      }`
+                }
+                align="center"
+              >
+                <div className="flex items-center gap-4">
+                  <MonoValue
+                    value={autoDetect ? "AUTO" : transcriptionLanguage.toUpperCase()}
+                  />
+                  <Toggle
+                    checked={autoDetect}
+                    onChange={() => onLanguageChange(autoDetect ? "en" : "auto")}
+                    label="Auto-detect"
+                  />
                 </div>
-                <Toggle
-                  checked={aiImprovementEnabled}
-                  onChange={() =>
-                    onAiImprovementChange(!aiImprovementEnabled)
-                  }
-                  label="AI Cleanup"
-                />
-              </div>
-
-              <div className="st-divider" />
-
-              <div className="st-row st-row--sub">
-                <div className="st-row-text">
-                  <div className="st-row-label">Adapt to Active App</div>
-                  <div className="st-row-desc">
-                    {contextAwareDescription}
-                  </div>
-                </div>
-                <Toggle
-                  checked={
-                    contextAwareDictationEnabled &&
-                    aiImprovementEnabled &&
-                    contextAwareSupported
-                  }
-                  onChange={() =>
-                    onContextAwareDictationChange(!contextAwareDictationEnabled)
-                  }
-                  label="Adapt to Active App"
-                  disabled={contextAwareDisabled}
-                />
-              </div>
+              </SettingRow>
             </div>
 
-            {/* — Voice Models — */}
-            <div className="st-section-label">Voice Models</div>
-            <div className="st-card st-card--grouped">
+            {/* Language picker — opens inline when auto-detect off */}
+            {!autoDetect && (
+              <SettingsSection caps="LANGUAGE LIST">
+                <div className="gen-search-wrap">
+                  <Search size={14} className="gen-search-icon" />
+                  <input
+                    type="text"
+                    className="gen-search"
+                    placeholder="Search languages…"
+                    value={langSearch}
+                    onChange={(e) => setLangSearch(e.target.value)}
+                  />
+                </div>
+                <div className="gen-lang-grid mt-3">
+                  {filteredLangs.map((lang) => {
+                    const isSelected = transcriptionLanguage === lang.code;
+                    return (
+                      <button
+                        key={lang.code}
+                        className={`gen-lang-tile${isSelected ? " selected" : ""}`}
+                        onClick={() => onLanguageChange(lang.code)}
+                      >
+                        <span className="gen-lang-flag">{lang.flag}</span>
+                        <span className="gen-lang-name">{lang.name}</span>
+                        <span className="gen-lang-native">{lang.native}</span>
+                      </button>
+                    );
+                  })}
+                  {filteredLangs.length === 0 && (
+                    <p className="gen-lang-empty">
+                      No languages match "{langSearch}"
+                    </p>
+                  )}
+                </div>
+              </SettingsSection>
+            )}
+
+            {/* Voice models — 3/9 caps section */}
+            <SettingsSection caps="VOICE MODELS">
               {renderModelRow(
                 "Dictation",
                 "For Scribbles, Stream, and Ctrl+Space.",
                 dictationModel,
               )}
-
               <div className="st-divider" />
               {renderModelRow(
                 "Meetings",
                 "For Minutes and long meeting transcription.",
                 meetingModel,
               )}
-            </div>
+            </SettingsSection>
 
-            <VibeCodingPicker />
+            <SettingsSection caps="EXPERIMENTAL">
+              <VibeCodingPicker />
+            </SettingsSection>
           </div>
         )}
 
@@ -537,135 +658,385 @@ export function SettingsTab({
             <h2 className="st-content-title">
               You, on <em>Oscar</em>.
             </h2>
+            <p className="mt-3 max-w-xl text-[13px] leading-relaxed text-ink-soft">
+              Your identity, voice profile, and how Oscar shows up when it
+              pastes for you.
+            </p>
 
-            {/* Profile hero */}
-            <div className="account-hero">
-              <div className="account-hero-avatar">
-                {getInitials(userEmail)}
-              </div>
-              <div className="account-hero-info">
-                <span className="account-hero-email">
-                  <Mail size={14} />
+            {/* IDENTITY — V2WebSettings:376 */}
+            <SettingsSection caps="IDENTITY">
+              <SettingRow label="Display name" align="center">
+                <span className="text-[14px] text-ink">
+                  {userEmail?.split("@")[0] || "—"}
+                </span>
+              </SettingRow>
+              <SettingRow label="Email" align="center">
+                <span className="inline-flex items-center gap-2 text-[14px] text-ink">
+                  <Mail size={12} className="text-ink-faint" />
                   {userEmail || "Not signed in"}
                 </span>
-                {userEmail && (
-                  <span className="account-hero-meta">
-                    <Lock size={11} />
-                    Signed in with Google
-                  </span>
-                )}
-              </div>
-            </div>
+              </SettingRow>
+              <SettingRow label="Signed in with" align="center">
+                <span className="inline-flex items-center gap-2 text-[14px] text-ink">
+                  <Lock size={12} className="text-ink-faint" />
+                  Google
+                </span>
+              </SettingRow>
+              <SettingRow label="Language" align="center">
+                <MonoValue
+                  value={
+                    autoDetect
+                      ? "AUTO"
+                      : (
+                          LANGUAGES.find((l) => l.code === transcriptionLanguage)?.name ??
+                          transcriptionLanguage
+                        ).toUpperCase()
+                  }
+                />
+              </SettingRow>
+            </SettingsSection>
 
-            {/* Resources */}
-            <div className="st-section-label">Resources</div>
-            <div className="st-card st-card--links">
-              {[
-                {
-                  label: "Export Your Data",
-                  href: `${WEB_APP_URL}/settings`,
-                },
-                {
-                  label: "Privacy Policy",
-                  href: `${WEB_APP_URL}/privacy`,
-                },
-                {
-                  label: "Terms of Service",
-                  href: `${WEB_APP_URL}/terms`,
-                },
-                {
-                  label: "Refund Policy",
-                  href: `${WEB_APP_URL}/refund-policy`,
-                },
-              ].map(({ label, href }) => (
-                <button
-                  key={href}
-                  type="button"
-                  className="st-link-row"
-                  onClick={() => openExternalPage(href)}
-                >
-                  <span>{label}</span>
-                  <ExternalLink size={13} />
-                </button>
-              ))}
-            </div>
+            {/* VOICE PROFILE — V2WebSettings:386 */}
+            <SettingsSection caps="VOICE PROFILE">
+              <SettingRow label="Auto-cleanup" align="center">
+                <MonoValue
+                  value={
+                    aiImprovementEnabled
+                      ? "ON · GEMINI REMOVES FILLER"
+                      : "OFF"
+                  }
+                  on={aiImprovementEnabled}
+                />
+              </SettingRow>
+              <SettingRow label="Context-aware dictation" align="center">
+                <MonoValue
+                  value={
+                    contextAwareSupported &&
+                    contextAwareDictationEnabled &&
+                    aiImprovementEnabled
+                      ? "ON · ADAPTS PER ACTIVE APP"
+                      : !contextAwareSupported
+                        ? "UNAVAILABLE"
+                        : "OFF"
+                  }
+                  on={
+                    contextAwareSupported &&
+                    contextAwareDictationEnabled &&
+                    aiImprovementEnabled
+                  }
+                />
+              </SettingRow>
+              <SettingRow label="Voice profile" align="center">
+                <MonoValue value="DEFAULT" on={false} />
+              </SettingRow>
+            </SettingsSection>
 
-            {/* Danger Zone */}
-            <div className="st-section-label st-section-label--danger">
-              Danger Zone
-            </div>
-            <div className="st-card st-card-danger st-card--grouped">
-              <div className="st-row">
-                <div className="st-row-text">
-                  <div className="st-row-label">Sign Out</div>
-                  <div className="st-row-desc">
-                    Sign out on this device
+            {/* SESSIONS — V2WebSettings:396 */}
+            <SettingsSection caps="SESSIONS">
+              <div className="flex items-center justify-between py-4 border-b border-cream-300">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-terracotta text-cream font-serif text-[13px] font-medium flex items-center justify-center shrink-0">
+                    {getInitials(userEmail)}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[14px] text-ink truncate">
+                      This device · OSCAR desktop
+                    </div>
+                    <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-ink-faint">
+                      {userEmail || "Local session"}
+                    </span>
                   </div>
                 </div>
-                <button className="st-btn-muted-sm" onClick={onSignOut}>
-                  <LogOut size={14} />
-                  Sign Out
-                </button>
+                <span className="font-mono text-[11px] tracking-[0.14em] text-terracotta">
+                  HERE
+                </span>
               </div>
+              <button
+                onClick={onSignOut}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent px-4 py-2 text-[12px] text-ink-soft cursor-pointer hover:text-ink transition-colors"
+              >
+                <LogOut size={12} />
+                Sign out on this device
+              </button>
+            </SettingsSection>
+          </div>
+        )}
 
-              <div className="st-divider" />
+        {/* ════════════ Folders ════════════ */}
+        {activeTab === "folders" && (
+          <FoldersPanel userId={userId} />
+        )}
 
-              <div className="st-row">
-                <div className="st-row-text">
-                  <div className="st-row-label">Clear Local Data</div>
-                  <div className="st-row-desc">
-                    Reset app, remove downloads, sign out
+        {/* ════════════ Data & privacy ════════════ */}
+        {activeTab === "privacy" && (
+          <div className="st-content">
+            <span className="st-content-eyebrow">SETTINGS · DATA &amp; PRIVACY</span>
+            <h2 className="st-content-title">
+              What we <em>do</em> with your voice.
+            </h2>
+            <p className="mt-3 max-w-xl text-[13px] leading-relaxed text-ink-soft">
+              Oscar transcribes locally on this device when it can. Audio never
+              leaves your machine unless you opt in. Transcripts sync if you're
+              signed in.
+            </p>
+
+            {/* WHAT'S STORED — V2WebSettingsPrivacy:458 */}
+            <SettingsSection caps="WHAT'S STORED">
+              <SettingRow
+                label="Audio recordings"
+                description="Audio is discarded after transcription. Local-only by design."
+                align="center"
+              >
+                <MonoValue value="OFF · DISCARDED" on={false} />
+              </SettingRow>
+              <SettingRow
+                label="Transcripts"
+                description="Cleaned text is stored so your library is searchable."
+                align="center"
+              >
+                <MonoValue value="ON · REQUIRED" />
+              </SettingRow>
+              <SettingRow
+                label="Telemetry"
+                description="Anonymous crash reports only. No content ever leaves."
+                align="center"
+              >
+                <MonoValue value="OFF" on={false} />
+              </SettingRow>
+            </SettingsSection>
+
+            {/* YOUR DATA — V2WebSettingsPrivacy:467 */}
+            <SettingsSection caps="YOUR DATA">
+              <div className="space-y-3">
+                <div className="rounded-lg p-5 flex items-start justify-between gap-6 bg-cream-200 border border-cream-300">
+                  <div className="min-w-0">
+                    <div className="font-serif text-[20px] font-medium text-ink leading-tight">
+                      Export everything
+                    </div>
+                    <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                      Download a ZIP of every Scribble, every Minutes, every
+                      vocabulary entry. Markdown + JSON.
+                    </p>
                   </div>
-                </div>
-                {clearConfirm ? (
-                  <div className="st-confirm-inline">
-                    <button
-                      className="st-btn-danger-sm"
-                      onClick={() => {
-                        setClearConfirm(false);
-                        onClearData();
-                      }}
-                    >
-                      Confirm
-                    </button>
-                    <button
-                      className="st-btn-ghost-sm"
-                      onClick={() => setClearConfirm(false)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
                   <button
-                    className="st-btn-danger-ghost-sm"
-                    onClick={() => setClearConfirm(true)}
+                    type="button"
+                    onClick={() => openExternalPage(`${WEB_APP_URL}/settings`)}
+                    className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-ink text-cream px-4 py-2 text-[12px] font-medium border-none cursor-pointer transition-opacity hover:opacity-90"
                   >
-                    <Trash2 size={13} />
-                    Clear
+                    <ExternalLink size={11} />
+                    Start export
                   </button>
-                )}
-              </div>
-
-              <div className="st-divider" />
-
-              <div className="st-row">
-                <div className="st-row-text">
-                  <div className="st-row-label">Delete Account</div>
-                  <div className="st-row-desc">
-                    Permanently remove your account and data
-                  </div>
                 </div>
-                <button
-                  className="st-btn-danger-ghost-sm"
-                  onClick={() => openExternalPage(`${WEB_APP_URL}/settings`)}
-                >
-                  Delete
-                </button>
+                <div className="rounded-lg p-5 flex items-start justify-between gap-6 border border-[#d6b3a8]">
+                  <div className="min-w-0">
+                    <div className="font-serif text-[20px] font-medium text-[#8c2f25] leading-tight">
+                      Clear local data
+                    </div>
+                    <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                      Reset this device — remove downloaded models, cached
+                      data, and sign out. Does not delete server data.
+                    </p>
+                  </div>
+                  {clearConfirm ? (
+                    <div className="shrink-0 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClearConfirm(false);
+                          onClearData();
+                        }}
+                        className="rounded-full px-4 py-2 text-[12px] text-cream bg-[#8c2f25] border-none cursor-pointer"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setClearConfirm(false)}
+                        className="rounded-full px-4 py-2 text-[12px] text-ink-soft border border-cream-300 bg-transparent cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setClearConfirm(true)}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] text-[#8c2f25] border border-[#d6b3a8] bg-transparent cursor-pointer"
+                    >
+                      <Trash2 size={11} />
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="rounded-lg p-5 flex items-start justify-between gap-6 border border-[#d6b3a8]">
+                  <div className="min-w-0">
+                    <div className="font-serif text-[20px] font-medium text-[#8c2f25] leading-tight">
+                      Delete account
+                    </div>
+                    <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                      Permanently delete every Scribble, every Minutes, your
+                      subscription. Cannot be undone.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openExternalPage(`${WEB_APP_URL}/settings`)}
+                    className="shrink-0 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] text-[#8c2f25] border border-[#d6b3a8] bg-transparent cursor-pointer"
+                  >
+                    Delete account
+                  </button>
+                </div>
               </div>
-            </div>
+            </SettingsSection>
+
+            <SettingsSection caps="LEGAL">
+              <div className="space-y-1">
+                {[
+                  { label: "Privacy Policy", href: `${WEB_APP_URL}/privacy` },
+                  { label: "Terms of Service", href: `${WEB_APP_URL}/terms` },
+                  { label: "Refund Policy", href: `${WEB_APP_URL}/refund-policy` },
+                ].map(({ label, href }) => (
+                  <button
+                    key={href}
+                    type="button"
+                    onClick={() => openExternalPage(href)}
+                    className="flex items-center justify-between w-full py-3 border-b border-cream-300 bg-transparent border-l-0 border-r-0 border-t-0 cursor-pointer text-left hover:bg-cream-100/40 transition-colors"
+                  >
+                    <span className="text-[14px] text-ink">{label}</span>
+                    <ExternalLink size={12} className="text-ink-faint" />
+                  </button>
+                ))}
+              </div>
+            </SettingsSection>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ── Folders panel ── */
+
+interface FolderSummary {
+  name: string;
+  count: number;
+  latestTitle: string | null;
+  latestCreatedAt: string | null;
+}
+
+function FoldersPanel({ userId }: { userId?: string }) {
+  const [scribbles, setScribbles] = useState<DBScribble[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      const { data } = await scribblesService.getScribbles();
+      if (cancelled) return;
+      setScribbles(data ?? []);
+      setIsLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const folders: FolderSummary[] = useMemo(() => {
+    const byFolder = new Map<string, FolderSummary>();
+    for (const s of scribbles) {
+      const key = s.folder?.trim();
+      if (!key) continue;
+      const created = s.created_at;
+      const existing = byFolder.get(key);
+      if (!existing) {
+        byFolder.set(key, {
+          name: key,
+          count: 1,
+          latestTitle: s.title || s.original_formatted_text.slice(0, 80),
+          latestCreatedAt: created,
+        });
+      } else {
+        existing.count += 1;
+        if (
+          !existing.latestCreatedAt ||
+          (created && created > existing.latestCreatedAt)
+        ) {
+          existing.latestTitle = s.title || s.original_formatted_text.slice(0, 80);
+          existing.latestCreatedAt = created;
+        }
+      }
+    }
+    return [...byFolder.values()].sort((a, b) => b.count - a.count);
+  }, [scribbles]);
+
+  const totalFiled = folders.reduce((acc, f) => acc + f.count, 0);
+
+  return (
+    <div className="st-content">
+      <span className="st-content-eyebrow">SETTINGS · FOLDERS</span>
+      <h2 className="st-content-title">
+        How you <em>group</em> things.
+      </h2>
+      <p className="mt-3 max-w-xl text-[13px] leading-relaxed text-ink-soft">
+        Oscar routes Scribbles to folders automatically based on what you
+        said. They show up in your sidebar so you can jump straight in.
+      </p>
+
+      <SettingsSection caps={`YOUR FOLDERS · ${folders.length} · ${totalFiled} SCRIBBLES FILED`}>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12 text-ink-faint">
+            <Loader2 size={20} className="animate-spin" />
+          </div>
+        ) : folders.length === 0 ? (
+          <div className="rounded-lg p-8 text-center bg-cream-200 border border-cream-300">
+            <FolderOpen className="mx-auto mb-3 text-ink-faint" size={28} />
+            <p className="font-serif text-[18px] text-ink leading-snug">
+              No folders yet.
+            </p>
+            <p className="mt-1.5 text-[13px] text-ink-soft">
+              Folders form when you tag Scribbles. Try a few captures and they
+              will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-5">
+            {folders.map((f) => (
+              <div
+                key={f.name}
+                className="rounded-lg p-6 bg-cream-200 border border-cream-300"
+              >
+                <div className="flex items-baseline justify-between">
+                  <h3 className="font-serif font-medium text-ink leading-tight" style={{ fontSize: 26, letterSpacing: "-0.015em" }}>
+                    {f.name}
+                  </h3>
+                  <span className="font-mono text-[13px] text-terracotta">
+                    {f.count}
+                  </span>
+                </div>
+                {f.latestTitle && (
+                  <div className="mt-5 text-[12px] leading-relaxed text-ink-soft">
+                    <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint">
+                      LATEST
+                    </span>
+                    <p className="mt-1.5 text-[13px] text-ink line-clamp-2">
+                      {f.latestTitle}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-6 inline-flex items-center gap-2 text-[12px] text-ink-soft">
+          <Plus size={12} className="text-ink-faint" />
+          New folders form when Oscar groups a Scribble. No manual create yet.
+        </p>
+      </SettingsSection>
     </div>
   );
 }

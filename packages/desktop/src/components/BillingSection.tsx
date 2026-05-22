@@ -15,6 +15,7 @@ import {
   type SubscriptionStatus,
   type SubscriptionTier,
 } from "@oscar/shared/constants";
+import { SettingsSection } from "./SettingsTab";
 
 interface BillingSectionProps {
   userId: string;
@@ -151,103 +152,95 @@ export function BillingSection({ userId }: BillingSectionProps) {
 
   return (
     <div className="billing-compact">
-      {/* ── Hero plan card ── */}
-      <div className="st-card st-card--grouped billing-hero-card">
-        <div className="billing-hero">
-          <div className="billing-hero-left">
-            <span
-              className={`billing-hero-icon ${isProUser ? "pro" : "free"}`}
-            >
-              <Crown size={20} />
-            </span>
-            <div className="billing-hero-text">
-              <span className="billing-hero-name">
-                {isProUser ? "Pro Plan" : "Free Plan"}
+      {/* CURRENT PLAN — V2WebSettingsBilling:293 */}
+      <SettingsSection caps="CURRENT PLAN" topBorder={false}>
+        <div className="rounded-lg p-7 bg-cream-200 border border-cream-300">
+          <div className="flex items-start justify-between gap-6 flex-wrap">
+            <div className="min-w-0">
+              <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+                {isProUser ? "PRO · ACTIVE" : "FREE TIER"}
               </span>
-              <span className="billing-hero-price">
-                {isProUser
-                  ? `₹${
-                      subscription.billingCycle === "monthly"
-                        ? PRICING.MONTHLY
-                        : PRICING.YEARLY
-                    } / ${subscription.billingCycle === "monthly" ? "month" : "year"}`
-                  : "No payment required"}
-              </span>
+              <div className="mt-2 flex items-baseline gap-3 flex-wrap">
+                <span
+                  className="font-serif font-medium text-ink"
+                  style={{ fontSize: 40, letterSpacing: "-0.025em", lineHeight: 1 }}
+                >
+                  {isProUser
+                    ? `₹${
+                        subscription.billingCycle === "monthly"
+                          ? PRICING.MONTHLY
+                          : PRICING.YEARLY
+                      }`
+                    : "₹0"}
+                </span>
+                <span className="text-[13px] text-ink-soft">
+                  {isProUser
+                    ? `per ${subscription.billingCycle === "monthly" ? "month" : "year"}`
+                    : "no payment required"}
+                </span>
+              </div>
+              {isProUser && subscription.currentPeriodEnd && (
+                <p className="mt-2 text-[13px] text-ink-soft">
+                  {isCancelling ? "Access until " : "Renews "}
+                  {formatDate(subscription.currentPeriodEnd)}
+                  {subscription.billingCycle === "yearly" && !isCancelling && " · saving 20% vs monthly"}
+                </p>
+              )}
+            </div>
+            <div className="shrink-0">
+              {isProUser ? (
+                <button
+                  className="text-[12px] rounded-full px-4 py-2 border border-cream-300 text-ink-soft bg-transparent cursor-pointer hover:text-ink transition-colors"
+                  onClick={() => openExternal(SETTINGS_URL)}
+                >
+                  Manage plan
+                </button>
+              ) : (
+                <button
+                  className="inline-flex items-center gap-1.5 text-[12px] rounded-full px-4 py-2 bg-ink text-cream border-none cursor-pointer transition-opacity hover:opacity-90 disabled:opacity-50"
+                  onClick={handleUpgrade}
+                  disabled={isUpgrading}
+                >
+                  {isUpgrading ? (
+                    <Loader2 size={12} className="spin" />
+                  ) : (
+                    <Crown size={12} />
+                  )}
+                  {isUpgrading ? "Loading…" : "Upgrade to Pro"}
+                </button>
+              )}
             </div>
           </div>
-          <div className="billing-hero-right">
-            {isProUser ? (
-              <span
-                className={
-                  isCancelling
-                    ? "billing-status-cancelling"
-                    : "billing-status-active"
-                }
-              >
-                <Check size={13} />
-                {isCancelling ? "Cancelling" : "Active"}
-              </span>
-            ) : (
-              <button
-                className="st-btn-primary-sm"
-                onClick={handleUpgrade}
-                disabled={isUpgrading}
-              >
-                {isUpgrading ? (
-                  <Loader2 size={14} className="spin" />
-                ) : (
-                  <Crown size={14} />
-                )}
-                {isUpgrading ? "Loading…" : "Upgrade to Pro"}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {isProUser && (
-          <>
-            <div className="billing-meta-grid">
-              <div className="billing-meta-cell">
-                <span className="billing-meta-cell-label">
-                  <CreditCard size={11} />
-                  Billing cycle
+          {isProUser && (
+            <div className="mt-6 pt-5 border-t border-cream-300 grid grid-cols-2 gap-6">
+              <div>
+                <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint inline-flex items-center gap-1.5">
+                  <CreditCard size={10} /> BILLING CYCLE
                 </span>
-                <span className="billing-meta-cell-val">
+                <div className="mt-1 text-[14px] text-ink">
                   {subscription.billingCycle === "monthly"
                     ? "Monthly"
                     : subscription.billingCycle === "yearly"
                       ? "Yearly"
                       : "—"}
-                </span>
+                </div>
               </div>
-              <div className="billing-meta-cell">
-                <span className="billing-meta-cell-label">
-                  <Calendar size={11} />
-                  {isCancelling ? "Access until" : "Next billing"}
+              <div>
+                <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint inline-flex items-center gap-1.5">
+                  <Calendar size={10} /> {isCancelling ? "ACCESS UNTIL" : "NEXT BILLING"}
                 </span>
-                <span className="billing-meta-cell-val">
+                <div className="mt-1 text-[14px] text-ink">
                   {formatDate(subscription.currentPeriodEnd)}
-                </span>
+                </div>
               </div>
             </div>
+          )}
+        </div>
+      </SettingsSection>
 
-            {!isCancelling && (
-              <div className="billing-hero-actions">
-                <button
-                  className="st-btn-ghost-sm"
-                  onClick={() => openExternal(SETTINGS_URL)}
-                >
-                  Manage Subscription
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* ── Usage ── */}
-      <div className="st-section-label">Usage</div>
-      <div className="billing-usage-grid">
+      {/* USAGE — V2WebSettingsBilling-style */}
+      <SettingsSection caps={`USAGE · ${new Date().toLocaleDateString("en-US", { month: "long" }).toUpperCase()}`}>
+        <div className="billing-usage-grid">
         <div className="billing-usage-card">
           <span className="billing-usage-card-label">
             Recordings this month
@@ -317,49 +310,41 @@ export function BillingSection({ userId }: BillingSectionProps) {
             </div>
           )}
         </div>
-      </div>
+        </div>
+      </SettingsSection>
 
-      {/* ── Pro Benefits (free users) ── */}
+      {/* PRO BENEFITS (free users) — V2OverlayUpgrade pattern */}
       {!isProUser && (
-        <>
-          <div className="st-section-label">Why upgrade to Pro?</div>
-          <div className="st-card billing-benefits">
-            <ul className="billing-benefits-list">
-              <li>
-                <Check size={14} />
-                <span>Unlimited recordings every month</span>
-              </li>
-              <li>
-                <Check size={14} />
-                <span>Unlimited vocabulary entries</span>
-              </li>
-              <li>
-                <Check size={14} />
-                <span>Priority AI processing</span>
-              </li>
-              <li>
-                <Check size={14} />
-                <span>Priority customer support</span>
-              </li>
-              <li>
-                <Check size={14} />
-                <span>Early access to new features</span>
-              </li>
+        <SettingsSection caps="WHY UPGRADE">
+          <div className="rounded-lg p-6 bg-cream-200 border border-cream-300">
+            <ul className="space-y-2.5 text-[13px] text-ink list-none">
+              {[
+                "Unlimited recordings every month",
+                "Unlimited vocabulary entries",
+                "Priority AI processing",
+                "Priority customer support",
+                "Early access to new features",
+              ].map((line) => (
+                <li key={line} className="flex items-start gap-2.5">
+                  <Check size={13} className="text-terracotta shrink-0 mt-0.5" />
+                  <span>{line}</span>
+                </li>
+              ))}
             </ul>
             <button
-              className="st-btn-primary-sm billing-benefits-cta"
+              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-ink text-cream px-4 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-opacity hover:opacity-90 disabled:opacity-50"
               onClick={handleUpgrade}
               disabled={isUpgrading}
             >
               {isUpgrading ? (
-                <Loader2 size={14} className="spin" />
+                <Loader2 size={13} className="spin" />
               ) : (
-                <Crown size={14} />
+                <Crown size={13} />
               )}
               Upgrade — Starting at ₹{PRICING.MONTHLY}/month
             </button>
           </div>
-        </>
+        </SettingsSection>
       )}
     </div>
   );
