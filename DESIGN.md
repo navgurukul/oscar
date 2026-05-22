@@ -1,6 +1,6 @@
 # Oscar Design System
-> Inspired by Wispr Flow editorial approach, with Oscar cyan identity
-> Version 1.0 — March 2026
+> Inspired by Wispr Flow editorial approach, with Oscar terracotta identity
+> Version 1.1 — May 2026
 
 ---
 
@@ -14,7 +14,7 @@
 **Design Philosophy:**
 - Warm, human, approachable — not clinical
 - Editorial elegance meets functional SaaS
-- Oscar cyan = energy, voice, motion
+- Oscar terracotta = voice warmth, editorial energy, active motion
 - Inspired by Wispr Flow "Voice in Motion" ethos
 
 ---
@@ -25,10 +25,10 @@
 
 | Name | Hex | HSL | Usage |
 |------|-----|-----|-------|
-| **Cyan Primary** | `#06B6D4` | `187 80% 42%` | CTAs, active states, mic animation |
-| **Cyan Light** | `#22D3EE` | `187 86% 60%` | Hover states, highlights |
-| **Cyan Dark** | `#0891B2` | `187 90% 37%` | Pressed states, accents |
-| **Cyan Subtle** | `#CFFAFE` | `187 97% 90%` | Backgrounds, tags |
+| **Terracotta Primary** | `#B8623D` | `18 50% 48%` | Brand mark, CTAs, active states, mic animation |
+| **Terracotta Light** | `#E8C9B8` | `19 51% 82%` | Hover states, highlights, soft fills |
+| **Terracotta Dark** | `#823F24` | `17 57% 33%` | Pressed states, high-contrast accents |
+| **Terracotta Subtle** | `#F7E6DD` | `21 61% 92%` | Backgrounds, tags |
 
 ### Neutral Colors (Wispr Flow Inspired)
 
@@ -47,8 +47,8 @@
 
 | Name | Hex | Usage |
 |------|-----|-------|
-| **Lavender** | `#BDADFF` | Wispr Flow accent (optional secondary) |
-| **Soft Teal** | `#5EEAD4` | Success states, secondary actions |
+| **Lavender** | `#BDADFF` | Wispr Flow accent (rare secondary) |
+| **Soft Green** | `#4ADE80` | Success states |
 | **Rose** | `#FDA4AF` | Warnings, recording indicator |
 
 ### Dark Mode
@@ -100,8 +100,8 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 
 | Variant | Background | Text | Border | Radius |
 |---------|------------|------|--------|--------|
-| **Primary** | `#06B6D4` | White | None | `9999px` (pill) |
-| **Primary Hover** | `#0891B2` | White | None | `9999px` |
+| **Primary** | `#B8623D` | Cream | None | `9999px` (pill) |
+| **Primary Hover** | `#A25234` | Cream | None | `9999px` |
 | **Secondary** | Transparent | `#0B0B0B` | 1px `#E2E8F0` | `9999px` |
 | **Ghost** | Transparent | `#475569` | None | — |
 | **Danger** | `#EF4444` | White | None | `9999px` |
@@ -128,17 +128,17 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 - Background: `#FFFFFF`
 - Border: 1px `#E2E8F0`
 - Border Radius: 12px
-- Focus: 2px ring `#06B6D4` at 30% opacity
+- Focus: 2px ring `#B8623D` at 30% opacity
 - Padding: 12px 16px
 
 ### Recording Button (Hero Component)
 
 - Size: 80×80px (mobile), 96×96px (desktop)
 - Shape: Perfect circle
-- Background: `#06B6D4` (cyan-500)
+- Background: `#B8623D` (terracotta-500)
 - Icon: Microphone (white, 32px)
 - Animation: Pulsing ring when recording
-- Shadow: `0 20px 40px rgba(6,182,212,0.3)`
+- Shadow: `0 20px 40px rgba(184,98,61,0.3)`
 
 ### Desktop Dictation Pill — Edge Handle (Paper variant)
 
@@ -146,8 +146,8 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
 
 **Handle (rest / ready)**:
 - Rest: 72 × 5 px · radius `999px 999px 0 0` · white→`#F8FAFC` gradient · 1px border `rgba(15,23,42,.08)` · shadow `0 -1px 6px rgba(0,0,0,.35)`
-- Ready: 96 × 6 px with cyan glow `0 -2px 12px rgba(34,211,238,.35), 0 -1px 4px rgba(0,0,0,.4)`
-- "Click to dictate" hint: 10px / 500 weight / `.06em` tracking · uppercase · `#22D3EE`
+- Ready: 96 × 6 px with terracotta glow `0 -2px 12px rgba(184,98,61,.32), 0 -1px 4px rgba(0,0,0,.4)`
+- "Click to dictate" hint: 10px / 500 weight / `.06em` tracking · uppercase · `#B8623D`
 
 **Hit zone**: full window width × 56 px tall, anchored to bottom. Hover enters ready state only; click starts dictation. 220 ms leave-debounce before collapse.
 
@@ -162,15 +162,15 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
 
 **State bodies**:
 - Idle: 13 dots, 2.5 × 2.5 px, color `rgba(15,23,42,.5)`
-- Recording: 15-bar waveform, 2.5 px wide, color `#06B6D4` (cyan-500) — subtle `mm-wave` baseline drift staggered 0.06 s, with live audio levels scaling bar amplitude on top
+- Recording: 15-bar waveform, 2.5 px wide, color `#B8623D` (terracotta-500) — subtle `mm-wave` baseline drift staggered 0.06 s, with live audio levels scaling bar amplitude on top
 - Processing: 13 pulse dots — animation `mm-pulse 1.1s ease-in-out infinite`, staggered 0.07 s
 - Error: rose-700 (`#BE123C`) triangle glyph + "no input" label
 
-**Inserted toast**: positioned 82 px above bottom · `#06B6D4` bg · `#022C33` text · padding `7px 14px` · shadow `0 8px 24px rgba(8,145,178,.4)` · 1500 ms dwell before collapse.
+**Inserted toast**: positioned 82 px above bottom · `#B8623D` bg · `#F7F4EE` text · padding `7px 14px` · shadow `0 8px 24px rgba(130,63,36,.35)` · 1500 ms dwell before collapse.
 
 **Keyboard hint**: reserved for explicit expanded/teaching surfaces. It is not shown during idle hover or active dictation.
 
-**Settings popover**: 260 px wide, radius 14 px, padded `6px`, white surface. Items at `13px / .02em`. Transform list uses the same hover/select style; selected row shows a cyan-500 check. Toggle: 32 × 18 px pill with 14 × 14 px knob; on state uses `#06B6D4`. Language opens a sub-page within the popover with a "Back" affordance.
+**Settings popover**: 260 px wide, radius 14 px, padded `6px`, white surface. Items at `13px / .02em`. Transform list uses the same hover/select style; selected row shows a terracotta-500 check. Toggle: 32 × 18 px pill with 14 × 14 px knob; on state uses `#B8623D`. Language opens a sub-page within the popover with a "Back" affordance.
 
 **Window heights** (Tauri `set_size` per phase): 56 px (rest / ready), 200 px (recording / processing / inserted / error), 380 px (settings open). Bottom edge stays flush with the primary monitor's bottom on every resize. macOS NSPanel level 1000 is re-applied after each resize so the pill floats above the Dock and fullscreen Spaces.
 
@@ -184,8 +184,8 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
 ### Tags/Labels
 
 - Pill shape (fully rounded)
-- Background: `#CFFAFE` (cyan-100)
-- Text: `#0891B2` (cyan-700)
+- Background: `#F7E6DD` (terracotta-50)
+- Text: `#823F24` (terracotta-700)
 - Padding: 4px 12px
 - Font: Inter 500 12px
 
@@ -252,7 +252,7 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
 
 | Element | Animation |
 |---------|-----------|
-| **Recording Button** | Pulsing cyan ring (infinite) |
+| **Recording Button** | Pulsing terracotta ring (infinite) |
 | **Success** | Checkmark draw animation |
 | **Copy** | Brief scale bounce |
 | **Hover states** | Subtle color shift + lift |
@@ -265,7 +265,7 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
   100% { transform: scale(1); opacity: 0; }
 }
 ```
-- Ring: 2px cyan stroke
+- Ring: 2px terracotta stroke
 - Duration: 1.5s infinite
 - Scale: 1.0 → 1.4
 
@@ -353,7 +353,7 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
   --text-primary: #FFFFFF;
   --text-secondary: #94A3B8;
   --border: #2D2D2D;
-  --accent: #06B6D4; /* Keep cyan! */
+  --accent: #B8623D;
 }
 ```
 
@@ -365,9 +365,9 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
 
 | State | Primary | Secondary |
 |-------|---------|-----------|
-| Default | bg-cyan-500, text-white | border-slate-200 |
-| Hover | bg-cyan-600 | bg-slate-50 |
-| Active | bg-cyan-700 | bg-slate-100 |
+| Default | bg-terracotta-500, text-cream | border-cream-300 |
+| Hover | bg-terracotta-600 | bg-cream-50 |
+| Active | bg-terracotta-700 | bg-cream-200 |
 | Disabled | opacity-50, cursor-not-allowed | opacity-50 |
 
 ### Input States
@@ -375,7 +375,7 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
 | State | Style |
 |-------|-------|
 | Default | border-slate-200 |
-| Focus | ring-2 ring-cyan-500/30 |
+| Focus | ring-2 ring-terracotta-500/30 |
 | Error | border-red-500 |
 | Disabled | bg-slate-100 |
 
@@ -393,7 +393,7 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
 ### Focus States
 ```css
 :focus-visible {
-  outline: 2px solid #06B6D4;
+  outline: 2px solid #B8623D;
   outline-offset: 2px;
 }
 ```
@@ -435,7 +435,7 @@ Use design system with AI workflow:
 
 Review checks:
 
-- brand alignment with OSCAR cyan-and-cream editorial system
+- brand alignment with OSCAR terracotta-and-cream editorial system
 - consistency across web and desktop patterns
 - hierarchy, spacing, motion, responsiveness
 - empty, loading, error, success states
@@ -453,9 +453,9 @@ Review checks:
   - Pill-shaped everything
   
 - **Oscar's Identity**
-  - Cyan (`#06B6D4`) as hero/brand color
+  - Terracotta (`#B8623D`) as hero/brand color
   - Voice-first, not just transcription
 
 ---
 
-*Document maintained by Light — Last updated March 2026*
+*Document maintained by Light — Last updated May 2026*

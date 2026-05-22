@@ -174,18 +174,18 @@ function HomeTab({
               </p>
             </div>
           ) : (
-            <div className="space-y-9">
+            <div className="space-y-14">
               {localTranscripts.map((t) => {
                 const time = formatEventTime(t.createdAt);
                 const source = sourceLabel(t);
                 const live = isFresh(t.createdAt);
                 return (
-                  <article key={t.id} className="grid grid-cols-12 gap-6 group">
-                    <div className="col-span-3 pt-1">
-                      <span className="font-mono text-[13px] text-ink tracking-[0.02em]">
+                  <article key={t.id} className="grid grid-cols-12 gap-10 group">
+                    <div className="col-span-2 pt-2">
+                      <span className="font-mono text-[14px] text-ink tracking-[0.02em]">
                         {time}
                       </span>
-                      <div className="mt-1">
+                      <div className="mt-1.5">
                         <span
                           className={`font-mono text-[10px] tracking-[0.16em] uppercase ${
                             live ? "text-terracotta" : "text-ink-faint"
@@ -195,10 +195,10 @@ function HomeTab({
                         </span>
                       </div>
                     </div>
-                    <div className="col-span-9">
+                    <div className="col-span-10">
                       <p
-                        className="font-serif text-ink leading-[1.4]"
-                        style={{ fontSize: 19, letterSpacing: "-0.005em" }}
+                        className="font-serif text-ink"
+                        style={{ fontSize: 24, lineHeight: 1.35, letterSpacing: "-0.005em", maxWidth: 760, textWrap: "pretty" as const }}
                       >
                         {t.text}
                       </p>

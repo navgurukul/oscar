@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { deflateSync } from "node:zlib";
+import sharp from "sharp";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 
@@ -122,36 +123,12 @@ function sdRoundedRect(px, py, cx, cy, width, height, radius) {
   return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - radius;
 }
 
-function sdSegment(px, py, ax, ay, bx, by, stroke) {
-  const vx = bx - ax;
-  const vy = by - ay;
-  const wx = px - ax;
-  const wy = py - ay;
-  const c = clamp((wx * vx + wy * vy) / (vx * vx + vy * vy), 0, 1);
-  return Math.hypot(px - (ax + vx * c), py - (ay + vy * c)) - stroke / 2;
-}
-
 function drawRoundedRect(canvas, cx, cy, width, height, radius, color) {
   drawSdf(
     canvas,
     { x: cx - width / 2 - 2, y: cy - height / 2 - 2, width: width + 4, height: height + 4 },
     color,
     (px, py) => sdRoundedRect(px, py, cx, cy, width, height, radius)
-  );
-}
-
-function drawLine(canvas, ax, ay, bx, by, stroke, color) {
-  const pad = stroke + 3;
-  drawSdf(
-    canvas,
-    {
-      x: Math.min(ax, bx) - pad,
-      y: Math.min(ay, by) - pad,
-      width: Math.abs(bx - ax) + pad * 2,
-      height: Math.abs(by - ay) + pad * 2,
-    },
-    color,
-    (px, py) => sdSegment(px, py, ax, ay, bx, by, stroke)
   );
 }
 
@@ -167,33 +144,6 @@ function drawCircleStroke(canvas, cx, cy, radius, stroke, color) {
     },
     color,
     (px, py) => Math.abs(Math.hypot(px - cx, py - cy) - radius) - stroke / 2
-  );
-}
-
-function drawArcStroke(canvas, cx, cy, radius, stroke, start, end, color) {
-  const pad = stroke + 3;
-  const span = (end - start + Math.PI * 2) % (Math.PI * 2);
-  const inArc = (angle) => ((angle - start + Math.PI * 2) % (Math.PI * 2)) <= span;
-
-  drawSdf(
-    canvas,
-    {
-      x: cx - radius - pad,
-      y: cy - radius - pad,
-      width: (radius + pad) * 2,
-      height: (radius + pad) * 2,
-    },
-    color,
-    (px, py) => {
-      const angle = Math.atan2(py - cy, px - cx);
-      if (inArc(angle)) return Math.abs(Math.hypot(px - cx, py - cy) - radius) - stroke / 2;
-
-      const sx = cx + Math.cos(start) * radius;
-      const sy = cy + Math.sin(start) * radius;
-      const ex = cx + Math.cos(end) * radius;
-      const ey = cy + Math.sin(end) * radius;
-      return Math.min(Math.hypot(px - sx, py - sy), Math.hypot(px - ex, py - ey)) - stroke / 2;
-    }
   );
 }
 
@@ -253,51 +203,33 @@ function drawTransparentMark(width, height, mode) {
   return canvas;
 }
 
-function drawWordmark(width, height) {
-  const canvas = createCanvas(width, height);
-  const markSize = Math.min(width, height) * 0.34;
-  const markCx = width * 0.2;
-  const cy = height * 0.5;
-
-  drawOscarMark(canvas, markCx, cy, markSize, colors.accent, colors.ink);
-
-  const stroke = height * 0.055;
-  const letterHeight = height * 0.22;
-  const r = letterHeight * 0.39;
-  let x = width * 0.37;
-  const gap = height * 0.065;
-
-  drawCircleStroke(canvas, x, cy, r, stroke, colors.ink);
-  x += r * 2 + gap;
-
-  drawLine(canvas, x + r * 0.9, cy - r, x, cy - r, stroke, colors.ink);
-  drawLine(canvas, x, cy - r, x, cy, stroke, colors.ink);
-  drawLine(canvas, x, cy, x + r * 0.9, cy, stroke, colors.ink);
-  drawLine(canvas, x + r * 0.9, cy, x + r * 0.9, cy + r, stroke, colors.ink);
-  drawLine(canvas, x + r * 0.9, cy + r, x, cy + r, stroke, colors.ink);
-  x += r * 1.25 + gap;
-
-  drawArcStroke(canvas, x, cy, r, stroke, 0.62, Math.PI * 2 - 0.62, colors.ink);
-  x += r * 2 + gap * 0.8;
-
-  drawLine(canvas, x - r * 0.8, cy + r, x, cy - r, stroke, colors.ink);
-  drawLine(canvas, x + r * 0.8, cy + r, x, cy - r, stroke, colors.ink);
-  drawLine(canvas, x - r * 0.42, cy + r * 0.18, x + r * 0.42, cy + r * 0.18, stroke * 0.78, colors.ink);
-  x += r * 1.7 + gap;
-
-  drawLine(canvas, x - r * 0.78, cy + r, x - r * 0.78, cy - r, stroke, colors.ink);
-  drawLine(canvas, x - r * 0.78, cy - r, x + r * 0.38, cy - r, stroke, colors.ink);
-  drawLine(canvas, x + r * 0.42, cy - r, x + r * 0.42, cy, stroke, colors.ink);
-  drawLine(canvas, x - r * 0.78, cy, x + r * 0.42, cy, stroke, colors.ink);
-  drawLine(canvas, x - r * 0.1, cy + r * 0.05, x + r * 0.58, cy + r, stroke, colors.ink);
-
-  return canvas;
-}
-
 function writePng(relativePath, canvas) {
   const output = resolve(root, relativePath);
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, encodePng(canvas.width, canvas.height, canvas.data));
+  console.log(`wrote ${relativePath}`);
+}
+
+async function writeWordmark(relativePath) {
+  const output = resolve(root, relativePath);
+  mkdirSync(dirname(output), { recursive: true });
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1366" height="768" viewBox="0 0 1366 768">
+      <g transform="translate(190 274) scale(9.1667)" fill="none">
+        <circle cx="12" cy="12" r="9" stroke="${palette.accent}" stroke-width="1.35"/>
+        <path d="M7.8 9.9v4.2M9.9 8.5v7M12 10.4v3.2M14.1 8.9v6.2M16.2 9.7v4.6"
+          stroke="${palette.ink}" stroke-width="1.35" stroke-linecap="round"/>
+      </g>
+      <text x="440" y="455"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="230"
+        font-weight="500"
+        letter-spacing="0"
+        fill="${palette.ink}">Oscar</text>
+    </svg>`;
+
+  await sharp(Buffer.from(svg)).png().toFile(output);
   console.log(`wrote ${relativePath}`);
 }
 
@@ -306,7 +238,7 @@ writePng("packages/web/public/OSCAR_ICON_192.png", drawIcon(192, 192));
 writePng("packages/web/public/OSCAR_ICON_512.png", drawIcon(512, 512));
 writePng("packages/web/public/OSCAR_LIGHT_LOGO.png", drawTransparentMark(1656, 1675, "light"));
 writePng("packages/web/public/OSCAR_DARK_LOGO.png", drawTransparentMark(1664, 1683, "dark"));
-writePng("packages/web/public/OSCARLOGO.png", drawWordmark(1366, 768));
+await writeWordmark("packages/web/public/OSCARLOGO.png");
 
 for (const file of ["OSCAR_AVATAR.png", "OSCAR_LIGHT_LOGO.png", "OSCAR_DARK_LOGO.png"]) {
   copyFileSync(

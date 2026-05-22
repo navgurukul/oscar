@@ -46,7 +46,7 @@ If reviewing a cross-cutting change, inspect both web and desktop before declari
 
 ## OSCAR-Specific Rules
 
-- Keep OSCAR's cyan-and-cream editorial identity from `DESIGN.md`.
+- Keep OSCAR's terracotta-and-cream editorial identity from `DESIGN.md`.
 - Prefer one dominant idea per screen or section; avoid card-heavy layouts unless cards are the interaction.
 - Protect mobile legibility and first-screen hierarchy.
 - Reuse shared primitives before adding new visual patterns.

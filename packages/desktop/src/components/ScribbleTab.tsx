@@ -216,8 +216,11 @@ function DetailPane({
         </div>
 
         <div className="mt-9 pt-9 border-t border-cream-300">
+          <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+            OSCAR&rsquo;S EDIT ↓
+          </span>
           <div
-            className="font-serif text-ink leading-[1.65] whitespace-pre-wrap"
+            className="mt-3 font-serif text-ink leading-[1.65] whitespace-pre-wrap"
             style={{ fontSize: 17 }}
           >
             {body}

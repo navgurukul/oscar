@@ -4,7 +4,7 @@ Use this checklist after reading `DESIGN.md`, `Agents.md`, and the affected file
 
 ## 1. Brand And Visual System
 
-- Does the work match OSCAR's cyan-and-cream editorial identity?
+- Does the work match OSCAR's terracotta-and-cream editorial identity?
 - Is typography consistent with the repo's established scale and tone?
 - Are accent colors restrained, or has the UI drifted into a noisy palette?
 - Are shadows, borders, radii, and surface treatments aligned with nearby screens?
