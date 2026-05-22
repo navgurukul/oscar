@@ -15,6 +15,9 @@ import { Header } from "./components/Header";
 import { ScribbleTab } from "./components/ScribbleTab";
 import { SettingsTab } from "./components/SettingsTab";
 import { UpdateNotification } from "./components/UpdateNotification";
+import { UpgradeModal } from "./components/UpgradeModal";
+import { PermissionRecoveryModal } from "./components/PermissionRecoveryModal";
+import { UpdateReleaseNotesModal } from "./components/UpdateReleaseNotesModal";
 import { useMinutesRecorder } from "./hooks/useMinutesRecorder";
 import { useUpdater } from "./hooks/useUpdater";
 import HomeTab from "./components/HomeTab";
@@ -1919,8 +1922,8 @@ function App() {
 
     setIsProcessing(true);
     setIsScribbleProcessing(true);
-    setScribbleStatus("Transcribing…");
-    setStatus("Transcribing Scribble...");
+    setScribbleStatus("transcribing");
+    setStatus("transcribing");
 
     const arrayBuffer = await audioBlob.arrayBuffer();
     const audioContext = new AudioContext({ sampleRate: 16000 });
@@ -1971,8 +1974,8 @@ function App() {
       let formattedText = rawText;
       let title = "";
       if (aiImprovementEnabledRef.current) {
-        setScribbleStatus("Polishing…");
-        setStatus("Polishing Scribble...");
+        setScribbleStatus("polishing");
+        setStatus("polishing");
         try {
           const formatted = await aiService.formatScribble(rawText);
           if (formatted.trim()) {
@@ -1982,7 +1985,7 @@ function App() {
           console.warn("[scribble] format failed, saving raw transcript:", aiErr);
         }
 
-        setScribbleStatus("Titling…");
+        setScribbleStatus("titling");
         try {
           title = await aiService.generateScribbleTitle(formattedText);
         } catch (titleErr) {
@@ -1990,8 +1993,8 @@ function App() {
         }
       }
 
-      setScribbleStatus("Saving…");
-      setStatus("Saving Scribble...");
+      setScribbleStatus("saving");
+      setStatus("saving");
       const { error } = await scribblesService.createScribble({
         user_id: user.id,
         title: title || buildFallbackScribbleTitle(formattedText),
@@ -2083,7 +2086,7 @@ function App() {
     ) {
       isScribbleProcessingRef.current = true;
       setIsScribbleProcessing(true);
-      setScribbleStatus("Processing…");
+      setScribbleStatus("transcribing");
       scribbleMediaRecorderRef.current.stop();
     } else {
       isScribbleProcessingRef.current = false;
@@ -2273,6 +2276,12 @@ function App() {
 
   // ── Subscription state ─────────────────────────────────────────────────────
   const [isProUser, setIsProUser] = useState(false);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [permissionRecoveryOpen, setPermissionRecoveryOpen] = useState(false);
+  const [permissionRecoveryKind] = useState<"microphone" | "accessibility">(
+    "microphone",
+  );
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
 
   // Fetch subscription status when user changes
   useEffect(() => {
@@ -2321,37 +2330,62 @@ function App() {
   if (setupComplete === null) return null;
   if (!setupComplete) return <SetupScreen onComplete={handleSetupComplete} />;
 
+  const headerTitleByTab: Record<TabType, string> = {
+    home: "OSCAR · LISTENING SURFACE",
+    scribble: "OSCAR · SCRIBBLES",
+    meetings: "OSCAR · MINUTES",
+    settings: "OSCAR · SETTINGS",
+    vocabulary: "OSCAR · VOCABULARY",
+    billing: "OSCAR · BILLING",
+  };
+
   return (
-    <div className="h-screen bg-white overflow-hidden flex flex-col font-['Figtree',-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif] text-slate-800">
+    <div className="h-screen bg-cream overflow-hidden flex flex-col font-sans text-ink">
       {/* Header - flows in layout, not fixed */}
       <Header
+        title={headerTitleByTab[activeTab] ?? "OSCAR"}
         userEmail={user.email || ""}
         onSignOut={handleSignOut}
         onSettingsClick={() => setActiveTab("settings")}
       />
 
       {hotkeyWarning && (
-        <div className="px-4 py-3 border-b border-amber-200 bg-amber-50 flex items-center justify-between gap-3">
-          <p className="text-sm text-amber-900 m-0">{hotkeyWarning}</p>
+        <div className="px-6 py-4 border-b border-cream-300 bg-cream-200 flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+              HOTKEY CONFLICT
+            </span>
+            <p className="mt-1 font-serif text-[16px] leading-snug tracking-[-0.005em] text-ink">
+              Another app owns <em className="italic text-terracotta">Ctrl + Space</em>.
+            </p>
+            <p className="mt-1 text-[12px] text-ink-soft">{hotkeyWarning}</p>
+          </div>
           <button
             type="button"
-            className="text-sm font-medium text-amber-900 bg-white border border-amber-300 rounded-md px-3 py-1.5"
+            className="shrink-0 rounded-full bg-ink text-cream px-4 py-2 text-[12px] font-medium border-none cursor-pointer hover:opacity-90"
             onClick={() => retryHotkeyRegistration()}
           >
-            Retry Hotkey
+            Retry hotkey
           </button>
         </div>
       )}
 
       {dictationConflict && (
-        <div className="px-4 py-3 border-b border-amber-200 bg-amber-50 flex items-center justify-between gap-3">
-          <p className="text-sm text-amber-900 m-0">
-            macOS Dictation is set to &ldquo;Press Control Key Twice&rdquo;, which interferes with Ctrl+Space recording. Go to{" "}
-            <strong>System Settings → Keyboard → Dictation</strong> and change the shortcut to &ldquo;Press 🌐 Key Twice&rdquo; or Off.
-          </p>
+        <div className="px-6 py-4 border-b border-cream-300 bg-cream-200 flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+              MACOS DICTATION CONFLICT
+            </span>
+            <p className="mt-1 font-serif text-[16px] leading-snug tracking-[-0.005em] text-ink">
+              macOS Dictation steals <em className="italic text-terracotta">Ctrl + Space</em>.
+            </p>
+            <p className="mt-1 text-[12px] text-ink-soft leading-relaxed">
+              Open <strong className="text-ink">System Settings → Keyboard → Dictation</strong> and change the shortcut to "Press 🌐 Key Twice" or Off.
+            </p>
+          </div>
           <button
             type="button"
-            className="shrink-0 text-sm font-medium text-amber-900 bg-white border border-amber-300 rounded-md px-3 py-1.5"
+            className="shrink-0 rounded-full bg-ink text-cream px-4 py-2 text-[12px] font-medium border-none cursor-pointer hover:opacity-90"
             onClick={() => setDictationConflict(false)}
           >
             Dismiss
@@ -2367,6 +2401,7 @@ function App() {
           onTabChange={(tab) => setActiveTab(tab)}
           userEmail={user.email || ""}
           isProUser={isProUser}
+          onUpgradeClick={() => setUpgradeModalOpen(true)}
           appVersion={appVersion}
           updaterState={{
             checking: updater.checking,
@@ -2386,7 +2421,7 @@ function App() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Main scrollable content */}
           <main
-            className={`flex-1 flex flex-col ${activeTab === "settings" ? "overflow-hidden" : "overflow-y-auto"} bg-slate-50 rounded-tl-2xl`}
+            className={`flex-1 flex flex-col ${activeTab === "settings" ? "overflow-hidden" : "overflow-y-auto"} bg-cream`}
           >
             <div className="flex-1 flex flex-col min-h-0">
               {activeTab === "home" && user && (
@@ -2565,11 +2600,11 @@ function App() {
           </main>
 
           {/* Bottom gutter */}
-          <div className="h-3 bg-white flex-shrink-0" />
+          <div className="h-3 bg-cream flex-shrink-0" />
         </div>
 
         {/* Right gutter */}
-        <div className="w-3 bg-white flex-shrink-0" />
+        <div className="w-3 bg-cream flex-shrink-0" />
       </div>
 
       {/* Update notification */}
@@ -2584,8 +2619,50 @@ function App() {
           onDownload={updater.downloadAndInstall}
           onInstall={updater.installAndRelaunch}
           onDismiss={() => setUpdateDismissed(true)}
+          onShowNotes={() => setReleaseNotesOpen(true)}
         />
       )}
+
+      {/* Full release-notes modal */}
+      <UpdateReleaseNotesModal
+        open={releaseNotesOpen}
+        version={updater.updateInfo?.version}
+        currentVersion={updater.updateInfo?.currentVersion}
+        body={updater.updateInfo?.body}
+        readyToInstall={updater.readyToInstall}
+        onClose={() => setReleaseNotesOpen(false)}
+        onInstall={() => {
+          setReleaseNotesOpen(false);
+          if (updater.readyToInstall) {
+            updater.installAndRelaunch();
+          } else {
+            updater.downloadAndInstall();
+          }
+        }}
+        onDefer={() => setReleaseNotesOpen(false)}
+      />
+
+      {/* Upgrade modal — limit reached / Pro CTA. */}
+      <UpgradeModal
+        open={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        onUpgrade={() => {
+          openUrl(`${import.meta.env.VITE_WEB_APP_URL ?? "https://oscar.samyarth.org"}/pricing`).catch(
+            (err) => console.error("Failed to open pricing:", err),
+          );
+          setUpgradeModalOpen(false);
+        }}
+        onDefer={() => setUpgradeModalOpen(false)}
+      />
+
+      {/* Mid-session permission recovery — non-blocking overlay. */}
+      <PermissionRecoveryModal
+        open={permissionRecoveryOpen}
+        permission={permissionRecoveryKind}
+        onClose={() => setPermissionRecoveryOpen(false)}
+      />
+
+      {/* Background updater bg shim — keeps the cream chrome consistent. */}
     </div>
   );
 }

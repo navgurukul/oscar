@@ -1,5 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { Search, Star, Trash2, Loader2, SquaresSubtract, FileText, ChevronLeft, ChevronRight, Mic, Square, Download } from "lucide-react";
+import { ContextLabel } from "./ContextLabel";
+// Editorial caps-mono label
+const Caps = ({ children }: { children: React.ReactNode }) => (
+  <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint">{children}</span>
+);
 import { motion } from "framer-motion";
 import { scribblesService } from "../services/scribbles.service";
 import { ScribbleCard } from "./ScribbleCard";
@@ -26,14 +31,6 @@ function formatTime(seconds: number): string {
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
-const SCRIBBLE_CTA_STYLE = {
-  background:
-    "radial-gradient(circle at top left, rgba(255, 255, 255, 0.22), transparent 36%), linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)",
-} as const;
-const SCRIBBLE_CTA_OVERLAY_STYLE = {
-  background: "linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 60%)",
-} as const;
-const SCRIBBLE_CTA_GLASS_STYLE = { WebkitBackdropFilter: "blur(10px)" } as const;
 
 export function ScribbleTab({
   userId,
@@ -337,6 +334,11 @@ export function ScribbleTab({
             </div>
           </div>
           <div className="scribbles-detail-content">
+            <ContextLabel
+              appKey={selectedScribble.dictation_app_key}
+              source={selectedScribble.dictation_context_source}
+              className="mb-2"
+            />
             <h1 className="scribbles-detail-title">
               {selectedScribble.title || "Untitled Scribble"}
             </h1>
@@ -363,45 +365,16 @@ export function ScribbleTab({
   return (
     <div className="scribbles-tab">
       <div className="scribbles-container">
-        <h1 className="scribbles-title">
-          <span className="text-slate-600 font-light text-lg" style={{ fontFamily: '"Figtree", -apple-system, sans-serif' }}>OSCAR</span>{" "}
-          <span className="font-bold">Scribble</span>
-        </h1>
-
-        {/* Info card */}
-        <div
-          className="relative mx-auto mb-6 w-full max-w-[720px] min-h-[158px] overflow-hidden rounded-[22px] px-6 py-5 shadow-[0_18px_40px_rgba(8,145,178,0.18)]"
-          style={SCRIBBLE_CTA_STYLE}
-        >
-          <div className="pointer-events-none absolute inset-0" style={SCRIBBLE_CTA_OVERLAY_STYLE} />
-          <div className="relative z-[1] flex min-h-[118px] items-center justify-between gap-5 max-md:flex-col max-md:items-start">
-            <div className="max-w-[430px] text-left">
-              <h2 className="m-0 text-[1.3rem] font-semibold leading-[1.08] text-slate-50">
-                Scribbles that stay searchable and synced.
-              </h2>
-              <p className="mt-3 text-[0.82rem] leading-[1.6] text-sky-50/90">
-                Record voice notes here and save them as searchable Scribbles across devices.
-              </p>
-            </div>
-
-            <div className="flex min-h-16 items-center justify-end max-md:w-full max-md:justify-start" aria-hidden="true">
-              {[
-                { label: "Search", icon: <Search size={20} /> },
-                { label: "Star", icon: <Star size={20} /> },
-                { label: "Scribble", icon: <FileText size={20} /> },
-                { label: "Record", icon: <Mic size={20} /> },
-              ].map(({ label, icon }, index) => (
-                <div
-                  key={label}
-                  className={`relative flex h-14 w-14 items-center justify-center rounded-full border border-white/45 bg-white/15 text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${index === 0 ? "ml-0" : "-ml-2.5"}`}
-                  style={SCRIBBLE_CTA_GLASS_STYLE}
-                  title={label}
-                >
-                  {icon}
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Editorial hero */}
+        <div className="pb-6 mb-6 border-b border-cream-300 text-left">
+          <Caps>SCRIBBLES · {allScribbles.length}</Caps>
+          <h1
+            className="mt-2 font-serif font-medium text-ink"
+            style={{ fontSize: 36, lineHeight: 1.05, letterSpacing: "-0.02em" }}
+          >
+            Everything you{" "}
+            <em className="italic text-terracotta">said</em>.
+          </h1>
         </div>
 
         {error && (
@@ -555,19 +528,19 @@ export function ScribbleTab({
               <div
                 className={`text-xs font-medium px-3 py-1 rounded-full shadow-sm border ${
                   isProcessing
-                    ? "bg-white text-cyan-700 border-cyan-100"
+                    ? "bg-cream-50 text-terracotta border-terracotta/30"
                     : statusMessage?.toLowerCase().startsWith("failed") ||
                       statusMessage?.toLowerCase().includes("too short") ||
                       statusMessage?.toLowerCase().includes("no audio") ||
                       statusMessage?.toLowerCase().includes("no speech") ||
                       statusMessage?.toLowerCase().startsWith("sign in")
-                    ? "bg-rose-50 text-rose-700 border-rose-100"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                    ? "bg-[#fbe9e7] text-[#8c2f25] border-[#e8c9b8]"
+                    : "bg-cream-200 text-ink border-cream-300"
                 }`}
               >
-                <span className="inline-flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[0.04em]">
                   {isProcessing && <Loader2 size={12} className="spin" />}
-                  {statusMessage ?? "Processing…"}
+                  {statusMessage ?? "processing"}
                 </span>
               </div>
             )}
@@ -588,12 +561,12 @@ export function ScribbleTab({
                     ? "Stop Scribble recording"
                     : "Record a new Scribble"
                 }
-                className={`relative w-16 h-16 flex items-center justify-center sm:w-20 sm:h-20 rounded-full text-white shadow-lg transition-colors duration-200 ${
+                className={`relative w-16 h-16 flex items-center justify-center sm:w-20 sm:h-20 rounded-full text-cream shadow-lg transition-colors duration-200 ${
                   isProcessing
-                    ? "bg-slate-400 cursor-wait"
+                    ? "bg-ink-faint cursor-wait"
                     : isRecording
                     ? "bg-rose-600 hover:bg-rose-700 hover:shadow-xl"
-                    : "bg-cyan-600 hover:bg-cyan-700 hover:shadow-xl"
+                    : "bg-terracotta hover:bg-terracotta-600 hover:shadow-xl"
                 }`}
               >
                 {isProcessing ? (

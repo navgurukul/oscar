@@ -17,16 +17,12 @@ import {
   Mail,
   CalendarDays,
   Play,
-  Plus,
   X,
   Trash2,
   History,
   RefreshCw,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import googleMeetLogo from "../assets/meeting-logos/google-meet.png";
-import zoomLogo from "../assets/meeting-logos/zoom.png";
-import teamsLogo from "../assets/meeting-logos/teams.png";
 import { cn } from "../lib/utils";
 import {
   MarkdownNotesView,
@@ -51,35 +47,21 @@ import {
 
 const GOOGLE_CALENDAR_LOGO_URL =
   "https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253";
-const CTA_APP_LOGOS = [
-  { src: googleMeetLogo, label: "Google Meet", logoClassName: "h-auto max-h-[25px] w-[25px] max-w-[25px] object-contain" },
-  { src: zoomLogo, label: "Zoom", logoClassName: "h-auto max-h-6 w-6 max-w-6 object-contain" },
-  { src: teamsLogo, label: "Teams", logoClassName: "h-auto max-h-6 w-6 max-w-6 object-contain" },
-];
-
 const FIGTREE_FONT_STYLE = { fontFamily: '"Figtree", -apple-system, sans-serif' } as const;
 const GARAMOND_FONT_STYLE = { fontFamily: '"EB Garamond", Georgia, serif' } as const;
-const MINUTES_INFO_CARD_STYLE = {
-  background:
-    "radial-gradient(circle at top left, rgba(255, 255, 255, 0.22), transparent 36%), linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)",
-} as const;
-const MINUTES_INFO_CARD_OVERLAY_STYLE = {
-  background: "linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 60%)",
-} as const;
-const LOGO_CHIP_BACKDROP_STYLE = { WebkitBackdropFilter: "blur(10px)" } as const;
-const MEETINGS_TAB_CLASS_NAME = "flex flex-1 flex-col overflow-y-auto px-12 pt-8 pb-[120px]";
+const MEETINGS_TAB_CLASS_NAME = "flex flex-1 flex-col overflow-y-auto px-12 pt-10 pb-[120px] bg-cream";
 const MEETINGS_CONTAINER_CLASS_NAME = "mx-auto w-full max-w-[720px]";
-const MEETINGS_TITLE_CLASS_NAME = "mb-5 text-center text-[1.75rem] font-semibold text-slate-800";
-const MEETINGS_SUBTITLE_CLASS_NAME = "mb-7 text-sm leading-6 text-slate-500";
-const SECTION_HEADER_CLASS_NAME = "mb-3 flex items-center gap-[7px] text-[0.8125rem] font-semibold uppercase tracking-[0.04em] text-slate-500";
+const MEETINGS_TITLE_CLASS_NAME = "mb-3 text-left font-serif font-medium tracking-[-0.02em] text-ink text-[36px] leading-[1.05]";
+const MEETINGS_SUBTITLE_CLASS_NAME = "mb-7 text-sm leading-6 text-ink-soft";
+const SECTION_HEADER_CLASS_NAME = "mb-3 flex items-center gap-[7px] font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint";
 const CALENDAR_EMPTY_CLASS_NAME = "flex flex-col items-center gap-2 px-0 py-3 text-center";
 const PARTICIPANT_PILLS_CLASS_NAME = "flex min-h-8 flex-wrap items-center gap-1.5 py-1";
-const PARTICIPANT_PILL_CLASS_NAME = "inline-flex max-w-[220px] items-center gap-1 rounded-[20px] border border-slate-200 bg-slate-100 px-2 py-[3px] pl-2.5 text-xs leading-[1.3] text-slate-600";
+const PARTICIPANT_PILL_CLASS_NAME = "inline-flex max-w-[220px] items-center gap-1 rounded-[20px] border border-cream-300 bg-cream-200 px-2 py-[3px] pl-2.5 text-xs leading-[1.3] text-ink-soft";
 const PARTICIPANT_PILL_TEXT_CLASS_NAME = "truncate";
-const PARTICIPANT_PILL_REMOVE_CLASS_NAME = "flex size-4 shrink-0 items-center justify-center rounded-full p-0 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-500";
-const RESULT_TABS_CLASS_NAME = "mb-4 flex border-b border-slate-200";
-const RESULT_TAB_CLASS_NAME = "mb-[-1px] inline-flex items-center gap-1.5 border-b-2 border-transparent bg-transparent px-4 py-2.5 text-[0.8125rem] font-medium text-slate-400 transition-colors hover:text-slate-500";
-const FOOTER_BUTTON_CLASS_NAME = "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-[7px] text-[0.8125rem] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-100";
+const PARTICIPANT_PILL_REMOVE_CLASS_NAME = "flex size-4 shrink-0 items-center justify-center rounded-full p-0 text-ink-faint transition-colors hover:bg-cream-300 hover:text-ink";
+const RESULT_TABS_CLASS_NAME = "mb-4 flex border-b border-cream-300";
+const RESULT_TAB_CLASS_NAME = "mb-[-1px] inline-flex items-center gap-1.5 border-b-2 border-transparent bg-transparent px-4 py-2.5 text-[0.8125rem] font-medium text-ink-faint transition-colors hover:text-ink-soft";
+const FOOTER_BUTTON_CLASS_NAME = "inline-flex items-center gap-1.5 rounded-lg border border-cream-300 bg-cream-50 px-3.5 py-[7px] text-[0.8125rem] font-medium text-ink-soft transition-colors hover:border-cream-400 hover:bg-cream-200";
 
 export type CalendarReconnectResult = "refreshed" | "needs_reconnect" | "retry_later";
 export type MinutesTranscriptionStatus =
@@ -916,54 +898,16 @@ export function MeetingsTab({
     return (
       <div className={MEETINGS_TAB_CLASS_NAME}>
         <div className={MEETINGS_CONTAINER_CLASS_NAME}>
-          <h1 className={MEETINGS_TITLE_CLASS_NAME} style={GARAMOND_FONT_STYLE}>
-            <span className="text-slate-600 font-light text-lg" style={FIGTREE_FONT_STYLE}>OSCAR</span>{" "}
-            <span className="font-bold">Minutes</span>
-          </h1>
-
-          <div
-            className="relative mb-6 flex items-stretch justify-between gap-[18px] overflow-hidden rounded-[22px] px-6 py-5 shadow-[0_18px_40px_rgba(8,145,178,0.2)] max-md:flex-col max-md:gap-[18px] max-md:p-[22px]"
-            style={MINUTES_INFO_CARD_STYLE}
-          >
-            <div className="pointer-events-none absolute inset-0" style={MINUTES_INFO_CARD_OVERLAY_STYLE} />
-            <div className="relative z-[1] flex max-w-[404px] flex-1 flex-col items-start text-left max-md:max-w-none">
-              <h2
-                className="m-0 text-[1.26rem] font-medium leading-[1.08] text-slate-50 max-md:text-[1.48rem]"
-                style={FIGTREE_FONT_STYLE}
-              >
-                Enhanced meeting notes, automatically.
-              </h2>
-              <p className="mt-3 max-w-[348px] text-[0.8rem] leading-[1.55] text-sky-50/90 max-md:max-w-none">
-                Record once, keep your rough notes, and let Minutes turn the meeting into a clean structured summary.
-              </p>
-            </div>
-            <div className="relative flex basis-[208px] items-center justify-end max-md:basis-auto max-md:justify-start" aria-hidden="true">
-              <div className="relative flex min-h-16 w-full items-center justify-end max-md:justify-start">
-                {CTA_APP_LOGOS.map((logo, index) => (
-                  <div
-                    key={`${logo.src}-${index}`}
-                    className={cn(
-                      "group relative z-[1] flex h-14 w-14 items-center justify-center rounded-full border boder-white/45 bg-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-[10px] transition-all duration-150 hover:z-[3] hover:-translate-y-px hover:bg-white/[0.18] hover:border-white/[0.34]",
-                      index === 0 ? "ml-0" : "-ml-2.5",
-                    )}
-                    style={LOGO_CHIP_BACKDROP_STYLE}
-                    title={logo.label}
-                  >
-                    <img
-                      className={cn("opacity-100 transition-transform duration-150 group-hover:scale-[1.02]", logo.logoClassName)}
-                      src={logo.src}
-                      alt=""
-                    />
-                  </div>
-                ))}
-                <div
-                  className="group relative -ml-2.5 flex h-14 w-14 items-center justify-center rounded-full border border-white/45 bg-white/15 text-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-[10px] transition-all duration-150 hover:z-[3] hover:-translate-y-px hover:bg-white/[0.18] hover:border-white/[0.34] hover:text-white/95"
-                  style={LOGO_CHIP_BACKDROP_STYLE}
-                >
-                  <Plus size={22} />
-                </div>
-              </div>
-            </div>
+          <div className="mb-7 pb-6 border-b border-cream-300">
+            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint">
+              MINUTES · {savedMeetings?.length ?? 0} SAVED
+            </span>
+            <h1 className={MEETINGS_TITLE_CLASS_NAME} style={GARAMOND_FONT_STYLE}>
+              What was <em className="italic text-terracotta">decided</em>.
+            </h1>
+            <p className="text-sm leading-6 text-ink-soft max-w-[480px]">
+              Record once, keep your rough notes, and let Minutes turn the meeting into a clean structured summary.
+            </p>
           </div>
 
           {systemAudioNotice}

@@ -93,9 +93,14 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
     if (phase === "detecting") {
       return (
         <>
-          <h1 className="split-title">Detecting your hardware…</h1>
+          <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+            03 · ACTIVE · DETECTING HARDWARE
+          </span>
+          <h1 className="split-title">
+            Picking the <em className="italic text-terracotta">right model</em>.
+          </h1>
           <p className="split-description">
-            Picking the best speech model for your machine.
+            Choosing the best speech model for your machine.
           </p>
         </>
       );
@@ -105,7 +110,12 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
       const pct = progress?.percentage ?? 0;
       return (
         <>
-          <h1 className="split-title">Warming up the engines…</h1>
+          <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+            03 · DOWNLOADING · MODEL
+          </span>
+          <h1 className="split-title">
+            Warming up the <em className="italic text-terracotta">engines</em>.
+          </h1>
           <p className="split-description">
             Downloading {modelDisplayName(recommendation.spec.variant)} (
             {formatModelSize(recommendation.spec.sizeBytes)}). Processed
@@ -132,7 +142,12 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
     // ready | error
     return (
       <>
-        <h1 className="split-title">Getting your voice ready</h1>
+        <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+          03 · READY · FIRST SCRIBBLE
+        </span>
+        <h1 className="split-title">
+          Try a <em className="italic text-terracotta">practice run</em>.
+        </h1>
         <p className="split-description">
           OSCAR runs speech recognition locally on your device.
           {recommendation

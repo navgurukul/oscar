@@ -18,15 +18,15 @@
 /* Plan Card */
 .plan-card {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e0d6;
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
 }
 
 .plan-card.pro {
-  border-color: #06b6d4;
-  background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
+  border-color: #b8623d;
+  background: linear-gradient(135deg, #faf8f3 0%, #f7e6dd 100%);
 }
 
 .plan-header {
@@ -46,19 +46,21 @@
 }
 
 .plan-card.free .plan-icon {
-  background: #f1f5f9;
-  color: #64748b;
+  background: #efeae0;
+  color: #5a5852;
 }
 
 .plan-card.pro .plan-icon {
-  background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
+  background: linear-gradient(135deg, #a25234 0%, #b8623d 100%);
   color: #ffffff;
 }
 
 .plan-info h3 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #0f172a;
+  font-family: var(--font-serif, 'EB Garamond', serif);
+  font-size: 1.7rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: #1a1816;
   margin-bottom: 4px;
 }
 
@@ -67,7 +69,7 @@
   font-weight: 600;
   padding: 3px 10px;
   background: #f0f9ff;
-  color: #0891b2;
+  color: #a25234;
   border-radius: 20px;
   text-transform: capitalize;
 }
@@ -83,7 +85,7 @@
   align-items: center;
   gap: 8px;
   font-size: 0.9375rem;
-  color: #64748b;
+  color: #5a5852;
 }
 
 .plan-status {
@@ -104,7 +106,7 @@
 
 .plan-description {
   font-size: 0.9375rem;
-  color: #64748b;
+  color: #5a5852;
   line-height: 1.6;
 }
 
@@ -113,7 +115,7 @@
   align-items: center;
   gap: 8px;
   padding: 12px 24px;
-  background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
+  background: linear-gradient(135deg, #a25234 0%, #b8623d 100%);
   color: #ffffff;
   border: none;
   border-radius: 10px;
@@ -126,7 +128,7 @@
 
 .plan-card .upgrade-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4);
+  box-shadow: 0 4px 20px rgba(184, 98, 61, 0.4);
 }
 
 .plan-card .upgrade-btn:disabled {
@@ -137,7 +139,7 @@
 /* Usage Card */
 .usage-card {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e0d6;
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
@@ -149,12 +151,12 @@
   gap: 10px;
   font-size: 1.125rem;
   font-weight: 600;
-  color: #0f172a;
+  color: #1a1816;
   margin-bottom: 20px;
 }
 
 .usage-card h4 svg {
-  color: #0891b2;
+  color: #a25234;
 }
 
 .usage-items {
@@ -177,25 +179,25 @@
 
 .usage-label {
   font-size: 0.9375rem;
-  color: #64748b;
+  color: #5a5852;
 }
 
 .usage-value {
   font-size: 0.875rem;
   font-weight: 600;
-  color: #0f172a;
+  color: #1a1816;
 }
 
 .usage-bar {
   height: 8px;
-  background: #f1f5f9;
+  background: #efeae0;
   border-radius: 4px;
   overflow: hidden;
 }
 
 .usage-fill {
   height: 100%;
-  background: linear-gradient(90deg, #06b6d4 0%, #0891b2 100%);
+  background: linear-gradient(90deg, #b8623d 0%, #a25234 100%);
   border-radius: 4px;
   transition: width 0.3s ease;
 }
@@ -207,7 +209,7 @@
 /* Benefits Card */
 .benefits-card {
   background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
-  border: 1px solid #06b6d4;
+  border: 1px solid #b8623d;
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
@@ -216,7 +218,7 @@
 .benefits-card h4 {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #0f172a;
+  color: #1a1816;
   margin-bottom: 16px;
 }
 
@@ -232,18 +234,18 @@
   align-items: center;
   gap: 12px;
   font-size: 0.9375rem;
-  color: #374151;
+  color: #5a5852;
 }
 
 .benefits-list li svg {
-  color: #06b6d4;
+  color: #b8623d;
   flex-shrink: 0;
 }
 
 /* Account Card */
 .account-card {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e0d6;
   border-radius: 16px;
   padding: 24px;
 }
@@ -251,7 +253,7 @@
 .account-card h4 {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #0f172a;
+  color: #1a1816;
   margin-bottom: 16px;
 }
 
@@ -264,13 +266,13 @@
 .account-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #94a3b8;
+  color: #8b8780;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .account-value {
   font-size: 0.9375rem;
-  color: #374151;
+  color: #5a5852;
 }
 

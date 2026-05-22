@@ -98,10 +98,14 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
               <span className="brand-name">OSCAR</span>
             </div>
 
-            <h1 className="split-title">Let's get you started</h1>
+            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+              01 · ACTIVE · SIGN IN
+            </span>
+            <h1 className="split-title">
+              Welcome to <em className="italic text-terracotta">Oscar</em>.
+            </h1>
             <p className="split-description">
-              Write faster in every app using your voice. Sign in with Google to
-              sync your dictionary and enable AI editing.
+              Continue with Google to sync your Scribbles, vocabulary, and Minutes across web and desktop.
             </p>
 
             {error && <p className="auth-error">{error}</p>}

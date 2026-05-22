@@ -14,6 +14,7 @@ interface UpdateNotificationProps {
   onDownload: () => void;
   onInstall: () => void;
   onDismiss: () => void;
+  onShowNotes?: () => void;
 }
 
 export function UpdateNotification({
@@ -26,11 +27,15 @@ export function UpdateNotification({
   onDownload,
   onInstall,
   onDismiss,
+  onShowNotes,
 }: UpdateNotificationProps) {
   if (!updateAvailable && !error) return null;
 
   return (
-    <div className="fixed bottom-5 right-5 z-[1000] w-[300px] max-w-[calc(100vw-24px)] rounded-xl border border-slate-200 bg-white p-3.5 shadow-[0_10px_40px_rgba(0,0,0,0.10)]">
+    <div className="fixed bottom-5 right-5 z-[1000] w-[300px] max-w-[calc(100vw-24px)] rounded-xl border border-cream-300 bg-cream-50 p-3.5 shadow-[0_16px_40px_rgba(26,24,22,0.18)]">
+      <div className="mb-2 font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint">
+        UPDATE
+      </div>
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           {error ? (
@@ -66,11 +71,20 @@ export function UpdateNotification({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+          {!downloading && !error && onShowNotes && (
+            <button
+              onClick={onShowNotes}
+              type="button"
+              className="text-[0.75rem] font-medium text-ink-soft hover:text-ink transition-colors bg-transparent border-none cursor-pointer"
+            >
+              Notes
+            </button>
+          )}
           {!downloading && !error && (
             <button
               onClick={readyToInstall ? onInstall : onDownload}
               type="button"
-              className="text-[0.75rem] font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
+              className="text-[0.75rem] font-semibold text-terracotta hover:opacity-80 transition-opacity bg-transparent border-none cursor-pointer"
             >
               {readyToInstall ? "Restart" : "Update"}
             </button>
