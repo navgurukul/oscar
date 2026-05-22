@@ -1,6 +1,5 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: ["class"],
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -26,12 +25,6 @@ module.exports = {
   			]
   		},
   		colors: {
-  			cyan: {
-  				'400': '#22d3ee',
-  				'500': '#06b6d4',
-  				'600': '#0891b2',
-  				'700': '#0e7490'
-  			},
   			cream: {
   				DEFAULT: '#f7f4ee',
   				50: '#faf8f3',
@@ -85,14 +78,7 @@ module.exports = {
   			},
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
-  			ring: 'hsl(var(--ring))',
-  			chart: {
-  				'1': 'hsl(var(--chart-1))',
-  				'2': 'hsl(var(--chart-2))',
-  				'3': 'hsl(var(--chart-3))',
-  				'4': 'hsl(var(--chart-4))',
-  				'5': 'hsl(var(--chart-5))'
-  			}
+  			ring: 'hsl(var(--ring))'
   		},
   		borderRadius: {
   			lg: 'var(--radius)',
