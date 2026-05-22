@@ -121,15 +121,15 @@ export function Navigation({
         }}
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="12" cy="12" r="10.5" stroke="#1a1816" strokeWidth="1.2" />
+          <circle cx="12" cy="12" r="9" stroke="#b8623d" strokeWidth="1.35" />
           <path
-            d="M7.5 12c0-1.6.8-2.5 1.8-2.5M9.3 14.5c-1 0-1.8-1-1.8-2.4M12 8.5v7M14.8 10v4M17.5 11.2v1.8"
+            d="M7.8 9.9v4.2M9.9 8.5v7M12 10.4v3.2M14.1 8.9v6.2M16.2 9.7v4.6"
             stroke="#1a1816"
-            strokeWidth="1.4"
+            strokeWidth="1.35"
             strokeLinecap="round"
           />
         </svg>
-        <span className="font-serif text-[22px] font-medium tracking-[-0.005em] text-ink">
+        <span className="font-serif text-[22px] font-medium tracking-[0] text-ink">
           Oscar
         </span>
       </div>

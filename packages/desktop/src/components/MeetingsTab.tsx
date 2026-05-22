@@ -311,8 +311,8 @@ function MeetingTypePicker({
           className={cn(
             "rounded-full px-2 py-0.5 text-[0.6875rem] font-medium transition-colors",
             value === option.value
-              ? "bg-cyan-50 text-cyan-600"
-              : "text-slate-400 hover:bg-slate-100 hover:text-slate-500",
+              ? "bg-terracotta-50 text-terracotta-600"
+              : "text-ink-faint hover:bg-cream-200 hover:text-ink-soft",
           )}
           onClick={() => onChange(option.value)}
           type="button"
@@ -340,8 +340,8 @@ function CalendarConnectCard({
   return (
     <div
       className={cn(
-        "flex w-full items-center justify-between gap-3.5 rounded-[14px] border border-slate-200 bg-white px-3.5 py-3 max-md:flex-col max-md:items-start",
-        warning && "border-orange-300 bg-[#fffaf3]",
+        "flex w-full items-center justify-between gap-3.5 rounded-[14px] border border-cream-300 bg-cream px-3.5 py-3 max-md:flex-col max-md:items-start",
+        warning && "border-orange-300 bg-cream-50",
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -357,7 +357,7 @@ function CalendarConnectCard({
         </div>
       </div>
       <button
-        className="shrink-0 rounded-lg bg-cyan-500 px-[18px] py-2 text-[0.8125rem] font-semibold text-slate-900 transition-colors hover:bg-cyan-400 active:bg-cyan-600 max-md:w-full"
+        className="shrink-0 rounded-lg bg-terracotta-500 px-[18px] py-2 text-[0.8125rem] font-semibold text-cream transition-colors hover:bg-terracotta-600 active:bg-terracotta-700 max-md:w-full"
         onClick={onClick}
         type="button"
       >
@@ -950,7 +950,7 @@ export function MeetingsTab({
                     : calendarErrorMsg || "Check your internet connection."}
                 </p>
                 <button
-                  className="mt-2 rounded-lg bg-cyan-500 px-[18px] py-2 text-[0.8125rem] font-semibold text-slate-900 transition-colors hover:bg-cyan-400 active:bg-cyan-600"
+                  className="mt-2 rounded-lg bg-terracotta-500 px-[18px] py-2 text-[0.8125rem] font-semibold text-cream transition-colors hover:bg-terracotta-600 active:bg-terracotta-700"
                   onClick={onConnectCalendar}
                   type="button"
                 >
@@ -1301,7 +1301,7 @@ export function MeetingsTab({
 
           {/* ── Notes area (primary focus) ──────────────────────────────── */}
           <textarea
-            className="min-h-[160px] w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-[1.65] text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-300"
+            className="min-h-[160px] w-full resize-y rounded-xl border border-cream-300 bg-cream px-4 py-3 text-sm leading-[1.65] text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-cream-400"
             placeholder="Jot down key points, action items, or anything worth remembering..."
             value={manualNotes}
             onChange={(event) => setManualNotes(event.target.value)}
@@ -1315,8 +1315,8 @@ export function MeetingsTab({
                 <Mic size={11} />
                 <span>Live transcript</span>
                 {minutesTranscriptionStatus === "transcribing" && (
-                  <span className="inline-flex items-center gap-1 text-cyan-500">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-500 animate-pulse" />
+                  <span className="inline-flex items-center gap-1 text-terracotta-500">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-terracotta-500 animate-pulse" />
                   </span>
                 )}
               </div>
@@ -1340,7 +1340,7 @@ export function MeetingsTab({
         </div>
 
         {/* ── Floating record control ────────────────────────────────── */}
-        <div className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-4 rounded-full border border-slate-200 bg-white/95 px-5 py-2.5 shadow-[0_8px_30px_rgba(15,23,42,0.1)] backdrop-blur-sm">
+        <div className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-4 rounded-full border border-cream-300 bg-cream/95 px-5 py-2.5 shadow-[0_8px_30px_rgba(26,24,22,0.1)] backdrop-blur-sm">
           {isRecording && (
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 shrink-0 rounded-full bg-red-500 animate-pulse" />
@@ -1354,10 +1354,10 @@ export function MeetingsTab({
           )}
           <motion.button
             className={cn(
-              "flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white transition-all duration-200",
+              "flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-cream transition-all duration-200",
               isRecording
                 ? "bg-red-600 shadow-[0_2px_10px_rgba(220,38,38,0.25)] hover:bg-red-700"
-                : "bg-cyan-600 shadow-[0_2px_10px_rgba(6,182,212,0.25)] hover:bg-cyan-700",
+                : "bg-terracotta-500 shadow-[0_2px_10px_rgba(184,98,61,0.25)] hover:bg-terracotta-600",
             )}
             onClick={isRecording ? handleStopRecording : onStartRecording}
             whileHover={{ scale: 1.04 }}
@@ -1389,7 +1389,7 @@ export function MeetingsTab({
               {currentRequest.meeting_local_datetime}
             </p>
           </div>
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-cyan-50 px-3.5 py-1.5 text-[0.8125rem] font-medium text-cyan-600">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-terracotta-50 px-3.5 py-1.5 text-[0.8125rem] font-medium text-terracotta-600">
             <FileText size={12} />
             {MEETING_TYPE_OPTIONS.find((option) => option.value === meetingTypeHint)?.label ?? "Auto"}
           </div>
@@ -1446,19 +1446,19 @@ export function MeetingsTab({
             )}
 
             {(result || error) && (
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="overflow-hidden rounded-xl border border-cream-300 bg-cream">
                 {error ? (
                   <div className="px-6 py-5 text-sm text-red-600">{error}</div>
                 ) : (
-                  <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-slate-700">
+                  <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-ink-soft">
                     <MarkdownNotesView markdown={result} />
                   </div>
                 )}
 
                 {!streaming && result && !error && (
-                  <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
+                  <div className="flex gap-2 border-t border-cream-300 px-4 py-3">
                     <button
-                      className={cn(FOOTER_BUTTON_CLASS_NAME, "border-cyan-600 bg-cyan-600 text-white hover:border-cyan-700 hover:bg-cyan-700")}
+                      className={cn(FOOTER_BUTTON_CLASS_NAME, "border-terracotta-600 bg-terracotta-600 text-cream hover:border-terracotta-700 hover:bg-terracotta-700")}
                       onClick={() => void handleCopy(result)}
                       type="button"
                     >
@@ -1468,7 +1468,7 @@ export function MeetingsTab({
                     <button
                       className={cn(
                         FOOTER_BUTTON_CLASS_NAME,
-                        !hasEmailableParticipants && "opacity-[0.45] hover:border-slate-200 hover:bg-white",
+                        !hasEmailableParticipants && "opacity-[0.45] hover:border-cream-300 hover:bg-cream",
                       )}
                       onClick={() =>
                         void handleShareByEmail({
@@ -1555,7 +1555,7 @@ function TranscriptTurns({
           <span
             className={cn(
               "mr-1 font-semibold",
-              turn.source === "microphone" ? "text-cyan-700" : "text-slate-700",
+              turn.source === "microphone" ? "text-terracotta-700" : "text-ink",
             )}
           >
             {turn.label}:

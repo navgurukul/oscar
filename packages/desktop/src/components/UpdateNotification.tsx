@@ -52,7 +52,7 @@ export function UpdateNotification({
               <p className="text-[0.8125rem] font-medium text-slate-800">Downloading update</p>
               <div className="mt-2 h-1 rounded-full bg-slate-100 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-cyan-500 transition-[width] duration-300 ease-out"
+                  className="h-full rounded-full bg-terracotta-500 transition-[width] duration-300 ease-out"
                   style={{ width: `${downloadProgress}%` }}
                 />
               </div>

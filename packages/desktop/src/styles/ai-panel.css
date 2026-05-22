@@ -6,7 +6,7 @@
   margin-top: 16px;
   border: 1px solid #e5e0d6;
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--cream);
   overflow: hidden;
 }
 

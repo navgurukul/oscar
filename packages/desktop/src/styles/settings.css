@@ -467,7 +467,7 @@
   border-radius: 8px;
   font-size: 0.875rem;
   color: #1a1816;
-  background: #fff;
+  background: var(--cream);
   cursor: pointer;
   outline: none;
   appearance: auto;
@@ -550,7 +550,7 @@
   gap: 7px;
   padding: 9px 18px;
   background: var(--cyan-600);
-  color: #ffffff;
+  color: var(--cream);
   border: none;
   border-radius: 9999px;
   font-size: 0.8125rem;
@@ -609,7 +609,7 @@
   gap: 7px;
   padding: 8px 16px;
   background: var(--red-600);
-  color: #ffffff;
+  color: var(--cream);
   border: none;
   border-radius: 9999px;
   font-size: 0.8125rem;
@@ -921,7 +921,7 @@
   gap: 6px;
   padding: 7px 14px;
   background: var(--cyan-600);
-  color: #ffffff;
+  color: var(--cream);
   border: none;
   border-radius: 9999px;
   font-size: 0.8125rem;
@@ -980,7 +980,7 @@
   gap: 6px;
   padding: 7px 14px;
   background: var(--red-600);
-  color: #ffffff;
+  color: var(--cream);
   border: none;
   border-radius: 9999px;
   font-size: 0.8125rem;
@@ -1071,7 +1071,7 @@
 
 .billing-plan-icon.pro {
   background: linear-gradient(135deg, #a25234, #b8623d);
-  color: #ffffff;
+  color: var(--cream);
 }
 
 .billing-plan-name {
@@ -1290,7 +1290,7 @@
 
 .billing-hero-icon.pro {
   background: linear-gradient(135deg, #a25234, #b8623d);
-  color: #ffffff;
+  color: var(--cream);
   box-shadow: 0 6px 16px rgba(184, 98, 61, 0.25);
 }
 
@@ -1375,7 +1375,7 @@
 
 .billing-usage-card {
   padding: 16px 18px;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e8edf2;
   border-radius: 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);

@@ -105,7 +105,7 @@
   width: 100%;
   height: 42px;
   padding: 0 16px 0 40px;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 10px;
   font-size: 0.9375rem;
@@ -126,7 +126,7 @@
 .scribbles-sort-select {
   height: 42px;
   padding: 0 12px;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 10px;
   font-size: 0.9375rem;
@@ -147,7 +147,7 @@
   gap: 8px;
   height: 42px;
   padding: 0 16px;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 10px;
   font-size: 0.9375rem;
@@ -241,7 +241,7 @@
 
 /* Scribble Card */
 .scribble-card {
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 16px;
   padding: 20px;
@@ -365,7 +365,7 @@
   min-width: 36px;
   height: 36px;
   padding: 0 10px;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 8px;
   font-size: 0.875rem;
@@ -383,7 +383,7 @@
 .pagination-btn.active {
   background: #b8623d;
   border-color: #b8623d;
-  color: #ffffff;
+  color: var(--cream);
 }
 
 .pagination-nav-btn {
@@ -392,7 +392,7 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 8px;
   color: #5a5852;
@@ -426,7 +426,7 @@
   justify-content: center;
   width: 48px;
   height: 48px;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 50%;
   color: #5a5852;
@@ -454,7 +454,7 @@
   height: 18px;
   padding: 0 5px;
   background: #dc2626;
-  color: #ffffff;
+  color: var(--cream);
   font-size: 0.6875rem;
   font-weight: 600;
   border-radius: 9px;
@@ -476,7 +476,7 @@
   width: 100%;
   max-width: 400px;
   height: 100%;
-  background: #ffffff;
+  background: var(--cream);
   box-shadow: -4px 0 24px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
@@ -683,7 +683,7 @@
   align-items: center;
   gap: 5px;
   padding: 6px 12px;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 8px;
   font-size: 0.8125rem;
@@ -703,7 +703,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 8px;
   font-size: 0.9375rem;
@@ -719,7 +719,7 @@
 }
 
 .scribbles-detail-content {
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 16px;
   padding: 32px;

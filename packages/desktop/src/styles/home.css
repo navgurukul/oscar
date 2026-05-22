@@ -50,7 +50,7 @@
   border-radius: 50%;
   border: none;
   background: #a25234;
-  color: #ffffff;
+  color: var(--cream);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -226,7 +226,7 @@
 }
 
 .transcripts-section-clear-btn.confirm {
-  color: #fff;
+  color: var(--cream);
   background: #dc2626;
   border-color: #dc2626;
 }
@@ -247,7 +247,7 @@
   font-size: 0.75rem;
   font-family: inherit;
   color: #5a5852;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 4px;
   box-shadow: 0 1px 0 #e5e0d6;
@@ -311,7 +311,7 @@
 
 .transcript-card {
   position: relative;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 12px;
   padding: 14px 16px;
@@ -384,7 +384,7 @@
   height: 28px;
   padding: 0;
   color: #8b8780;
-  background: #ffffff;
+  background: var(--cream);
   border: 1px solid #e5e0d6;
   border-radius: 6px;
   cursor: pointer;

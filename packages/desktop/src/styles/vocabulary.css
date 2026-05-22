@@ -340,7 +340,7 @@
 .vocabulary-upgrade-prompt .upgrade-btn {
   padding: 10px 20px;
   background: #f59e0b;
-  color: #ffffff;
+  color: var(--cream);
   border: none;
   border-radius: 8px;
   font-weight: 600;

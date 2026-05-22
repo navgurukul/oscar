@@ -88,25 +88,47 @@ export function V2Source({ name, kind }: { name: string; kind?: string }) {
   );
 }
 
-// Wordmark — circle glyph + serif "Oscar". Links home unless `as` overrides.
+export function V2OscarMark({
+  size = 22,
+  light = false,
+}: {
+  size?: number;
+  light?: boolean;
+}) {
+  const ring = light ? v2.cream : v2.accent;
+  const bars = light ? v2.accent : v2.ink;
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="12" cy="12" r="9" stroke={ring} strokeWidth="1.35" />
+      <path
+        d="M7.8 9.9v4.2M9.9 8.5v7M12 10.4v3.2M14.1 8.9v6.2M16.2 9.7v4.6"
+        stroke={bars}
+        strokeWidth="1.35"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// Wordmark — terracotta voice/O glyph + serif "Oscar". Links home unless `as` overrides.
 export function V2Wordmark({ light = false, href = "/" }: { light?: boolean; href?: string }) {
   const ink = light ? v2.cream : v2.ink;
   return (
     <Link href={href} className="inline-flex items-center gap-2.5 hover:opacity-80 transition-opacity">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <circle cx="12" cy="12" r="10.5" stroke={ink} strokeWidth="1.2" />
-        <path
-          d="M7.5 12c0-1.6.8-2.5 1.8-2.5M9.3 14.5c-1 0-1.8-1-1.8-2.4M12 8.5v7M14.8 10v4M17.5 11.2v1.8"
-          stroke={ink}
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-      </svg>
+      <V2OscarMark light={light} />
       <span
         style={{
           fontFamily: v2Serif,
           fontSize: 22,
-          letterSpacing: "-0.005em",
+          letterSpacing: 0,
           fontWeight: 500,
           color: ink,
         }}
