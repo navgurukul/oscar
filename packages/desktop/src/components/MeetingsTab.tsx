@@ -13,7 +13,6 @@ import {
   RotateCcw,
   ChevronLeft,
   Loader2,
-  Clock,
   Mail,
   CalendarDays,
   Play,
@@ -384,50 +383,33 @@ function CalendarEventRow({
 
   return (
     <button
-      className={cn(
-        "group relative flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors",
-        "after:pointer-events-none after:absolute after:bottom-0 after:left-4 after:right-4 after:h-px after:bg-[#eef2f7] last:after:hidden",
-        isLive
-          ? "bg-gradient-to-r from-cyan-50/95 via-white to-white hover:from-cyan-50 hover:via-slate-50 hover:to-slate-50"
-          : "bg-white hover:bg-slate-50",
-      )}
+      className="group grid grid-cols-12 gap-4 items-baseline w-full text-left py-4 border-b border-cream-300 last:border-b-0 bg-transparent border-l-0 border-r-0 border-t-0 cursor-pointer transition-colors hover:bg-cream-50"
       onClick={() => onUse(event)}
       type="button"
     >
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="truncate text-[0.875rem] font-semibold leading-[1.3] text-slate-900">
-          {event.title}
-        </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[0.75rem] text-slate-500">
-          <Clock size={10} />
-          <span>{formatEventTimeRange(event)}</span>
-          {event.attendees.length > 0 && (
-            <>
-              <span className="text-slate-300">·</span>
-              <Users size={10} />
-              <span>{attendeeLabel}</span>
-            </>
-          )}
-          {isLive && (
-            <>
-              <span className="text-slate-300">·</span>
-              <span className="font-semibold text-teal-600">● Live</span>
-            </>
+      <div className="col-span-3">
+        <span className="font-mono text-[12px] text-ink tracking-[0.02em]">
+          {formatEventTimeRange(event)}
+        </span>
+        <div className="mt-1 font-mono text-[10px] tracking-[0.16em] uppercase text-ink-faint">
+          {isLive ? (
+            <span className="text-terracotta">● LIVE · {attendeeLabel.toUpperCase()}</span>
+          ) : (
+            attendeeLabel.toUpperCase()
           )}
         </div>
       </div>
-      <span
-        title="Record this meeting"
-        aria-label="Record this meeting"
-        className={cn(
-          "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
-          isLive
-            ? "bg-teal-100 text-teal-700"
-            : "bg-sky-50 text-cyan-700 group-hover:bg-cyan-100 group-hover:text-cyan-800",
-        )}
-      >
-        <Play size={12} fill="currentColor" />
-      </span>
+      <div className="col-span-7 min-w-0">
+        <h3 className="font-serif text-[17px] font-medium text-ink leading-[1.2] tracking-[-0.005em] truncate">
+          {event.title}
+        </h3>
+      </div>
+      <div className="col-span-2 text-right">
+        <span className="inline-flex items-center gap-1 font-mono text-[11px] tracking-[0.16em] uppercase text-terracotta">
+          <Play size={9} fill="currentColor" />
+          record →
+        </span>
+      </div>
     </button>
   );
 }
@@ -984,14 +966,13 @@ export function MeetingsTab({
                 </div>
               ) : (
                 <motion.div
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_26px_rgba(15,23,42,0.05)]"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.22 }}
                 >
                   {groupEventsByDay(nextCalendarEvents, currentTime).map((group) => (
-                    <div key={group.key} className="border-b border-[#eef2f7] last:border-b-0">
-                      <div className="bg-slate-50/60 px-4 py-1.5 text-[0.6875rem] font-bold uppercase tracking-[0.06em] text-slate-400">
+                    <div key={group.key} className="mb-2">
+                      <div className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint py-2">
                         {group.label}
                       </div>
                       {group.events.map((event, index) => (
@@ -1010,12 +991,12 @@ export function MeetingsTab({
           </div>
 
           {savedMeetings.length > 0 && (
-            <div className="mt-5">
+            <div className="mt-9">
               <div className={SECTION_HEADER_CLASS_NAME}>
-                <History size={14} />
-                <span>Previous meetings</span>
+                <History size={11} />
+                <span>Previous meetings · {savedMeetings.length}</span>
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col">
                 {savedMeetings
                   .slice()
                   .sort(
@@ -1023,40 +1004,61 @@ export function MeetingsTab({
                       new Date(right.startedAt).getTime() -
                       new Date(left.startedAt).getTime(),
                   )
-                  .map((meeting) => (
-                    <button
-                      key={meeting.id}
-                      className="flex w-full flex-col gap-1 rounded-lg border border-slate-200 bg-white px-[13px] py-2.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
-                      onClick={() => {
-                        setViewingSaved(meeting);
-                        setResultTab("notes");
-                        setPhase("view_saved");
-                      }}
-                      style={FIGTREE_FONT_STYLE}
-                      type="button"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="flex-1 truncate text-[0.8125rem] font-semibold text-slate-800">
-                          {meeting.meetingTitle}
-                        </span>
-                        <span className="shrink-0 text-[0.7rem] text-slate-400">
-                          {new Date(meeting.startedAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </span>
-                      </div>
-                      {meeting.attendeesCompact && (
-                        <div className="flex items-center gap-1 text-[0.7rem] text-slate-400">
-                          <Users size={10} />
-                          <span>{meeting.attendeesCompact}</span>
+                  .map((meeting) => {
+                    const startDate = new Date(meeting.startedAt);
+                    const dateMono = `${startDate
+                      .toLocaleDateString(undefined, { weekday: "short" })
+                      .toUpperCase()} · ${startDate.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: false,
+                    })}`;
+                    const monthDay = startDate.toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    });
+                    return (
+                      <button
+                        key={meeting.id}
+                        className="group grid grid-cols-12 gap-4 items-baseline w-full text-left py-5 border-b border-cream-300 bg-transparent border-l-0 border-r-0 border-t-0 cursor-pointer transition-colors hover:bg-cream-50"
+                        onClick={() => {
+                          setViewingSaved(meeting);
+                          setResultTab("notes");
+                          setPhase("view_saved");
+                        }}
+                        type="button"
+                      >
+                        <div className="col-span-3">
+                          <span className="font-mono text-[12px] text-ink tracking-[0.02em]">
+                            {dateMono}
+                          </span>
+                          <div className="mt-1 font-mono text-[10px] tracking-[0.16em] uppercase text-ink-faint">
+                            MINUTES · {monthDay.toUpperCase()}
+                          </div>
                         </div>
-                      )}
-                      <div className="truncate whitespace-nowrap text-[0.75rem] leading-[1.4] text-slate-500">
-                        {markdownPreview(meeting.notesMarkdown)}
-                      </div>
-                    </button>
-                  ))}
+                        <div className="col-span-7 min-w-0">
+                          <h3 className="font-serif text-[18px] font-medium text-ink leading-[1.2] tracking-[-0.005em]">
+                            {meeting.meetingTitle}
+                          </h3>
+                          {meeting.attendeesCompact && (
+                            <div className="mt-1 text-[12px] text-ink-soft leading-relaxed truncate">
+                              {meeting.attendeesCompact}
+                            </div>
+                          )}
+                          {meeting.notesMarkdown && (
+                            <p className="mt-1 text-[12px] text-ink-faint leading-relaxed truncate">
+                              {markdownPreview(meeting.notesMarkdown)}
+                            </p>
+                          )}
+                        </div>
+                        <div className="col-span-2 text-right">
+                          <span className="font-mono text-[11px] tracking-[0.16em] uppercase text-terracotta opacity-0 group-hover:opacity-100 transition-opacity">
+                            continue →
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
               </div>
             </div>
           )}

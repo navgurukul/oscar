@@ -328,7 +328,10 @@ export function SettingsTab({
         {/* ════════════ General ════════════ */}
         {activeTab === "general" && (
           <div className="st-content">
-            <h2 className="st-content-title">General</h2>
+            <span className="st-content-eyebrow">SETTINGS · GENERAL</span>
+            <h2 className="st-content-title">
+              How Oscar <em>behaves</em>.
+            </h2>
 
             {/* — Recording — */}
             <div className="st-section-label">Recording</div>
@@ -497,7 +500,10 @@ export function SettingsTab({
             <VocabularySection userId={userId} />
           ) : (
             <div className="st-content">
-              <h2 className="st-content-title">Vocabulary</h2>
+              <span className="st-content-eyebrow">SETTINGS · VOCABULARY</span>
+              <h2 className="st-content-title">
+                Words Oscar should <em>know</em>.
+              </h2>
               <div className="st-empty-state">
                 <BookOpen size={32} />
                 <p>Sign in to manage your vocabulary.</p>
@@ -508,7 +514,10 @@ export function SettingsTab({
         {/* ════════════ Plans & Billing ════════════ */}
         {activeTab === "billing" && (
           <div className="st-content">
-            <h2 className="st-content-title">Plans & Billing</h2>
+            <span className="st-content-eyebrow">SETTINGS · PLANS & BILLING</span>
+            <h2 className="st-content-title">
+              Your <em>plan</em>, your terms.
+            </h2>
             {userId && userEmail ? (
               <BillingSection userId={userId} />
             ) : (
@@ -524,7 +533,10 @@ export function SettingsTab({
         {/* ════════════ Account ════════════ */}
         {activeTab === "account" && (
           <div className="st-content">
-            <h2 className="st-content-title">Account</h2>
+            <span className="st-content-eyebrow">SETTINGS · ACCOUNT</span>
+            <h2 className="st-content-title">
+              You, on <em>Oscar</em>.
+            </h2>
 
             {/* Profile hero */}
             <div className="account-hero">

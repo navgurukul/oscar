@@ -125,8 +125,19 @@
 
 /* ── Content wrapper (Account / Privacy) ── */
 .st-content {
-  padding: 32px 36px;
+  padding: 40px 48px 48px;
   width: 100%;
+  max-width: 760px;
+}
+
+.st-content-eyebrow {
+  display: block;
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #8b8780);
+  margin-bottom: 10px;
 }
 
 .st-content-title {
@@ -135,8 +146,13 @@
   font-weight: 500;
   color: var(--ink);
   letter-spacing: -0.02em;
-  line-height: 1.05;
-  margin-bottom: 24px;
+  line-height: 1.02;
+  margin-bottom: 28px;
+}
+
+.st-content-title em {
+  font-style: italic;
+  color: var(--terra-500, #b8623d);
 }
 
 .st-desc {
@@ -155,29 +171,50 @@
   color: #8b8780;
 }
 
-/* ── Cards ── */
+.st-section-label {
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #8b8780);
+  margin: 32px 0 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--cream-300, #e5e0d6);
+}
+
+.st-section-label:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.st-section-label--danger {
+  color: #8c2f25;
+}
+
+/* ── Editorial hairline blocks ── */
 .st-card {
-  background: #ffffff;
-  border: 1px solid #e8edf2;
-  border-radius: 14px;
-  padding: 20px 22px;
-  margin-bottom: 14px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 0;
+  box-shadow: none;
+  transition: none;
 }
 
 .st-card:hover {
-  border-color: #d1dae4;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+  border: none;
+  box-shadow: none;
 }
 
 .st-card.st-card-danger {
-  border-color: rgba(220, 38, 38, 0.2);
-  background: rgba(248, 113, 113, 0.03);
+  background: transparent;
 }
 
 .st-card.st-card-danger:hover {
-  border-color: rgba(220, 38, 38, 0.35);
+  background: transparent;
 }
 
 .st-card-hd {
@@ -230,30 +267,32 @@
   line-height: 1.5;
 }
 
-/* ── Profile row ── */
+/* ── Profile row — editorial hairline ── */
 .st-profile-row {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
-  background: #faf8f3;
-  border-radius: 10px;
-  border: 1px solid #efeae0;
+  padding: 16px 0;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid var(--cream-300, #e5e0d6);
 }
 
 .st-avatar {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--cyan-600) 0%, var(--cyan-400) 100%);
-  color: #ffffff;
+  background: var(--terra-500, #b8623d);
+  color: var(--cream, #f7f4ee);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.9375rem;
-  font-weight: 700;
+  font-family: var(--font-serif, 'EB Garamond', serif);
+  font-size: 0.875rem;
+  font-weight: 500;
   flex-shrink: 0;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 .st-profile-info {
@@ -718,37 +757,52 @@
   padding: 0;
 }
 
-.st-card--grouped .st-row {
-  padding: 16px 20px;
-}
-
+.st-card--grouped .st-row,
+.st-card--grouped .st-row--col,
 .st-card--grouped .st-profile-row {
-  padding: 18px 20px;
+  padding: 16px 0;
 }
 
-.st-card--grouped .st-row--col {
-  padding: 16px 20px;
-}
-
-/* ── Row layout ── */
+/* ── Row layout — editorial hairline ── */
 .st-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   min-height: 28px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--cream-300, #e5e0d6);
+}
+
+.st-card:last-child .st-row:last-child,
+.st-card.st-card--grouped > .st-row:last-of-type {
+  border-bottom: none;
 }
 
 .st-row--col {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
+  gap: 10px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--cream-300, #e5e0d6);
 }
 
 .st-row--sub {
-  background: #faf8f3;
-  border-left: 2px solid #e5e0d6;
+  background: transparent;
+  border-left: none;
+  padding-left: 20px;
+  position: relative;
+}
+
+.st-row--sub::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 10px;
+  height: 1px;
+  background: var(--cream-300, #e5e0d6);
 }
 
 .st-row-text {
@@ -807,11 +861,9 @@
   margin-top: 4px;
 }
 
-/* ── Divider ── */
+/* ── Divider (now redundant — rows carry their own hairline) ── */
 .st-divider {
-  height: 1px;
-  background: #efeae0;
-  margin: 0;
+  display: none;
 }
 
 /* ── Toggle disabled state ── */
@@ -820,26 +872,27 @@
   cursor: not-allowed;
 }
 
-/* ── Links card ── */
+/* ── Links list (now hairline rows, no card chrome) ── */
 .st-card--links {
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .st-link-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 13px 20px;
+  padding: 14px 0;
   width: 100%;
   background: transparent;
   border: none;
-  color: #5a5852;
+  color: var(--ink, #1a1816);
   text-decoration: none;
   font-size: 0.875rem;
   text-align: left;
-  border-bottom: 1px solid #efeae0;
-  transition: background 0.12s, color 0.12s;
+  border-bottom: 1px solid var(--cream-300, #e5e0d6);
+  transition: color 0.12s;
+  cursor: pointer;
 }
 
 .st-link-row:last-child {
@@ -847,8 +900,8 @@
 }
 
 .st-link-row:hover {
-  background: #faf8f3;
-  color: #1a1816;
+  background: transparent;
+  color: var(--terra-500, #b8623d);
 }
 
 .st-link-row svg {
@@ -1409,36 +1462,36 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 20px 22px;
-  background:
-    radial-gradient(circle at top left, rgba(184, 98, 61, 0.08), transparent 60%),
-    #ffffff;
-  border: 1px solid #e8edf2;
-  border-radius: 14px;
-  margin-bottom: 18px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  padding: 18px 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--cream-300, #e5e0d6);
+  margin-bottom: 0;
+  box-shadow: none;
+  transition: none;
 }
 
 .account-hero:hover {
-  border-color: #d1dae4;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+  border-color: var(--cream-300, #e5e0d6);
+  box-shadow: none;
 }
 
 .account-hero-avatar {
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--cyan-600) 0%, var(--cyan-400) 100%);
-  color: #ffffff;
+  background: var(--terra-500, #b8623d);
+  color: var(--cream, #f7f4ee);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.0625rem;
-  font-weight: 700;
+  font-family: var(--font-serif, 'EB Garamond', serif);
+  font-size: 1rem;
+  font-weight: 500;
   flex-shrink: 0;
-  letter-spacing: 0.02em;
-  box-shadow: 0 6px 16px rgba(184, 98, 61, 0.22);
+  letter-spacing: 0;
+  box-shadow: none;
 }
 
 .account-hero-info {
