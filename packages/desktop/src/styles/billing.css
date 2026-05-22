@@ -15,76 +15,90 @@
   min-height: 400px;
 }
 
-/* Plan Card */
-.plan-card {
-  background: #ffffff;
-  border: 1px solid #e5e0d6;
-  border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 24px;
+/* ── Editorial blocks (no card chrome) ── */
+.plan-card,
+.usage-card,
+.benefits-card,
+.account-card {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 28px 0;
+  margin-bottom: 0;
+  border-top: 1px solid #e5e0d6;
+}
+
+.plan-card:first-of-type,
+.billing-section .plan-card {
+  border-top: none;
+  padding-top: 0;
 }
 
 .plan-card.pro {
-  border-color: #b8623d;
-  background: linear-gradient(135deg, #faf8f3 0%, #f7e6dd 100%);
+  background: transparent;
+  border-color: #e5e0d6;
 }
 
 .plan-header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 14px;
+  margin-bottom: 14px;
 }
 
 .plan-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .plan-card.free .plan-icon {
-  background: #efeae0;
-  color: #5a5852;
+  background: transparent;
+  color: #8b8780;
+  width: auto;
+  height: auto;
 }
 
 .plan-card.pro .plan-icon {
-  background: linear-gradient(135deg, #a25234 0%, #b8623d 100%);
-  color: #ffffff;
+  background: #b8623d;
+  color: #f7f4ee;
 }
 
 .plan-info h3 {
   font-family: var(--font-serif, 'EB Garamond', serif);
-  font-size: 1.7rem;
+  font-size: 1.625rem;
   font-weight: 500;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   color: #1a1816;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .plan-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 3px 10px;
-  background: #f0f9ff;
-  color: #a25234;
-  border-radius: 20px;
-  text-transform: capitalize;
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 0;
+  background: transparent;
+  color: #b8623d;
+  border-radius: 0;
 }
 
 .plan-details {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .plan-detail {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: #5a5852;
 }
 
@@ -92,20 +106,24 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 20px;
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 0;
+  border-radius: 0;
   width: fit-content;
+  background: transparent;
 }
 
 .plan-status.active {
-  background: #dcfce7;
-  color: #16a34a;
+  background: transparent;
+  color: #b8623d;
 }
 
 .plan-description {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: #5a5852;
   line-height: 1.6;
 }
@@ -114,55 +132,54 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
-  background: linear-gradient(135deg, #a25234 0%, #b8623d 100%);
-  color: #ffffff;
+  padding: 12px 22px;
+  background: #1a1816;
+  color: #f7f4ee;
   border: none;
-  border-radius: 10px;
-  font-size: 0.9375rem;
-  font-weight: 600;
+  border-radius: 999px;
+  font-family: var(--font-sans, 'Figtree', sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
-  margin-top: 8px;
+  transition: opacity 0.15s;
+  margin-top: 14px;
 }
 
 .plan-card .upgrade-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 20px rgba(184, 98, 61, 0.4);
+  opacity: 0.88;
+  transform: none;
+  box-shadow: none;
 }
 
 .plan-card .upgrade-btn:disabled {
-  opacity: 0.7;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* Usage Card */
-.usage-card {
-  background: #ffffff;
-  border: 1px solid #e5e0d6;
-  border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 24px;
-}
-
+/* Usage block — editorial */
 .usage-card h4 {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1a1816;
-  margin-bottom: 20px;
+  gap: 8px;
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8b8780;
+  margin-bottom: 18px;
 }
 
 .usage-card h4 svg {
-  color: #a25234;
+  color: #8b8780;
+  width: 11px;
+  height: 11px;
 }
 
 .usage-items {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .usage-item {
@@ -174,51 +191,48 @@
 .usage-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: baseline;
 }
 
 .usage-label {
-  font-size: 0.9375rem;
-  color: #5a5852;
-}
-
-.usage-value {
   font-size: 0.875rem;
-  font-weight: 600;
   color: #1a1816;
 }
 
+.usage-value {
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #8b8780;
+  letter-spacing: 0.04em;
+}
+
 .usage-bar {
-  height: 8px;
-  background: #efeae0;
-  border-radius: 4px;
+  height: 3px;
+  background: #e5e0d6;
+  border-radius: 999px;
   overflow: hidden;
 }
 
 .usage-fill {
   height: 100%;
-  background: linear-gradient(90deg, #b8623d 0%, #a25234 100%);
-  border-radius: 4px;
+  background: #b8623d;
+  border-radius: 999px;
   transition: width 0.3s ease;
 }
 
 .usage-fill.warning {
-  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+  background: #8c2f25;
 }
 
-/* Benefits Card */
-.benefits-card {
-  background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
-  border: 1px solid #b8623d;
-  border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 24px;
-}
-
+/* Benefits — editorial */
 .benefits-card h4 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1a1816;
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8b8780;
   margin-bottom: 16px;
 }
 
@@ -226,15 +240,15 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .benefits-list li {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 0.9375rem;
-  color: #5a5852;
+  gap: 10px;
+  font-size: 0.875rem;
+  color: #1a1816;
 }
 
 .benefits-list li svg {
@@ -242,18 +256,14 @@
   flex-shrink: 0;
 }
 
-/* Account Card */
-.account-card {
-  background: #ffffff;
-  border: 1px solid #e5e0d6;
-  border-radius: 16px;
-  padding: 24px;
-}
-
+/* Account block — editorial */
 .account-card h4 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1a1816;
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8b8780;
   margin-bottom: 16px;
 }
 

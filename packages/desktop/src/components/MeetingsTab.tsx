@@ -1094,7 +1094,7 @@ export function MeetingsTab({
               </p>
             </div>
             <button
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-transparent text-slate-400 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cream-300 bg-transparent text-ink-faint transition-colors hover:border-[#8c2f25] hover:text-[#8c2f25] cursor-pointer"
               onClick={() => {
                 onDeleteMeeting(viewingSaved.id);
                 setPhase("select");
@@ -1119,7 +1119,7 @@ export function MeetingsTab({
 
           <div className={RESULT_TABS_CLASS_NAME}>
             <button
-              className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-cyan-600 text-cyan-600")}
+              className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-terracotta text-terracotta")}
               onClick={() => setResultTab("notes")}
               type="button"
             >
@@ -1127,7 +1127,7 @@ export function MeetingsTab({
               Notes
             </button>
             <button
-              className={cn(RESULT_TAB_CLASS_NAME, resultTab === "transcript" && "border-b-cyan-600 text-cyan-600")}
+              className={cn(RESULT_TAB_CLASS_NAME, resultTab === "transcript" && "border-b-terracotta text-terracotta")}
               onClick={() => setResultTab("transcript")}
               type="button"
             >
@@ -1137,22 +1137,22 @@ export function MeetingsTab({
           </div>
 
           {resultTab === "notes" && (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-slate-700">
+            <div>
+              <div className="max-h-[460px] overflow-y-auto py-2 pr-1">
                 <MarkdownNotesView markdown={viewingSaved.notesMarkdown} />
               </div>
-              <div className="flex flex-col gap-2 border-t border-slate-100 px-4 py-3">
+              <div className="flex flex-col gap-2 border-t border-cream-300 pt-4 mt-4">
                 <div className="flex flex-wrap gap-2">
                   <button
-                    className={cn(FOOTER_BUTTON_CLASS_NAME, "border-cyan-600 bg-cyan-600 text-white hover:border-cyan-700 hover:bg-cyan-700")}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-ink text-cream px-4 py-2 text-[12px] font-medium border-none cursor-pointer transition-opacity hover:opacity-90"
                     onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
                     type="button"
                   >
                     {copied ? <Check size={12} /> : <Copy size={12} />}
-                    {copied ? "Copied!" : "Copy"}
+                    {copied ? "Copied" : "Copy"}
                   </button>
                   <button
-                    className={FOOTER_BUTTON_CLASS_NAME}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent text-ink-soft px-4 py-2 text-[12px] font-medium cursor-pointer transition-colors hover:text-ink hover:border-cream-400"
                     onClick={() =>
                       void handleShareByEmail({
                         subjectTitle: viewingSaved.meetingTitle,
@@ -1166,9 +1166,8 @@ export function MeetingsTab({
                   </button>
                   <button
                     className={cn(
-                      FOOTER_BUTTON_CLASS_NAME,
-                      regenerating &&
-                        "cursor-not-allowed opacity-60",
+                      "inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent text-ink-soft px-4 py-2 text-[12px] font-medium cursor-pointer transition-colors hover:text-ink hover:border-cream-400",
+                      regenerating && "cursor-not-allowed opacity-60",
                     )}
                     onClick={() => void handleRegenerateSaved(viewingSaved)}
                     disabled={
@@ -1188,7 +1187,7 @@ export function MeetingsTab({
                   </button>
                 </div>
                 {regenerateError && (
-                  <p className="m-0 text-[0.75rem] text-rose-500">
+                  <p className="m-0 text-[12px] text-[#8c2f25]">
                     {regenerateError}
                   </p>
                 )}
