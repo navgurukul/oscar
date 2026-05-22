@@ -223,14 +223,41 @@ const HALLUCINATION_PHRASES: &[&str] = &[
     "ruins fat is here",
 ];
 
+/// Audio duration (seconds) at or below which a segment is treated as a
+/// short intentional utterance — e.g. a single-word dictation like "yes",
+/// "bye", "you". The phrase-list match is suppressed in this range so user
+/// speech is not silently dropped as a silence-hallucination.
+const SHORT_UTTERANCE_SECS: f32 = 2.5;
+
+/// `no_speech_probability` ceiling below which Whisper is confident the
+/// segment contains speech. Combined with `SHORT_UTTERANCE_SECS`, this
+/// distinguishes a deliberate one-word dictation from idle-silence noise.
+const SHORT_UTTERANCE_CONFIDENT_NO_SPEECH: f32 = 0.2;
+
 /// Mark a Whisper segment as a likely hallucination so the caller can drop it
 /// before downstream summarization sees it. We are deliberately conservative:
 /// only flag clear-cut noise patterns (stock phrases, repetition loops,
 /// wrong-script-for-target-language) rather than anything ambiguous.
-fn is_hallucination_segment(trimmed: &str, language: &str) -> bool {
+fn is_hallucination_segment(
+    trimmed: &str,
+    language: &str,
+    segment_secs: f32,
+    no_speech_prob: f32,
+) -> bool {
     let lower = trimmed.to_lowercase();
 
-    if HALLUCINATION_PHRASES.iter().any(|phrase| lower == *phrase) {
+    // Short, confidently-voiced segments are almost always intentional
+    // single-word dictation ("you", "bye", "thanks") rather than silence
+    // hallucinations. Skip the exact phrase-list match in that case; the
+    // structural drops (repetition, foreign-loop, wrong-script, pure-punct)
+    // still apply below.
+    let trust_short_utterance = segment_secs > 0.0
+        && segment_secs <= SHORT_UTTERANCE_SECS
+        && no_speech_prob <= SHORT_UTTERANCE_CONFIDENT_NO_SPEECH;
+
+    if !trust_short_utterance
+        && HALLUCINATION_PHRASES.iter().any(|phrase| lower == *phrase)
+    {
         return true;
     }
 
@@ -404,19 +431,35 @@ pub(crate) fn transcribe_audio_inner(
     let mut dropped_hallucination = 0usize;
 
     // Tightened from whisper.cpp default 0.6 → 0.5 to cut hallucinations on
-    // borderline-silent or cross-talk segments more aggressively.
+    // borderline-silent or cross-talk segments more aggressively. Whisper's
+    // per-segment estimate is noisy on tiny segments, so single-word
+    // utterances get a relaxed threshold — VAD upstream already vouched
+    // that speech is present.
     const NO_SPEECH_THRESHOLD: f32 = 0.5;
+    const SHORT_SEGMENT_NO_SPEECH_THRESHOLD: f32 = 0.8;
     let effective_language = lang.unwrap_or("");
 
     for i in 0..num_segments {
         if let Some(segment) = state.get_segment(i) {
             let no_speech_prob = segment.no_speech_probability();
-            if no_speech_prob > NO_SPEECH_THRESHOLD {
+            // Whisper timestamps are in centiseconds.
+            let segment_secs =
+                (segment.end_timestamp() - segment.start_timestamp()) as f32 / 100.0;
+            let no_speech_ceiling = if segment_secs > 0.0
+                && segment_secs <= SHORT_UTTERANCE_SECS
+            {
+                SHORT_SEGMENT_NO_SPEECH_THRESHOLD
+            } else {
+                NO_SPEECH_THRESHOLD
+            };
+            if no_speech_prob > no_speech_ceiling {
                 dropped_no_speech += 1;
                 log::debug!(
-                    "[whisper] Dropping segment {} (no_speech_prob={:.2})",
+                    "[whisper] Dropping segment {} (no_speech_prob={:.2}, ceiling={:.2}, secs={:.2})",
                     i,
-                    no_speech_prob
+                    no_speech_prob,
+                    no_speech_ceiling,
+                    segment_secs
                 );
                 continue;
             }
@@ -427,12 +470,19 @@ pub(crate) fn transcribe_audio_inner(
                     continue;
                 }
 
-                if is_hallucination_segment(trimmed, effective_language) {
+                if is_hallucination_segment(
+                    trimmed,
+                    effective_language,
+                    segment_secs,
+                    no_speech_prob,
+                ) {
                     dropped_hallucination += 1;
                     log::debug!(
-                        "[whisper] Dropping hallucination segment {}: {:?}",
+                        "[whisper] Dropping hallucination segment {}: {:?} (secs={:.2}, no_speech={:.2})",
                         i,
                         trimmed,
+                        segment_secs,
+                        no_speech_prob,
                     );
                     continue;
                 }
