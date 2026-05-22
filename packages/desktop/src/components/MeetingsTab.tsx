@@ -24,10 +24,10 @@ import {
 import { motion } from "framer-motion";
 import { cn } from "../lib/utils";
 import {
-  MarkdownNotesView,
   markdownPreview,
   stripEvidenceComments,
 } from "./MarkdownNotesView";
+import { MinutesDistillView } from "./MinutesDistillView";
 import type {
   EnhancedMeetingNoteRequest,
   MeetingAttendee,
@@ -1139,7 +1139,7 @@ export function MeetingsTab({
           {resultTab === "notes" && (
             <div>
               <div className="max-h-[460px] overflow-y-auto py-2 pr-1">
-                <MarkdownNotesView markdown={viewingSaved.notesMarkdown} />
+                <MinutesDistillView markdown={viewingSaved.notesMarkdown} />
               </div>
               <div className="flex flex-col gap-2 border-t border-cream-300 pt-4 mt-4">
                 <div className="flex flex-wrap gap-2">
@@ -1451,7 +1451,7 @@ export function MeetingsTab({
                   <div className="px-6 py-5 text-sm text-red-600">{error}</div>
                 ) : (
                   <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-ink-soft">
-                    <MarkdownNotesView markdown={result} />
+                    <MinutesDistillView markdown={result} />
                   </div>
                 )}
 

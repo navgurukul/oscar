@@ -433,19 +433,20 @@
 }
 
 .step-label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: #8b8780;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
   text-transform: uppercase;
 }
 
 .step-item.active .step-label {
-  color: #1a1816;
+  color: var(--terra-500);
 }
 
 .step-arrow {
-  color: #d8d2c4;
+  color: var(--cream-400);
   width: 14px;
   height: 14px;
 }

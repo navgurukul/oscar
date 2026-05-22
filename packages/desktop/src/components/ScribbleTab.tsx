@@ -10,8 +10,13 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
+  Copy,
+  Check,
+  Sparkles,
+  X,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { AIPanel } from "./AIPanel";
 import { ContextLabel } from "./ContextLabel";
 import { TrashPanel } from "./TrashPanel";
 import { scribblesService } from "../services/scribbles.service";
@@ -118,7 +123,12 @@ interface DetailPaneProps {
   onExportMarkdown: (s: DBScribble) => void;
   onToggleStar: (s: DBScribble) => void;
   onDelete: (s: DBScribble) => void;
+  onCopyClean: (s: DBScribble) => void;
+  onCopyRaw: (s: DBScribble) => void;
+  onToggleAI: () => void;
   isDeleting: boolean;
+  isAIOpen: boolean;
+  copyState: "idle" | "clean" | "raw";
 }
 
 function DetailPane({
@@ -127,7 +137,12 @@ function DetailPane({
   onExportMarkdown,
   onToggleStar,
   onDelete,
+  onCopyClean,
+  onCopyRaw,
+  onToggleAI,
   isDeleting,
+  isAIOpen,
+  copyState,
 }: DetailPaneProps) {
   if (!scribble) {
     return (
@@ -172,7 +187,38 @@ function DetailPane({
           {date}
         </p>
 
-        <div className="mt-7 flex items-center gap-2">
+        <div className="mt-7 flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => onCopyClean(scribble)}
+            className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-medium bg-ink text-cream border-none cursor-pointer transition-opacity hover:opacity-90"
+          >
+            {copyState === "clean" ? <Check size={11} /> : <Copy size={11} />}
+            {copyState === "clean" ? "Copied" : "Copy clean"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onCopyRaw(scribble)}
+            disabled={!scribble.raw_text}
+            className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] border border-cream-300 text-ink-soft bg-transparent hover:text-ink cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-default"
+            title={scribble.raw_text ? "Copy the original transcript" : "No raw transcript saved"}
+          >
+            {copyState === "raw" ? <Check size={11} /> : <Copy size={11} />}
+            {copyState === "raw" ? "Copied" : "Copy raw"}
+          </button>
+          <button
+            type="button"
+            onClick={onToggleAI}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] border bg-transparent cursor-pointer transition-colors ${
+              isAIOpen
+                ? "border-terracotta text-terracotta"
+                : "border-cream-300 text-ink-soft hover:text-terracotta hover:border-terracotta/50"
+            }`}
+            aria-pressed={isAIOpen}
+          >
+            {isAIOpen ? <X size={11} /> : <Sparkles size={11} />}
+            {isAIOpen ? "Close AI" : "Ask Oscar"}
+          </button>
           <button
             type="button"
             onClick={() => onToggleStar(scribble)}
@@ -247,6 +293,8 @@ export function ScribbleTab({
   const [trashCount, setTrashCount] = useState(0);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isAIOpen, setIsAIOpen] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "clean" | "raw">("idle");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("created");
@@ -390,6 +438,41 @@ export function ScribbleTab({
     triggerDownload(body, `${slug}.txt`, "text/plain");
   };
 
+  const handleCopyClean = async (scribble: DBScribble) => {
+    const body = scribble.edited_text || scribble.original_formatted_text;
+    if (!body) return;
+    await navigator.clipboard.writeText(body);
+    setCopyState("clean");
+    setTimeout(() => setCopyState("idle"), 1500);
+  };
+
+  const handleCopyRaw = async (scribble: DBScribble) => {
+    if (!scribble.raw_text) return;
+    await navigator.clipboard.writeText(scribble.raw_text);
+    setCopyState("raw");
+    setTimeout(() => setCopyState("idle"), 1500);
+  };
+
+  const handleAIApply = async (text: string) => {
+    if (!selected) return;
+    const previous = selected.edited_text;
+    setAllScribbles((prev) =>
+      prev.map((n) => (n.id === selected.id ? { ...n, edited_text: text } : n)),
+    );
+    const { data, error } = await scribblesService.updateScribble(selected.id, {
+      edited_text: text,
+    });
+    if (error || !data) {
+      setAllScribbles((prev) =>
+        prev.map((n) => (n.id === selected.id ? { ...n, edited_text: previous } : n)),
+      );
+      setError("Failed to apply AI edit. Please try again.");
+      setTimeout(() => setError(null), 3000);
+    } else {
+      setIsAIOpen(false);
+    }
+  };
+
   const handleExportMarkdown = (scribble: DBScribble) => {
     const title = scribble.title || "Untitled Scribble";
     const date = new Date(scribble.created_at).toLocaleDateString("en-US", {
@@ -520,15 +603,32 @@ export function ScribbleTab({
         )}
       </aside>
 
-      {/* RIGHT — detail pane */}
+      {/* CENTER — detail pane */}
       <DetailPane
         scribble={selected}
         onExportTxt={handleExportTxt}
         onExportMarkdown={handleExportMarkdown}
         onToggleStar={handleToggleStar}
         onDelete={handleDelete}
+        onCopyClean={handleCopyClean}
+        onCopyRaw={handleCopyRaw}
+        onToggleAI={() => setIsAIOpen((v) => !v)}
         isDeleting={!!(selected && deletingId === selected.id)}
+        isAIOpen={isAIOpen}
+        copyState={copyState}
       />
+
+      {/* RIGHT — AI panel (V2DesktopAIPanel pattern: col-span-3 cream-200 aside) */}
+      {isAIOpen && selected && (
+        <div className="w-[340px] shrink-0 border-l border-cream-300 overflow-hidden flex flex-col">
+          <AIPanel
+            transcript={selected.edited_text || selected.original_formatted_text}
+            onApply={(text) => void handleAIApply(text)}
+            appKey={selected.dictation_app_key}
+            contextSource={selected.dictation_context_source}
+          />
+        </div>
+      )}
 
       {/* Trash panel */}
       <TrashPanel
@@ -541,7 +641,10 @@ export function ScribbleTab({
       />
 
       {/* Floating record button */}
-      <div className="fixed bottom-8 left-[420px] right-0 z-40 flex justify-center pointer-events-none">
+      <div
+        className="fixed bottom-8 left-[420px] z-40 flex justify-center pointer-events-none"
+        style={{ right: isAIOpen ? 340 : 0 }}
+      >
         <div className="pointer-events-auto">
           <motion.div
             whileHover={isProcessing ? undefined : { y: -3 }}
