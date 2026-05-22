@@ -369,7 +369,7 @@
   left: 3px;
   width: 16px;
   height: 16px;
-  background: #fff;
+  background: var(--cream);
   border-radius: 50%;
   transition: transform 0.2s;
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
@@ -400,16 +400,16 @@
 .gen-search {
   width: 100%;
   padding: 8px 12px 8px 32px;
-  border: 1px solid #e5e0d6;
+  border: 1px solid var(--cream-300);
   border-radius: 8px;
   font-size: 0.875rem;
-  color: #1a1816;
-  background: #faf8f3;
+  color: var(--ink);
+  background: var(--cream-50);
   outline: none;
   box-sizing: border-box;
 }
-.gen-search:focus { border-color: #8b8780; background: #fff; }
-.gen-search::placeholder { color: #8b8780; }
+.gen-search:focus { border-color: var(--ink-faint); background: var(--cream); }
+.gen-search::placeholder { color: var(--ink-faint); }
 
 /* Language tile grid */
 .gen-lang-grid {
@@ -434,17 +434,17 @@
   align-items: flex-start;
   gap: 2px;
   padding: 10px 12px;
-  border: 1.5px solid #efeae0;
+  border: 1.5px solid var(--cream-200);
   border-radius: 10px;
-  background: #faf8f3;
+  background: var(--cream-50);
   cursor: pointer;
   text-align: left;
   transition: border-color 0.15s, background 0.15s;
 }
-.gen-lang-tile:hover { border-color: #d8d2c4; background: #fff; }
+.gen-lang-tile:hover { border-color: var(--cream-400); background: var(--cream); }
 .gen-lang-tile.selected {
-  border-color: #a25234;
-  background: #ecfeff;
+  border-color: var(--terra-600);
+  background: var(--terra-50);
 }
 .gen-lang-tile.disabled { cursor: default; }
 .gen-lang-flag { font-size: 1.25rem; line-height: 1; }

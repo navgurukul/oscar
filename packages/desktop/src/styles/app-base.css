@@ -96,7 +96,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--cream);
   flex-shrink: 0;
 }
 
@@ -136,8 +136,8 @@
 
 /* ── Settings Panel ─────────────────────────────────────────────────────── */
 .settings-panel {
-  background: #fff;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--cream);
+  border-bottom: 1px solid var(--cream-300);
   padding: 24px 28px;
 }
 
@@ -207,7 +207,7 @@
   outline: none;
   border-color: var(--cyan-500);
   box-shadow: 0 0 0 3px rgba(184, 98, 61, 0.15);
-  background: #fff;
+  background: var(--cream);
 }
 
 .model-input button {
@@ -215,7 +215,7 @@
   background: var(--cyan-500);
   border: none;
   border-radius: 8px;
-  color: #fff;
+  color: var(--cream);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -306,9 +306,9 @@ kbd {
   gap: 8px;
   padding: 10px 16px;
   font-size: 0.8rem;
-  color: #5a5852;
-  background: #fff;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  color: var(--ink-soft);
+  background: var(--cream);
+  border-bottom: 1px solid var(--cream-300);
 }
 
 .status-text {
@@ -440,7 +440,7 @@ kbd {
   border-radius: 50%;
   border: none;
   background: linear-gradient(135deg, var(--cyan-600) 0%, var(--cyan-400) 100%);
-  color: #fff;
+  color: var(--cream);
   cursor: pointer;
   transition: all 0.25s ease;
   box-shadow: 0 0 30px rgba(184, 98, 61, 0.35);
@@ -669,7 +669,7 @@ kbd {
 
 .api-key-input-wrap input:focus {
   border-color: var(--cyan-500);
-  background: #fff;
+  background: var(--cream);
 }
 
 .icon-btn.small {
@@ -743,7 +743,7 @@ kbd {
 
 .dict-input-row input:focus {
   border-color: var(--cyan-500);
-  background: #fff;
+  background: var(--cream);
 }
 
 .dict-input-row button {

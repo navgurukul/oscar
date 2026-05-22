@@ -1410,16 +1410,16 @@ export function MeetingsTab({
 
         <div className={RESULT_TABS_CLASS_NAME}>
           <button
-            className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-cyan-600 text-cyan-600")}
+            className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-terracotta text-terracotta")}
             onClick={() => setResultTab("notes")}
             type="button"
           >
             <FileText size={13} />
             Notes
-            {streaming && resultTab === "notes" && <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />}
+            {streaming && resultTab === "notes" && <span className="inline-block h-1.5 w-1.5 rounded-full bg-terracotta animate-pulse" />}
           </button>
           <button
-            className={cn(RESULT_TAB_CLASS_NAME, resultTab === "transcript" && "border-b-cyan-600 text-cyan-600")}
+            className={cn(RESULT_TAB_CLASS_NAME, resultTab === "transcript" && "border-b-terracotta text-terracotta")}
             onClick={() => setResultTab("transcript")}
             type="button"
           >

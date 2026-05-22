@@ -282,6 +282,7 @@
     .ready-body {
       display: flex;
       align-items: center;
+      gap: 8px;
       height: 22px;
     }
     .ready-body .ready-text {
@@ -291,6 +292,35 @@
       letter-spacing: .01em;
       white-space: nowrap;
     }
+
+    /* "Optimized for X" context label — terracotta dot + mono caps app name.
+       Quiet, never blocking. Shown in expanded / ready / recording phases when
+       a high-confidence dictation context is known. */
+    .ctx-label {
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+    .ctx-label .ctx-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #b8623d;
+      flex-shrink: 0;
+    }
+    .ctx-label .ctx-app {
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #b8623d;
+      white-space: nowrap;
+    }
+    .ctx-label.low .ctx-dot { background: #8b8780; }
+    .ctx-label.low .ctx-app { color: #8b8780; }
+    body[data-ctx="on"][data-phase="expanded"]  .ctx-label,
+    body[data-ctx="on"][data-phase="ready"]     .ctx-label,
+    body[data-ctx="on"][data-phase="recording"] .ctx-label { display: inline-flex; }
 
     /* Only show the active state body */
     .pill-body > [data-body] { display: none; }
@@ -580,7 +610,11 @@
           </div>
           <!-- Click-to-dictate label (expanded hover state) -->
           <div class="ready-body" data-body="ready">
-            <span class="ready-text">Click to dictate</span>
+            <span class="ctx-label" id="ctx-label" aria-hidden="true">
+              <span class="ctx-dot"></span>
+              <span class="ctx-app" id="ctx-app"></span>
+            </span>
+            <span class="ready-text" id="ready-text">Click to dictate</span>
           </div>
           <!-- Recording waveform -->
           <div class="waveform" data-body="recording" id="waveform"></div>
@@ -671,6 +705,7 @@
     let langPage = false;
     let leaveTimer = null;
     let readyHoldTimer = null;
+    let contextApp = null;        // { name: string, confidence: 'high' | 'low' } | null
     let settings = {
       language: 'hi-en',
       autoPaste: true,
@@ -766,8 +801,29 @@
       });
     }
 
+    /* ─── Context label ("Optimized for X") ────────────────────────────── */
+    function setContextApp(payload) {
+      const ctxEl = document.getElementById('ctx-label');
+      const appEl = document.getElementById('ctx-app');
+      if (!ctxEl || !appEl) return;
+      if (!payload || !payload.name) {
+        contextApp = null;
+        document.body.removeAttribute('data-ctx');
+        appEl.textContent = '';
+        ctxEl.classList.remove('low');
+        return;
+      }
+      const name = String(payload.name).replace(/[-_]/g, ' ').toUpperCase();
+      const confidence = payload.confidence === 'low' ? 'low' : 'high';
+      contextApp = { name, confidence };
+      appEl.textContent = name;
+      ctxEl.classList.toggle('low', confidence === 'low');
+      document.body.setAttribute('data-ctx', 'on');
+    }
+
     window.__oscarSetPillPhase = applyPhase;
     window.__oscarGetPillPhase = () => phase;
+    window.__oscarSetPillContextApp = setContextApp;
 
     /* ─── Tauri IPC helpers ────────────────────────────────────────────── */
     function callTauri(cmd, args) {
@@ -959,6 +1015,10 @@
           // Back-compat with old events; map to new phase
           ev.listen('pill-set-processing', () => applyPhase('processing')),
           ev.listen('pill-set-listening', () => applyPhase('recording')),
+
+          // "Optimized for X" context — host pushes detected app + confidence.
+          // Payload: { name: string, confidence: 'high' | 'low' } | null.
+          ev.listen('pill-context-app', (evt) => setContextApp(evt.payload)),
 
           // Live mic levels from the host. Payload: number[] of 15 floats
           // in [0..1] — one per bar. Audio sets amplitude while the nested

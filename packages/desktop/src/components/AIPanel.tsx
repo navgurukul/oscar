@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { Check, X, Copy, RotateCcw } from "lucide-react";
 import { aiService } from "../services/ai.service";
+import { ContextLabel } from "./ContextLabel";
+import type { DictationContextSource } from "../types/scribble.types";
 
 interface AIPanelProps {
   transcript: string;
   onApply: (text: string) => void;
+  appKey?: string | null;
+  contextSource?: DictationContextSource | null;
 }
 
 type AIMode = "cleanup" | "summary" | "bullets" | "email";
@@ -23,7 +27,7 @@ const MODE_LABEL: Record<AIMode, string> = {
   email: "Email Draft",
 };
 
-export function AIPanel({ transcript, onApply }: AIPanelProps) {
+export function AIPanel({ transcript, onApply, appKey, contextSource }: AIPanelProps) {
   const [activeMode, setActiveMode] = useState<AIMode | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [result, setResult] = useState("");
@@ -80,6 +84,7 @@ export function AIPanel({ transcript, onApply }: AIPanelProps) {
 
   return (
     <aside className="bg-cream-200 p-6 overflow-auto h-full">
+      <ContextLabel appKey={appKey} source={contextSource} className="mb-2 block" />
       <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
         ASK OSCAR · AI
       </span>
