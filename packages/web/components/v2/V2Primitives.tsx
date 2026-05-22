@@ -90,13 +90,11 @@ export function V2Source({ name, kind }: { name: string; kind?: string }) {
 
 export function V2OscarMark({
   size = 22,
-  light = false,
 }: {
   size?: number;
   light?: boolean;
 }) {
-  const ring = light ? v2.cream : v2.accent;
-  const bars = light ? v2.accent : v2.ink;
+  const mark = v2.accent;
 
   return (
     <svg
@@ -107,10 +105,15 @@ export function V2OscarMark({
       aria-hidden="true"
       focusable="false"
     >
-      <circle cx="12" cy="12" r="9" stroke={ring} strokeWidth="1.35" />
       <path
-        d="M7.8 9.9v4.2M9.9 8.5v7M12 10.4v3.2M14.1 8.9v6.2M16.2 9.7v4.6"
-        stroke={bars}
+        d="M3.9 10.8C4.6 16.2 7.7 18.9 12 18.9S19.4 16.2 20.1 10.8"
+        stroke={mark}
+        strokeWidth="1.45"
+        strokeLinecap="round"
+      />
+      <path
+        d="M5.8 10.9v2.7M7.4 9.8v4.7M9 8.7v6.8M10.6 7.8v8.8M12.2 9.5v5.6M13.8 10.7v3.7M15.4 9.1v6.3M17 8.4v7.7M18.6 10.1v4.4"
+        stroke={mark}
         strokeWidth="1.35"
         strokeLinecap="round"
       />
@@ -118,7 +121,7 @@ export function V2OscarMark({
   );
 }
 
-// Wordmark — terracotta voice/O glyph + serif "Oscar". Links home unless `as` overrides.
+// Wordmark — terracotta bowl waveform + serif "Oscar". Links home unless `as` overrides.
 export function V2Wordmark({ light = false, href = "/" }: { light?: boolean; href?: string }) {
   const ink = light ? v2.cream : v2.ink;
   return (

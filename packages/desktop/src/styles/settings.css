@@ -232,7 +232,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  /* default: cyan accent — matches the project's primary */
+  /* default: terracotta accent */
   background: rgba(184, 98, 61, 0.1);
   color: var(--cyan-600);
 }

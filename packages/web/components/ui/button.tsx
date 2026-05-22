@@ -28,7 +28,7 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground hover:opacity-90",
         // Brand-tinted accent — terracotta-soft fill, used sparingly for affirmative actions.
         soft: "bg-terracotta-100 text-ink border border-terracotta-500/30 hover:bg-terracotta-50",
-        // Back-compat aliases — earlier cyan-themed variants now collapse to the
+        // Back-compat aliases — earlier accent variants now collapse to the
         // editorial system. Kept so legacy call sites compile; treat as deprecated.
         glow: "bg-ink text-cream hover:opacity-90",
         outlineDark: "border border-input bg-transparent text-ink hover:bg-cream-200",

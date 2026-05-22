@@ -132,8 +132,17 @@ function drawRoundedRect(canvas, cx, cy, width, height, radius, color) {
   );
 }
 
-function drawCircleStroke(canvas, cx, cy, radius, stroke, color) {
-  const pad = stroke + 3;
+function normalizeAngle(angle) {
+  const tau = Math.PI * 2;
+  return ((angle % tau) + tau) % tau;
+}
+
+function drawArcStroke(canvas, cx, cy, radius, stroke, startAngle, endAngle, color) {
+  const tau = Math.PI * 2;
+  const start = normalizeAngle(startAngle);
+  const span = normalizeAngle(endAngle - startAngle);
+  const pad = stroke + 4;
+
   drawSdf(
     canvas,
     {
@@ -143,42 +152,76 @@ function drawCircleStroke(canvas, cx, cy, radius, stroke, color) {
       height: (radius + pad) * 2,
     },
     color,
-    (px, py) => Math.abs(Math.hypot(px - cx, py - cy) - radius) - stroke / 2
+    (px, py) => {
+      const angle = normalizeAngle(Math.atan2(py - cy, px - cx) - start);
+      const onArc = angle <= span;
+      const ringDistance = Math.abs(Math.hypot(px - cx, py - cy) - radius) - stroke / 2;
+
+      if (onArc) return ringDistance;
+
+      const startX = cx + Math.cos(start) * radius;
+      const startY = cy + Math.sin(start) * radius;
+      const end = start + span;
+      const endX = cx + Math.cos(end) * radius;
+      const endY = cy + Math.sin(end) * radius;
+      const capDistance = Math.min(
+        Math.hypot(px - startX, py - startY),
+        Math.hypot(px - endX, py - endY)
+      );
+
+      return capDistance - stroke / 2;
+    }
   );
 }
 
-function drawOscarMark(canvas, cx, cy, size, ringColor, barColor) {
-  const radius = size * 0.36;
-  const ringStroke = Math.max(1.3, size * 0.045);
-  drawCircleStroke(canvas, cx, cy, radius, ringStroke, ringColor);
+function drawOscarMark(canvas, cx, cy, size, markColor) {
+  const stroke = Math.max(1.6, size * 0.052);
+  const bowlRadius = size * 0.43;
+  drawArcStroke(
+    canvas,
+    cx,
+    cy - size * 0.03,
+    bowlRadius,
+    stroke,
+    Math.PI * 0.08,
+    Math.PI * 0.92,
+    markColor
+  );
 
-  const barWidth = Math.max(1.4, size * 0.055);
+  const barWidth = Math.max(1.4, size * 0.052);
+  const barCenter = cy - size * 0.1;
   const bars = [
-    [-0.22, 0.22],
-    [-0.11, 0.34],
-    [0, 0.18],
-    [0.12, 0.31],
-    [0.23, 0.24],
+    [-0.37, 0.18],
+    [-0.27, 0.28],
+    [-0.17, 0.38],
+    [-0.07, 0.5],
+    [0.03, 0.33],
+    [0.13, 0.22],
+    [0.23, 0.36],
+    [0.33, 0.44],
+    [0.43, 0.24],
   ];
 
   for (const [offset, height] of bars) {
     drawRoundedRect(
       canvas,
       cx + offset * size,
-      cy,
+      barCenter,
       barWidth,
       height * size,
       barWidth / 2,
-      barColor
+      markColor
     );
   }
 }
 
-function drawIcon(width, height) {
+function drawIcon(width, height, mode = "light") {
   const canvas = createCanvas(width, height);
   const size = Math.min(width, height);
+  const background = mode === "dark" ? colors.night : colors.cream;
+  const inner = mode === "dark" ? hex("#18130f") : hex("#faf8f3");
 
-  drawRoundedRect(canvas, width / 2, height / 2, width, height, size * 0.22, colors.cream);
+  drawRoundedRect(canvas, width / 2, height / 2, width, height, size * 0.22, background);
   drawRoundedRect(
     canvas,
     width / 2,
@@ -186,20 +229,18 @@ function drawIcon(width, height) {
     width - size * 0.035,
     height - size * 0.035,
     size * 0.2,
-    hex("#faf8f3")
+    inner
   );
-  drawCircleStroke(canvas, width / 2, height / 2, size * 0.395, size * 0.018, colors.rule);
-  drawOscarMark(canvas, width / 2, height / 2, size * 0.76, colors.ink, colors.accent);
+  drawOscarMark(canvas, width / 2, height / 2 + size * 0.02, size * 0.78, colors.accent);
   return canvas;
 }
 
 function drawTransparentMark(width, height, mode) {
   const canvas = createCanvas(width, height);
   const size = Math.min(width, height) * 0.82;
-  const ring = mode === "dark" ? colors.cream : colors.accent;
-  const bars = mode === "dark" ? colors.accent : colors.ink;
+  const mark = mode === "dark" ? colors.cream : colors.accent;
 
-  drawOscarMark(canvas, width / 2, height / 2, size, ring, bars);
+  drawOscarMark(canvas, width / 2, height / 2, size, mark);
   return canvas;
 }
 
@@ -216,10 +257,11 @@ async function writeWordmark(relativePath) {
 
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="1366" height="768" viewBox="0 0 1366 768">
-      <g transform="translate(190 274) scale(9.1667)" fill="none">
-        <circle cx="12" cy="12" r="9" stroke="${palette.accent}" stroke-width="1.35"/>
-        <path d="M7.8 9.9v4.2M9.9 8.5v7M12 10.4v3.2M14.1 8.9v6.2M16.2 9.7v4.6"
-          stroke="${palette.ink}" stroke-width="1.35" stroke-linecap="round"/>
+      <g transform="translate(188 272) scale(9.25)" fill="none">
+        <path d="M3.9 10.8C4.6 16.2 7.7 18.9 12 18.9S19.4 16.2 20.1 10.8"
+          stroke="${palette.accent}" stroke-width="1.45" stroke-linecap="round"/>
+        <path d="M5.8 10.9v2.7M7.4 9.8v4.7M9 8.7v6.8M10.6 7.8v8.8M12.2 9.5v5.6M13.8 10.7v3.7M15.4 9.1v6.3M17 8.4v7.7M18.6 10.1v4.4"
+          stroke="${palette.accent}" stroke-width="1.35" stroke-linecap="round"/>
       </g>
       <text x="440" y="455"
         font-family="Georgia, 'Times New Roman', serif"
@@ -236,8 +278,8 @@ async function writeWordmark(relativePath) {
 writePng("packages/web/public/OSCAR_AVATAR.png", drawIcon(1024, 1024));
 writePng("packages/web/public/OSCAR_ICON_192.png", drawIcon(192, 192));
 writePng("packages/web/public/OSCAR_ICON_512.png", drawIcon(512, 512));
-writePng("packages/web/public/OSCAR_LIGHT_LOGO.png", drawTransparentMark(1656, 1675, "light"));
-writePng("packages/web/public/OSCAR_DARK_LOGO.png", drawTransparentMark(1664, 1683, "dark"));
+writePng("packages/web/public/OSCAR_LIGHT_LOGO.png", drawIcon(1024, 1024, "light"));
+writePng("packages/web/public/OSCAR_DARK_LOGO.png", drawIcon(1024, 1024, "dark"));
 await writeWordmark("packages/web/public/OSCARLOGO.png");
 
 for (const file of ["OSCAR_AVATAR.png", "OSCAR_LIGHT_LOGO.png", "OSCAR_DARK_LOGO.png"]) {

@@ -25,9 +25,9 @@ module.exports = {
   			]
   		},
   		colors: {
-  			/* Editorial cream/ink/terracotta palette mirrors web v2. The legacy
-  			 * `cyan` (brand) + `sky` (light surface) scales are aliased onto
-  			 * terracotta + cream so existing utility classes flip automatically. */
+			/* Editorial cream/ink/terracotta palette mirrors web v2. Legacy
+			 * `cyan` + `sky` utility names are aliased onto
+			 * terracotta + cream so existing utility classes flip automatically. */
   			cream: {
   				DEFAULT: '#f7f4ee',
   				50: '#faf8f3',
