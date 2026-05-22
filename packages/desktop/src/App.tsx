@@ -2400,6 +2400,7 @@ function App() {
           activeTab={activeTab}
           onTabChange={(tab) => setActiveTab(tab)}
           userEmail={user.email || ""}
+          userName={user.user_metadata?.full_name || ""}
           isProUser={isProUser}
           onUpgradeClick={() => setUpgradeModalOpen(true)}
           appVersion={appVersion}

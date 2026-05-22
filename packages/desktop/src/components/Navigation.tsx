@@ -20,10 +20,16 @@ interface UpdaterState {
   updateInfo: { version: string; currentVersion: string; date?: string; body?: string } | null;
 }
 
+interface FolderSummary {
+  name: string;
+  count: number;
+}
+
 interface NavigationProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   userEmail: string;
+  userName?: string;
   isProUser?: boolean;
   onUpgradeClick?: () => void;
   appVersion: string | null;
@@ -31,6 +37,7 @@ interface NavigationProps {
   onCheckForUpdates?: () => void;
   onDownloadUpdate?: () => void;
   onInstallUpdate?: () => void;
+  folders?: FolderSummary[];
 }
 
 function CapsLabel({ children }: { children: React.ReactNode }) {
@@ -72,6 +79,7 @@ export function Navigation({
   activeTab,
   onTabChange,
   userEmail,
+  userName,
   isProUser = false,
   onUpgradeClick,
   appVersion,
@@ -79,11 +87,13 @@ export function Navigation({
   onCheckForUpdates,
   onDownloadUpdate,
   onInstallUpdate,
+  folders = [],
 }: NavigationProps) {
   const workspaceItems: { id: TabType; label: string }[] = [
     { id: "home", label: "Today" },
     { id: "scribble", label: "Scribbles" },
     { id: "meetings", label: "Minutes" },
+    { id: "settings", label: "Settings" },
   ];
 
   const handleUpgrade = () => {
@@ -96,6 +106,9 @@ export function Navigation({
       });
     }
   };
+
+  const displayName = userName?.trim() || userEmail?.split("@")[0] || "Signed in";
+  const visibleFolders = folders.slice(0, 6);
 
   return (
     <nav className="w-60 bg-cream flex flex-col flex-shrink-0 border-r border-cream-300">
@@ -136,16 +149,22 @@ export function Navigation({
           </div>
         </div>
 
-        <div className="pt-5 border-t border-cream-300">
-          <CapsLabel>ACCOUNT</CapsLabel>
-          <div className="mt-3 space-y-0.5">
-            <NavRow
-              label="Settings"
-              isActive={activeTab === "settings"}
-              onClick={() => onTabChange("settings")}
-            />
+        {visibleFolders.length > 0 && (
+          <div className="pt-5 border-t border-cream-300">
+            <CapsLabel>FOLDERS</CapsLabel>
+            <div className="mt-3 space-y-2">
+              {visibleFolders.map((f) => (
+                <div
+                  key={f.name}
+                  className="flex items-center justify-between"
+                >
+                  <span className="text-[12px] text-ink-soft truncate pr-2">{f.name}</span>
+                  <span className="font-mono text-[11px] text-ink-faint">{f.count}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="px-6 pt-4 pb-5 border-t border-cream-300 space-y-4">
@@ -157,9 +176,20 @@ export function Navigation({
               {getInitials(userEmail)}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] text-ink truncate" title={userEmail}>
-                {userEmail || "Signed in"}
+              <div
+                className="text-[13px] text-ink truncate leading-tight"
+                title={displayName}
+              >
+                {displayName}
               </div>
+              {userEmail && userEmail !== displayName && (
+                <div
+                  className="text-[11px] text-ink-faint truncate leading-tight"
+                  title={userEmail}
+                >
+                  {userEmail}
+                </div>
+              )}
             </div>
           </div>
         </div>
