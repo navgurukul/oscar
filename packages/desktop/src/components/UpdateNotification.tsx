@@ -39,31 +39,31 @@ export function UpdateNotification({
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           {error ? (
-            <p className="text-[0.8125rem] text-slate-500">Update check failed</p>
+            <p className="text-[0.8125rem] text-ink-soft">Update check failed</p>
           ) : readyToInstall ? (
             <>
-              <p className="text-[0.8125rem] font-medium text-slate-800">Ready to install</p>
-              <p className="text-[0.75rem] text-slate-400 mt-0.5">
+              <p className="text-[0.8125rem] font-medium text-ink">Ready to install</p>
+              <p className="text-[0.75rem] text-ink-faint mt-0.5">
                 v{updateInfo?.version} — restart to apply
               </p>
             </>
           ) : downloading ? (
             <>
-              <p className="text-[0.8125rem] font-medium text-slate-800">Downloading update</p>
-              <div className="mt-2 h-1 rounded-full bg-slate-100 overflow-hidden">
+              <p className="text-[0.8125rem] font-medium text-ink">Downloading update</p>
+              <div className="mt-2 h-1 rounded-full bg-cream-200 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-terracotta-500 transition-[width] duration-300 ease-out"
+                  className="h-full rounded-full bg-terracotta transition-[width] duration-300 ease-out"
                   style={{ width: `${downloadProgress}%` }}
                 />
               </div>
-              <p className="text-[0.75rem] text-slate-400 mt-1.5">{downloadProgress}%</p>
+              <p className="text-[0.75rem] text-ink-faint mt-1.5">{downloadProgress}%</p>
             </>
           ) : (
             <>
-              <p className="text-[0.8125rem] font-medium text-slate-800">
+              <p className="text-[0.8125rem] font-medium text-ink">
                 v{updateInfo?.version} available
               </p>
-              <p className="text-[0.75rem] text-slate-400 mt-0.5">
+              <p className="text-[0.75rem] text-ink-faint mt-0.5">
                 Current: v{updateInfo?.currentVersion}
               </p>
             </>
@@ -93,7 +93,7 @@ export function UpdateNotification({
             onClick={onDismiss}
             type="button"
             aria-label="Dismiss"
-            className="flex items-center justify-center h-6 w-6 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            className="flex items-center justify-center h-6 w-6 rounded-md text-ink-faint hover:bg-cream-200 hover:text-ink-soft transition-colors"
           >
             <X size={13} />
           </button>
