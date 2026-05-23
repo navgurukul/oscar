@@ -120,20 +120,13 @@ export function Navigation({
           if (e.button === 0) getCurrentWindow().startDragging();
         }}
       >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M3.9 10.8C4.6 16.2 7.7 18.9 12 18.9S19.4 16.2 20.1 10.8"
-            stroke="#b8623d"
-            strokeWidth="1.45"
-            strokeLinecap="round"
-          />
-          <path
-            d="M5.8 10.9v2.7M7.4 9.8v4.7M9 8.7v6.8M10.6 7.8v8.8M12.2 9.5v5.6M13.8 10.7v3.7M15.4 9.1v6.3M17 8.4v7.7M18.6 10.1v4.4"
-            stroke="#b8623d"
-            strokeWidth="1.35"
-            strokeLinecap="round"
-          />
-        </svg>
+        <img
+          src="/oscar-light-logo.svg"
+          alt="Oscar Logo"
+          width="22"
+          height="22"
+          className="object-contain"
+        />
         <span className="font-serif text-[22px] font-medium tracking-[0] text-ink">
           Oscar
         </span>

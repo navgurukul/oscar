@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { CSSProperties, ReactNode } from "react";
@@ -90,34 +91,21 @@ export function V2Source({ name, kind }: { name: string; kind?: string }) {
 
 export function V2OscarMark({
   size = 22,
+  light = false,
 }: {
   size?: number;
   light?: boolean;
 }) {
-  const mark = v2.accent;
+  const src = light ? "/oscar-dark-logo.svg" : "/oscar-light-logo.svg";
 
   return (
-    <svg
+    <Image
+      src={src}
+      alt="Oscar Logo"
       width={size}
       height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M3.9 10.8C4.6 16.2 7.7 18.9 12 18.9S19.4 16.2 20.1 10.8"
-        stroke={mark}
-        strokeWidth="1.45"
-        strokeLinecap="round"
-      />
-      <path
-        d="M5.8 10.9v2.7M7.4 9.8v4.7M9 8.7v6.8M10.6 7.8v8.8M12.2 9.5v5.6M13.8 10.7v3.7M15.4 9.1v6.3M17 8.4v7.7M18.6 10.1v4.4"
-        stroke={mark}
-        strokeWidth="1.35"
-        strokeLinecap="round"
-      />
-    </svg>
+      className="object-contain"
+    />
   );
 }
 

@@ -90,7 +90,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
           <div className="split-content">
             <div className="brand-header">
               <img
-                src="/OSCAR_LIGHT_LOGO.png"
+                src="/oscar-light-logo.svg"
                 alt="OSCAR"
                 width="36"
                 height="36"
