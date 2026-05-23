@@ -2,6 +2,8 @@ import { randomUUID } from "crypto";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { parseDocument } from "./documentParse";
 import { buildDocumentEmbeddingInput, embedText } from "./embeddings";
+import { generateText, getGeminiApiKey } from "./ai-route";
+import { API_CONFIG } from "../constants";
 
 const BUCKET = "org-documents";
 
@@ -20,6 +22,65 @@ export interface DocumentRow {
   tags: string[];
   created_at: string;
   updated_at: string;
+}
+
+export function chunkTextSemantically(text: string, maxSize: number = 1800): string[] {
+  if (!text) return [];
+  const cleanedText = text.trim();
+  const headerRegex = /\n(?=#{1,6}\s+)/g;
+  const sections = cleanedText.split(headerRegex);
+  const chunks: string[] = [];
+  let currentChunk = "";
+  for (const section of sections) {
+    const sectionText = section.trim();
+    if (!sectionText) continue;
+    if ((currentChunk + "\n\n" + sectionText).length <= maxSize) {
+      currentChunk = currentChunk ? currentChunk + "\n\n" + sectionText : sectionText;
+    } else {
+      if (currentChunk) {
+        chunks.push(currentChunk);
+      }
+      if (sectionText.length > maxSize) {
+        const paragraphs = sectionText.split(/\n{2,}/);
+        currentChunk = "";
+        for (const paragraph of paragraphs) {
+          const paraText = paragraph.trim();
+          if (!paraText) continue;
+          if ((currentChunk + "\n\n" + paraText).length <= maxSize) {
+            currentChunk = currentChunk ? currentChunk + "\n\n" + paraText : paraText;
+          } else {
+            if (currentChunk) {
+              chunks.push(currentChunk);
+            }
+            if (paraText.length > maxSize) {
+              const sentences = paraText.match(/[^.!?]+[.!?]+(\s|$)/g) || [paraText];
+              currentChunk = "";
+              for (const sentence of sentences) {
+                const sentenceText = sentence.trim();
+                if (!sentenceText) continue;
+                if ((currentChunk + " " + sentenceText).length <= maxSize) {
+                  currentChunk = currentChunk ? currentChunk + " " + sentenceText : sentenceText;
+                } else {
+                  if (currentChunk) {
+                    chunks.push(currentChunk);
+                  }
+                  currentChunk = sentenceText;
+                }
+              }
+            } else {
+              currentChunk = paraText;
+            }
+          }
+        }
+      } else {
+        currentChunk = sectionText;
+      }
+    }
+  }
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+  return chunks;
 }
 
 export async function uploadDocument(params: {
@@ -58,13 +119,39 @@ export async function uploadDocument(params: {
     params.filename.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() ||
     "Untitled document";
 
-  // Best-effort embedding before insert so retrieval can use it immediately.
-  // A failure here must NOT block the upload — fall back to recency ranking
-  // until a later backfill fills the column in.
+  // 1. Auto-Summarization (best-effort)
+  let summary: string | null = null;
+  if (parsed.text.trim()) {
+    try {
+      const apiKey = getGeminiApiKey();
+      summary = await generateText({
+        apiKey,
+        messages: [
+          {
+            role: "system",
+            content: "You are a precise document summarizer. Output only a 2-4 sentence summary of the document, nothing else. Do not use markdown code blocks or formatting.",
+          },
+          {
+            role: "user",
+            content: `Document Title: ${title}\n\nDocument Text:\n${parsed.text.slice(0, 100000)}`,
+          },
+        ],
+        maxTokens: 300,
+        temperature: 0.2,
+        model: API_CONFIG.GEMINI_MODEL_FAST,
+        timeoutMs: 15000,
+      });
+    } catch (err) {
+      console.warn("[documents] auto-summarization failed (continuing):", err);
+    }
+  }
+
+  // 2. Document Embedding (best-effort)
   let embedding: number[] | null = null;
   try {
     const input = buildDocumentEmbeddingInput({
       title,
+      summary,
       extractedText: parsed.text,
     });
     if (input.trim()) {
@@ -85,6 +172,7 @@ export async function uploadDocument(params: {
       mime_type: parsed.mimeType,
       size_bytes: params.buffer.byteLength,
       extracted_text: parsed.text,
+      summary,
       ...(embedding ? { embedding: toVectorLiteral(embedding) } : {}),
     })
     .select("*")
@@ -94,6 +182,127 @@ export async function uploadDocument(params: {
     await supabase.storage.from(BUCKET).remove([key]).catch(() => undefined);
     return { error: error?.message ?? "Insert failed" };
   }
+
+  // 3. Text Chunking, Chunk Embeddings & Entity Extraction (Post-insert, best-effort)
+  if (parsed.text.trim()) {
+    // A: Chunking & Chunk Embedding
+    try {
+      const chunks = chunkTextSemantically(parsed.text);
+      const chunkPromises = chunks.map(async (content, i) => {
+        let chunkEmbedding: number[] | null = null;
+        try {
+          chunkEmbedding = await embedText(content);
+        } catch (err) {
+          console.warn(`[documents] chunk embedding failed for index ${i}:`, err);
+        }
+        return {
+          document_id: data.id,
+          organization_id: params.organizationId,
+          chunk_index: i,
+          content,
+          chunk_embedding: chunkEmbedding ? toVectorLiteral(chunkEmbedding) : null,
+        };
+      });
+
+      const chunkRows = await Promise.all(chunkPromises);
+      const { error: chunkErr } = await supabase
+        .from("document_chunks")
+        .insert(chunkRows.map(row => ({
+          document_id: row.document_id,
+          organization_id: row.organization_id,
+          chunk_index: row.chunk_index,
+          content: row.content,
+          ...(row.chunk_embedding ? { chunk_embedding: row.chunk_embedding } : {})
+        })));
+      if (chunkErr) {
+        console.error("[documents] inserting chunks failed:", chunkErr);
+      }
+    } catch (err) {
+      console.error("[documents] chunking/embedding pipeline failed:", err);
+    }
+
+    // B: Entity Extraction
+    try {
+      const apiKey = getGeminiApiKey();
+      const extractionPrompt = `Analyze the following document and extract:
+1. Organization terms: acronyms, products, projects, tools, and technical terminology.
+2. Organization people: names of people, their emails, roles, and any common aliases (e.g. short names, nicknames), phonetic aliases (how their name sounds), or common ASR (Speech-to-Text) errors for their name.
+
+Output the result as a JSON object matching the following structure:
+{
+  "terms": [
+    {
+      "canonical_term": "OSCAR",
+      "aliases": ["Oscar App", "Oscar Voice"],
+      "category": "product",
+      "definition_or_context": "The AI voice note application.",
+      "confidence": 0.95
+    }
+  ],
+  "people": [
+    {
+      "canonical_name": "Apeksha",
+      "email": "apeksha@company.com",
+      "role": "Lead Engineer",
+      "aliases": ["Apu"],
+      "phonetic_aliases": ["Apeksha", "Apex-a"],
+      "common_asr_errors": ["A picture", "Apeksha", "Opiksha"]
+    }
+  ]
+}
+
+Ensure the output is valid JSON. Do not include any explanations, markdown code blocks, or text before/after the JSON.`;
+
+      const jsonStr = await generateText({
+        apiKey,
+        messages: [
+          { role: "system", content: "You are a precise entity extraction assistant. You output only valid JSON." },
+          { role: "user", content: `${extractionPrompt}\n\nDocument Title: ${title}\n\nDocument Text:\n${parsed.text.slice(0, 50000)}` }
+        ],
+        maxTokens: 2048,
+        temperature: 0.1,
+        model: API_CONFIG.GEMINI_MODEL_FAST,
+        timeoutMs: 25000,
+      });
+
+      const extractedData = JSON.parse(jsonStr);
+
+      if (extractedData.terms && Array.isArray(extractedData.terms)) {
+        for (const term of extractedData.terms) {
+          if (!term.canonical_term || !term.category) continue;
+          const category = ['acronym', 'product', 'project', 'tool', 'terminology'].includes(term.category)
+            ? term.category
+            : 'terminology';
+          await supabase.from("org_terms").upsert({
+            organization_id: params.organizationId,
+            canonical_term: term.canonical_term,
+            aliases: term.aliases || [],
+            category,
+            definition_or_context: term.definition_or_context || null,
+            confidence: term.confidence || 1.0,
+          }, { onConflict: "organization_id,canonical_term" });
+        }
+      }
+
+      if (extractedData.people && Array.isArray(extractedData.people)) {
+        for (const person of extractedData.people) {
+          if (!person.canonical_name) continue;
+          await supabase.from("org_people_aliases").upsert({
+            organization_id: params.organizationId,
+            canonical_name: person.canonical_name,
+            email: person.email || null,
+            role: person.role || null,
+            aliases: person.aliases || [],
+            phonetic_aliases: person.phonetic_aliases || [],
+            common_asr_errors: person.common_asr_errors || [],
+          }, { onConflict: "organization_id,canonical_name" });
+        }
+      }
+    } catch (err) {
+      console.error("[documents] entity extraction failed:", err);
+    }
+  }
+
   return data as DocumentRow;
 }
 
