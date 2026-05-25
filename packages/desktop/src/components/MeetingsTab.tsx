@@ -13,26 +13,21 @@ import {
   RotateCcw,
   ChevronLeft,
   Loader2,
-  Clock,
   Mail,
   CalendarDays,
   Play,
-  Plus,
   X,
   Trash2,
   History,
   RefreshCw,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import googleMeetLogo from "../assets/meeting-logos/google-meet.png";
-import zoomLogo from "../assets/meeting-logos/zoom.png";
-import teamsLogo from "../assets/meeting-logos/teams.png";
 import { cn } from "../lib/utils";
 import {
-  MarkdownNotesView,
   markdownPreview,
   stripEvidenceComments,
 } from "./MarkdownNotesView";
+import { MinutesDistillView } from "./MinutesDistillView";
 import type {
   EnhancedMeetingNoteRequest,
   MeetingAttendee,
@@ -51,35 +46,21 @@ import {
 
 const GOOGLE_CALENDAR_LOGO_URL =
   "https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253";
-const CTA_APP_LOGOS = [
-  { src: googleMeetLogo, label: "Google Meet", logoClassName: "h-auto max-h-[25px] w-[25px] max-w-[25px] object-contain" },
-  { src: zoomLogo, label: "Zoom", logoClassName: "h-auto max-h-6 w-6 max-w-6 object-contain" },
-  { src: teamsLogo, label: "Teams", logoClassName: "h-auto max-h-6 w-6 max-w-6 object-contain" },
-];
-
 const FIGTREE_FONT_STYLE = { fontFamily: '"Figtree", -apple-system, sans-serif' } as const;
 const GARAMOND_FONT_STYLE = { fontFamily: '"EB Garamond", Georgia, serif' } as const;
-const MINUTES_INFO_CARD_STYLE = {
-  background:
-    "radial-gradient(circle at top left, rgba(255, 255, 255, 0.22), transparent 36%), linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)",
-} as const;
-const MINUTES_INFO_CARD_OVERLAY_STYLE = {
-  background: "linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 60%)",
-} as const;
-const LOGO_CHIP_BACKDROP_STYLE = { WebkitBackdropFilter: "blur(10px)" } as const;
-const MEETINGS_TAB_CLASS_NAME = "flex flex-1 flex-col overflow-y-auto px-12 pt-8 pb-[120px]";
+const MEETINGS_TAB_CLASS_NAME = "flex flex-1 flex-col overflow-y-auto px-12 pt-10 pb-[120px] bg-cream";
 const MEETINGS_CONTAINER_CLASS_NAME = "mx-auto w-full max-w-[720px]";
-const MEETINGS_TITLE_CLASS_NAME = "mb-5 text-center text-[1.75rem] font-semibold text-slate-800";
-const MEETINGS_SUBTITLE_CLASS_NAME = "mb-7 text-sm leading-6 text-slate-500";
-const SECTION_HEADER_CLASS_NAME = "mb-3 flex items-center gap-[7px] text-[0.8125rem] font-semibold uppercase tracking-[0.04em] text-slate-500";
+const MEETINGS_TITLE_CLASS_NAME = "mb-3 text-left font-serif font-medium tracking-[-0.02em] text-ink text-[36px] leading-[1.05]";
+const MEETINGS_SUBTITLE_CLASS_NAME = "mb-7 text-sm leading-6 text-ink-soft";
+const SECTION_HEADER_CLASS_NAME = "mb-3 flex items-center gap-[7px] font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint";
 const CALENDAR_EMPTY_CLASS_NAME = "flex flex-col items-center gap-2 px-0 py-3 text-center";
 const PARTICIPANT_PILLS_CLASS_NAME = "flex min-h-8 flex-wrap items-center gap-1.5 py-1";
-const PARTICIPANT_PILL_CLASS_NAME = "inline-flex max-w-[220px] items-center gap-1 rounded-[20px] border border-slate-200 bg-slate-100 px-2 py-[3px] pl-2.5 text-xs leading-[1.3] text-slate-600";
+const PARTICIPANT_PILL_CLASS_NAME = "inline-flex max-w-[220px] items-center gap-1 rounded-[20px] border border-cream-300 bg-cream-200 px-2 py-[3px] pl-2.5 text-xs leading-[1.3] text-ink-soft";
 const PARTICIPANT_PILL_TEXT_CLASS_NAME = "truncate";
-const PARTICIPANT_PILL_REMOVE_CLASS_NAME = "flex size-4 shrink-0 items-center justify-center rounded-full p-0 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-500";
-const RESULT_TABS_CLASS_NAME = "mb-4 flex border-b border-slate-200";
-const RESULT_TAB_CLASS_NAME = "mb-[-1px] inline-flex items-center gap-1.5 border-b-2 border-transparent bg-transparent px-4 py-2.5 text-[0.8125rem] font-medium text-slate-400 transition-colors hover:text-slate-500";
-const FOOTER_BUTTON_CLASS_NAME = "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-[7px] text-[0.8125rem] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-100";
+const PARTICIPANT_PILL_REMOVE_CLASS_NAME = "flex size-4 shrink-0 items-center justify-center rounded-full p-0 text-ink-faint transition-colors hover:bg-cream-300 hover:text-ink";
+const RESULT_TABS_CLASS_NAME = "mb-4 flex border-b border-cream-300";
+const RESULT_TAB_CLASS_NAME = "mb-[-1px] inline-flex items-center gap-1.5 border-b-2 border-transparent bg-transparent px-4 py-2.5 text-[0.8125rem] font-medium text-ink-faint transition-colors hover:text-ink-soft";
+const FOOTER_BUTTON_CLASS_NAME = "inline-flex items-center gap-1.5 rounded-lg border border-cream-300 bg-cream-50 px-3.5 py-[7px] text-[0.8125rem] font-medium text-ink-soft transition-colors hover:border-cream-400 hover:bg-cream-200";
 
 export type CalendarReconnectResult = "refreshed" | "needs_reconnect" | "retry_later";
 export type MinutesTranscriptionStatus =
@@ -330,8 +311,8 @@ function MeetingTypePicker({
           className={cn(
             "rounded-full px-2 py-0.5 text-[0.6875rem] font-medium transition-colors",
             value === option.value
-              ? "bg-cyan-50 text-cyan-600"
-              : "text-slate-400 hover:bg-slate-100 hover:text-slate-500",
+              ? "bg-terracotta-50 text-terracotta-600"
+              : "text-ink-faint hover:bg-cream-200 hover:text-ink-soft",
           )}
           onClick={() => onChange(option.value)}
           type="button"
@@ -359,8 +340,8 @@ function CalendarConnectCard({
   return (
     <div
       className={cn(
-        "flex w-full items-center justify-between gap-3.5 rounded-[14px] border border-slate-200 bg-white px-3.5 py-3 max-md:flex-col max-md:items-start",
-        warning && "border-orange-300 bg-[#fffaf3]",
+        "flex w-full items-center justify-between gap-3.5 rounded-[14px] border border-cream-300 bg-cream px-3.5 py-3 max-md:flex-col max-md:items-start",
+        warning && "border-orange-300 bg-cream-50",
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -376,7 +357,7 @@ function CalendarConnectCard({
         </div>
       </div>
       <button
-        className="shrink-0 rounded-lg bg-cyan-500 px-[18px] py-2 text-[0.8125rem] font-semibold text-slate-900 transition-colors hover:bg-cyan-400 active:bg-cyan-600 max-md:w-full"
+        className="shrink-0 rounded-lg bg-terracotta-500 px-[18px] py-2 text-[0.8125rem] font-semibold text-cream transition-colors hover:bg-terracotta-600 active:bg-terracotta-700 max-md:w-full"
         onClick={onClick}
         type="button"
       >
@@ -402,50 +383,33 @@ function CalendarEventRow({
 
   return (
     <button
-      className={cn(
-        "group relative flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors",
-        "after:pointer-events-none after:absolute after:bottom-0 after:left-4 after:right-4 after:h-px after:bg-[#eef2f7] last:after:hidden",
-        isLive
-          ? "bg-gradient-to-r from-cyan-50/95 via-white to-white hover:from-cyan-50 hover:via-slate-50 hover:to-slate-50"
-          : "bg-white hover:bg-slate-50",
-      )}
+      className="group grid grid-cols-12 gap-4 items-baseline w-full text-left py-4 border-b border-cream-300 last:border-b-0 bg-transparent border-l-0 border-r-0 border-t-0 cursor-pointer transition-colors hover:bg-cream-50"
       onClick={() => onUse(event)}
       type="button"
     >
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="truncate text-[0.875rem] font-semibold leading-[1.3] text-slate-900">
-          {event.title}
-        </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[0.75rem] text-slate-500">
-          <Clock size={10} />
-          <span>{formatEventTimeRange(event)}</span>
-          {event.attendees.length > 0 && (
-            <>
-              <span className="text-slate-300">·</span>
-              <Users size={10} />
-              <span>{attendeeLabel}</span>
-            </>
-          )}
-          {isLive && (
-            <>
-              <span className="text-slate-300">·</span>
-              <span className="font-semibold text-teal-600">● Live</span>
-            </>
+      <div className="col-span-3">
+        <span className="font-mono text-[12px] text-ink tracking-[0.02em]">
+          {formatEventTimeRange(event)}
+        </span>
+        <div className="mt-1 font-mono text-[10px] tracking-[0.16em] uppercase text-ink-faint">
+          {isLive ? (
+            <span className="text-terracotta">● LIVE · {attendeeLabel.toUpperCase()}</span>
+          ) : (
+            attendeeLabel.toUpperCase()
           )}
         </div>
       </div>
-      <span
-        title="Record this meeting"
-        aria-label="Record this meeting"
-        className={cn(
-          "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
-          isLive
-            ? "bg-teal-100 text-teal-700"
-            : "bg-sky-50 text-cyan-700 group-hover:bg-cyan-100 group-hover:text-cyan-800",
-        )}
-      >
-        <Play size={12} fill="currentColor" />
-      </span>
+      <div className="col-span-7 min-w-0">
+        <h3 className="font-serif text-[17px] font-medium text-ink leading-[1.2] tracking-[-0.005em] truncate">
+          {event.title}
+        </h3>
+      </div>
+      <div className="col-span-2 text-right">
+        <span className="inline-flex items-center gap-1 font-mono text-[11px] tracking-[0.16em] uppercase text-terracotta">
+          <Play size={9} fill="currentColor" />
+          record →
+        </span>
+      </div>
     </button>
   );
 }
@@ -916,54 +880,16 @@ export function MeetingsTab({
     return (
       <div className={MEETINGS_TAB_CLASS_NAME}>
         <div className={MEETINGS_CONTAINER_CLASS_NAME}>
-          <h1 className={MEETINGS_TITLE_CLASS_NAME} style={GARAMOND_FONT_STYLE}>
-            <span className="text-slate-600 font-light text-lg" style={FIGTREE_FONT_STYLE}>OSCAR</span>{" "}
-            <span className="font-bold">Minutes</span>
-          </h1>
-
-          <div
-            className="relative mb-6 flex items-stretch justify-between gap-[18px] overflow-hidden rounded-[22px] px-6 py-5 shadow-[0_18px_40px_rgba(8,145,178,0.2)] max-md:flex-col max-md:gap-[18px] max-md:p-[22px]"
-            style={MINUTES_INFO_CARD_STYLE}
-          >
-            <div className="pointer-events-none absolute inset-0" style={MINUTES_INFO_CARD_OVERLAY_STYLE} />
-            <div className="relative z-[1] flex max-w-[404px] flex-1 flex-col items-start text-left max-md:max-w-none">
-              <h2
-                className="m-0 text-[1.26rem] font-medium leading-[1.08] text-slate-50 max-md:text-[1.48rem]"
-                style={FIGTREE_FONT_STYLE}
-              >
-                Enhanced meeting notes, automatically.
-              </h2>
-              <p className="mt-3 max-w-[348px] text-[0.8rem] leading-[1.55] text-sky-50/90 max-md:max-w-none">
-                Record once, keep your rough notes, and let Minutes turn the meeting into a clean structured summary.
-              </p>
-            </div>
-            <div className="relative flex basis-[208px] items-center justify-end max-md:basis-auto max-md:justify-start" aria-hidden="true">
-              <div className="relative flex min-h-16 w-full items-center justify-end max-md:justify-start">
-                {CTA_APP_LOGOS.map((logo, index) => (
-                  <div
-                    key={`${logo.src}-${index}`}
-                    className={cn(
-                      "group relative z-[1] flex h-14 w-14 items-center justify-center rounded-full border boder-white/45 bg-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-[10px] transition-all duration-150 hover:z-[3] hover:-translate-y-px hover:bg-white/[0.18] hover:border-white/[0.34]",
-                      index === 0 ? "ml-0" : "-ml-2.5",
-                    )}
-                    style={LOGO_CHIP_BACKDROP_STYLE}
-                    title={logo.label}
-                  >
-                    <img
-                      className={cn("opacity-100 transition-transform duration-150 group-hover:scale-[1.02]", logo.logoClassName)}
-                      src={logo.src}
-                      alt=""
-                    />
-                  </div>
-                ))}
-                <div
-                  className="group relative -ml-2.5 flex h-14 w-14 items-center justify-center rounded-full border border-white/45 bg-white/15 text-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-[10px] transition-all duration-150 hover:z-[3] hover:-translate-y-px hover:bg-white/[0.18] hover:border-white/[0.34] hover:text-white/95"
-                  style={LOGO_CHIP_BACKDROP_STYLE}
-                >
-                  <Plus size={22} />
-                </div>
-              </div>
-            </div>
+          <div className="mb-7 pb-6 border-b border-cream-300">
+            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint">
+              MINUTES · {savedMeetings?.length ?? 0} SAVED
+            </span>
+            <h1 className={MEETINGS_TITLE_CLASS_NAME} style={GARAMOND_FONT_STYLE}>
+              What was <em className="italic text-terracotta">decided</em>.
+            </h1>
+            <p className="text-sm leading-6 text-ink-soft max-w-[480px]">
+              Record once, keep your rough notes, and let Minutes turn the meeting into a clean structured summary.
+            </p>
           </div>
 
           {systemAudioNotice}
@@ -1024,7 +950,7 @@ export function MeetingsTab({
                     : calendarErrorMsg || "Check your internet connection."}
                 </p>
                 <button
-                  className="mt-2 rounded-lg bg-cyan-500 px-[18px] py-2 text-[0.8125rem] font-semibold text-slate-900 transition-colors hover:bg-cyan-400 active:bg-cyan-600"
+                  className="mt-2 rounded-lg bg-terracotta-500 px-[18px] py-2 text-[0.8125rem] font-semibold text-cream transition-colors hover:bg-terracotta-600 active:bg-terracotta-700"
                   onClick={onConnectCalendar}
                   type="button"
                 >
@@ -1040,14 +966,13 @@ export function MeetingsTab({
                 </div>
               ) : (
                 <motion.div
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_26px_rgba(15,23,42,0.05)]"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.22 }}
                 >
                   {groupEventsByDay(nextCalendarEvents, currentTime).map((group) => (
-                    <div key={group.key} className="border-b border-[#eef2f7] last:border-b-0">
-                      <div className="bg-slate-50/60 px-4 py-1.5 text-[0.6875rem] font-bold uppercase tracking-[0.06em] text-slate-400">
+                    <div key={group.key} className="mb-2">
+                      <div className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint py-2">
                         {group.label}
                       </div>
                       {group.events.map((event, index) => (
@@ -1066,12 +991,12 @@ export function MeetingsTab({
           </div>
 
           {savedMeetings.length > 0 && (
-            <div className="mt-5">
+            <div className="mt-9">
               <div className={SECTION_HEADER_CLASS_NAME}>
-                <History size={14} />
-                <span>Previous meetings</span>
+                <History size={11} />
+                <span>Previous meetings · {savedMeetings.length}</span>
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col">
                 {savedMeetings
                   .slice()
                   .sort(
@@ -1079,40 +1004,61 @@ export function MeetingsTab({
                       new Date(right.startedAt).getTime() -
                       new Date(left.startedAt).getTime(),
                   )
-                  .map((meeting) => (
-                    <button
-                      key={meeting.id}
-                      className="flex w-full flex-col gap-1 rounded-lg border border-slate-200 bg-white px-[13px] py-2.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
-                      onClick={() => {
-                        setViewingSaved(meeting);
-                        setResultTab("notes");
-                        setPhase("view_saved");
-                      }}
-                      style={FIGTREE_FONT_STYLE}
-                      type="button"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="flex-1 truncate text-[0.8125rem] font-semibold text-slate-800">
-                          {meeting.meetingTitle}
-                        </span>
-                        <span className="shrink-0 text-[0.7rem] text-slate-400">
-                          {new Date(meeting.startedAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </span>
-                      </div>
-                      {meeting.attendeesCompact && (
-                        <div className="flex items-center gap-1 text-[0.7rem] text-slate-400">
-                          <Users size={10} />
-                          <span>{meeting.attendeesCompact}</span>
+                  .map((meeting) => {
+                    const startDate = new Date(meeting.startedAt);
+                    const dateMono = `${startDate
+                      .toLocaleDateString(undefined, { weekday: "short" })
+                      .toUpperCase()} · ${startDate.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: false,
+                    })}`;
+                    const monthDay = startDate.toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    });
+                    return (
+                      <button
+                        key={meeting.id}
+                        className="group grid grid-cols-12 gap-4 items-baseline w-full text-left py-5 border-b border-cream-300 bg-transparent border-l-0 border-r-0 border-t-0 cursor-pointer transition-colors hover:bg-cream-50"
+                        onClick={() => {
+                          setViewingSaved(meeting);
+                          setResultTab("notes");
+                          setPhase("view_saved");
+                        }}
+                        type="button"
+                      >
+                        <div className="col-span-3">
+                          <span className="font-mono text-[12px] text-ink tracking-[0.02em]">
+                            {dateMono}
+                          </span>
+                          <div className="mt-1 font-mono text-[10px] tracking-[0.16em] uppercase text-ink-faint">
+                            MINUTES · {monthDay.toUpperCase()}
+                          </div>
                         </div>
-                      )}
-                      <div className="truncate whitespace-nowrap text-[0.75rem] leading-[1.4] text-slate-500">
-                        {markdownPreview(meeting.notesMarkdown)}
-                      </div>
-                    </button>
-                  ))}
+                        <div className="col-span-7 min-w-0">
+                          <h3 className="font-serif text-[18px] font-medium text-ink leading-[1.2] tracking-[-0.005em]">
+                            {meeting.meetingTitle}
+                          </h3>
+                          {meeting.attendeesCompact && (
+                            <div className="mt-1 text-[12px] text-ink-soft leading-relaxed truncate">
+                              {meeting.attendeesCompact}
+                            </div>
+                          )}
+                          {meeting.notesMarkdown && (
+                            <p className="mt-1 text-[12px] text-ink-faint leading-relaxed truncate">
+                              {markdownPreview(meeting.notesMarkdown)}
+                            </p>
+                          )}
+                        </div>
+                        <div className="col-span-2 text-right">
+                          <span className="font-mono text-[11px] tracking-[0.16em] uppercase text-terracotta opacity-0 group-hover:opacity-100 transition-opacity">
+                            continue →
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
               </div>
             </div>
           )}
@@ -1148,7 +1094,7 @@ export function MeetingsTab({
               </p>
             </div>
             <button
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-transparent text-slate-400 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cream-300 bg-transparent text-ink-faint transition-colors hover:border-[#8c2f25] hover:text-[#8c2f25] cursor-pointer"
               onClick={() => {
                 onDeleteMeeting(viewingSaved.id);
                 setPhase("select");
@@ -1173,7 +1119,7 @@ export function MeetingsTab({
 
           <div className={RESULT_TABS_CLASS_NAME}>
             <button
-              className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-cyan-600 text-cyan-600")}
+              className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-terracotta text-terracotta")}
               onClick={() => setResultTab("notes")}
               type="button"
             >
@@ -1181,7 +1127,7 @@ export function MeetingsTab({
               Notes
             </button>
             <button
-              className={cn(RESULT_TAB_CLASS_NAME, resultTab === "transcript" && "border-b-cyan-600 text-cyan-600")}
+              className={cn(RESULT_TAB_CLASS_NAME, resultTab === "transcript" && "border-b-terracotta text-terracotta")}
               onClick={() => setResultTab("transcript")}
               type="button"
             >
@@ -1191,22 +1137,22 @@ export function MeetingsTab({
           </div>
 
           {resultTab === "notes" && (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-slate-700">
-                <MarkdownNotesView markdown={viewingSaved.notesMarkdown} />
+            <div>
+              <div className="max-h-[460px] overflow-y-auto py-2 pr-1">
+                <MinutesDistillView markdown={viewingSaved.notesMarkdown} />
               </div>
-              <div className="flex flex-col gap-2 border-t border-slate-100 px-4 py-3">
+              <div className="flex flex-col gap-2 border-t border-cream-300 pt-4 mt-4">
                 <div className="flex flex-wrap gap-2">
                   <button
-                    className={cn(FOOTER_BUTTON_CLASS_NAME, "border-cyan-600 bg-cyan-600 text-white hover:border-cyan-700 hover:bg-cyan-700")}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-ink text-cream px-4 py-2 text-[12px] font-medium border-none cursor-pointer transition-opacity hover:opacity-90"
                     onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
                     type="button"
                   >
                     {copied ? <Check size={12} /> : <Copy size={12} />}
-                    {copied ? "Copied!" : "Copy"}
+                    {copied ? "Copied" : "Copy"}
                   </button>
                   <button
-                    className={FOOTER_BUTTON_CLASS_NAME}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent text-ink-soft px-4 py-2 text-[12px] font-medium cursor-pointer transition-colors hover:text-ink hover:border-cream-400"
                     onClick={() =>
                       void handleShareByEmail({
                         subjectTitle: viewingSaved.meetingTitle,
@@ -1220,9 +1166,8 @@ export function MeetingsTab({
                   </button>
                   <button
                     className={cn(
-                      FOOTER_BUTTON_CLASS_NAME,
-                      regenerating &&
-                        "cursor-not-allowed opacity-60",
+                      "inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent text-ink-soft px-4 py-2 text-[12px] font-medium cursor-pointer transition-colors hover:text-ink hover:border-cream-400",
+                      regenerating && "cursor-not-allowed opacity-60",
                     )}
                     onClick={() => void handleRegenerateSaved(viewingSaved)}
                     disabled={
@@ -1242,7 +1187,7 @@ export function MeetingsTab({
                   </button>
                 </div>
                 {regenerateError && (
-                  <p className="m-0 text-[0.75rem] text-rose-500">
+                  <p className="m-0 text-[12px] text-[#8c2f25]">
                     {regenerateError}
                   </p>
                 )}
@@ -1356,7 +1301,7 @@ export function MeetingsTab({
 
           {/* ── Notes area (primary focus) ──────────────────────────────── */}
           <textarea
-            className="min-h-[160px] w-full resize-y rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-[1.65] text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-300"
+            className="min-h-[160px] w-full resize-y rounded-xl border border-cream-300 bg-cream px-4 py-3 text-sm leading-[1.65] text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-cream-400"
             placeholder="Jot down key points, action items, or anything worth remembering..."
             value={manualNotes}
             onChange={(event) => setManualNotes(event.target.value)}
@@ -1370,8 +1315,8 @@ export function MeetingsTab({
                 <Mic size={11} />
                 <span>Live transcript</span>
                 {minutesTranscriptionStatus === "transcribing" && (
-                  <span className="inline-flex items-center gap-1 text-cyan-500">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-500 animate-pulse" />
+                  <span className="inline-flex items-center gap-1 text-terracotta-500">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-terracotta-500 animate-pulse" />
                   </span>
                 )}
               </div>
@@ -1395,7 +1340,7 @@ export function MeetingsTab({
         </div>
 
         {/* ── Floating record control ────────────────────────────────── */}
-        <div className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-4 rounded-full border border-slate-200 bg-white/95 px-5 py-2.5 shadow-[0_8px_30px_rgba(15,23,42,0.1)] backdrop-blur-sm">
+        <div className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-4 rounded-full border border-cream-300 bg-cream/95 px-5 py-2.5 shadow-[0_8px_30px_rgba(26,24,22,0.1)] backdrop-blur-sm">
           {isRecording && (
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 shrink-0 rounded-full bg-red-500 animate-pulse" />
@@ -1409,10 +1354,10 @@ export function MeetingsTab({
           )}
           <motion.button
             className={cn(
-              "flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white transition-all duration-200",
+              "flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-cream transition-all duration-200",
               isRecording
                 ? "bg-red-600 shadow-[0_2px_10px_rgba(220,38,38,0.25)] hover:bg-red-700"
-                : "bg-cyan-600 shadow-[0_2px_10px_rgba(6,182,212,0.25)] hover:bg-cyan-700",
+                : "bg-terracotta-500 shadow-[0_2px_10px_rgba(184,98,61,0.25)] hover:bg-terracotta-600",
             )}
             onClick={isRecording ? handleStopRecording : onStartRecording}
             whileHover={{ scale: 1.04 }}
@@ -1444,7 +1389,7 @@ export function MeetingsTab({
               {currentRequest.meeting_local_datetime}
             </p>
           </div>
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-cyan-50 px-3.5 py-1.5 text-[0.8125rem] font-medium text-cyan-600">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-terracotta-50 px-3.5 py-1.5 text-[0.8125rem] font-medium text-terracotta-600">
             <FileText size={12} />
             {MEETING_TYPE_OPTIONS.find((option) => option.value === meetingTypeHint)?.label ?? "Auto"}
           </div>
@@ -1465,16 +1410,16 @@ export function MeetingsTab({
 
         <div className={RESULT_TABS_CLASS_NAME}>
           <button
-            className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-cyan-600 text-cyan-600")}
+            className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-terracotta text-terracotta")}
             onClick={() => setResultTab("notes")}
             type="button"
           >
             <FileText size={13} />
             Notes
-            {streaming && resultTab === "notes" && <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />}
+            {streaming && resultTab === "notes" && <span className="inline-block h-1.5 w-1.5 rounded-full bg-terracotta animate-pulse" />}
           </button>
           <button
-            className={cn(RESULT_TAB_CLASS_NAME, resultTab === "transcript" && "border-b-cyan-600 text-cyan-600")}
+            className={cn(RESULT_TAB_CLASS_NAME, resultTab === "transcript" && "border-b-terracotta text-terracotta")}
             onClick={() => setResultTab("transcript")}
             type="button"
           >
@@ -1501,19 +1446,19 @@ export function MeetingsTab({
             )}
 
             {(result || error) && (
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="overflow-hidden rounded-xl border border-cream-300 bg-cream">
                 {error ? (
                   <div className="px-6 py-5 text-sm text-red-600">{error}</div>
                 ) : (
-                  <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-slate-700">
-                    <MarkdownNotesView markdown={result} />
+                  <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-ink-soft">
+                    <MinutesDistillView markdown={result} />
                   </div>
                 )}
 
                 {!streaming && result && !error && (
-                  <div className="flex gap-2 border-t border-slate-100 px-4 py-3">
+                  <div className="flex gap-2 border-t border-cream-300 px-4 py-3">
                     <button
-                      className={cn(FOOTER_BUTTON_CLASS_NAME, "border-cyan-600 bg-cyan-600 text-white hover:border-cyan-700 hover:bg-cyan-700")}
+                      className={cn(FOOTER_BUTTON_CLASS_NAME, "border-terracotta-600 bg-terracotta-600 text-cream hover:border-terracotta-700 hover:bg-terracotta-700")}
                       onClick={() => void handleCopy(result)}
                       type="button"
                     >
@@ -1523,7 +1468,7 @@ export function MeetingsTab({
                     <button
                       className={cn(
                         FOOTER_BUTTON_CLASS_NAME,
-                        !hasEmailableParticipants && "opacity-[0.45] hover:border-slate-200 hover:bg-white",
+                        !hasEmailableParticipants && "opacity-[0.45] hover:border-cream-300 hover:bg-cream",
                       )}
                       onClick={() =>
                         void handleShareByEmail({
@@ -1610,7 +1555,7 @@ function TranscriptTurns({
           <span
             className={cn(
               "mr-1 font-semibold",
-              turn.source === "microphone" ? "text-cyan-700" : "text-slate-700",
+              turn.source === "microphone" ? "text-terracotta-700" : "text-ink",
             )}
           >
             {turn.label}:

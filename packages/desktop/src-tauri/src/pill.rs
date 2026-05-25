@@ -20,7 +20,7 @@ use crate::events::OscarEvent;
 // across its full frame regardless of pixel alpha — the only reliable way
 // to let clicks pass through is to shrink the frame itself.
 const PILL_W_REST: f64 = 140.0;         // handle (~96px) + small hover buffer
-const PILL_W_EXPANDED: f64 = 360.0;     // full Paper pill + actions
+const PILL_W_EXPANDED: f64 = 280.0;     // full Paper pill + actions (≤280 per v2 design)
 const PILL_H_REST: f64 = 16.0;          // 5–6 px handle + ~10 px hover buffer
 const PILL_H_EXPANDED: f64 = 200.0;     // pill + toast space
 const PILL_H_SETTINGS: f64 = 380.0;     // pill + settings popover

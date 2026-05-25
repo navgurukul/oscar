@@ -4,20 +4,34 @@ import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
+// v2 cream/ink/terracotta system.
+// Tailwind tokens used here resolve via tailwind.config.js (cream, ink, terracotta)
+// and via globals.css HSL vars (--primary, --secondary, --destructive, --ring, etc.)
+// remapped to the same palette. New code should default to these variants and
+// avoid raw hex.
 const buttonVariants = cva(
-  "inline-flex items-center cursor-pointer justify-center whitespace-nowrap rounded-md text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-700 disabled:pointer-events-none disabled:opacity-50 gap-2",
+  "inline-flex items-center cursor-pointer justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-cream disabled:pointer-events-none disabled:opacity-50 gap-2",
   {
     variants: {
       variant: {
-        default: "bg-cyan-700 text-white hover:bg-cyan-700",
-        destructive: "bg-red-600 text-white hover:bg-red-700",
-        outline: "border text-white hover:bg-gray-700",
-        ghost: "bg-transparent",
-        // New design variants
-        glow: "relative bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_30px_rgba(6,182,212,0.35)] hover:from-cyan-500 hover:to-blue-500 ring-1 ring-cyan-400/30",
-        soft: "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25",
-        outlineDark:
-          "border border-cyan-700/40 text-cyan-300 hover:bg-cyan-700/20",
+        // Primary CTA — ink pill on cream. Matches the design pattern used on every page.
+        default: "bg-ink text-cream hover:opacity-90",
+        // Destructive — oxblood danger token from globals.css.
+        destructive: "bg-destructive text-destructive-foreground hover:opacity-90",
+        // Outlined — rule border on cream. Hover lifts to cream2 for subtle feedback.
+        outline: "border border-input bg-transparent text-ink hover:bg-cream-200",
+        // Quiet — text on transparent, cream2 hover. Used for icon buttons and menus.
+        ghost: "text-ink hover:bg-cream-200",
+        // Link — terracotta inline link styling.
+        link: "text-terracotta underline-offset-4 hover:underline",
+        // Soft surface — cream2 hover. Cousin of ghost with a default surface.
+        secondary: "bg-secondary text-secondary-foreground hover:opacity-90",
+        // Brand-tinted accent — terracotta-soft fill, used sparingly for affirmative actions.
+        soft: "bg-terracotta-100 text-ink border border-terracotta-500/30 hover:bg-terracotta-50",
+        // Back-compat aliases — earlier accent variants now collapse to the
+        // editorial system. Kept so legacy call sites compile; treat as deprecated.
+        glow: "bg-ink text-cream hover:opacity-90",
+        outlineDark: "border border-input bg-transparent text-ink hover:bg-cream-200",
       },
       size: {
         default: "h-10 px-4 py-2",
@@ -26,7 +40,6 @@ const buttonVariants = cva(
         icon: "h-10 w-10",
         xl: "h-12 px-6",
       },
-      // Basic spacing controls
       margin: {
         none: "m-0",
         sm: "m-2",

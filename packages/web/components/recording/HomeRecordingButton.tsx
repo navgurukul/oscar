@@ -36,9 +36,10 @@ export function HomeRecordingButton() {
       <Button
         onClick={handleStartRecording}
         size="lg"
-        className="w-16 h-16 sm:w-20 sm:h-20 rounded-full text-slate-950 bg-cyan-500 hover:bg-cyan-500 hover:text-white shadow-lg hover:shadow-xl transition-all duration-200"
+        className="w-16 h-16 sm:w-20 sm:h-20 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+        style={{ background: "#1a1816", color: "#f7f4ee" }}
       >
-        <Mic className="w-6 h-6 sm:w-8 sm:h-8 " />
+        <Mic className="w-6 h-6 sm:w-8 sm:h-8" style={{ color: "#b8623d" }} />
       </Button>
     </motion.div>
   );

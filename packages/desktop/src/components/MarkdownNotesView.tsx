@@ -58,7 +58,7 @@ export function MarkdownNotesView({
                 type="checkbox"
                 checked={item.task === "done"}
                 readOnly
-                className="mt-[5px] h-3.5 w-3.5 shrink-0 accent-cyan-500"
+                className="mt-[5px] h-3.5 w-3.5 shrink-0 accent-terracotta"
                 aria-label={item.task === "done" ? "Done" : "To do"}
               />
             )}
@@ -81,7 +81,11 @@ export function MarkdownNotesView({
     if (h2Match) {
       flushList();
       blocks.push(
-        <h2 key={`h2-${blocks.length}`} className="text-xl font-semibold text-slate-900">
+        <h2
+          key={`h2-${blocks.length}`}
+          className="font-serif font-medium tracking-[-0.015em] text-ink leading-[1.15] pt-4"
+          style={{ fontSize: 24 }}
+        >
           {h2Match[1].trim()}
         </h2>,
       );
@@ -94,7 +98,7 @@ export function MarkdownNotesView({
       blocks.push(
         <h3
           key={`h3-${blocks.length}`}
-          className="pt-2 text-sm font-semibold uppercase tracking-[0.04em] text-slate-500"
+          className="pt-3 font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint"
         >
           {h3Match[1].trim()}
         </h3>,
@@ -119,7 +123,11 @@ export function MarkdownNotesView({
 
     flushList();
     blocks.push(
-      <p key={`p-${blocks.length}`} className="text-sm leading-[1.7] text-slate-600">
+      <p
+        key={`p-${blocks.length}`}
+        className="font-serif leading-[1.65] text-ink"
+        style={{ fontSize: 16, letterSpacing: "-0.005em" }}
+      >
         {line}
       </p>,
     );

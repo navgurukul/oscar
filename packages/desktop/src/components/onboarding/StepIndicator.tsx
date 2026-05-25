@@ -8,9 +8,9 @@ interface StepIndicatorProps {
 
 export function StepIndicator({ currentStep }: StepIndicatorProps) {
   const steps = [
-    { id: "signin", label: "SIGN IN" },
-    { id: "permissions", label: "PERMISSIONS" },
-    { id: "setup", label: "SET UP" },
+    { id: "signin", label: "01 · SIGN IN" },
+    { id: "permissions", label: "02 · PERMISSIONS" },
+    { id: "setup", label: "03 · READY" },
   ] as const;
 
   const currentIndex = steps.findIndex((step) => step.id === currentStep);

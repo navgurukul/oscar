@@ -119,7 +119,7 @@ export function PermissionsScreen({
           <div className="split-content">
             <div className="brand-header">
               <img
-                src="/OSCAR_LIGHT_LOGO.png"
+                src="/oscar-light-logo.svg"
                 alt="OSCAR"
                 width="36"
                 height="36"
@@ -127,12 +127,14 @@ export function PermissionsScreen({
               <span className="brand-name">OSCAR</span>
             </div>
 
+            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+              02 · ACTIVE · PERMISSIONS
+            </span>
             <h1 className="split-title">
-              Allow OSCAR to transcribe your voice
+              Three things <em className="italic text-terracotta">Oscar needs</em>.
             </h1>
             <p className="split-description">
-              When you turn it on, OSCAR transcribes using your microphone. Your
-              audio is processed locally — nothing leaves your device.
+              Microphone to hear you. Accessibility to paste what you said. Login items so it starts with you. Your audio is processed locally — nothing leaves your device.
             </p>
 
             <div className="permissions-items-modern">

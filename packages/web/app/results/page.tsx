@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useScribbleStorage } from "@/lib/hooks/useScribbleStorage";
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
@@ -10,8 +10,6 @@ import { storageService } from "@/lib/services/storage.service";
 import { scribblesService } from "@/lib/services/scribbles.service";
 import { feedbackService } from "@/lib/services/feedback.service";
 import { aiService } from "@/lib/services/ai.service";
-import { ScribbleEditorSkeleton } from "@/components/results/ScribbleEditorSkeleton";
-import { ScribbleActions } from "@/components/results/ScribbleActions";
 import { Spinner } from "@/components/ui/spinner";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
@@ -21,31 +19,29 @@ import {
   MessageCircle,
   Share2,
   FileText,
-  FolderPlus,
-  X,
-  Check,
-  Plus,
   Languages,
   ListChecks,
   BookOpen,
+  Star,
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
-import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { FeedbackWidget } from "@/components/results/FeedbackWidget";
+import {
+  v2,
+  v2Serif,
+  v2Mono,
+  V2Caps,
+  V2Mono,
+  V2Wordmark,
+} from "@/components/v2/V2Primitives";
 
-// Lazy load the ScribbleEditor component
-const ScribbleEditor = dynamic(
-  () =>
-    import("@/components/results/ScribbleEditor").then((mod) => ({
-      default: mod.ScribbleEditor,
-    })),
-  {
-    loading: () => <ScribbleEditorSkeleton />,
-    ssr: false,
-  }
-);
+type Mode = "normal" | "email" | "translate" | "summary" | "bullets";
+const MODES: Array<{ id: Mode; icon: typeof FileText; label: string; desc: string }> = [
+  { id: "normal", icon: FileText, label: "Scribble", desc: "Clean working draft" },
+  { id: "email", icon: Mail, label: "Email", desc: "Send-ready" },
+  { id: "bullets", icon: ListChecks, label: "Bullets", desc: "Key points" },
+  { id: "summary", icon: BookOpen, label: "Summary", desc: "Condensed" },
+  { id: "translate", icon: Languages, label: "Translate", desc: "Language" },
+];
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -55,406 +51,187 @@ export default function ResultsPage() {
     useScribbleStorage();
 
   const [editedText, setEditedText] = useState("");
-  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [scribbleId, setScribbleId] = useState<string | null>(null);
-  const [isCopying, setIsCopying] = useState<boolean>(false);
-  const [isDownloading, setIsDownloading] = useState<boolean>(false);
-  const [isSharing, setIsSharing] = useState<boolean>(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [shareSubject, setShareSubject] = useState<string | null>(null);
-  const {
-    formatText: gmailFormatText,
-  } = useAIEmailFormatting();
-  const [isScribbleSaved, setIsScribbleSaved] = useState<boolean>(false);
+  const { formatText: gmailFormatText } = useAIEmailFormatting();
+  const [isScribbleSaved, setIsScribbleSaved] = useState(false);
+  const [isStarred, setIsStarred] = useState(false);
 
-  // New Mode states
-  const [activeMode, setActiveMode] = useState<"normal" | "email" | "translate" | "summary" | "bullets">("normal");
+  const [activeMode, setActiveMode] = useState<Mode>("normal");
   const [modeContent, setModeContent] = useState<Record<string, string>>({});
   const [modeSource, setModeSource] = useState<Record<string, string>>({});
   const [isLoadingMode, setIsLoadingMode] = useState(false);
+  const [activeTab, setActiveTab] = useState<"scribble" | "transcript">("scribble");
 
-  // Language / translation state (post-recording)
-  const [selectedLanguage, setSelectedLanguage] = useState<
-    "original" | "en" | "hi"
-  >("original");
+  const [selectedLanguage, setSelectedLanguage] = useState<"original" | "en" | "hi">("original");
   const [isTranslating, setIsTranslating] = useState(false);
-  const [translatedScribble, setTranslatedScribble] = useState<string | null>(null);
-  const [translatedRaw, setTranslatedRaw] = useState<string | null>(null);
-
-  // Translation caching and cancellation
-  const translationCacheScribbleRef = useRef<Map<string, string>>(new Map());
-  const translationCacheRawRef = useRef<Map<string, string>>(new Map());
+  const translationCacheRef = useRef<Map<string, string>>(new Map());
   const translateControllerRef = useRef<AbortController | null>(null);
 
-  // Feedback state
   const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
   const [hasFeedbackSubmitted, setHasFeedbackSubmitted] = useState(false);
   const [feedbackValue, setFeedbackValue] = useState<boolean | null>(null);
 
-  // Folder state
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [availableFolders, setAvailableFolders] = useState<string[]>([]);
-  const [isAddingNewFolder, setIsAddingNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
 
   useEffect(() => {
-    const storedScribbleId = storageService.getCurrentScribbleId();
-    if (storedScribbleId) {
-      setScribbleId(storedScribbleId);
-      loadScribbleDetails(storedScribbleId);
+    const stored = storageService.getCurrentScribbleId();
+    if (stored) {
+      setScribbleId(stored);
+      void loadScribbleDetails(stored);
     }
-    loadAvailableFolders();
+    void loadAvailableFolders();
   }, []);
 
   const loadScribbleDetails = async (id: string) => {
     const { data, error } = await scribblesService.getScribbleById(id);
     if (!error && data) {
       setSelectedFolder(data.folder);
+      setIsStarred(data.is_starred ?? false);
     }
   };
 
   const loadAvailableFolders = async () => {
     const { data, error } = await scribblesService.getFolders();
-    if (!error && data) {
-      setAvailableFolders(data);
-    }
-  };
-
-  const handleUpdateFolder = async (folderName: string | null) => {
-    if (!scribbleId) return;
-
-    const { error } = await scribblesService.updateScribble(scribbleId, {
-      folder: folderName,
-    });
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update folder.",
-        variant: "destructive",
-      });
-    } else {
-      setSelectedFolder(folderName);
-      if (folderName && !availableFolders.includes(folderName)) {
-        setAvailableFolders([...availableFolders, folderName]);
-      }
-      toast({
-        title: "Success",
-        description: folderName ? `Added to folder "${folderName}"` : "Removed from folder",
-      });
-    }
-  };
-
-  const handleAddNewFolder = () => {
-    if (!newFolderName.trim()) {
-      toast({
-        title: "Error",
-        description: "Folder name cannot be empty.",
-        variant: "destructive",
-      });
-      return;
-    }
-    handleUpdateFolder(newFolderName.trim());
-    setIsAddingNewFolder(false);
-    setNewFolderName("");
+    if (!error && data) setAvailableFolders(data);
   };
 
   useEffect(() => {
-    if (formattedScribble) {
-      setEditedText(formattedScribble);
-    }
+    if (formattedScribble) setEditedText(formattedScribble);
   }, [formattedScribble]);
 
-  // If base content changes, reset translation state and transform cache
   useEffect(() => {
     setSelectedLanguage("original");
-    setTranslatedScribble(null);
-    setTranslatedRaw(null);
     setModeContent({});
     setModeSource({});
     setActiveMode("normal");
   }, [formattedScribble, rawText, title]);
 
   useEffect(() => {
-    if (!isLoading && !formattedScribble && !rawText) {
-      router.push(ROUTES.HOME);
-    }
+    if (!isLoading && !formattedScribble && !rawText) router.push(ROUTES.HOME);
   }, [isLoading, formattedScribble, rawText, router]);
 
-  const getScribbleBaseText = () => {
-    if (activeMode === "normal") {
-      return editedText || formattedScribble || rawText || "";
-    }
-
+  const getBaseText = () => {
+    if (activeMode === "normal") return editedText || formattedScribble || rawText || "";
     return formattedScribble || rawText || "";
   };
 
-  const handleSelectMode = async (
-    nextMode: "normal" | "email" | "translate" | "summary" | "bullets"
-  ) => {
-    if (nextMode === "normal") {
+  const handleSelectMode = async (next: Mode) => {
+    if (next === "normal") {
       setActiveMode("normal");
       setEditedText(formattedScribble || "");
       return;
     }
+    setActiveMode(next);
+    if (next === "translate") return;
 
-    setActiveMode(nextMode);
-    if (nextMode === "translate") {
+    const baseText = getBaseText();
+    const fresh = modeContent[next] && modeSource[next] === baseText;
+    if (fresh) {
+      setEditedText(modeContent[next] || baseText);
       return;
     }
-
-    const baseText = getScribbleBaseText();
-    const hasFreshContent =
-      modeContent[nextMode] && modeSource[nextMode] === baseText;
-
-    if (hasFreshContent) {
-      setEditedText(modeContent[nextMode] || baseText);
-      return;
-    }
-
     setIsLoadingMode(true);
-
-    let resultText = baseText;
-    if (nextMode === "email") {
+    let result = baseText;
+    if (next === "email") {
       const res = await gmailFormatText(baseText, title || UI_STRINGS.UNTITLED_SCRIBBLE);
-      resultText = res.success ? res.formattedText || baseText : baseText;
+      result = res.success ? res.formattedText || baseText : baseText;
     } else {
-      const res = await aiService.transformText(baseText, nextMode, title || UI_STRINGS.UNTITLED_SCRIBBLE);
-      resultText = res.success ? res.formattedText || baseText : baseText;
+      const res = await aiService.transformText(baseText, next, title || UI_STRINGS.UNTITLED_SCRIBBLE);
+      result = res.success ? res.formattedText || baseText : baseText;
     }
-
-    setModeContent((previous) => ({ ...previous, [nextMode]: resultText }));
-    setModeSource((previous) => ({ ...previous, [nextMode]: baseText }));
-    setEditedText(resultText);
+    setModeContent((p) => ({ ...p, [next]: result }));
+    setModeSource((p) => ({ ...p, [next]: baseText }));
+    setEditedText(result);
     setIsLoadingMode(false);
-  };
-
-  const handleCopyScribble = async () => {
-    if (isCopying) return;
-
-    setIsCopying(true);
-    try {
-      const textToCopy = activeMode === "normal"
-        ? editedText || ""
-        : modeContent[activeMode] || editedText || "";
-      await navigator.clipboard.writeText(textToCopy);
-      toast({
-        title: "Copied!",
-        description: "Scribble copied to clipboard.",
-      });
-    } catch (error) {
-      console.error("Failed to copy:", error);
-      toast({
-        title: "Copy Failed",
-        description: "Could not copy to clipboard.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCopying(false);
-    }
-  };
-
-  const handleDownloadScribble = () => {
-    if (isDownloading) return;
-
-    setIsDownloading(true);
-    try {
-      const textToDownload = activeMode === "normal"
-        ? editedText || ""
-        : modeContent[activeMode] || editedText || "";
-      const blob = new Blob([textToDownload], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = UI_STRINGS.SCRIBBLE_FILENAME;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      toast({
-        title: "Downloaded!",
-        description: "Scribble saved to your device.",
-      });
-    } catch (error) {
-      console.error("Failed to download:", error);
-      toast({
-        title: "Download Failed",
-        description: "Could not download the file.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsDownloading(false);
-    }
   };
 
   const applyLanguage = async (lang: "original" | "en" | "hi") => {
     if (lang === "original") {
-      // Cancel any in-flight translation
       translateControllerRef.current?.abort();
       translateControllerRef.current = null;
       setSelectedLanguage("original");
-      setTranslatedScribble(null);
-      setTranslatedRaw(null);
-      setModeContent(prev => ({ ...prev, translate: "" }));
+      setModeContent((p) => ({ ...p, translate: "" }));
       setEditedText(formattedScribble || "");
       return;
     }
+    const baseScribble = getBaseText();
+    if (!baseScribble) return;
+    if (isTranslating && translateControllerRef.current) translateControllerRef.current.abort();
 
-    // Always translate the simple content, not other modes.
-    const baseScribble = getScribbleBaseText();
-    const baseRaw = rawText || "";
-    if (!baseScribble && !baseRaw) return;
-
-    // Abort any previous translation in-flight
-    if (isTranslating && translateControllerRef.current) {
-      translateControllerRef.current.abort();
-    }
-
-    // Build cache keys
-    const scribbleKey = baseScribble ? `${lang}|scribble|${baseScribble}` : "";
-    const rawKey = baseRaw ? `${lang}|raw|${baseRaw}` : "";
-
-    // If both are cached, apply instantly
-    const cachedScribble = scribbleKey ? translationCacheScribbleRef.current.get(scribbleKey) : "";
-    const cachedRaw = rawKey ? translationCacheRawRef.current.get(rawKey) : "";
-    if ((baseScribble ? !!cachedScribble : true) && (baseRaw ? !!cachedRaw : true)) {
+    const key = `${lang}|${baseScribble}`;
+    const cached = translationCacheRef.current.get(key);
+    if (cached) {
       setSelectedLanguage(lang);
-      setTranslatedScribble(cachedScribble || "");
-      setTranslatedRaw(cachedRaw || "");
-
-      // Update modeContent for translate mode
-      setModeContent(prev => ({ ...prev, translate: cachedScribble || "" }));
-      setEditedText(cachedScribble || "");
-
-      toast({
-        title: "Language updated",
-        description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
-      });
+      setModeContent((p) => ({ ...p, translate: cached }));
+      setEditedText(cached);
       return;
     }
-
-    // Start new translation with cancellation support
     const controller = new AbortController();
     translateControllerRef.current = controller;
     setIsTranslating(true);
     try {
-      const [scribbleRes, rawRes] = await Promise.all([
-        baseScribble
-          ? cachedScribble
-            ? Promise.resolve({ success: true as const, translatedText: cachedScribble })
-            : aiService.translateText(baseScribble, lang, controller.signal)
-          : Promise.resolve({ success: true as const, translatedText: "" }),
-        baseRaw
-          ? cachedRaw
-            ? Promise.resolve({ success: true as const, translatedText: cachedRaw })
-            : aiService.translateText(baseRaw, lang, controller.signal)
-          : Promise.resolve({ success: true as const, translatedText: "" }),
-      ]);
-
-      if (!scribbleRes.success || !rawRes.success) {
-        // If aborted, silently return without error toast
-        if (controller.signal.aborted) {
-          return;
-        }
-        const combinedError =
-          (("error" in scribbleRes && scribbleRes.error) || ("error" in rawRes && rawRes.error) || "Could not translate right now. Please try again.");
+      const res = await aiService.translateText(baseScribble, lang, controller.signal);
+      if (!res.success) {
+        if (controller.signal.aborted) return;
         toast({
           title: "Translation failed",
-          description: combinedError,
+          description: res.error || "Could not translate.",
           variant: "destructive",
         });
-        const errMsg = (typeof combinedError === "string" ? combinedError : "").toLowerCase();
-        if (errMsg.includes("sign in")) {
-          router.push(ROUTES.AUTH);
-        }
+        if (res.error?.toLowerCase().includes("sign in")) router.push(ROUTES.AUTH);
         return;
       }
-
-      const scribbleText = scribbleRes.translatedText || "";
-      const rawTextTranslated = rawRes.translatedText || "";
-
-      // Update cache
-      if (scribbleKey && scribbleText) translationCacheScribbleRef.current.set(scribbleKey, scribbleText);
-      if (rawKey && rawTextTranslated) translationCacheRawRef.current.set(rawKey, rawTextTranslated);
-
+      const text = res.translatedText || "";
+      translationCacheRef.current.set(key, text);
       setSelectedLanguage(lang);
-      setTranslatedScribble(scribbleText);
-      setTranslatedRaw(rawTextTranslated);
-
-      // Update modeContent for translate mode
-      setModeContent(prev => ({ ...prev, translate: scribbleText }));
-      setEditedText(scribbleText);
-
-      toast({
-        title: "Language updated",
-        description: lang === "hi" ? "Switched to Hindi." : "Switched to English.",
-      });
-
-      // Background prefetch opposite language for snappier subsequent switches
-      const oppositeLang = lang === "hi" ? "en" : "hi";
-      const oppScribbleKey = baseScribble ? `${oppositeLang}|scribble|${baseScribble}` : "";
-      const oppRawKey = baseRaw ? `${oppositeLang}|raw|${baseRaw}` : "";
-      setTimeout(async () => {
-        try {
-          if (baseScribble && oppScribbleKey && !translationCacheScribbleRef.current.has(oppScribbleKey)) {
-            const res = await aiService.translateText(baseScribble, oppositeLang);
-            if (res.success && res.translatedText) {
-              translationCacheScribbleRef.current.set(oppScribbleKey, res.translatedText);
-            }
-          }
-          if (baseRaw && oppRawKey && !translationCacheRawRef.current.has(oppRawKey)) {
-            const res = await aiService.translateText(baseRaw, oppositeLang);
-            if (res.success && res.translatedText) {
-              translationCacheRawRef.current.set(oppRawKey, res.translatedText);
-            }
-          }
-        } catch {
-          // ignore background prefetch errors
-        }
-      }, 200);
+      setModeContent((p) => ({ ...p, translate: text }));
+      setEditedText(text);
     } finally {
       setIsTranslating(false);
-      // Clear controller reference after completion
-      if (translateControllerRef.current === controller) {
-        translateControllerRef.current = null;
-      }
+      if (translateControllerRef.current === controller) translateControllerRef.current = null;
     }
   };
 
-  const handleShareScribble = async () => {
-    // Initialize editable subject with current title when opening
-    setShareSubject(title || UI_STRINGS.UNTITLED_SCRIBBLE);
-    setIsShareModalOpen(true);
+  const currentText = () =>
+    activeMode === "normal"
+      ? editedText || ""
+      : modeContent[activeMode] || editedText || "";
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(currentText());
+    toast({ title: "Copied", description: "Scribble copied to clipboard." });
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([currentText()], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = UI_STRINGS.SCRIBBLE_FILENAME;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleSaveEdit = async () => {
     if (!editedText) return;
-
     if (!scribbleId) {
       updateFormattedScribble(editedText);
-      if (activeMode !== "normal") {
-        setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
-      }
+      if (activeMode !== "normal") setModeContent((p) => ({ ...p, [activeMode]: editedText }));
       return;
     }
-
     setIsSaving(true);
-    const { error } = await scribblesService.updateScribble(scribbleId, {
-      edited_text: editedText,
-    });
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save changes. Please try again.",
-        variant: "destructive",
-      });
-    } else {
+    const { error } = await scribblesService.updateScribble(scribbleId, { edited_text: editedText });
+    if (error) toast({ title: "Save failed", variant: "destructive" });
+    else {
       updateFormattedScribble(editedText);
-      if (activeMode !== "normal") {
-        setModeContent(prev => ({ ...prev, [activeMode]: editedText }));
-      }
+      if (activeMode !== "normal") setModeContent((p) => ({ ...p, [activeMode]: editedText }));
     }
     setIsSaving(false);
   };
@@ -464,13 +241,10 @@ export default function ResultsPage() {
       router.push(`/auth?redirectTo=${encodeURIComponent(ROUTES.RESULTS)}`);
       return;
     }
-
     setIsSaving(true);
     try {
       let saveResult;
-
       if (scribbleId) {
-        // Update existing scribble if we have an ID
         saveResult = await scribblesService.updateScribble(scribbleId, {
           title: title || "Untitled Scribble",
           raw_text: rawText || "",
@@ -478,20 +252,17 @@ export default function ResultsPage() {
           edited_text: editedText || undefined,
         });
       } else {
-        // Enforce scribble quota before creating a new scribble
         const quotaRes = await fetch("/api/usage/check?type=scribble");
         if (quotaRes.status === 402) {
-          const quotaData = await quotaRes.json();
+          const data = await quotaRes.json();
           toast({
             title: "Scribble limit reached",
-            description: quotaData.message || "Upgrade to Pro for unlimited scribbles.",
+            description: data.message || "Upgrade for unlimited scribbles.",
             variant: "destructive",
           });
           setIsSaving(false);
           return;
         }
-
-        // Create new scribble
         saveResult = await scribblesService.createScribble({
           user_id: user.id,
           title: title || "Untitled Scribble",
@@ -499,403 +270,466 @@ export default function ResultsPage() {
           original_formatted_text: formattedScribble || "",
         });
       }
-
-      const { data: savedScribble, error: saveError } = saveResult;
-
-      if (saveError) {
-        throw saveError;
-      }
-
-      if (savedScribble) {
-        setScribbleId(savedScribble.id);
-        storageService.setCurrentScribbleId(savedScribble.id);
+      const { data, error } = saveResult;
+      if (error) throw error;
+      if (data) {
+        setScribbleId(data.id);
+        storageService.setCurrentScribbleId(data.id);
         setIsScribbleSaved(true);
-        toast({
-          title: "Saved!",
-          description: "Your Scribble has been saved to the cloud.",
-        });
+        toast({ title: "Saved", description: "Scribble saved to the cloud." });
       }
-    } catch (error) {
-      console.error("Failed to save scribble to database:", error);
-      toast({
-        title: "Save Failed",
-        description: "Could not save to cloud. Please try again.",
-        variant: "destructive",
-      });
+    } catch (err) {
+      console.error("Save failed:", err);
+      toast({ title: "Save failed", description: "Could not save.", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleFeedbackSubmit = async (
-    helpful: boolean,
-    reasons?: FeedbackReason[]
-  ) => {
+  const handleToggleStar = async () => {
     if (!scribbleId) {
-      toast({
-        title: "Error",
-        description: "Could not submit feedback - scribble not found.",
-        variant: "destructive",
-      });
+      toast({ title: "Save first", description: "Star a Scribble after saving.", variant: "destructive" });
       return;
     }
+    const next = !isStarred;
+    setIsStarred(next);
+    const { error } = await scribblesService.toggleStar(scribbleId, next);
+    if (error) {
+      setIsStarred(!next);
+      toast({ title: "Failed to star", variant: "destructive" });
+    }
+  };
 
-    setIsFeedbackSubmitting(true);
-    const { success, error } = await feedbackService.submitFeedback(
-      scribbleId,
-      helpful,
-      reasons
-    );
-
-    if (error || !success) {
-      toast({
-        title: "Error",
-        description: "Failed to submit feedback. Please try again.",
-        variant: "destructive",
-      });
+  const handleUpdateFolder = async (folderName: string | null) => {
+    if (!scribbleId) return;
+    const { error } = await scribblesService.updateScribble(scribbleId, { folder: folderName });
+    if (error) {
+      toast({ title: "Folder update failed", variant: "destructive" });
     } else {
+      setSelectedFolder(folderName);
+      if (folderName && !availableFolders.includes(folderName)) {
+        setAvailableFolders([...availableFolders, folderName]);
+      }
+      toast({ title: folderName ? `Filed to ${folderName}` : "Removed from folder" });
+    }
+  };
+
+  const handleFeedbackSubmit = async (helpful: boolean, reasons?: FeedbackReason[]) => {
+    if (!scribbleId) {
+      toast({ title: "Save first", variant: "destructive" });
+      return;
+    }
+    setIsFeedbackSubmitting(true);
+    const { success, error } = await feedbackService.submitFeedback(scribbleId, helpful, reasons);
+    if (error || !success) toast({ title: "Feedback failed", variant: "destructive" });
+    else {
       setHasFeedbackSubmitted(true);
       setFeedbackValue(helpful);
-      toast({
-        title: "Thanks!",
-        description: "Your feedback helps us improve.",
-      });
+      toast({ title: "Thanks!" });
     }
     setIsFeedbackSubmitting(false);
   };
 
   if (isLoading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="flex items-center justify-center mb-4">
-            <Spinner className="text-cyan-500" />
-          </div>
-          <p className="text-gray-300">{UI_STRINGS.LOADING_SCRIBBLE}</p>
-        </div>
+      <main className="min-h-screen flex items-center justify-center" style={{ background: v2.cream }}>
+        <Spinner />
       </main>
     );
   }
 
-  const displayText = activeMode === "normal"
-    ? editedText
-    : (modeContent[activeMode] || editedText);
+  const displayText =
+    activeMode === "normal" ? editedText : modeContent[activeMode] || editedText;
 
   return (
-    <main className="flex flex-col items-center px-4 pt-8 pb-24 min-h-screen bg-[#020617] text-white overflow-x-hidden">
-      <div className="w-full max-w-2xl flex flex-col items-center gap-3 mt-16">
-        <div className="text-center space-y-4 w-full mt-5">
-          <h1 className="text-3xl md:text-5xl font-bold text-white tracking-tight">
-            {title || UI_STRINGS.RESULTS_TITLE}
-          </h1>
-          <p className="text-sm uppercase tracking-[0.22em] text-cyan-300/80">
-            Voice to Scribble
-          </p>
-
-          {/* Folder Management Section - Only show after saving */}
-          {scribbleId ? (
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex flex-wrap justify-center items-center gap-2">
-                {selectedFolder ? (
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 px-3 py-1 text-sm flex items-center gap-2 hover:bg-cyan-500/20 transition-colors cursor-default">
-                      <FolderPlus className="w-3.5 h-3.5" />
-                      {selectedFolder}
-                      <button
-                        onClick={() => handleUpdateFolder(null)}
-                        className="text-cyan-400 hover:text-red-400 transition-colors ml-1"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </Badge>
-                  </div>
-                ) : (
-                  <span className="text-gray-500 text-sm">Not in a folder yet</span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 mt-2">
-                {!isAddingNewFolder ? (
-                  <div className="flex items-center gap-2 overflow-x-auto max-w-[90vw] no-scrollbar pb-1">
-                    {availableFolders.filter(f => f !== selectedFolder).map(folder => (
-                      <button
-                        key={folder}
-                        onClick={() => handleUpdateFolder(folder)}
-                        className="text-[11px] px-3 py-1 rounded-full bg-slate-900 border border-white/5 text-gray-500 hover:text-cyan-400 hover:border-cyan-500/30 transition-all whitespace-nowrap"
-                      >
-                        {folder}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setIsAddingNewFolder(true)}
-                      className="text-[11px] px-3 py-1 rounded-full bg-cyan-500/5 border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-all flex items-center gap-1 font-medium"
-                    >
-                      <Plus className="w-3 h-3" />
-                      New
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1 bg-slate-900/80 border border-cyan-500/30 rounded-full px-2 py-0.5 animate-in fade-in zoom-in duration-200">
-                    <Input
-                      autoFocus
-                      placeholder="Folder..."
-                      value={newFolderName}
-                      onChange={(e) => setNewFolderName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddNewFolder()}
-                      className="h-6 w-24 bg-transparent border-none text-[11px] focus-visible:ring-0 placeholder:text-gray-600 p-0"
-                    />
-                    <button
-                      onClick={handleAddNewFolder}
-                      disabled={newFolderName.trim() === ""}
-                      className="p-1 hover:text-cyan-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setIsAddingNewFolder(false)}
-                      className="p-1 hover:text-red-400 transition-colors"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <span className="text-gray-500 text-sm">Save your Scribble to organize it into folders</span>
+    <main style={{ background: v2.cream, color: v2.ink, minHeight: "100vh", fontFamily: "var(--font-figtree), system-ui" }}>
+      <header
+        className="flex items-center justify-between px-6 md:px-14 py-6"
+        style={{ borderBottom: `1px solid ${v2.rule}` }}
+      >
+        <div className="flex items-center gap-6">
+          <V2Wordmark />
+          <Link href="/scribble">
+            <V2Caps>← LIBRARY</V2Caps>
+          </Link>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {scribbleId && (
+            <button
+              onClick={() => void handleToggleStar()}
+              className="rounded-full p-2"
+              style={{ color: isStarred ? v2.accent : v2.inkFaint }}
+              title={isStarred ? "Unstar" : "Star"}
+            >
+              <Star className="h-4 w-4" style={isStarred ? { fill: v2.accent } : undefined} />
+            </button>
+          )}
+          <button
+            onClick={handleCopy}
+            className="text-[12px] rounded-full px-3.5 py-1.5"
+            style={{ color: v2.inkSoft, border: `1px solid ${v2.rule}` }}
+          >
+            Copy
+          </button>
+          <button
+            onClick={handleDownload}
+            className="text-[12px] rounded-full px-3.5 py-1.5"
+            style={{ color: v2.inkSoft, border: `1px solid ${v2.rule}` }}
+          >
+            Download
+          </button>
+          <button
+            onClick={() => {
+              setShareSubject(title || UI_STRINGS.UNTITLED_SCRIBBLE);
+              setIsShareModalOpen(true);
+            }}
+            className="text-[12px] rounded-full px-3.5 py-1.5 inline-flex items-center gap-1.5"
+            style={{ color: v2.inkSoft, border: `1px solid ${v2.rule}` }}
+          >
+            <Share2 className="h-3 w-3" /> Share
+          </button>
+          {!isScribbleSaved && (
+            <button
+              onClick={() => void handleSaveToDatabase()}
+              disabled={isSaving}
+              className="text-[12px] rounded-full px-4 py-1.5 font-medium disabled:opacity-50"
+              style={{ background: v2.ink, color: v2.cream }}
+            >
+              {isSaving ? "Saving…" : "Save Scribble"}
+            </button>
           )}
         </div>
+      </header>
 
-        {/* Mode Selection Bar (Floating) */}
-        <div className="flex flex-col items-center gap-1.5 w-full mb-2">
-          <p className="text-sm text-gray-400 font-medium">Transform this Scribble into <span className="text-base font-bold text-cyan-400">→</span></p>
-          <TooltipProvider>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="flex items-center bg-slate-900/80 backdrop-blur-md border border-white/5 rounded-xl p-1 shadow-2xl z-10"
-            >
-              {[
-                { id: "normal", icon: FileText, label: "Scribble", desc: "Your clean working draft" },
-                { id: "email", icon: Mail, label: "Email", desc: "Send-ready draft" },
-                { id: "bullets", icon: ListChecks, label: "Bullets", desc: "Quick key points" },
-                { id: "summary", icon: BookOpen, label: "Summary", desc: "Condensed overview" },
-                { id: "translate", icon: Languages, label: "Translate", desc: "Change language" }
-              ].map((mode) => (
-                <Tooltip key={mode.id} delayDuration={200}>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => void handleSelectMode(mode.id as typeof activeMode)}
-                      className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
-                        activeMode === mode.id
-                          ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
-                          : "text-gray-400 hover:text-white hover:bg-white/5"
-                      }`}
-                    >
-                      {isLoadingMode && activeMode === mode.id ? (
-                        <Spinner className="w-5 h-5" />
-                      ) : (
-                        <mode.icon className="w-5 h-5" />
-                      )}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <p><span className="font-semibold">{mode.label}</span> — {mode.desc}</p>
-                  </TooltipContent>
-                </Tooltip>
-              ))}
-            </motion.div>
-          </TooltipProvider>
+      <article className="px-6 md:px-14 pt-12 md:pt-14 pb-20 mx-auto" style={{ maxWidth: 1180 }}>
+        <V2Caps color={v2.accent}>READY · CLEAN COPY</V2Caps>
+        <h1
+          className="mt-3"
+          style={{
+            fontFamily: v2Serif,
+            fontSize: "clamp(40px, 6vw, 60px)",
+            lineHeight: 1.0,
+            letterSpacing: "-0.025em",
+            fontWeight: 500,
+          }}
+        >
+          {title || (
+            <em style={{ fontStyle: "italic", color: v2.accent }}>{UI_STRINGS.RESULTS_TITLE}</em>
+          )}
+        </h1>
 
-          {/* Translation Dropdown - only when translate mode is active */}
-          <AnimatePresence>
-            {activeMode === "translate" && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="flex items-center gap-2 bg-slate-900/50 backdrop-blur-sm border border-white/5 rounded-full p-1 shadow-xl"
+        <div className="mt-10 grid grid-cols-12 gap-8 md:gap-14">
+          <div
+            className="col-span-12 lg:col-span-8"
+            style={{ borderRight: `1px solid ${v2.rule}`, paddingRight: 0 }}
+          >
+            <div className="flex items-center gap-3 flex-wrap mb-5">
+              <V2Caps>{activeTab === "transcript" ? "YOUR VOICE · UNEDITED" : "SCRIBBLE"}</V2Caps>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => setActiveTab("scribble")}
+                  className="rounded-full px-3 py-1 text-[11px] font-medium"
+                  style={{
+                    background: activeTab === "scribble" ? v2.ink : "transparent",
+                    color: activeTab === "scribble" ? v2.cream : v2.inkSoft,
+                    border: `1px solid ${activeTab === "scribble" ? v2.ink : v2.rule}`,
+                  }}
+                >
+                  Scribble
+                </button>
+                <button
+                  onClick={() => setActiveTab("transcript")}
+                  className="rounded-full px-3 py-1 text-[11px] font-medium"
+                  style={{
+                    background: activeTab === "transcript" ? v2.ink : "transparent",
+                    color: activeTab === "transcript" ? v2.cream : v2.inkSoft,
+                    border: `1px solid ${activeTab === "transcript" ? v2.ink : v2.rule}`,
+                  }}
+                >
+                  Raw
+                </button>
+              </div>
+            </div>
+            {activeTab === "transcript" ? (
+              <div
+                className="space-y-5 pr-0 md:pr-10"
+                style={{ fontFamily: v2Serif, fontSize: 18, lineHeight: 1.65, color: v2.ink }}
               >
-                {[
-                  { id: "original", label: "Original" },
-                  { id: "en", label: "English" },
-                  { id: "hi", label: "Hindi" }
-                ].map((lang) => (
-                  <button
-                    key={lang.id}
-                    onClick={() => applyLanguage(lang.id as "original" | "en" | "hi")}
-                    disabled={isTranslating && selectedLanguage !== lang.id}
-                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                      selectedLanguage === lang.id
-                        ? "bg-cyan-500 text-slate-950 shadow-lg"
-                        : "text-gray-400 hover:text-white hover:bg-white/5"
-                    }`}
-                  >
-                    {isTranslating && selectedLanguage === lang.id ? (
-                      <Spinner className="w-3 h-3" />
-                    ) : (
-                      lang.label
-                    )}
-                  </button>
+                {(rawText || "No transcript available.").split("\n").map((line, i) => (
+                  <p key={i}>{line}</p>
                 ))}
-              </motion.div>
+              </div>
+            ) : (
+              <textarea
+                value={displayText || ""}
+                onChange={(e) => setEditedText(e.target.value)}
+                onBlur={handleSaveEdit}
+                placeholder="Your Scribble will appear here..."
+                className="w-full bg-transparent outline-none resize-none pr-0 md:pr-10"
+                style={{
+                  fontFamily: v2Serif,
+                  fontSize: 18,
+                  lineHeight: 1.65,
+                  color: v2.ink,
+                  minHeight: 360,
+                }}
+              />
             )}
-          </AnimatePresence>
+          </div>
+
+          <aside className="col-span-12 lg:col-span-4 space-y-8">
+            <div>
+              <V2Caps color={v2.accent}>OSCAR&rsquo;S MARGIN</V2Caps>
+              <p
+                className="mt-3"
+                style={{ fontFamily: v2Serif, fontSize: 21, lineHeight: 1.4, letterSpacing: "-0.005em" }}
+              >
+                Cleaned and titled. <em style={{ fontStyle: "italic", color: v2.accent }}>Save it</em> to
+                organize, share, or reshape.
+              </p>
+            </div>
+
+            <div>
+              <V2Caps>RESHAPE</V2Caps>
+              <div
+                className="mt-3 rounded-md p-4"
+                style={{ background: v2.cream2 }}
+              >
+                {MODES.map((m) => {
+                  const isActive = activeMode === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => void handleSelectMode(m.id)}
+                      className="flex items-center gap-3 py-1.5 w-full text-left"
+                      style={{ color: isActive ? v2.accent : v2.ink, fontSize: 13 }}
+                    >
+                      <span style={{ color: v2.accent }}>→</span>
+                      {isLoadingMode && isActive ? <Spinner className="w-3.5 h-3.5" /> : <m.icon className="h-3.5 w-3.5" />}
+                      <span style={{ fontWeight: isActive ? 500 : 400 }}>{m.label}</span>
+                      <V2Mono style={{ fontSize: 10, color: v2.inkFaint, marginLeft: "auto" }}>
+                        {m.desc}
+                      </V2Mono>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {activeMode === "translate" && (
+              <div>
+                <V2Caps>LANGUAGE</V2Caps>
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  {[
+                    { id: "original" as const, label: "Original" },
+                    { id: "en" as const, label: "English" },
+                    { id: "hi" as const, label: "Hindi" },
+                  ].map((l) => (
+                    <button
+                      key={l.id}
+                      onClick={() => applyLanguage(l.id)}
+                      disabled={isTranslating && selectedLanguage !== l.id}
+                      className="rounded-full px-4 py-1.5 text-[12px] font-medium transition disabled:opacity-50"
+                      style={{
+                        background: selectedLanguage === l.id ? v2.ink : "transparent",
+                        color: selectedLanguage === l.id ? v2.cream : v2.inkSoft,
+                        border: `1px solid ${selectedLanguage === l.id ? v2.ink : v2.rule}`,
+                      }}
+                    >
+                      {isTranslating && selectedLanguage === l.id ? <Spinner className="w-3 h-3" /> : l.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {scribbleId && (
+              <div>
+                <V2Caps>FOLDER</V2Caps>
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  {selectedFolder ? (
+                    <button
+                      onClick={() => handleUpdateFolder(null)}
+                      className="rounded-full px-3 py-1.5 text-[12px] inline-flex items-center gap-2"
+                      style={{ background: v2.accentSoft, color: v2.accent }}
+                    >
+                      {selectedFolder}
+                      <span style={{ opacity: 0.7 }}>×</span>
+                    </button>
+                  ) : (
+                    <span className="text-[12px]" style={{ color: v2.inkFaint }}>
+                      Not filed yet
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {availableFolders
+                    .filter((f) => f !== selectedFolder)
+                    .map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => handleUpdateFolder(f)}
+                        className="rounded-full px-3 py-1 text-[11px]"
+                        style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  <div className="flex items-center gap-1">
+                    <input
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newFolderName.trim()) {
+                          handleUpdateFolder(newFolderName.trim());
+                          setNewFolderName("");
+                        }
+                      }}
+                      placeholder="+ new folder"
+                      className="bg-transparent outline-none text-[11px] px-2 py-1"
+                      style={{ borderBottom: `1px solid ${v2.rule}`, width: 120, color: v2.ink }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {scribbleId && (
+              <div>
+                <V2Caps>FEEDBACK</V2Caps>
+                <div className="mt-3">
+                  <FeedbackWidget
+                    onSubmit={handleFeedbackSubmit}
+                    isSubmitting={isFeedbackSubmitting}
+                    hasSubmitted={hasFeedbackSubmitted}
+                    submittedValue={feedbackValue}
+                  />
+                </div>
+              </div>
+            )}
+          </aside>
         </div>
 
-        <ScribbleEditor
-          formattedScribble={displayText || ""}
-          title={title || UI_STRINGS.UNTITLED_SCRIBBLE}
-          onCopy={handleCopyScribble}
-          onDownload={handleDownloadScribble}
-          onShare={handleShareScribble}
-          rawText={translatedRaw ?? rawText ?? ""}
-          onSaveEdit={handleSaveEdit}
-          onTextChange={setEditedText}
-          isSaving={isSaving}
-          isCopying={isCopying}
-          isDownloading={isDownloading}
-          isSharing={isSharing}
-          onFeedbackSubmit={handleFeedbackSubmit}
-          isFeedbackSubmitting={isFeedbackSubmitting}
-          hasFeedbackSubmitted={hasFeedbackSubmitted}
-          feedbackValue={feedbackValue}
-          showFeedback={!!scribbleId}
-        />
-      </div>
+        <div
+          className="mt-14 pt-7 flex items-center justify-between flex-wrap gap-3"
+          style={{ borderTop: `1px solid ${v2.rule}` }}
+        >
+          <V2Caps>{isScribbleSaved ? "SAVED · ALL CHANGES SYNCED" : "READY TO SAVE"}</V2Caps>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => router.push("/recording")}
+              className="text-[13px] rounded-full px-4 py-2"
+              style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+            >
+              Discard & record again
+            </button>
+            {!isScribbleSaved && (
+              <button
+                onClick={() => void handleSaveToDatabase()}
+                disabled={isSaving}
+                className="text-[13px] rounded-full px-5 py-2.5 font-medium disabled:opacity-50"
+                style={{ background: v2.ink, color: v2.cream }}
+              >
+                {isSaving ? "Saving…" : "Save Scribble"}
+              </button>
+            )}
+            {isScribbleSaved && (
+              <Link
+                href="/scribble"
+                className="text-[13px] rounded-full px-5 py-2.5 font-medium"
+                style={{ background: v2.ink, color: v2.cream }}
+              >
+                Open library →
+              </Link>
+            )}
+          </div>
+        </div>
+      </article>
 
-      <ScribbleActions
-        onSave={handleSaveToDatabase}
-        isSaving={isSaving}
-        showSave={!isScribbleSaved}
-      />
-
-      {/* Share Options Modal */}
       {isShareModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0"
+            style={{ background: "rgba(15,13,10,0.55)" }}
             onClick={() => setIsShareModalOpen(false)}
           />
-          <div className="relative w-full max-w-md rounded-2xl border border-cyan-700/30 bg-slate-900 p-6 shadow-2xl">
+          <div
+            className="relative w-full max-w-md rounded-2xl p-6 shadow-2xl"
+            style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
+          >
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <Share2 className="w-5 h-5 text-cyan-400" />
-                <div>
-                  <h3 className="text-lg font-semibold text-white">Share Scribble</h3>
-                  <p className="text-sm text-gray-400">Choose a destination</p>
-                </div>
+              <div>
+                <V2Caps color={v2.accent}>SHARE</V2Caps>
+                <h3
+                  className="mt-1"
+                  style={{
+                    fontFamily: v2Serif,
+                    fontSize: 24,
+                    fontWeight: 500,
+                    letterSpacing: "-0.01em",
+                  }}
+                >
+                  Send this Scribble
+                </h3>
               </div>
-              <button
-                onClick={() => setIsShareModalOpen(false)}
-                className="text-gray-400 hover:text-white text-xl"
-                aria-label="Close share dialog"
-              >
+              <button onClick={() => setIsShareModalOpen(false)} style={{ color: v2.inkFaint }}>
                 ✕
               </button>
             </div>
-            <Separator className="bg-cyan-700/30" />
 
-            {/* Subject input */}
-            <div className="mt-4">
-              <label className="text-sm text-gray-400 block mb-1">Email subject</label>
+            <div className="mt-2">
+              <V2Caps>EMAIL SUBJECT</V2Caps>
               <input
-                type="text"
                 value={shareSubject ?? (title || UI_STRINGS.UNTITLED_SCRIBBLE)}
                 onChange={(e) => setShareSubject(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                placeholder="Subject"
+                className="mt-2 w-full bg-transparent outline-none py-2 text-[14px]"
+                style={{ borderBottom: `1px solid ${v2.ruleHard}`, color: v2.ink, fontFamily: v2Mono }}
               />
             </div>
 
-            {/* Removed Gmail toggle/preview. Share will use editor content if already email-formatted. */}
-
-            <div className="mt-4 grid grid-cols-1 gap-3">
-              {/* WhatsApp */}
+            <div className="mt-5 grid grid-cols-1 gap-2.5">
               <button
-                onClick={async () => {
-                  const textToShare = (translatedScribble ?? editedText ?? formattedScribble) || "";
-                  const shareTitle = title || UI_STRINGS.UNTITLED_SCRIBBLE;
-                  const payload = `${shareTitle}\n\n${textToShare}`.trim();
-                  const url = `https://wa.me/?text=${encodeURIComponent(payload)}`;
-                  window.open(url, "_blank", "noopener,noreferrer");
+                onClick={() => {
+                  const payload = `${title || ""}\n\n${currentText()}`.trim();
+                  window.open(`https://wa.me/?text=${encodeURIComponent(payload)}`, "_blank", "noopener,noreferrer");
                   setIsShareModalOpen(false);
                 }}
-                className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+                className="w-full flex items-center gap-3 py-3 px-4 rounded-lg text-left"
+                style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
               >
-                <MessageCircle className="w-5 h-5" />
+                <MessageCircle className="w-4 h-4" />
                 <span>WhatsApp</span>
               </button>
-
-              {/* Gmail */}
               <button
                 onClick={() => {
-              const shareTitle = title || UI_STRINGS.UNTITLED_SCRIBBLE;
-              const subjectText = shareSubject ?? shareTitle;
-              const subject = encodeURIComponent(subjectText);
-              const bodyText = activeMode === "normal"
-                ? editedText || ""
-                : modeContent[activeMode] || editedText || "";
-                  const body = encodeURIComponent(bodyText);
-                  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}&tf=1`;
-                  window.open(gmailUrl, "_blank", "noopener,noreferrer");
+                  const subject = encodeURIComponent(shareSubject ?? (title || UI_STRINGS.UNTITLED_SCRIBBLE));
+                  const body = encodeURIComponent(currentText());
+                  window.open(
+                    `https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}&tf=1`,
+                    "_blank",
+                    "noopener,noreferrer"
+                  );
                   setIsShareModalOpen(false);
                 }}
-                className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+                className="w-full flex items-center gap-3 py-3 px-4 rounded-lg text-left"
+                style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
               >
-                <Mail className="w-5 h-5" />
-                <div className="flex flex-col items-start">
-                  <span>Gmail</span>
-                  <span className="text-xs text-gray-400">Uses editor content (AI formatted if applied)</span>
-                </div>
+                <Mail className="w-4 h-4" />
+                <span>Gmail</span>
               </button>
-
-              {/* Default Email Client */}
               <button
                 onClick={() => {
-              const shareTitle = title || UI_STRINGS.UNTITLED_SCRIBBLE;
-              const subjectText = shareSubject ?? shareTitle;
-              const subject = encodeURIComponent(subjectText);
-              const bodyText = activeMode === "normal"
-                ? editedText || ""
-                : modeContent[activeMode] || editedText || "";
-                  const body = encodeURIComponent(bodyText);
+                  const subject = encodeURIComponent(shareSubject ?? (title || UI_STRINGS.UNTITLED_SCRIBBLE));
+                  const body = encodeURIComponent(currentText());
                   window.location.href = `mailto:?subject=${subject}&body=${body}`;
                   setIsShareModalOpen(false);
                 }}
-                className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
+                className="w-full flex items-center gap-3 py-3 px-4 rounded-lg text-left"
+                style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
               >
-                <Mail className="w-5 h-5" />
-                <div className="flex flex-col items-start">
-                  <span>Email (Default Client)</span>
-                  <span className="text-xs text-gray-400">Uses editor content (AI formatted if applied)</span>
-                </div>
+                <Mail className="w-4 h-4" />
+                <span>Email · default client</span>
               </button>
-
-              {/* Native Share (if available) */}
-              {typeof navigator !== "undefined" && "share" in navigator && (
-                <button
-                  onClick={async () => {
-                    const textToShare = editedText || formattedScribble || "";
-                    const shareTitle = title || UI_STRINGS.UNTITLED_SCRIBBLE;
-                    const payload = `${shareTitle}\n\n${textToShare}`.trim();
-                    try {
-                      setIsSharing(true);
-                      const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
-                      await nav.share?.({ title: shareTitle, text: payload });
-                      setIsShareModalOpen(false);
-                    } catch {
-                      // user may have cancelled
-                    } finally {
-                      setIsSharing(false);
-                    }
-                  }}
-                  className="w-full flex items-center gap-3 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-cyan-700/30"
-                >
-                  <Share2 className="w-5 h-5" />
-                  <span>More Options…</span>
-                </button>
-              )}
             </div>
           </div>
         </div>

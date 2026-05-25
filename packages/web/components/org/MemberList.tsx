@@ -1,9 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Users, UserMinus, Shield, Crown } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { UserMinus, Crown } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -28,11 +26,25 @@ import type {
   OrganizationMemberWithUser,
   OrganizationRole,
 } from "@oscar/shared/types";
+import {
+  v2,
+  v2Serif,
+  V2Caps,
+  V2Mono,
+  V2Avatar,
+} from "@/components/v2/V2Primitives";
 
 interface Props {
   organizationId: string;
   currentUserId: string;
   currentRole: OrganizationRole;
+}
+
+function formatJoined(iso: string | null | undefined) {
+  if (!iso) return "—";
+  return new Date(iso)
+    .toLocaleDateString(undefined, { month: "short", year: "numeric" })
+    .toUpperCase();
 }
 
 export function MemberList({ organizationId, currentUserId, currentRole }: Props) {
@@ -123,113 +135,184 @@ export function MemberList({ organizationId, currentUserId, currentRole }: Props
     }
   };
 
+  if (loading) {
+    return (
+      <p className="text-[14px]" style={{ color: v2.inkSoft }}>
+        Loading members…
+      </p>
+    );
+  }
+
   return (
-    <Card className="bg-slate-900 border-cyan-700/30">
-      <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
-          <Users className="w-5 h-5 text-cyan-500" />
-          Members
-        </CardTitle>
-        <CardDescription className="text-gray-400">
-          {members.length} {members.length === 1 ? "member" : "members"} in this workspace
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <p className="text-gray-500 text-sm">Loading members...</p>
-        ) : (
-          <ul className="divide-y divide-cyan-700/20">
-            {members.map((m) => {
-              const isSelf = m.user_id === currentUserId;
-              const isOwner = m.role === "owner";
-              return (
-                <li key={m.user_id} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-white text-sm font-medium truncate">
-                      {m.display_name ?? m.email ?? m.user_id}
-                      {isSelf ? <span className="text-gray-500"> (you)</span> : null}
-                    </p>
-                    {m.email && m.display_name ? (
-                      <p className="text-gray-500 text-xs truncate">{m.email}</p>
-                    ) : null}
+    <div>
+      {/* Header row */}
+      <div
+        className="grid grid-cols-12 gap-4 py-3"
+        style={{ borderTop: `1px solid ${v2.rule}`, borderBottom: `1px solid ${v2.rule}` }}
+      >
+        <div className="col-span-12 md:col-span-4">
+          <V2Caps>NAME</V2Caps>
+        </div>
+        <div className="hidden md:block md:col-span-4">
+          <V2Caps>EMAIL</V2Caps>
+        </div>
+        <div className="hidden md:block md:col-span-2">
+          <V2Caps>ROLE</V2Caps>
+        </div>
+        <div className="hidden md:block md:col-span-2 text-right">
+          <V2Caps>SINCE</V2Caps>
+        </div>
+      </div>
+
+      {members.map((m) => {
+        const isSelf = m.user_id === currentUserId;
+        const isOwner = m.role === "owner";
+        const name = m.display_name ?? m.email ?? m.user_id;
+        return (
+          <div
+            key={m.user_id}
+            className="grid grid-cols-12 gap-4 py-4 items-center"
+            style={{ borderBottom: `1px solid ${v2.rule}` }}
+          >
+            <div className="col-span-12 md:col-span-4 flex items-center gap-3">
+              <V2Avatar size={30} initial={name.charAt(0).toUpperCase()} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="truncate" style={{ fontSize: 14, color: v2.ink }}>
+                    {name}
+                  </span>
+                  {isSelf && (
+                    <V2Mono style={{ fontSize: 10, color: v2.accent, letterSpacing: "0.16em" }}>
+                      YOU
+                    </V2Mono>
+                  )}
+                </div>
+                {m.email && m.display_name && (
+                  <div className="md:hidden">
+                    <V2Mono style={{ fontSize: 11, color: v2.inkSoft }}>{m.email}</V2Mono>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {canChangeRoles && !isOwner && !isSelf ? (
-                      <Select
-                        value={m.role}
-                        onValueChange={(value) => void changeRole(m.user_id, value as OrganizationRole)}
-                        disabled={busyId === m.user_id}
+                )}
+              </div>
+            </div>
+            <div className="hidden md:block md:col-span-4 truncate">
+              <V2Mono style={{ fontSize: 12, color: v2.inkSoft }}>{m.email ?? "—"}</V2Mono>
+            </div>
+            <div className="col-span-8 md:col-span-2 flex items-center gap-2">
+              {canChangeRoles && !isOwner && !isSelf ? (
+                <Select
+                  value={m.role}
+                  onValueChange={(value) =>
+                    void changeRole(m.user_id, value as OrganizationRole)
+                  }
+                  disabled={busyId === m.user_id}
+                >
+                  <SelectTrigger
+                    className="h-7 w-24 text-xs"
+                    style={{ background: v2.cream2, border: `1px solid ${v2.rule}`, color: v2.ink }}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent
+                    style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
+                  >
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="member">Member</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <span
+                  style={{
+                    fontSize: 13,
+                    color: isOwner ? v2.accent : v2.ink,
+                    fontWeight: isOwner ? 500 : 400,
+                    fontFamily: v2Serif,
+                    letterSpacing: "-0.005em",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {m.role}
+                </span>
+              )}
+            </div>
+            <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-1">
+              <span
+                className="hidden md:block"
+                style={{
+                  fontFamily: "var(--font-ibm-plex-mono), ui-monospace, monospace",
+                  fontSize: 11,
+                  color: v2.inkFaint,
+                  marginRight: 8,
+                }}
+              >
+                {formatJoined(m.joined_at)}
+              </span>
+              {canTransferOwnership && !isOwner && !isSelf && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <button
+                      disabled={busyId === m.user_id}
+                      className="p-1.5 rounded-full disabled:opacity-50"
+                      style={{ color: v2.inkFaint }}
+                      aria-label="Transfer ownership"
+                      title="Transfer ownership"
+                    >
+                      <Crown className="w-3.5 h-3.5" />
+                    </button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent
+                    style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
+                  >
+                    <AlertDialogHeader>
+                      <AlertDialogTitle
+                        style={{
+                          fontFamily: v2Serif,
+                          fontSize: 24,
+                          fontWeight: 500,
+                          letterSpacing: "-0.01em",
+                        }}
                       >
-                        <SelectTrigger className="w-28 h-8 bg-slate-800 border-slate-700 text-white text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="member">Member</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <span className="text-gray-400 text-xs capitalize flex items-center gap-1">
-                        {isOwner && <Shield className="w-3 h-3" />}
-                        {m.role}
-                      </span>
-                    )}
-                    {canTransferOwnership && !isOwner && !isSelf ? (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={busyId === m.user_id}
-                            className="h-8 w-8 p-0 text-gray-400 hover:text-amber-300 hover:bg-amber-400/10"
-                            aria-label="Transfer ownership"
-                          >
-                            <Crown className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="bg-slate-900 border-slate-800 text-white">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              Make {m.display_name ?? m.email ?? "this member"} the owner?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription className="text-slate-400">
-                              They will gain full control of this workspace including billing
-                              and member management. You will be demoted to admin and lose the
-                              ability to transfer ownership back without their consent.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="bg-slate-800 border-slate-700 text-white">
-                              Cancel
-                            </AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => void transferOwnership(m.user_id)}
-                              className="bg-amber-500 hover:bg-amber-600 text-slate-900"
-                            >
-                              Transfer ownership
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    ) : null}
-                    {canManage && !isOwner && !isSelf ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => void remove(m.user_id)}
-                        disabled={busyId === m.user_id}
-                        className="h-8 w-8 p-0 text-gray-400 hover:text-red-400 hover:bg-red-500/10"
+                        Make {name} the owner?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription style={{ color: v2.inkSoft }}>
+                        They will gain full control of this workspace including billing and member
+                        management. You will be demoted to admin.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel
+                        style={{
+                          background: "transparent",
+                          border: `1px solid ${v2.rule}`,
+                          color: v2.inkSoft,
+                        }}
                       >
-                        <UserMinus className="w-4 h-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => void transferOwnership(m.user_id)}
+                        style={{ background: v2.accent, color: v2.cream }}
+                      >
+                        Transfer ownership
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              {canManage && !isOwner && !isSelf && (
+                <button
+                  onClick={() => void remove(m.user_id)}
+                  disabled={busyId === m.user_id}
+                  className="p-1.5 rounded-full disabled:opacity-50"
+                  style={{ color: v2.inkFaint }}
+                  title="Remove"
+                >
+                  <UserMinus className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

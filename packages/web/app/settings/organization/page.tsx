@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState, type ReactElement } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
@@ -11,8 +11,18 @@ import { MemberList } from "@/components/org/MemberList";
 import { InvitePanel } from "@/components/org/InvitePanel";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type { ActiveOrganization } from "@oscar/shared/types";
+import { v2 } from "@/components/v2/V2Primitives";
+import {
+  createOrgSettingsSections,
+  V2OrgSettingsShell,
+} from "@/components/v2/V2OrgSettingsShell";
+
+type Tab = "details" | "members" | "invites";
+
+function isOrgSettingsTab(value: string | null): value is Tab {
+  return value === "details" || value === "members" || value === "invites";
+}
 
 function OrgSettingsContent() {
   const router = useRouter();
@@ -21,6 +31,9 @@ function OrgSettingsContent() {
   const [active, setActive] = useState<ActiveOrganization | null>(null);
   const [loading, setLoading] = useState(true);
   const showCreate = searchParams.get("create") === "1";
+  const requestedTab = searchParams.get("tab");
+  const initialTab = isOrgSettingsTab(requestedTab) ? requestedTab : "details";
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -43,55 +56,109 @@ function OrgSettingsContent() {
     void load();
   }, [authLoading, user, router, load]);
 
-  if (!isOrgFeatureEnabled()) {
-    return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center">
-          <h1 className="text-2xl text-white mb-2">Workspaces are not enabled</h1>
-          <p className="text-gray-400">Ask an admin to enable the organization feature flag.</p>
-        </div>
-      </main>
-    );
-  }
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   if (authLoading || loading || !user) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <Spinner className="text-cyan-500" />
+      <main
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: v2.cream }}
+      >
+        <Spinner />
       </main>
     );
   }
 
-  return (
-    <main className="flex flex-col items-center px-4 pt-8 pb-24">
-      <div className="w-full max-w-3xl mt-16 space-y-6">
-        <header className="mb-2 mt-5">
-          <h1 className="text-3xl font-bold text-white mb-2">Organization</h1>
-          <p className="text-gray-400">Manage your workspace, members, and invites.</p>
-        </header>
+  const orgName = active?.organization.name || "Workspace";
 
+  const TITLES: Record<Tab, { eyebrow: string; h1: ReactElement; lead: string }> = {
+    details: {
+      eyebrow: "SETTINGS · ORG DETAILS",
+      h1: (
+        <>
+          How the workspace <em style={{ fontStyle: "italic", color: v2.accent }}>shows up</em>.
+        </>
+      ),
+      lead: "Identity, branding, and the danger zone.",
+    },
+    members: {
+      eyebrow: "SETTINGS · MEMBERS",
+      h1: (
+        <>
+          The people <em style={{ fontStyle: "italic", color: v2.accent }}>here</em>.
+        </>
+      ),
+      lead: "Names, roles, and when each joined the workspace.",
+    },
+    invites: {
+      eyebrow: "SETTINGS · INVITES",
+      h1: (
+        <>
+          Who&rsquo;s next <em style={{ fontStyle: "italic", color: v2.accent }}>to join</em>.
+        </>
+      ),
+      lead: "Pending invitations and recent acceptances.",
+    },
+  };
+
+  const titleData = TITLES[activeTab];
+  const sections = createOrgSettingsSections({
+    active: activeTab,
+    billingSub: "Workspace plan",
+    onSectionSelect: (section) => {
+      setActiveTab(section);
+      router.replace(`${ROUTES.ORG_SETTINGS}?tab=${section}`);
+    },
+  });
+
+  return (
+    <V2OrgSettingsShell
+      active={activeTab}
+      orgName={orgName}
+      eyebrow={titleData.eyebrow}
+      title={titleData.h1}
+      lead={titleData.lead}
+      sections={sections}
+    >
+      <div className="space-y-6">
         {active ? (
           <>
-            <OrgDetailsForm
-              organization={active.organization}
-              role={active.role}
-              onUpdated={(org) =>
-                setActive((prev) => (prev ? { ...prev, organization: org } : prev))
-              }
-            />
-            <MemberList
-              organizationId={active.organization.id}
-              currentUserId={user.id}
-              currentRole={active.role}
-            />
-            {(active.role === "owner" || active.role === "admin") && (
-              <InvitePanel organizationId={active.organization.id} />
+            {activeTab === "details" && (
+              <OrgDetailsForm
+                organization={active.organization}
+                role={active.role}
+                onUpdated={(org) =>
+                  setActive((prev) => (prev ? { ...prev, organization: org } : prev))
+                }
+              />
             )}
+            {activeTab === "members" && (
+              <MemberList
+                organizationId={active.organization.id}
+                currentUserId={user.id}
+                currentRole={active.role}
+              />
+            )}
+            {activeTab === "invites" &&
+              (active.role === "owner" || active.role === "admin") && (
+                <InvitePanel organizationId={active.organization.id} />
+              )}
+            {activeTab === "invites" &&
+              !(active.role === "owner" || active.role === "admin") && (
+                <p className="text-[14px]" style={{ color: v2.inkSoft }}>
+                  Only owners and admins can manage invites.
+                </p>
+              )}
           </>
         ) : (
-          <div className="rounded-lg border border-cyan-700/30 bg-slate-900 p-6 text-gray-300 flex items-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
-            Setting up your workspace...
+          <div
+            className="rounded-lg p-6 flex items-center gap-2"
+            style={{ background: v2.cream2, border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+          >
+            <Loader2 className="w-4 h-4 animate-spin" style={{ color: v2.accent }} />
+            Setting up your workspace…
           </div>
         )}
 
@@ -104,7 +171,7 @@ function OrgSettingsContent() {
           />
         )}
       </div>
-    </main>
+    </V2OrgSettingsShell>
   );
 }
 
@@ -112,8 +179,11 @@ export default function OrgSettingsPage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen flex items-center justify-center">
-          <Spinner className="text-cyan-500" />
+        <main
+          className="min-h-screen flex items-center justify-center"
+          style={{ background: v2.cream }}
+        >
+          <Spinner />
         </main>
       }
     >

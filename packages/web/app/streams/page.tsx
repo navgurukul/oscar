@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mic, Trash2, Copy } from "lucide-react";
+import { Trash2, Copy } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
-import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,14 +20,24 @@ import { useToast } from "@/hooks/use-toast";
 import { streamsService } from "@/lib/services/streams.service";
 import { ROUTES } from "@/lib/constants";
 import type { DBStream } from "@oscar/shared/types";
+import {
+  v2,
+  v2Serif,
+  V2Caps,
+  V2Mono,
+  V2Source,
+  V2WebHeader,
+} from "@/components/v2/V2Primitives";
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return new Date(iso)
+    .toLocaleString(undefined, {
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+    .toUpperCase();
 }
 
 export default function StreamsPage() {
@@ -86,77 +95,181 @@ export default function StreamsPage() {
 
   if (authLoading || loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <Spinner className="text-cyan-500" />
+      <main
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: v2.cream }}
+      >
+        <Spinner />
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen px-4 pt-28 pb-24 max-w-3xl mx-auto">
-      <header className="mb-6 space-y-1">
-        <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-          <Mic className="w-7 h-7 text-cyan-400" />
-          Stream history
-        </h1>
-        <p className="text-slate-400 text-sm">
-          Every dictation pasted through the desktop pill, kept private to you. Not shared with workspace members.
-        </p>
-      </header>
+    <main
+      style={{
+        background: v2.cream,
+        color: v2.ink,
+        minHeight: "100vh",
+        fontFamily: "var(--font-figtree), system-ui",
+      }}
+    >
+      <V2WebHeader />
 
-      {streams.length === 0 ? (
-        <div className="py-16 text-center text-slate-400 text-sm">
-          No streams yet. Dictate something through the desktop pill and it will appear here.
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {streams.map((s) => (
-            <li
-              key={s.id}
-              className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+      <section className="px-6 md:px-14 pt-16 md:pt-20 pb-10 md:pb-12">
+        <V2Caps>
+          STREAM HISTORY · {streams.length} DICTATION{streams.length === 1 ? "" : "S"}
+        </V2Caps>
+        <h1
+          className="mt-3"
+          style={{
+            fontFamily: v2Serif,
+            fontSize: "clamp(40px, 7vw, 76px)",
+            lineHeight: 0.96,
+            letterSpacing: "-0.025em",
+            fontWeight: 500,
+          }}
+        >
+          Every <em style={{ fontStyle: "italic", color: v2.accent }}>paste</em> through the pill.
+        </h1>
+        <p className="mt-7 max-w-xl text-[16px] leading-relaxed" style={{ color: v2.inkSoft }}>
+          Dictations from the desktop pill — kept private to you, not shared with workspace
+          members. Search through what you pasted, where you pasted it.
+        </p>
+      </section>
+
+      <section
+        className="px-6 md:px-14 pb-20"
+        style={{ borderTop: `1px solid ${v2.rule}` }}
+      >
+        {streams.length === 0 ? (
+          <div className="py-20 text-center">
+            <V2Caps color={v2.accent}>NO STREAMS YET</V2Caps>
+            <h3
+              className="mt-3"
+              style={{
+                fontFamily: v2Serif,
+                fontSize: 48,
+                lineHeight: 0.98,
+                letterSpacing: "-0.025em",
+                fontWeight: 500,
+              }}
             >
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="min-w-0">
-                  <p className="text-xs text-slate-500">{formatDate(s.created_at)}</p>
-                  {s.destination_app || s.app_key ? (
-                    <p className="text-xs text-cyan-300 mt-0.5">
-                      {s.destination_app ?? s.app_key}
-                    </p>
-                  ) : null}
+              Dictate something <em style={{ color: v2.accent }}>through the pill</em>.
+            </h3>
+            <p
+              className="mt-5 mx-auto max-w-md text-[14px] leading-relaxed"
+              style={{ color: v2.inkSoft }}
+            >
+              Pastes from the desktop app show up here. Hold{" "}
+              <V2Mono
+                style={{
+                  background: v2.cream2,
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  fontSize: 12,
+                }}
+              >
+                Ctrl+Space
+              </V2Mono>{" "}
+              anywhere.
+            </p>
+          </div>
+        ) : (
+          <div className="pt-2">
+            {streams.map((s) => (
+              <article
+                key={s.id}
+                className="grid grid-cols-12 gap-4 md:gap-10 py-7 group"
+                style={{ borderTop: `1px solid ${v2.rule}` }}
+              >
+                <div className="col-span-12 md:col-span-2">
+                  <V2Mono style={{ fontSize: 12, color: v2.ink }}>
+                    {formatDate(s.created_at)}
+                  </V2Mono>
+                  <div className="mt-1.5">
+                    <V2Source
+                      name={(s.destination_app ?? s.app_key ?? "STREAM").toUpperCase()}
+                      kind="DICTATED"
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                <div className="col-span-12 md:col-span-9">
+                  {s.formatted_text ? (
+                    <p
+                      style={{
+                        fontFamily: v2Serif,
+                        fontSize: 18,
+                        lineHeight: 1.55,
+                        color: v2.ink,
+                        letterSpacing: "-0.005em",
+                      }}
+                      className="whitespace-pre-wrap"
+                    >
+                      {s.formatted_text}
+                    </p>
+                  ) : (
+                    <p
+                      className="text-[14px] leading-relaxed italic whitespace-pre-wrap"
+                      style={{ color: v2.inkSoft }}
+                    >
+                      {s.raw_transcript}
+                    </p>
+                  )}
+                </div>
+                <div className="col-span-12 md:col-span-1 flex md:justify-end items-start gap-1">
+                  <button
                     onClick={() => void copy(s.formatted_text || s.raw_transcript)}
-                    className="h-8 w-8 p-0 text-gray-400 hover:text-cyan-300 hover:bg-cyan-400/10"
+                    className="p-1.5 rounded-full transition"
+                    style={{ color: v2.inkFaint }}
+                    title="Copy"
                   >
                     <Copy className="w-4 h-4" />
-                  </Button>
+                  </button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-gray-400 hover:text-red-400 hover:bg-red-500/10"
+                      <button
+                        className="p-1.5 rounded-full transition"
+                        style={{ color: v2.inkFaint }}
+                        title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </Button>
+                      </button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent className="bg-slate-900 border-slate-800 text-white">
+                    <AlertDialogContent
+                      style={{
+                        background: v2.cream,
+                        border: `1px solid ${v2.rule}`,
+                        color: v2.ink,
+                      }}
+                    >
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Delete this stream?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-slate-400">
+                        <AlertDialogTitle
+                          style={{
+                            fontFamily: v2Serif,
+                            fontSize: 24,
+                            fontWeight: 500,
+                            letterSpacing: "-0.01em",
+                          }}
+                        >
+                          Delete this stream?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription style={{ color: v2.inkSoft }}>
                           Permanent. The original paste in the destination app is not affected.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-slate-800 border-slate-700 text-white">
+                        <AlertDialogCancel
+                          style={{
+                            background: "transparent",
+                            border: `1px solid ${v2.rule}`,
+                            color: v2.inkSoft,
+                          }}
+                        >
                           Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() => void remove(s.id)}
-                          className="bg-red-600 hover:bg-red-700"
+                          style={{ background: v2.danger, color: v2.cream }}
                         >
                           Delete
                         </AlertDialogAction>
@@ -164,16 +277,11 @@ export default function StreamsPage() {
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
-              </div>
-              {s.formatted_text ? (
-                <p className="text-slate-100 text-sm whitespace-pre-wrap">{s.formatted_text}</p>
-              ) : (
-                <p className="text-slate-400 text-sm italic whitespace-pre-wrap">{s.raw_transcript}</p>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   );
 }

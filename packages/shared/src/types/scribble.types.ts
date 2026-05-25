@@ -59,7 +59,12 @@ export interface DBScribble extends DictationScribbleMetadata {
   organization_id?: string | null;
   shared_with_org?: boolean;
   shared_at?: string | null;
+  // Public share link (Phase 6)
+  visibility?: Visibility;
+  public_share_token?: string | null;
 }
+
+export type Visibility = "private" | "org" | "public";
 
 // Insert type for creating a new scribble
 export interface DBScribbleInsert extends DictationScribbleMetadata {

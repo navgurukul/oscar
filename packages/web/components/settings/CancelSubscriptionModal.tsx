@@ -1,8 +1,8 @@
 "use client";
 
-import { AlertTriangle, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import { v2, v2Serif, V2Caps } from "@/components/v2/V2Primitives";
 
 interface CancelSubscriptionModalProps {
   isOpen: boolean;
@@ -13,13 +13,22 @@ interface CancelSubscriptionModalProps {
 }
 
 function formatDate(dateString: string | null) {
-  if (!dateString) return "N/A";
+  if (!dateString) return "the end of your current billing period";
   return new Date(dateString).toLocaleDateString("en-IN", {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 }
+
+const REASONS = [
+  "Too expensive",
+  "Not using it enough",
+  "Found something better",
+  "Privacy concerns",
+  "Just trying it out",
+  "Other",
+];
 
 export function CancelSubscriptionModal({
   isOpen,
@@ -28,51 +37,110 @@ export function CancelSubscriptionModal({
   isLoading,
   periodEnd,
 }: CancelSubscriptionModalProps) {
+  const [reason, setReason] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="bg-slate-900 border-cyan-700/30 rounded-2xl shadow-xl max-w-md w-full">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-yellow-400" />
-            </div>
-            <h2 className="text-xl font-bold text-white">
-              Cancel Subscription?
-            </h2>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-gray-400 mb-6">
-            Are you sure you want to cancel? You&apos;ll lose access to Pro
-            features at the end of your billing period on{" "}
-            <span className="text-white">{formatDate(periodEnd)}</span>.
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(15,13,10,0.55)", fontFamily: "var(--font-figtree), system-ui" }}
+    >
+      <div
+        className="rounded-2xl overflow-hidden w-full"
+        style={{
+          background: v2.cream,
+          color: v2.ink,
+          maxWidth: 560,
+          boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
+        }}
+      >
+        <div className="px-7 md:px-9 pt-9 pb-9">
+          <V2Caps color={v2.danger}>CANCEL SUBSCRIPTION</V2Caps>
+          <h1
+            className="mt-2"
+            style={{
+              fontFamily: v2Serif,
+              fontSize: 38,
+              lineHeight: 1.0,
+              letterSpacing: "-0.025em",
+              fontWeight: 500,
+            }}
+          >
+            Before you <em style={{ fontStyle: "italic", color: v2.accent }}>go</em>…
+          </h1>
+          <p className="mt-4 text-[14px] leading-relaxed" style={{ color: v2.inkSoft }}>
+            Your Pro plan stays active until <strong>{formatDate(periodEnd)}</strong>. After that
+            you&rsquo;ll drop to Free. Existing Scribbles stay yours.
           </p>
-          <div className="flex gap-3">
-            <Button
-              // variant="outline"
-              onClick={onClose}
-              className="flex-1 border-gray-700"
-              disabled={isLoading}
+
+          <div className="mt-7">
+            <V2Caps>QUICK QUESTION · WHY</V2Caps>
+            <div className="mt-3 space-y-2">
+              {REASONS.map((r) => {
+                const active = reason === r;
+                return (
+                  <button
+                    key={r}
+                    onClick={() => setReason(r)}
+                    className="w-full text-left rounded-md py-2.5 px-4 text-[13px] transition-colors"
+                    style={{
+                      background: active ? v2.cream2 : "transparent",
+                      border: `1px solid ${active ? v2.accent : v2.rule}`,
+                      color: v2.ink,
+                    }}
+                  >
+                    {r}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div
+            className="mt-7 rounded-md p-4"
+            style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+          >
+            <V2Caps color={v2.accent}>BEFORE YOU GO</V2Caps>
+            <p className="mt-2 text-[12px] leading-relaxed" style={{ color: v2.inkSoft }}>
+              We&rsquo;d hate to lose you. Reach out if Oscar isn&rsquo;t working — we read every
+              note.
+            </p>
+            <a
+              href="mailto:hello@oscar.ai?subject=Cancellation%20feedback"
+              className="mt-3 inline-block text-[12px] rounded-full px-4 py-2"
+              style={{ background: v2.ink, color: v2.cream }}
             >
-              Keep Subscription
-            </Button>
-            <Button
-              variant="outline"
+              Tell us what&rsquo;s up
+            </a>
+          </div>
+
+          <div className="mt-7 flex items-center gap-3 flex-wrap">
+            <button
               onClick={onConfirm}
-              className="flex-1"
               disabled={isLoading}
+              className="text-[13px] rounded-full px-5 py-2.5 disabled:opacity-50"
+              style={{ color: v2.danger, border: `1px solid ${v2.dangerSoft}` }}
             >
               {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <>
+                  <Loader2 className="w-4 h-4 inline mr-2 animate-spin" /> Cancelling…
+                </>
               ) : (
-                "Yes, Cancel"
+                "Cancel anyway"
               )}
-            </Button>
+            </button>
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              className="text-[13px]"
+              style={{ color: v2.inkSoft }}
+            >
+              Keep Pro
+            </button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

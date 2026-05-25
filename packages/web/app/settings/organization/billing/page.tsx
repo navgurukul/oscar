@@ -2,36 +2,27 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, CreditCard, Users, Zap, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES, SUBSCRIPTION_CONFIG } from "@/lib/constants";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 import type {
   ActiveOrganization,
   OrganizationMemberWithUser,
 } from "@oscar/shared/types";
+import {
+  v2,
+  v2Serif,
+  V2Caps,
+  V2Mono,
+} from "@/components/v2/V2Primitives";
+import {
+  createOrgSettingsSections,
+  V2OrgSettingsShell,
+} from "@/components/v2/V2OrgSettingsShell";
 
 export default function OrgBillingPage() {
   const router = useRouter();
@@ -61,7 +52,6 @@ export default function OrgBillingPage() {
   }, []);
 
   useEffect(() => {
-    if (!isOrgFeatureEnabled()) return;
     if (authLoading) return;
     if (!user) {
       router.push(`${ROUTES.AUTH}?redirectTo=${ROUTES.ORG_SETTINGS}/billing`);
@@ -95,26 +85,24 @@ export default function OrgBillingPage() {
     }
   }, [subscription, toast]);
 
-  if (!isOrgFeatureEnabled()) {
-    return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <p className="text-gray-400">Workspace billing is not enabled.</p>
-      </main>
-    );
-  }
-
   if (authLoading || loading || subscription.isLoading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <Spinner className="text-cyan-500" />
+      <main
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: v2.cream }}
+      >
+        <Spinner />
       </main>
     );
   }
 
   if (!active) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <p className="text-gray-300">No active workspace.</p>
+      <main
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: v2.cream, color: v2.ink }}
+      >
+        <p style={{ color: v2.inkSoft }}>No active workspace.</p>
       </main>
     );
   }
@@ -124,129 +112,312 @@ export default function OrgBillingPage() {
   const limit = SUBSCRIPTION_CONFIG.FREE_ORG_MONTHLY_RECORDINGS;
   const used = subscription.recordingsThisMonth;
   const pct = isPro ? null : Math.min(100, Math.round((used / limit) * 100));
+  const billingSub = isPro ? "Pro · workspace" : "Free · workspace";
 
   return (
-    <main className="flex flex-col items-center px-4 pt-8 pb-24">
-      <div className="w-full max-w-3xl mt-16 space-y-6">
-        <header className="mb-2 mt-5">
-          <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-            <CreditCard className="w-7 h-7 text-cyan-400" />
-            Billing
-          </h1>
-          <p className="text-gray-400">
-            Plan and usage for <span className="text-white">{active.organization.name}</span>.
-          </p>
-        </header>
-
-        <Card className="bg-slate-900 border-cyan-700/30">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Zap className="w-5 h-5 text-cyan-400" />
-              {isPro ? "Pro" : "Free"}
-            </CardTitle>
-            <CardDescription className="text-gray-400">
-              {isPro
-                ? subscription.billingCycle
-                  ? `${subscription.billingCycle === "monthly" ? "Monthly" : "Yearly"} plan${
-                      subscription.currentPeriodEnd
-                        ? ` · renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
-                        : ""
-                    }`
-                  : "Active subscription"
-                : `Shared ${limit} recordings / month across all workspace members.`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {!isPro && (
+    <V2OrgSettingsShell
+      active="billing"
+      orgName={active.organization.name}
+      eyebrow="ORG SETTINGS · BILLING"
+      title={
+        <>
+          The workspace plan, <em style={{ fontStyle: "italic", color: v2.accent }}>not</em> yours.
+        </>
+      }
+      lead={
+        <>
+          Plan and usage for <strong>{active.organization.name}</strong>. Different from your
+          personal Pro — workspace billing covers shared Minutes and the team feed.
+        </>
+      }
+      sections={createOrgSettingsSections({
+        active: "billing",
+        memberCount: members.length,
+        billingSub,
+      })}
+    >
+      <div className="space-y-10">
+        {/* CURRENT PLAN */}
+        <div
+          className="grid grid-cols-12 gap-6 md:gap-10"
+          style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 28 }}
+        >
+          <div className="col-span-12 md:col-span-3">
+            <V2Caps>CURRENT PLAN</V2Caps>
+          </div>
+          <div
+            className="col-span-12 md:col-span-9 rounded-lg p-7"
+            style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+          >
+            <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
-                <div className="flex items-center justify-between mb-2 text-sm text-gray-300">
-                  <span>This month</span>
-                  <span>
-                    {used} / {limit}
+                <V2Caps color={isPro ? v2.accent : v2.inkFaint}>
+                  WORKSPACE · {isPro ? "PRO" : "FREE"}
+                </V2Caps>
+                <div className="mt-2 flex items-baseline gap-3 flex-wrap">
+                  <span
+                    style={{
+                      fontFamily: v2Serif,
+                      fontSize: 48,
+                      fontWeight: 500,
+                      letterSpacing: 0,
+                    }}
+                  >
+                    {isPro ? "Pro" : "₹0"}
+                  </span>
+                  <span style={{ fontSize: 13, color: v2.inkSoft }}>
+                    {isPro
+                      ? subscription.billingCycle
+                        ? `· ${subscription.billingCycle === "monthly" ? "monthly" : "annual"}${
+                            subscription.currentPeriodEnd
+                              ? ` · renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
+                              : ""
+                          }`
+                        : "· active"
+                      : `· ${limit} recordings / month shared across members`}
                   </span>
                 </div>
-                <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                {!isPro && (
+                  <p className="mt-3 text-[13px]" style={{ color: v2.inkSoft, maxWidth: 460 }}>
+                    Members each have their own personal quota too — this is the shared pool for
+                    things saved to the workspace.
+                  </p>
+                )}
+              </div>
+              {canManage && !isPro && (
+                <button
+                  onClick={() => router.push(ROUTES.PRICING)}
+                  className="text-[12px] rounded-full px-4 py-2 font-medium"
+                  style={{ background: v2.accent, color: v2.cream }}
+                >
+                  Upgrade workspace →
+                </button>
+              )}
+              {canManage && isPro && subscription.status === "active" && (
+                <button
+                  onClick={() => setConfirmCancel(true)}
+                  className="text-[12px] rounded-full px-4 py-2"
+                  style={{ border: `1px solid ${v2.dangerSoft}`, color: v2.danger }}
+                >
+                  Cancel subscription
+                </button>
+              )}
+            </div>
+
+            {!isPro && (
+              <div className="mt-7">
+                <div className="flex items-baseline justify-between mb-2.5">
+                  <V2Caps>SHARED USAGE · THIS MONTH</V2Caps>
+                  <V2Mono style={{ fontSize: 12, color: v2.ink }}>
+                    {used} / {limit} · {pct}%
+                  </V2Mono>
+                </div>
+                <div
+                  className="rounded-full overflow-hidden"
+                  style={{ height: 8, background: v2.rule }}
+                >
                   <div
-                    className="h-full bg-cyan-500 transition-all"
-                    style={{ width: `${pct ?? 0}%` }}
+                    style={{
+                      height: "100%",
+                      width: `${pct ?? 0}%`,
+                      background: pct && pct > 80 ? v2.accent : v2.ink,
+                      transition: "all 0.3s ease",
+                    }}
                   />
                 </div>
               </div>
             )}
 
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <Users className="w-4 h-4" />
-              {members.length} {members.length === 1 ? "member" : "members"}
-            </div>
-
-            {canManage ? (
-              <div className="flex gap-2 pt-2">
-                {!isPro && (
-                  <Button
-                    onClick={() => router.push(ROUTES.PRICING)}
-                    className="bg-cyan-500 hover:bg-cyan-600 text-white"
-                  >
-                    Upgrade to Pro
-                  </Button>
-                )}
-                {isPro && subscription.status === "active" && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setConfirmCancel(true)}
-                    className="border-red-700/40 text-red-300 hover:bg-red-500/10"
-                  >
-                    Cancel subscription
-                  </Button>
-                )}
-                {isPro && subscription.status === "cancelled" && (
-                  <p className="text-xs text-amber-300 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
-                    Cancellation scheduled — Pro stays active until{" "}
-                    {subscription.currentPeriodEnd
-                      ? new Date(subscription.currentPeriodEnd).toLocaleDateString()
-                      : "the end of the billing period"}
-                    .
-                  </p>
-                )}
+            {isPro && subscription.status === "cancelled" && (
+              <div
+                className="mt-7 rounded-md px-4 py-3 flex items-start gap-2"
+                style={{ background: v2.cream, border: `1px solid ${v2.dangerSoft}`, color: v2.danger }}
+              >
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <p className="text-[13px] leading-relaxed">
+                  Cancellation scheduled — Pro stays active until{" "}
+                  {subscription.currentPeriodEnd
+                    ? new Date(subscription.currentPeriodEnd).toLocaleDateString()
+                    : "the end of the billing period"}
+                  .
+                </p>
               </div>
-            ) : (
-              <p className="text-xs text-gray-500">
-                Only workspace owners or admins can change billing.
-              </p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        {!isPro && (
+          <div
+            className="grid grid-cols-12 gap-6 md:gap-10"
+            style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 28 }}
+          >
+            <div className="col-span-12 md:col-span-3">
+              <V2Caps>UPGRADE</V2Caps>
+            </div>
+            <div
+              className="col-span-12 md:col-span-9 rounded-lg p-7"
+              style={{ background: v2.ink, color: v2.cream }}
+            >
+              <V2Caps color={v2.accentSoft}>WORKSPACE PRO</V2Caps>
+              <div className="mt-3 flex items-baseline gap-3 flex-wrap">
+                <span
+                  style={{
+                    fontFamily: v2Serif,
+                    fontSize: 48,
+                    fontWeight: 500,
+                    letterSpacing: 0,
+                  }}
+                >
+                  Unlimited
+                </span>
+                <span style={{ fontSize: 13, color: "rgba(247,244,238,0.65)" }}>
+                  shared Minutes, team feed, and workspace usage.
+                </span>
+              </div>
+              <ul className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-[14px] list-none p-0">
+                {[
+                  "Unlimited shared Minutes",
+                  "Shared workspace vocabulary",
+                  "Posted Minutes for team review",
+                  "Org-wide audit log",
+                  "Org-wide analytics",
+                  "Priority workspace support",
+                ].map((feature) => (
+                  <li key={feature} className="flex items-start gap-2" style={{ color: v2.cream }}>
+                    <span style={{ color: v2.accent, fontFamily: "var(--font-ibm-plex-mono), ui-monospace", fontSize: 12, marginTop: 4 }}>·</span>
+                    <span style={{ fontFamily: v2Serif, fontSize: 15 }}>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+              {canManage && (
+                <button
+                  onClick={() => router.push(ROUTES.PRICING)}
+                  className="mt-7 text-[13px] rounded-full px-5 py-2.5 font-medium"
+                  style={{ background: v2.cream, color: v2.ink }}
+                >
+                  Upgrade workspace →
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* SEATS */}
+        <div
+          className="grid grid-cols-12 gap-6 md:gap-10"
+          style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 28 }}
+        >
+          <div className="col-span-12 md:col-span-3">
+            <V2Caps>SEATS</V2Caps>
+          </div>
+          <div className="col-span-12 md:col-span-9">
+            <div
+              className="flex items-center justify-between py-4"
+              style={{ borderBottom: `1px solid ${v2.rule}` }}
+            >
+              <div>
+                <div style={{ fontSize: 14, color: v2.ink }}>
+                  {members.length} {members.length === 1 ? "member" : "members"} in workspace
+                </div>
+                <V2Caps>{members.length} ACTIVE</V2Caps>
+              </div>
+              {!canManage && (
+                <V2Mono style={{ fontSize: 11, color: v2.inkFaint }}>VIEW ONLY</V2Mono>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* WORKSPACE INVOICES */}
+        <div
+          className="grid grid-cols-12 gap-6 md:gap-10"
+          style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 28 }}
+        >
+          <div className="col-span-12 md:col-span-3">
+            <V2Caps>WORKSPACE INVOICES</V2Caps>
+          </div>
+          <div className="col-span-12 md:col-span-9">
+            {[
+              ["THIS CYCLE", isPro ? "Active subscription" : "Free · workspace"],
+              ["LAST CYCLE", isPro ? "Available in Razorpay" : "No charge"],
+              ["ARCHIVE", "Invoices appear after workspace upgrades"],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="grid grid-cols-12 gap-4 py-3 items-center"
+                style={{ borderBottom: `1px solid ${v2.rule}` }}
+              >
+                <V2Mono style={{ fontSize: 12, color: v2.ink, gridColumn: "span 4 / span 4" }}>
+                  {label}
+                </V2Mono>
+                <span className="col-span-8 text-[13px]" style={{ color: v2.inkSoft }}>
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {!canManage && (
+          <p className="text-[12px]" style={{ color: v2.inkFaint }}>
+            Only workspace owners or admins can change billing.
+          </p>
+        )}
       </div>
 
-      <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
-        <AlertDialogContent className="bg-slate-900 border-slate-800 text-white">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancel the workspace subscription?</AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-400">
-              Pro features stay active until the end of the current billing period. Members will drop back to the shared free quota afterwards.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="bg-slate-800 border-slate-700 text-white">
-              Keep it
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void cancel()}
-              disabled={cancelling}
-              className="bg-red-600 hover:bg-red-700"
+      {confirmCancel && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(15,13,10,0.55)" }}
+        >
+          <div
+            className="rounded-2xl w-full max-w-md p-7"
+            style={{ background: v2.cream, border: `1px solid ${v2.rule}` }}
+          >
+            <V2Caps color={v2.danger}>CANCEL SUBSCRIPTION</V2Caps>
+            <h2
+              className="mt-2"
+              style={{
+                fontFamily: v2Serif,
+                fontSize: 32,
+                lineHeight: 1.0,
+                letterSpacing: 0,
+                fontWeight: 500,
+              }}
             >
-              {cancelling ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Cancelling...
-                </>
-              ) : (
-                "Cancel subscription"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </main>
+              Cancel the workspace subscription?
+            </h2>
+            <p className="mt-3 text-[14px] leading-relaxed" style={{ color: v2.inkSoft }}>
+              Pro features stay active until the end of the current billing period. Members will
+              drop back to the shared free quota afterwards.
+            </p>
+            <div className="mt-6 flex items-center gap-3">
+              <button
+                onClick={() => setConfirmCancel(false)}
+                className="text-[13px] rounded-full px-5 py-2.5"
+                style={{ background: v2.ink, color: v2.cream }}
+              >
+                Keep it
+              </button>
+              <button
+                onClick={() => void cancel()}
+                disabled={cancelling}
+                className="text-[13px] rounded-full px-5 py-2.5 disabled:opacity-50"
+                style={{ border: `1px solid ${v2.dangerSoft}`, color: v2.danger }}
+              >
+                {cancelling ? (
+                  <>
+                    <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />
+                    Cancelling…
+                  </>
+                ) : (
+                  "Cancel anyway"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </V2OrgSettingsShell>
   );
 }

@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Oscar · redesign</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=EB+Garamond:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Figtree', 'system-ui', 'sans-serif'],
+          serif: ['"EB Garamond"', 'Georgia', 'serif'],
+          mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; font-family: "Figtree", system-ui, sans-serif; }
+  ::selection { background: #e8c9b8; color: #1a1816; }
+  #root { min-height: 100vh; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="oscar-v2.jsx"></script>
+<script type="text/babel" src="oscar-v2-screens.jsx"></script>
+<script type="text/babel" src="oscar-v2-screens2.jsx"></script>
+<script type="text/babel" src="oscar-v2-screens3.jsx"></script>
+<script type="text/babel" src="oscar-v2-screens4.jsx"></script>
+<script type="text/babel" src="oscar-v2-screens5.jsx"></script>
+<script type="text/babel">
+
+function Canvas() {
+  return (
+    <DesignCanvas>
+      <DCSection
+        id="intro"
+        title="Oscar · v2"
+        subtitle="Voice-first writing. Wispr × Granola lean — editorial whitespace, notebook intimacy. Warm cream stage, terracotta accent only for live-audio moments. Three big-idea moves: unified listening surface (Today, not tabs), AI margin notes, the pill as presence. Figtree + EB Garamond + IBM Plex Mono."
+      />
+      <DCSection
+        id="codebase-parity"
+        title="Codebase parity — new this wave"
+        subtitle="Seven pages that exist in navgurukul/oscar@release_Dev but didn’t have artboards yet: /auth/post-callback · /download · /terms · /refund-policy · /settings/organization/{billing, analytics, audit}. Designed into their existing surfaces (auth flows, marketing, legal, teams)."
+      />
+
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · MARKETING
+          ════════════════════════════════════════════════════════════════ */}
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · AUTH (FULL SET) — wave 5
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="web-auth-full"
+        title="Web · auth (full set) — new"
+        subtitle="Sign-in already existed. This wave fills the rest: sign-up, forgot, magic-link sent, reset, two-factor, and a six-card error catalog."
+      >
+        <DCArtboard id="auth-signup" label="Sign up · new account" width={1280} height={820}>
+          <V2WebSignUp />
+        </DCArtboard>
+        <DCArtboard id="auth-forgot" label="Forgot password · request" width={1280} height={820}>
+          <V2WebForgotPassword />
+        </DCArtboard>
+        <DCArtboard id="auth-link-sent" label="Magic link sent · check inbox" width={1280} height={820}>
+          <V2WebMagicLinkSent />
+        </DCArtboard>
+        <DCArtboard id="auth-reset" label="Reset password · landed from email" width={1280} height={820}>
+          <V2WebResetPassword />
+        </DCArtboard>
+        <DCArtboard id="auth-2fa" label="Two-step · 6-digit challenge" width={1280} height={820}>
+          <V2WebTwoFactor />
+        </DCArtboard>
+        <DCArtboard id="auth-errors" label="Auth error catalog · six cards" width={1280} height={1080}>
+          <V2WebAuthErrors />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · ONBOARDING — wave 5
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="web-onboarding-new"
+        title="Onboarding · web + mobile — new"
+        subtitle="Desktop onboarding already exists. Adding web first-run, mobile permission priming, and the Today-with-nothing-yet state."
+      >
+        <DCArtboard id="onb-web-firstrun" label="Web first-run · 3 steps" width={1280} height={1300}>
+          <V2WebFirstRun />
+        </DCArtboard>
+        <DCArtboard id="onb-today-first" label="Today · first-ever (no captures yet)" width={1280} height={1500}>
+          <V2WebTodayFirstEver />
+        </DCArtboard>
+        <DCArtboard id="onb-mobile" label="Mobile onboarding · step 2 · mic permission" width={402} height={874}>
+          <IOSDevice><V2MobileOnboarding /></IOSDevice>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · EDITOR STATES — wave 5
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="web-editor-states"
+        title="Web · editor states — new"
+        subtitle="The single-Scribble surface, in its six shapes: empty, AI streaming, read-only, version history, save conflict, collab."
+      >
+        <DCArtboard id="ed-states" label="Editor states gallery · six in one" width={1280} height={1080}>
+          <V2WebEditorStatesGallery />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="web-marketing"
+        title="Web · marketing"
+        subtitle="Public-facing pages — landing, pricing, auth."
+      >
+        <DCArtboard id="web-landing" label="Landing" width={1280} height={2800}>
+          <V2WebLanding />
+        </DCArtboard>
+        <DCArtboard id="web-pricing" label="Pricing" width={1280} height={1800}>
+          <V2WebPricing />
+        </DCArtboard>
+        <DCArtboard id="web-auth" label="Auth · sign in" width={1280} height={820}>
+          <V2WebAuth />
+        </DCArtboard>
+        <DCArtboard id="web-download" label="Download · auto-detect + showcase" width={1280} height={1400}>
+          <V2WebDownload />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · APP
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="web-app"
+        title="Web · app"
+        subtitle="Signed-in. Today is the listening surface — Stream, Minutes, and Scribble are modes of one act, not separate tabs."
+      >
+        <DCArtboard id="web-today" label="Today · the listening surface" width={1280} height={2400}>
+          <V2WebHome />
+        </DCArtboard>
+        <DCArtboard id="web-library" label="Library" width={1280} height={1800}>
+          <V2WebLibrary />
+        </DCArtboard>
+        <DCArtboard id="web-library-empty" label="Library · first run / empty" width={1280} height={1100}>
+          <V2WebLibraryEmpty />
+        </DCArtboard>
+        <DCArtboard id="web-search" label="Search results" width={1280} height={1300}>
+          <V2WebSearchResults />
+        </DCArtboard>
+        <DCArtboard id="web-folder" label="Folder detail · Pricing" width={1280} height={1500}>
+          <V2WebFolderDetail />
+        </DCArtboard>
+        <DCArtboard id="web-scribble" label="Single Scribble · with AI margin notes" width={1280} height={1400}>
+          <V2WebScribble />
+        </DCArtboard>
+        <DCArtboard id="web-minutes-list" label="Minutes list" width={1280} height={1700}>
+          <V2WebMinutesList />
+        </DCArtboard>
+        <DCArtboard id="web-minutes-detail" label="Single Minutes · with three-column distillation" width={1280} height={1500}>
+          <V2WebMinutesDetail />
+        </DCArtboard>
+        <DCArtboard id="web-minutes-share" label="Single Minutes · public share view" width={1280} height={1700}>
+          <V2WebMinutesShare />
+        </DCArtboard>
+        <DCArtboard id="web-transform" label="Scribble · Transform" width={1280} height={1100}>
+          <V2WebTransform />
+        </DCArtboard>
+        <DCArtboard id="web-translate" label="Scribble · Translate" width={1280} height={1100}>
+          <V2WebTranslate />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · CAPTURE FLOW
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="web-capture"
+        title="Web · capture flow"
+        subtitle="The moment of recording — listening, shaping, ready."
+      >
+        <DCArtboard id="web-recording" label="Recording · live" width={1280} height={840}>
+          <V2WebRecording />
+        </DCArtboard>
+        <DCArtboard id="web-processing" label="Processing · what Oscar is doing" width={1280} height={840}>
+          <V2WebProcessing />
+        </DCArtboard>
+        <DCArtboard id="web-results" label="Results · review & save" width={1280} height={1100}>
+          <V2WebResults />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · SETTINGS
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="web-settings"
+        title="Web · settings"
+        subtitle="Five sub-pages on the same editorial shell — sidebar + sectioned hairline rows."
+      >
+        <DCArtboard id="set-account" label="Account" width={1280} height={1500}>
+          <V2WebSettings />
+        </DCArtboard>
+        <DCArtboard id="set-billing" label="Plans & billing" width={1280} height={1300}>
+          <V2WebSettingsBilling />
+        </DCArtboard>
+        <DCArtboard id="set-vocab" label="Vocabulary" width={1280} height={1300}>
+          <V2WebSettingsVocabulary />
+        </DCArtboard>
+        <DCArtboard id="set-folders" label="Folders" width={1280} height={1100}>
+          <V2WebSettingsFolders />
+        </DCArtboard>
+        <DCArtboard id="set-privacy" label="Data & privacy" width={1280} height={1300}>
+          <V2WebSettingsPrivacy />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · STATES
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="web-states"
+        title="Web · states"
+        subtitle="Empty, loading, denied, limit, not-found — all dressed in the same restraint."
+      >
+        <DCArtboard id="web-states-gallery" label="States gallery · six in one" width={1280} height={1080}>
+          <V2WebStatesGallery />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · TEAMS WORKSPACE
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="web-teams"
+        title="Web · teams workspace"
+        subtitle="The org surface — feed, docs, members, invites, settings. Where the team's shared voice lives."
+      >
+        <DCArtboard id="team-feed" label="Team feed" width={1280} height={1400}>
+          <V2WebTeamFeed />
+        </DCArtboard>
+        <DCArtboard id="team-docs" label="Workspace docs · list" width={1280} height={1400}>
+          <V2WebTeamDocs />
+        </DCArtboard>
+        <DCArtboard id="team-doc-single" label="Workspace doc · single" width={1280} height={1400}>
+          <V2WebTeamDocSingle />
+        </DCArtboard>
+        <DCArtboard id="team-org-details" label="Org settings · details" width={1280} height={1400}>
+          <V2WebOrgDetails />
+        </DCArtboard>
+        <DCArtboard id="team-org-members" label="Org settings · members & roles" width={1280} height={1200}>
+          <V2WebOrgMembers />
+        </DCArtboard>
+        <DCArtboard id="team-org-invites" label="Org settings · invites" width={1280} height={1300}>
+          <V2WebOrgInvites />
+        </DCArtboard>
+        <DCArtboard id="team-invite-accept" label="Invite acceptance · /invite/[token]" width={1280} height={820}>
+          <V2WebInviteAccept />
+        </DCArtboard>
+        <DCArtboard id="team-create" label="Create workspace" width={1280} height={900}>
+          <V2WebCreateWorkspace />
+        </DCArtboard>
+        <DCArtboard id="team-org-billing" label="Org settings · billing" width={1280} height={1500}>
+          <V2WebOrgBilling />
+        </DCArtboard>
+        <DCArtboard id="team-org-analytics" label="Org settings · analytics" width={1280} height={1400}>
+          <V2WebOrgAnalytics />
+        </DCArtboard>
+        <DCArtboard id="team-org-audit" label="Org settings · audit log" width={1280} height={1400}>
+          <V2WebOrgAudit />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · ACCOUNT FLOWS
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="web-account"
+        title="Web · account flows"
+        subtitle="Auth handoff, data export, account deletion. The serious moments."
+      >
+        <DCArtboard id="acc-desktop-callback" label="/auth/desktop-callback · three states" width={1280} height={800}>
+          <V2WebDesktopCallback />
+        </DCArtboard>
+        <DCArtboard id="acc-post-callback" label="/auth/post-callback · session finalize" width={1280} height={1000}>
+          <V2WebPostCallback />
+        </DCArtboard>
+        <DCArtboard id="acc-export" label="Export data · three-step" width={1280} height={1100}>
+          <V2WebExportData />
+        </DCArtboard>
+        <DCArtboard id="acc-delete" label="Delete account · confirm + goodbye" width={1280} height={1100}>
+          <V2WebDeleteAccount />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          WEB · LEGAL
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="web-legal"
+        title="Web · legal"
+        subtitle="One editorial template covers Privacy / Terms / Refund — three Markdown bodies, one design."
+      >
+        <DCArtboard id="legal-privacy" label="Privacy policy" width={1280} height={1500}>
+          <V2WebLegal />
+        </DCArtboard>
+        <DCArtboard id="legal-terms" label="Terms of service" width={1280} height={2100}>
+          <V2WebLegalTerms />
+        </DCArtboard>
+        <DCArtboard id="legal-refund" label="Refund policy" width={1280} height={1900}>
+          <V2WebLegalRefund />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          DESKTOP
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="desktop-app"
+        title="Desktop · app"
+        subtitle="The Tauri shell. Sidebar + spine. Mono captions tell you what Oscar is doing — never a spinner without a name."
+      >
+        <DCArtboard id="d-today" label="Today" width={1100} height={760}>
+          <V2DesktopHome />
+        </DCArtboard>
+        <DCArtboard id="d-scribble" label="Scribbles · three-pane" width={1100} height={760}>
+          <V2DesktopScribble />
+        </DCArtboard>
+        <DCArtboard id="d-minutes" label="Minutes" width={1100} height={760}>
+          <V2DesktopMinutes />
+        </DCArtboard>
+        <DCArtboard id="d-settings" label="Settings · general" width={1100} height={760}>
+          <V2DesktopSettings />
+        </DCArtboard>
+        <DCArtboard id="d-vibe" label="Vibe Coding · mode picker" width={1100} height={760}>
+          <V2DesktopVibeCoding />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="desktop-pill"
+        title="Desktop · pill"
+        subtitle="The dictation pill. A presence, not a button — ghost-glass at rest, terracotta only when audio is live or fresh."
+      >
+        <DCArtboard id="d-pill" label="Pill · five states + principles" width={1280} height={900}>
+          <V2DesktopPill />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="desktop-onboarding"
+        title="Desktop · onboarding"
+        subtitle="Three steps — sign in, permissions, first Scribble — visualized as a single canvas."
+      >
+        <DCArtboard id="d-onboarding" label="Onboarding · three steps" width={1100} height={760}>
+          <V2DesktopOnboarding />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="desktop-context"
+        title="Desktop · context-aware dictation"
+        subtitle="Phase 6 — the ‘Optimized for X’ label appears in three places. Quiet, never blocking."
+      >
+        <DCArtboard id="d-context" label="Context labels · three placements" width={1100} height={760}>
+          <V2DesktopContextLabels />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="desktop-update"
+        title="Desktop · update"
+        subtitle="In-app release notes. Small, restartable, with reasons."
+      >
+        <DCArtboard id="d-update" label="Update available · v0.42.0 (single state)" width={1100} height={760}>
+          <V2DesktopUpdate />
+        </DCArtboard>
+        <DCArtboard id="d-update-gallery" label="Update · six states (checking, downloading, ready, failed, mandatory, up-to-date)" width={1100} height={1000}>
+          <V2DesktopUpdateGallery />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="desktop-states"
+        title="Desktop · states"
+        subtitle="Common friction — hotkey conflict, mic denied, no calendar. Each with a single clear path forward."
+      >
+        <DCArtboard id="d-states" label="States gallery" width={1100} height={760}>
+          <V2DesktopStatesGallery />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="desktop-extras"
+        title="Desktop · extras"
+        subtitle="Trash, AI panel — the surfaces you live in but don't think about."
+      >
+        <DCArtboard id="d-trash" label="Trash · 30-day retention" width={1100} height={760}>
+          <V2DesktopTrash />
+        </DCArtboard>
+        <DCArtboard id="d-ai" label="Scribble · AI panel open" width={1100} height={760}>
+          <V2DesktopAIPanel />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          MOBILE
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="mobile"
+        title="Mobile · iPhone Pro"
+        subtitle="The spine, narrowed. Floating ink pill replaces the bottom tab bar — listening is the only persistent affordance."
+      >
+        <DCArtboard id="m-landing" label="Landing" width={402} height={874}>
+          <IOSDevice><V2MobileLanding /></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-auth" label="Auth · sign in" width={402} height={874}>
+          <IOSDevice><V2MobileAuth /></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-today" label="Today" width={402} height={874}>
+          <IOSDevice><V2MobileHome /></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-library" label="Library" width={402} height={874}>
+          <IOSDevice><V2MobileLibrary /></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-editor" label="Editor · margin notes stacked" width={402} height={874}>
+          <IOSDevice><V2MobileEditor /></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-pricing" label="Pricing" width={402} height={874}>
+          <IOSDevice><V2MobilePricing /></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-recording" label="Recording · live" width={402} height={874}>
+          <IOSDevice><V2MobileRecording /></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-processing" label="Processing" width={402} height={874}>
+          <IOSDevice><V2MobileProcessing /></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-results" label="Results · review & save" width={402} height={874}>
+          <IOSDevice><V2MobileResults /></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-minutes" label="Single Minutes" width={402} height={874}>
+          <IOSDevice><V2MobileMinutes /></IOSDevice>
+        </DCArtboard>
+        <DCArtboard id="m-settings" label="Settings" width={402} height={874}>
+          <IOSDevice><V2MobileSettings /></IOSDevice>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          OVERLAYS
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="overlays"
+        title="Overlays · modals & toasts"
+        subtitle="High-friction moments — hitting a limit, paying, recovering — and the small things said quietly."
+      >
+        <DCArtboard id="ov-upgrade" label="Upgrade · limit reached" width={1100} height={760}>
+          <V2OverlayUpgrade />
+        </DCArtboard>
+        <DCArtboard id="ov-checkout" label="Checkout · Razorpay" width={1100} height={760}>
+          <V2OverlayCheckout />
+        </DCArtboard>
+        <DCArtboard id="ov-publish" label="Publish dialog" width={1100} height={760}>
+          <V2WebPublishDialog />
+        </DCArtboard>
+        <DCArtboard id="ov-permission" label="Permission · in-context recovery" width={1100} height={760}>
+          <V2OverlayPermission />
+        </DCArtboard>
+        <DCArtboard id="ov-toasts" label="Toast catalog" width={1100} height={760}>
+          <V2OverlayToasts />
+        </DCArtboard>
+        <DCArtboard id="ov-cancel" label="Cancel subscription" width={1100} height={760}>
+          <V2OverlayCancelSub />
+        </DCArtboard>
+        <DCArtboard id="ov-trash-sheet" label="Trash sheet · right slide-in" width={1280} height={760}>
+          <V2OverlayTrashSheet />
+        </DCArtboard>
+      </DCSection>
+
+      {/* ════════════════════════════════════════════════════════════════
+          COLOR
+          ════════════════════════════════════════════════════════════════ */}
+      <DCSection
+        id="colors"
+        title="Color explorations"
+        subtitle="Terracotta is current. Four alternates explored — same type system, same rhythm, only the cream / ink / accent triad shifts."
+      >
+        <DCArtboard id="col-swatches" label="Palette overview · all five" width={1880} height={780}>
+          <V2PaletteSwatches />
+        </DCArtboard>
+        <DCArtboard id="col-terracotta" label="01 · Terracotta · current" width={720} height={1080}>
+          <V2HeroIn palette="terracotta" />
+        </DCArtboard>
+        <DCArtboard id="col-oxblood" label="02 · Oxblood · bookish" width={720} height={1080}>
+          <V2HeroIn palette="oxblood" />
+        </DCArtboard>
+        <DCArtboard id="col-moss" label="03 · Moss · slow & natural" width={720} height={1080}>
+          <V2HeroIn palette="moss" />
+        </DCArtboard>
+        <DCArtboard id="col-indigo" label="04 · Indigo · ink on paper" width={720} height={1080}>
+          <V2HeroIn palette="indigo" />
+        </DCArtboard>
+        <DCArtboard id="col-honey" label="05 · Honey · warm gold" width={720} height={1080}>
+          <V2HeroIn palette="honey" />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<Canvas />);
+</script>
+</body>
+</html>

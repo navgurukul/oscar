@@ -13,6 +13,8 @@ body {
   font-size: var(--font-size-base, 16px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: #f7f4ee;
+  color: #1a1816;
 }
 
 /* Define actual font families */
@@ -47,11 +49,11 @@ html.text-size-lg {
   }
 
   ::selection {
-    background-color: #a5f3fc; /* cyan-200 */
-    color: #111827; /* gray-900 */
+    background-color: #e8c9b8; /* accentSoft */
+    color: #1a1816; /* ink */
   }
 
-  /* Custom Scrollbar Styling - Cyan Theme */
+  /* Custom Scrollbar Styling — terracotta on cream */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -62,18 +64,17 @@ html.text-size-lg {
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(6, 182, 212, 0); /* Hidden by default */
+    background: rgba(184, 98, 61, 0);
     border-radius: 4px;
     transition: background-color 0.2s ease;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(6, 182, 212, 0.8); /* Show on hover */
+    background: rgba(184, 98, 61, 0.7);
   }
 
-  /* Show scrollbar when scrolling */
   ::-webkit-scrollbar-thumb:active {
-    background: rgba(6, 182, 212, 0.8);
+    background: rgba(184, 98, 61, 0.8);
   }
 
   /* Firefox Scrollbar - Hide by default */
@@ -83,17 +84,17 @@ html.text-size-lg {
   }
 
   textarea:hover {
-    scrollbar-color: rgba(6, 182, 212, 0.5) transparent;
+    scrollbar-color: rgba(184, 98, 61, 0.5) transparent;
   }
 
-  /* Folder tabs container - Custom cyan scrollbar */
+  /* Folder tabs container - terracotta scrollbar */
   .folder-tabs-scrollable {
     scrollbar-color: transparent transparent;
     scrollbar-width: thin;
   }
 
   .folder-tabs-scrollable:hover {
-    scrollbar-color: rgba(6, 182, 212, 0.6) transparent;
+    scrollbar-color: rgba(184, 98, 61, 0.6) transparent;
   }
 
   .folder-tabs-scrollable::-webkit-scrollbar {
@@ -105,71 +106,45 @@ html.text-size-lg {
   }
 
   .folder-tabs-scrollable::-webkit-scrollbar-thumb {
-    background: rgba(6, 182, 212, 0);
+    background: rgba(184, 98, 61, 0);
     border-radius: 3px;
     transition: background-color 0.2s ease;
   }
 
   .folder-tabs-scrollable:hover::-webkit-scrollbar-thumb {
-    background: rgba(6, 182, 212, 0.6);
+    background: rgba(184, 98, 61, 0.6);
   }
 
   .folder-tabs-scrollable::-webkit-scrollbar-thumb:active {
-    background: rgba(6, 182, 212, 0.8);
+    background: rgba(184, 98, 61, 0.8);
   }
 
+  /* Shadcn primitives read these CSS vars. Mapped to the v2 cream/ink/terracotta
+   * palette so any primitive using bg-primary, border-input, text-muted-foreground,
+   * etc. lands in the editorial system automatically.
+   * Note: --accent here is the *neutral hover surface* (cream2), not the brand
+   * terracotta. Brand color lives in Tailwind's `terracotta` token + v2.accent. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --background: 40 36% 95%;       /* cream  #f7f4ee */
+    --foreground: 30 8% 9%;         /* ink    #1a1816 */
+    --card: 40 36% 95%;
+    --card-foreground: 30 8% 9%;
+    --popover: 40 36% 95%;
+    --popover-foreground: 30 8% 9%;
+    --primary: 30 8% 9%;            /* ink */
+    --primary-foreground: 40 36% 95%;
+    --secondary: 40 32% 91%;        /* cream2 #efeae0 */
+    --secondary-foreground: 30 8% 9%;
+    --muted: 40 32% 91%;            /* cream2 */
+    --muted-foreground: 45 5% 34%;  /* inkSoft #5a5852 */
+    --accent: 40 32% 91%;           /* cream2 — neutral hover surface */
+    --accent-foreground: 30 8% 9%;
+    --destructive: 6 58% 35%;       /* danger #8c2f25 */
+    --destructive-foreground: 40 36% 95%;
+    --border: 40 22% 87%;           /* rule #e5e0d6 */
+    --input: 40 22% 87%;
+    --ring: 18 50% 48%;             /* terracotta #b8623d — focus rings are brand */
     --radius: 0.5rem;
-  }
-  .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
   }
 }
 
@@ -194,7 +169,7 @@ html.text-size-lg {
 
 .typewriter {
   overflow: hidden;
-  border-right: 3px solid #06b6d4;
+  border-right: 3px solid #b8623d;
   white-space: nowrap;
   animation: blinkCursor 0.7s infinite;
 }

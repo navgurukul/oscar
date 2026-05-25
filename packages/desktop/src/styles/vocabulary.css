@@ -22,35 +22,39 @@
 }
 
 .vocabulary-icon {
-  color: #0891b2;
+  color: #a25234;
 }
 
 .vocabulary-section h3 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #0f172a;
+  font-family: var(--font-serif, 'EB Garamond', serif);
+  font-size: 2rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--ink);
 }
 
 .vocabulary-count {
   font-size: 0.875rem;
-  color: #64748b;
+  color: #5a5852;
   font-weight: 500;
 }
 
 .vocabulary-description {
   font-size: 0.9375rem;
-  color: #64748b;
+  color: #5a5852;
   margin-bottom: 24px;
   line-height: 1.6;
 }
 
-/* Vocabulary Form */
+/* Vocabulary Form — editorial block */
 .vocabulary-form {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 24px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0 0 24px;
   margin-bottom: 24px;
+  border-bottom: 1px solid #e5e0d6;
 }
 
 .vocabulary-form-row {
@@ -67,43 +71,48 @@
 }
 
 .vocabulary-input-group label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #64748b;
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: #8b8780;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.18em;
 }
 
 .vocabulary-input-group input {
-  padding: 10px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  padding: 9px 0;
+  border: none;
+  border-bottom: 1px solid #e5e0d6;
+  border-radius: 0;
   font-size: 0.9375rem;
-  background: #ffffff;
-  color: #1e293b;
-  transition: all 0.2s;
+  background: transparent;
+  color: #1a1816;
+  transition: border-color 0.15s;
 }
 
 .vocabulary-input-group input:focus {
   outline: none;
-  border-color: #06b6d4;
-  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+  border-bottom-color: #1a1816;
+  box-shadow: none;
 }
 
 .vocabulary-add-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: auto;
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 999px;
   border: none;
-  background: #0891b2;
-  color: #ffffff;
+  background: #1a1816;
+  color: #f7f4ee;
   cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
+  transition: opacity 0.15s;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 
 /* Label hidden in icon-only (auto-sized) mode; shown when button goes full-width */
@@ -114,7 +123,8 @@
 }
 
 .vocabulary-add-btn:hover:not(:disabled) {
-  background: #0e7490;
+  background: #1a1816;
+  opacity: 0.88;
 }
 
 .vocabulary-add-btn:disabled {
@@ -122,24 +132,30 @@
   cursor: not-allowed;
 }
 
-/* Vocabulary List */
+/* Vocabulary List — editorial hairline rows */
 .vocabulary-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
 }
 
 .vocabulary-item {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px 20px;
-  transition: all 0.2s;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 16px 0;
+  transition: none;
+  border-bottom: 1px solid #e5e0d6;
+}
+
+.vocabulary-item:last-child {
+  border-bottom: none;
 }
 
 .vocabulary-item:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-color: #e5e0d6;
+  box-shadow: none;
+  background: transparent;
 }
 
 .vocabulary-item-content {
@@ -160,23 +176,28 @@
 }
 
 .vocabulary-term {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #0f172a;
+  font-family: var(--font-serif, 'EB Garamond', serif);
+  font-size: 1.0625rem;
+  font-weight: 500;
+  color: #1a1816;
+  letter-spacing: -0.005em;
 }
 
 .vocabulary-context {
-  font-size: 0.75rem;
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.625rem;
   font-weight: 500;
-  padding: 3px 10px;
-  background: #f0f9ff;
-  color: #0891b2;
-  border-radius: 20px;
+  padding: 0;
+  background: transparent;
+  color: #b8623d;
+  border-radius: 0;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 .vocabulary-pronunciation {
   font-size: 0.875rem;
-  color: #64748b;
+  color: #5a5852;
   margin-top: 4px;
 }
 
@@ -189,15 +210,15 @@
   padding: 8px;
   border: none;
   background: transparent;
-  color: #94a3b8;
+  color: #8b8780;
   cursor: pointer;
   border-radius: 6px;
   transition: all 0.2s;
 }
 
 .vocabulary-item-actions button:hover {
-  background: #f1f5f9;
-  color: #475569;
+  background: #efeae0;
+  color: #5a5852;
 }
 
 .vocabulary-item-actions button:hover:last-child {
@@ -218,17 +239,18 @@
 }
 
 .vocabulary-edit-inputs input {
-  padding: 10px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  padding: 9px 0;
+  border: none;
+  border-bottom: 1px solid #e5e0d6;
+  border-radius: 0;
   font-size: 0.875rem;
-  background: #f8fafc;
-  color: #1e293b;
+  background: transparent;
+  color: #1a1816;
 }
 
 .vocabulary-edit-inputs input:focus {
   outline: none;
-  border-color: #06b6d4;
+  border-bottom-color: #1a1816;
 }
 
 .vocabulary-edit-actions {
@@ -237,57 +259,61 @@
 }
 
 .vocabulary-edit-actions button {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: none;
-  font-size: 0.875rem;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: opacity 0.15s, background 0.15s;
 }
 
 .vocabulary-edit-actions .save-btn {
-  background: #0891b2;
-  color: #ffffff;
+  background: #1a1816;
+  color: #f7f4ee;
 }
 
 .vocabulary-edit-actions .save-btn:hover {
-  background: #0e7490;
+  background: #1a1816;
+  opacity: 0.88;
 }
 
 .vocabulary-edit-actions .cancel-btn {
-  background: #f1f5f9;
-  color: #64748b;
+  background: transparent;
+  color: #5a5852;
+  border-color: #e5e0d6;
 }
 
 .vocabulary-edit-actions .cancel-btn:hover {
-  background: #e2e8f0;
+  background: transparent;
+  border-color: #d8d2c4;
+  color: #1a1816;
 }
 
-/* Empty State */
+/* Empty State — editorial */
 .vocabulary-empty {
   text-align: center;
-  padding: 48px;
-  background: #ffffff;
-  border: 2px dashed #e2e8f0;
-  border-radius: 16px;
+  padding: 48px 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 .vocabulary-empty-icon {
-  color: #cbd5e1;
+  color: #d8d2c4;
   margin-bottom: 16px;
 }
 
 .vocabulary-empty p {
   font-size: 1rem;
-  color: #64748b;
+  color: #5a5852;
   font-weight: 500;
   margin-bottom: 4px;
 }
 
 .vocabulary-empty span {
   font-size: 0.875rem;
-  color: #94a3b8;
+  color: #8b8780;
 }
 
 .vocabulary-loading {
@@ -314,7 +340,7 @@
 .vocabulary-upgrade-prompt .upgrade-btn {
   padding: 10px 20px;
   background: #f59e0b;
-  color: #ffffff;
+  color: var(--cream);
   border: none;
   border-radius: 8px;
   font-weight: 600;

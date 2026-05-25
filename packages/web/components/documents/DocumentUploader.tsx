@@ -2,10 +2,10 @@
 
 import { useCallback, useRef, useState } from "react";
 import { UploadCloud, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { documentsService } from "@/lib/services/documents.service";
 import type { OrgDocument } from "@oscar/shared/types";
+import { v2, V2Caps } from "@/components/v2/V2Primitives";
 
 interface Props {
   onUploaded?: (doc: OrgDocument) => void;
@@ -52,13 +52,20 @@ export function DocumentUploader({ onUploaded }: Props) {
         const file = e.dataTransfer.files?.[0];
         if (file) void upload(file);
       }}
-      className={`rounded-2xl border-2 border-dashed p-6 text-center transition-colors ${
-        dragging ? "border-cyan-400 bg-cyan-400/5" : "border-slate-700 bg-slate-900"
-      }`}
+      className="rounded-2xl p-6 md:p-7 text-center transition-colors"
+      style={{
+        background: dragging ? "rgba(184,98,61,0.06)" : v2.cream2,
+        border: `2px dashed ${dragging ? v2.accent : v2.rule}`,
+      }}
     >
-      <UploadCloud className="w-7 h-7 text-cyan-400 mx-auto mb-2" />
-      <p className="text-white text-sm font-medium mb-1">Drop a file to add it</p>
-      <p className="text-slate-500 text-xs mb-3">PDF, DOCX, Markdown, or plain text · up to 10 MB</p>
+      <UploadCloud
+        className="w-7 h-7 mx-auto mb-3"
+        style={{ color: dragging ? v2.accent : v2.inkFaint }}
+      />
+      <V2Caps color={v2.accent}>DROP A FILE TO ADD IT</V2Caps>
+      <p className="mt-2 text-[12px]" style={{ color: v2.inkSoft }}>
+        PDF, DOCX, Markdown, or plain text · up to 10 MB
+      </p>
       <input
         ref={inputRef}
         type="file"
@@ -70,20 +77,21 @@ export function DocumentUploader({ onUploaded }: Props) {
           if (inputRef.current) inputRef.current.value = "";
         }}
       />
-      <Button
+      <button
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        className="bg-cyan-500 hover:bg-cyan-600 text-white"
+        className="mt-5 text-[13px] rounded-full px-5 py-2.5 font-medium inline-flex items-center gap-2 disabled:opacity-50"
+        style={{ background: v2.ink, color: v2.cream }}
       >
         {busy ? (
           <>
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            Uploading...
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Uploading…
           </>
         ) : (
           "Choose file"
         )}
-      </Button>
+      </button>
     </div>
   );
 }

@@ -41,8 +41,8 @@ function renderInviteHtml(params: InviteEmailParams): string {
     : null;
   return `<!doctype html>
 <html>
-  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #e5e7eb; padding: 32px; margin: 0;">
-    <table role="presentation" cellpadding="0" cellspacing="0" style="max-width: 560px; margin: 0 auto; background: #111827; border: 1px solid rgba(34, 211, 238, 0.18); border-radius: 16px; padding: 28px;">
+  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0f0d0a; color: #efeae0; padding: 32px; margin: 0;">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="max-width: 560px; margin: 0 auto; background: #1a1714; border: 1px solid rgba(184, 98, 61, 0.28); border-radius: 16px; padding: 28px;">
       <tr>
         <td>
           <h1 style="margin: 0 0 8px; font-size: 22px; color: #f9fafb;">Join ${escapeHtml(params.organizationName)} on Oscar</h1>
@@ -50,10 +50,10 @@ function renderInviteHtml(params: InviteEmailParams): string {
           <p style="margin: 0 0 24px; color: #d1d5db; line-height: 1.5;">
             Oscar is a voice note app. Joining the <strong>${escapeHtml(params.organizationName)}</strong> workspace gives you access to shared scribbles, meeting minutes, and reference documents.
           </p>
-          <a href="${params.inviteUrl}" style="display: inline-block; padding: 12px 20px; background: #06b6d4; color: #0f172a; font-weight: 600; text-decoration: none; border-radius: 10px;">Accept invite</a>
+          <a href="${params.inviteUrl}" style="display: inline-block; padding: 12px 20px; background: #b8623d; color: #f7f4ee; font-weight: 600; text-decoration: none; border-radius: 10px;">Accept invite</a>
           <p style="margin: 24px 0 0; color: #6b7280; font-size: 13px;">
             Or open this link directly:<br />
-            <a href="${params.inviteUrl}" style="color: #22d3ee; word-break: break-all;">${params.inviteUrl}</a>
+            <a href="${params.inviteUrl}" style="color: #e8c9b8; word-break: break-all;">${params.inviteUrl}</a>
           </p>
           ${expiry ? `<p style="margin: 16px 0 0; color: #6b7280; font-size: 12px;">This invite expires on ${expiry}.</p>` : ""}
         </td>

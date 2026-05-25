@@ -26,24 +26,37 @@ export function MeetingSearchBar({
   onTypeChange,
 }: MeetingSearchBarProps) {
   return (
-    <div className="flex gap-3">
-      <div className="relative flex-1">
+    <div className="flex gap-3 items-center">
+      <div
+        className="relative flex-1 rounded-full"
+        style={{ background: "#efeae0", border: "1px solid #e5e0d6" }}
+      >
         <Search
           size={15}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+          className="absolute left-4 top-1/2 -translate-y-1/2"
+          style={{ color: "#8b8780" }}
         />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search meetings..."
-          className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all duration-150"
+          className="w-full pl-10 pr-4 py-2.5 bg-transparent outline-none text-sm"
+          style={{ color: "#1a1816" }}
         />
       </div>
       <select
         value={typeFilter}
         onChange={(e) => onTypeChange(e.target.value as MeetingTypeHint | "all")}
-        className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all duration-150 cursor-pointer"
+        className="px-4 py-2.5 rounded-full text-sm cursor-pointer outline-none"
+        style={{
+          background: "transparent",
+          border: "1px solid #e5e0d6",
+          color: "#5a5852",
+          fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+          fontSize: 11,
+          letterSpacing: "0.06em",
+        }}
       >
         {MEETING_TYPES.map((t) => (
           <option key={t.value} value={t.value}>

@@ -29,28 +29,39 @@ export class ErrorBoundary extends React.Component<
             justifyContent: "center",
             height: "100vh",
             padding: 32,
-            fontFamily: "system-ui, sans-serif",
+            fontFamily: "'Figtree', system-ui, sans-serif",
             textAlign: "center",
-            color: "#334155",
-            background: "#f8fafc",
+            color: "var(--ink)",
+            background: "var(--cream)",
           }}
         >
-          <h1 style={{ fontSize: "1.25rem", fontWeight: 600, marginBottom: 8 }}>
-            Something went wrong
+          <h1
+            style={{
+              fontFamily: "'EB Garamond', Georgia, serif",
+              fontSize: "1.5rem",
+              fontWeight: 500,
+              letterSpacing: "-0.015em",
+              marginBottom: 8,
+            }}
+          >
+            Something went wrong.
           </h1>
-          <p style={{ fontSize: "0.875rem", color: "#64748b", marginBottom: 20, maxWidth: 400 }}>
+          <p style={{ fontSize: "0.875rem", color: "var(--ink-soft)", marginBottom: 20, maxWidth: 400, lineHeight: 1.55 }}>
             OSCAR ran into an unexpected error. Restarting usually fixes this.
           </p>
           <pre
             style={{
+              fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
               fontSize: "0.75rem",
-              color: "#94a3b8",
-              background: "#f1f5f9",
+              color: "var(--ink-faint)",
+              background: "var(--cream-200)",
+              border: "1px solid var(--cream-300)",
               padding: "12px 16px",
               borderRadius: 8,
               maxWidth: 500,
               overflow: "auto",
               marginBottom: 20,
+              textAlign: "left",
             }}
           >
             {this.state.error?.message}
@@ -59,12 +70,12 @@ export class ErrorBoundary extends React.Component<
             onClick={() => window.location.reload()}
             style={{
               padding: "8px 20px",
-              fontSize: "0.875rem",
+              fontSize: "0.8125rem",
               fontWeight: 500,
-              color: "#fff",
-              background: "#0891b2",
+              color: "var(--cream)",
+              background: "var(--terra-500)",
               border: "none",
-              borderRadius: 8,
+              borderRadius: 999,
               cursor: "pointer",
             }}
           >

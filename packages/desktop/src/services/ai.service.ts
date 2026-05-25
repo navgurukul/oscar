@@ -653,7 +653,11 @@ export const aiService = {
     // Best-effort org context — failure here must not block paste, so the
     // service swallows errors and returns an empty block when anything goes
     // wrong (no active workspace, RLS denial, network blip, ...).
-    const orgContext = await orgContextService.getBlock({ docLimit: 2 });
+    const profile = mode === "transcribe_cleanup" ? "stream" : "scribble";
+    const orgContext = await orgContextService.getBlock({
+      rawTranscript: text,
+      profile,
+    });
     return invokeAIProcess(
       accessToken,
       {
@@ -705,7 +709,11 @@ export const aiService = {
     request: EnhancedMeetingNoteRequest,
   ): Promise<string> {
     const accessToken = await getSessionAccessToken();
-    const orgContext = await orgContextService.getBlock({ docLimit: 3 });
+    const transcriptQuery = request.transcript_segments.map((s) => s.text).join(" ").slice(0, 5000);
+    const orgContext = await orgContextService.getBlock({
+      rawTranscript: transcriptQuery || request.meeting_title,
+      profile: "minutes",
+    });
     const requestWithContext: EnhancedMeetingNoteRequest = orgContext.block
       ? { ...request, org_context_block: orgContext.block }
       : request;

@@ -15,6 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { v2 } from "@/components/v2/V2Primitives";
 
 interface ScribbleActionsProps {
   onSave?: () => Promise<void>;
@@ -27,13 +28,10 @@ export function ScribbleActions({ onSave, isSaving, showSave }: ScribbleActionsP
   const pathname = usePathname();
   const { user } = useAuth();
 
-  // After login, on results page show only ONE bottom action button (hide the "audio/play" one)
   const hideContinueRecording = !!user && pathname === ROUTES.RECORDING;
 
   const handleContinueRecording = () => {
-    // Set continue mode flag so recording page knows to seed the transcript
     storageService.setContinueMode(true);
-    // Navigate to recording page
     router.push(ROUTES.RECORDING);
   };
 
@@ -42,10 +40,21 @@ export function ScribbleActions({ onSave, isSaving, showSave }: ScribbleActionsP
     router.push(ROUTES.RECORDING);
   };
 
+  const tooltipStyle = { background: v2.ink, color: v2.cream, border: `1px solid ${v2.ink}` };
+  const primaryButton = {
+    background: v2.accent,
+    color: v2.cream,
+    border: "none",
+  };
+  const secondaryButton = {
+    background: v2.cream2,
+    color: v2.ink,
+    border: `1px solid ${v2.rule}`,
+  };
+
   return (
     <TooltipProvider>
       <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 flex items-center justify-center gap-4 z-50">
-        {/* Record Again */}
         <Tooltip>
           <TooltipTrigger asChild>
             <motion.div
@@ -55,18 +64,18 @@ export function ScribbleActions({ onSave, isSaving, showSave }: ScribbleActionsP
               <Button
                 onClick={handleRecordAgain}
                 size="icon"
-                className="bg-slate-800 hover:bg-slate-700 text-white shadow-lg w-12 h-12 rounded-full border-none"
+                className="shadow-lg w-12 h-12 rounded-full"
+                style={secondaryButton}
               >
                 <RotateCcw className="w-5 h-5" />
               </Button>
             </motion.div>
           </TooltipTrigger>
-          <TooltipContent side="top" className="bg-slate-800 border-slate-700 text-white">
+          <TooltipContent side="top" style={tooltipStyle}>
             <p>{UI_STRINGS.RECORD_AGAIN}</p>
           </TooltipContent>
         </Tooltip>
 
-        {/* Save Button (In between) */}
         {showSave && onSave && (
           <motion.div
             whileHover={{ y: -5 }}
@@ -75,19 +84,19 @@ export function ScribbleActions({ onSave, isSaving, showSave }: ScribbleActionsP
             <Button
               onClick={onSave}
               disabled={isSaving}
-              className="bg-cyan-600 hover:bg-cyan-700 text-white rounded-full px-6 h-12 gap-2 shadow-lg border-none"
+              className="rounded-full px-6 h-12 gap-2 shadow-lg"
+              style={primaryButton}
             >
               {isSaving ? (
-                <Spinner className="w-4 h-4 text-white" />
+                <Spinner className="w-4 h-4" />
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              <span className="text-sm font-bold">Save</span>
+              <span className="text-sm font-semibold">Save</span>
             </Button>
           </motion.div>
         )}
 
-        {/* Continue Recording */}
         {!hideContinueRecording && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -98,13 +107,14 @@ export function ScribbleActions({ onSave, isSaving, showSave }: ScribbleActionsP
                 <Button
                   onClick={handleContinueRecording}
                   size="icon"
-                  className="bg-cyan-600 hover:bg-cyan-700 text-white shadow-lg w-12 h-12 rounded-full border-none"
+                  className="shadow-lg w-12 h-12 rounded-full"
+                  style={primaryButton}
                 >
                   <Play className="w-5 h-5" />
                 </Button>
               </motion.div>
             </TooltipTrigger>
-            <TooltipContent side="top" className="bg-cyan-800 border-cyan-700 text-white">
+            <TooltipContent side="top" style={tooltipStyle}>
               <p>{UI_STRINGS.CONTINUE_RECORDING}</p>
             </TooltipContent>
           </Tooltip>

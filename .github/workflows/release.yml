@@ -66,14 +66,14 @@ jobs:
             os: macos-14
             cflags: "-march=armv8-a -mmacosx-version-min=12.0"
             macosx_deployment_target: "12.0"
-            bundles: "app,dmg"
+            bundles: "app"
             extra_cargo_args: ""
           - target: x86_64-apple-darwin
             label: macos-intel
             os: macos-14
             cflags: "-mmacosx-version-min=12.0"
             macosx_deployment_target: "12.0"
-            bundles: "app,dmg"
+            bundles: "app"
             extra_cargo_args: ""
           # ── Windows ──
           # Vulkan compute backend was reverted in v0.5.26: whisper.cpp's
@@ -208,6 +208,49 @@ jobs:
           VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
         run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} ${{ matrix.extra_cargo_args }}
+
+      - name: Create macOS DMG
+        if: runner.os == 'macOS'
+        working-directory: packages/desktop
+        env:
+          TARGET: ${{ matrix.target }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${TAG#v}"
+          BASE="src-tauri/target/$TARGET/release/bundle"
+          DMG_DIR="$BASE/dmg"
+          STAGE="$DMG_DIR/stage"
+
+          case "$TARGET" in
+            aarch64-apple-darwin) ARCH="aarch64" ;;
+            x86_64-apple-darwin) ARCH="x64" ;;
+            *) echo "Unsupported macOS target: $TARGET" >&2; exit 1 ;;
+          esac
+
+          APP_PATH=$(find "$BASE/macos" -maxdepth 1 -name "*.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found in $BASE/macos" >&2
+            exit 1
+          fi
+
+          mkdir -p "$DMG_DIR"
+          rm -rf "$STAGE" "$DMG_DIR/OSCAR_${VERSION}_${ARCH}.dmg"
+          mkdir -p "$STAGE"
+
+          ditto "$APP_PATH" "$STAGE/OSCAR.app"
+          ln -s /Applications "$STAGE/Applications"
+
+          hdiutil create \
+            -volname "OSCAR" \
+            -srcfolder "$STAGE" \
+            -ov \
+            -format UDZO \
+            "$DMG_DIR/OSCAR_${VERSION}_${ARCH}.dmg"
+
+          hdiutil verify "$DMG_DIR/OSCAR_${VERSION}_${ARCH}.dmg"
+          rm -rf "$STAGE"
 
       - name: Sign bundles
         if: runner.os != 'Windows'

@@ -3,31 +3,32 @@ import Link from "next/link";
 
 export function Footer() {
   return (
-    <footer className="w-full border-t border-gray-800/50 ">
-      <div className="max-w-7xl mx-auto px-4 py-3">
+    <footer className="w-full" style={{ borderTop: "1px solid #e5e0d6" }}>
+      <div className="max-w-7xl mx-auto px-6 md:px-14 py-6">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          {/* Copyright */}
-          <p className="text-gray-500 text-sm">
+          <p className="text-sm" style={{ color: "#5a5852" }}>
             © {new Date().getFullYear()} Samyak Arth Services Private Limited
           </p>
 
-          {/* Legal Links */}
           <div className="flex items-center gap-6">
             <Link
               href="/privacy"
-              className="text-gray-500 text-sm hover:text-cyan-400 transition-colors"
+              className="text-sm transition-colors"
+              style={{ color: "#5a5852" }}
             >
               Privacy
             </Link>
             <Link
               href="/terms"
-              className="text-gray-500 text-sm hover:text-cyan-400 transition-colors"
+              className="text-sm transition-colors"
+              style={{ color: "#5a5852" }}
             >
               Terms
             </Link>
             <Link
               href="/refund-policy"
-              className="text-gray-500 text-sm hover:text-cyan-400 transition-colors"
+              className="text-sm transition-colors"
+              style={{ color: "#5a5852" }}
             >
               Refund Policy
             </Link>

@@ -15,7 +15,6 @@ import {
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
 import { buildOrgContext, joinSystemPrompt } from "@/lib/server/orgContext";
-import { isOrgFeatureEnabled } from "@/lib/featureFlags";
 
 const REQUEST_TIMEOUT_MS = 12000;
 const TRANSFORM_MODES = new Set(["summary", "bullets"]);
@@ -74,16 +73,13 @@ export async function POST(req: NextRequest) {
     ? bodyResult.data.documentIds.filter((id): id is string => typeof id === "string")
     : undefined;
 
-  let orgPromptBlock = "";
-  if (isOrgFeatureEnabled()) {
-    const orgCtx = await buildOrgContext(user.id, {
-      documentIds,
-      docLimit: 4,
-      docTokenBudget: 2400,
-      queryText: inputResult.text,
-    });
-    orgPromptBlock = orgCtx.promptBlock;
-  }
+  const orgCtx = await buildOrgContext(user.id, {
+    documentIds,
+    docLimit: 4,
+    docTokenBudget: 2400,
+    queryText: inputResult.text,
+  });
+  const orgPromptBlock = orgCtx.promptBlock;
 
   try {
     const baseSystem = `${getSystemPrompt(mode)}\nReturn plain text only. Do NOT wrap output in markdown code blocks or backticks.`;

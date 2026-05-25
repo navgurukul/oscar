@@ -9,8 +9,8 @@
 }
 
 .permissions-card {
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(6, 182, 212, 0.18);
+  background: rgba(26, 24, 22, 0.85);
+  border: 1px solid rgba(184, 98, 61, 0.18);
   border-radius: 20px;
   padding: 44px 48px 40px;
   max-width: 520px;
@@ -23,7 +23,7 @@
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.12em;
-  color: #6b7280;
+  color: #5a5852;
   margin-bottom: 14px;
 }
 
@@ -31,7 +31,7 @@
   font-size: 2.1rem;
   font-weight: 500;
   line-height: 1.2;
-  color: #f1f5f9;
+  color: #efeae0;
   margin-bottom: 16px;
   letter-spacing: 0em;
   font-family: 'EB Garamond', Georgia, serif;
@@ -39,7 +39,7 @@
 
 .permissions-description {
   font-size: 0.9rem;
-  color: #94a3b8;
+  color: #8b8780;
   line-height: 1.6;
   margin-bottom: 28px;
 }
@@ -73,12 +73,12 @@
 .perm-row-label {
   font-size: 0.88rem;
   font-weight: 500;
-  color: #e2e8f0;
+  color: #e5e0d6;
 }
 
 .perm-row-sub {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: #5a5852;
 }
 
 .perm-enable-btn {
@@ -87,8 +87,8 @@
   gap: 7px;
   padding: 8px 16px;
   border-radius: 99px;
-  background: rgba(6, 182, 212, 0.12);
-  border: 1px solid rgba(6, 182, 212, 0.35);
+  background: rgba(184, 98, 61, 0.12);
+  border: 1px solid rgba(184, 98, 61, 0.35);
   color: var(--cyan-400);
   font-size: 0.82rem;
   font-weight: 500;
@@ -100,9 +100,9 @@
 }
 
 .perm-enable-btn:hover {
-  background: rgba(6, 182, 212, 0.2);
-  border-color: rgba(6, 182, 212, 0.6);
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
+  background: rgba(184, 98, 61, 0.2);
+  border-color: rgba(184, 98, 61, 0.6);
+  box-shadow: 0 0 12px rgba(184, 98, 61, 0.2);
 }
 
 .perm-badge {
@@ -117,8 +117,8 @@
 }
 
 .perm-badge.granted {
-  background: rgba(6, 182, 212, 0.1);
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  background: rgba(184, 98, 61, 0.1);
+  border: 1px solid rgba(184, 98, 61, 0.3);
   color: var(--cyan-400);
 }
 
@@ -134,7 +134,7 @@
   border-radius: 50%;
   border: 1.5px solid rgba(255, 255, 255, 0.15);
   background: rgba(255, 255, 255, 0.04);
-  color: #6b7280;
+  color: #5a5852;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -144,13 +144,13 @@
 }
 
 .perm-check-btn:hover {
-  border-color: rgba(6, 182, 212, 0.4);
+  border-color: rgba(184, 98, 61, 0.4);
   color: var(--cyan-400);
 }
 
 .perm-check-btn.checked {
-  background: rgba(6, 182, 212, 0.12);
-  border-color: rgba(6, 182, 212, 0.4);
+  background: rgba(184, 98, 61, 0.12);
+  border-color: rgba(184, 98, 61, 0.4);
   color: var(--cyan-400);
 }
 
@@ -165,7 +165,7 @@
 .perm-skip-note {
   flex: 1;
   font-size: 0.75rem;
-  color: #4b5563;
+  color: #5a5852;
   line-height: 1.5;
   min-width: 160px;
 }
@@ -175,7 +175,7 @@
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.06);
-  color: #6b7280;
+  color: #5a5852;
   font-size: 0.9rem;
   font-weight: 600;
   font-family: inherit;
@@ -187,7 +187,7 @@
 .perm-continue-btn.active {
   background: var(--cyan-600);
   border-color: transparent;
-  color: #fff;
+  color: var(--cream);
   cursor: pointer;
 }
 
@@ -213,7 +213,7 @@
 
 .auth-field label {
   font-size: 0.78rem;
-  color: #94a3b8;
+  color: #8b8780;
   font-weight: 500;
 }
 
@@ -222,14 +222,14 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   padding: 9px 12px;
-  color: #f1f5f9;
+  color: #efeae0;
   font-size: 0.875rem;
   outline: none;
   transition: border-color 0.15s;
 }
 
 .auth-field input:focus {
-  border-color: rgba(6, 182, 212, 0.5);
+  border-color: rgba(184, 98, 61, 0.5);
 }
 
 .auth-error {
@@ -256,13 +256,13 @@
   margin-top: 14px;
   text-align: center;
   font-size: 0.8rem;
-  color: #64748b;
+  color: #5a5852;
 }
 
 .auth-switch-btn {
   background: none;
   border: none;
-  color: #06b6d4;
+  color: #b8623d;
   cursor: pointer;
   font-size: 0.8rem;
   padding: 0;
@@ -270,7 +270,7 @@
 }
 
 .auth-switch-btn:hover {
-  color: #67e8f9;
+  color: #823f24;
 }
 
 /* ── Google Sign In Button ──────────────────────────────────────────────── */
@@ -282,7 +282,7 @@
   gap: 10px;
   width: 100%;
   padding: 12px 16px;
-  background: #fff;
+  background: var(--cream);
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
   color: #3c4043;
@@ -313,7 +313,7 @@
   display: flex;
   align-items: center;
   margin: 16px 0;
-  color: #64748b;
+  color: #5a5852;
   font-size: 0.8rem;
 }
 
@@ -339,7 +339,7 @@
 
 .user-email {
   font-size: 0.72rem;
-  color: #64748b;
+  color: #5a5852;
   max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -350,9 +350,9 @@
 
 .sync-badge {
   font-size: 0.68rem;
-  color: #06b6d4;
-  background: rgba(6, 182, 212, 0.1);
-  border: 1px solid rgba(6, 182, 212, 0.2);
+  color: #b8623d;
+  background: rgba(184, 98, 61, 0.1);
+  border: 1px solid rgba(184, 98, 61, 0.2);
   border-radius: 4px;
   padding: 1px 6px;
   margin-left: 6px;
@@ -370,7 +370,7 @@
 .split-layout {
   min-height: 100vh;
   font-family: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #fafafa;
+  background: #f7f4ee;
   display: flex;
   flex-direction: column;
 }
@@ -387,7 +387,7 @@
   align-items: center;
   justify-content: center;
   padding: 48px;
-  background: #fff;
+  background: var(--cream);
 }
 
 .split-content {
@@ -412,8 +412,8 @@
   justify-content: center;
   gap: 8px;
   padding: 20px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--cream);
+  border-bottom: 1px solid #e5e0d6;
 }
 
 .onboarding-titlebar {
@@ -433,19 +433,20 @@
 }
 
 .step-label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: #9ca3af;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--ink-faint);
   text-transform: uppercase;
 }
 
 .step-item.active .step-label {
-  color: #111827;
+  color: var(--terra-500);
 }
 
 .step-arrow {
-  color: #d1d5db;
+  color: var(--cream-400);
   width: 14px;
   height: 14px;
 }
@@ -478,30 +479,32 @@
 .brand-name {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #111827;
+  color: #1a1816;
   letter-spacing: -0.01em;
 }
 
 /* Split Content Typography */
 .split-title {
-  font-size: 2rem;
-  font-weight: 600;
-  line-height: 1.2;
-  color: #111827;
-  margin-bottom: 12px;
-  letter-spacing: -0.02em;
+  font-family: var(--font-serif, 'EB Garamond', serif);
+  font-size: 2.5rem;
+  font-weight: 500;
+  line-height: 1.05;
+  color: var(--ink);
+  margin-top: 8px;
+  margin-bottom: 14px;
+  letter-spacing: -0.025em;
 }
 
 .split-description {
   font-size: 0.95rem;
-  color: #6b7280;
+  color: #5a5852;
   line-height: 1.6;
   margin-bottom: 28px;
 }
 
 .terms-text {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: #8b8780;
   text-align: center;
   margin-top: 16px;
 }
@@ -510,11 +513,11 @@
   border: none;
   padding: 0;
   font-size: inherit;
-  color: #6b7280;
+  color: #5a5852;
   text-decoration: underline;
   cursor: pointer;
 }
-.terms-link:hover { color: #374151; }
+.terms-link:hover { color: #5a5852; }
 
 /* Cover Showcase */
 .cover-showcase {
@@ -574,7 +577,7 @@
 }
 
 .slide-dot.active {
-  background: #fff;
+  background: var(--cream);
   width: 24px;
 }
 
@@ -598,7 +601,7 @@
   position: relative;
   z-index: 1;
   text-align: center;
-  color: #fff;
+  color: var(--cream);
   max-width: 400px;
 }
 
@@ -625,7 +628,7 @@
 .cover-speed {
   font-size: 3.5rem;
   font-weight: 300;
-  color: #fff;
+  color: var(--cream);
   font-family: 'EB Garamond', Georgia, serif;
   letter-spacing: -0.02em;
 }
@@ -680,26 +683,26 @@
   align-items: center;
   gap: 14px;
   padding: 16px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: #faf8f3;
+  border: 1px solid #e5e0d6;
   border-radius: 12px;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .perm-item-modern:hover {
-  border-color: #d1d5db;
+  border-color: #d8d2c4;
 }
 
 .perm-item-icon {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--cream);
+  border: 1px solid #e5e0d6;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
+  color: #5a5852;
   flex-shrink: 0;
 }
 
@@ -713,20 +716,20 @@
 .perm-item-label {
   font-size: 0.9rem;
   font-weight: 500;
-  color: #111827;
+  color: #1a1816;
 }
 
 .perm-item-sub {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: #8b8780;
 }
 
 .perm-enable-btn-modern {
   padding: 6px 14px;
   border-radius: 6px;
-  background: #111827;
+  background: #1a1816;
   border: none;
-  color: #fff;
+  color: var(--cream);
   font-size: 0.8rem;
   font-weight: 500;
   font-family: inherit;
@@ -736,7 +739,7 @@
 }
 
 .perm-enable-btn-modern:hover {
-  background: #374151;
+  background: #5a5852;
 }
 
 .perm-badge-modern {
@@ -750,8 +753,8 @@
 }
 
 .perm-badge-modern.granted {
-  background: rgba(34, 211, 238, 0.15);
-  color: #22d3ee;
+  background: rgba(184, 98, 61, 0.15);
+  color: #cc8b6b;
 }
 
 .perm-badge-modern.denied {
@@ -768,8 +771,8 @@
   padding: 12px 24px;
   border-radius: 8px;
   border: none;
-  background: #e5e7eb;
-  color: #9ca3af;
+  background: #e5e0d6;
+  color: #8b8780;
   font-size: 0.95rem;
   font-weight: 500;
   font-family: inherit;
@@ -778,13 +781,13 @@
 }
 
 .perm-continue-btn-modern.active {
-  background: #111827;
-  color: #fff;
+  background: #1a1816;
+  color: var(--cream);
   cursor: pointer;
 }
 
 .perm-continue-btn-modern.active:hover {
-  background: #374151;
+  background: #5a5852;
 }
 
 /* Responsive adjustments */
@@ -820,7 +823,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
+  background: linear-gradient(135deg, #cc8b6b 0%, #b8623d 100%);
   border-radius: 10px;
   color: white;
 }
@@ -834,12 +837,12 @@
 .setup-model-name {
   font-size: 1rem;
   font-weight: 600;
-  color: #111827;
+  color: #1a1816;
 }
 
 .setup-model-size {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: #5a5852;
 }
 
 .setup-loading {
@@ -852,8 +855,8 @@
 .setup-spinner {
   width: 48px;
   height: 48px;
-  border: 3px solid rgba(34, 211, 238, 0.2);
-  border-top-color: #22d3ee;
+  border: 3px solid rgba(184, 98, 61, 0.2);
+  border-top-color: #cc8b6b;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -866,7 +869,7 @@
 
 .setup-status {
   font-size: 1rem;
-  color: #4b5563;
+  color: #5a5852;
   text-align: center;
 }
 
@@ -891,7 +894,7 @@
 
 .download-progress-fill {
   height: 100%;
-  background: #111827;
+  background: #1a1816;
   border-radius: 3px;
   transition: width 0.2s ease-out;
 }
@@ -902,7 +905,7 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: #6b7280;
+  color: #5a5852;
   font-size: 0.95rem;
   font-weight: 500;
   font-family: inherit;
@@ -911,5 +914,5 @@
 }
 
 .setup-skip-btn:hover {
-  color: #374151;
+  color: #5a5852;
 }

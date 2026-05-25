@@ -1,7 +1,8 @@
 import React from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Home, Settings, Crown, Sparkles, FileText, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle, Calendar } from "lucide-react";
+import { Crown, Sparkles, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle } from "lucide-react";
+import { getInitials } from "../lib/utils";
 
 const WEB_APP_URL =
   import.meta.env.VITE_WEB_APP_URL ?? "https://oscar.samyarth.org";
@@ -19,10 +20,16 @@ interface UpdaterState {
   updateInfo: { version: string; currentVersion: string; date?: string; body?: string } | null;
 }
 
+interface FolderSummary {
+  name: string;
+  count: number;
+}
+
 interface NavigationProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   userEmail: string;
+  userName?: string;
   isProUser?: boolean;
   onUpgradeClick?: () => void;
   appVersion: string | null;
@@ -30,36 +37,39 @@ interface NavigationProps {
   onCheckForUpdates?: () => void;
   onDownloadUpdate?: () => void;
   onInstallUpdate?: () => void;
+  folders?: FolderSummary[];
 }
 
-function NavItem({
-  id,
+function CapsLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint">
+      {children}
+    </span>
+  );
+}
+
+function NavRow({
   label,
-  icon: Icon,
   isActive,
   onClick,
-  activeClass = "bg-slate-100 text-slate-800",
-  activeIconClass = "",
 }: {
-  id: TabType;
   label: string;
-  icon: React.ElementType;
   isActive: boolean;
   onClick: () => void;
-  activeClass?: string;
-  activeIconClass?: string;
 }) {
   return (
     <button
-      key={id}
-      className={`w-full flex items-center gap-3 py-2.5 px-4 rounded-lg border-none text-[0.9375rem] font-medium cursor-pointer transition-colors duration-150 ${
-        isActive
-          ? activeClass
-          : "bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700"
-      }`}
+      type="button"
       onClick={onClick}
+      className={`flex items-center gap-2.5 w-full text-left bg-transparent border-none cursor-pointer py-1.5 px-0.5 transition-colors duration-150 ${
+        isActive ? "text-ink font-medium" : "text-ink-soft hover:text-ink"
+      } text-[13px]`}
     >
-      <Icon size={16} className={isActive ? activeIconClass : ""} />
+      <span
+        className={`inline-block h-[5px] w-[5px] rounded-full ${
+          isActive ? "bg-terracotta" : "bg-transparent"
+        }`}
+      />
       <span>{label}</span>
     </button>
   );
@@ -68,18 +78,22 @@ function NavItem({
 export function Navigation({
   activeTab,
   onTabChange,
+  userEmail,
+  userName,
   isProUser = false,
   onUpgradeClick,
   appVersion,
   updaterState,
   onCheckForUpdates,
   onDownloadUpdate,
-  onInstallUpdate
+  onInstallUpdate,
+  folders = [],
 }: NavigationProps) {
-  const navItems: { id: TabType; label: string; icon: React.ElementType; activeClass: string; activeIconClass: string }[] = [
-    { id: "home",     label: "Stream",   icon: Home,     activeClass: "bg-cyan-50 text-cyan-700", activeIconClass: "text-cyan-600" },
-    { id: "meetings", label: "Minutes",  icon: Calendar, activeClass: "bg-cyan-50 text-cyan-700", activeIconClass: "text-cyan-600" },
-    { id: "scribble",    label: "Scribble", icon: FileText, activeClass: "bg-cyan-50 text-cyan-700", activeIconClass: "text-cyan-600" },
+  const workspaceItems: { id: TabType; label: string }[] = [
+    { id: "home", label: "Today" },
+    { id: "scribble", label: "Scribbles" },
+    { id: "meetings", label: "Minutes" },
+    { id: "settings", label: "Settings" },
   ];
 
   const handleUpgrade = () => {
@@ -93,84 +107,124 @@ export function Navigation({
     }
   };
 
+  const displayName = userName?.trim() || userEmail?.split("@")[0] || "Signed in";
+  const visibleFolders = folders.slice(0, 6);
+
   return (
-    <nav className="w-60 bg-white flex flex-col flex-shrink-0">
-      {/* Brand section - fixed at top, draggable for macOS */}
+    <nav className="w-60 bg-cream flex flex-col flex-shrink-0 border-r border-cream-300">
+      {/* Brand — V2Wordmark. Draggable on macOS. */}
       <div
         data-tauri-drag-region
-        className="pb-4 px-5 flex items-center gap-2.5 cursor-default"
-        onMouseDown={(e) => { if (e.button === 0) getCurrentWindow().startDragging(); }}
+        className="pt-5 pb-7 px-6 flex items-center gap-2.5 cursor-default"
+        onMouseDown={(e) => {
+          if (e.button === 0) getCurrentWindow().startDragging();
+        }}
       >
-        <img src="/OSCAR_LIGHT_LOGO.png" alt="OSCAR" width={36} height={36} />
-        <span className="text-base font-semibold text-slate-800">OSCAR</span>
+        <img
+          src="/oscar-light-logo.svg"
+          alt="Oscar Logo"
+          width="22"
+          height="22"
+          className="object-contain"
+        />
+        <span className="font-serif text-[22px] font-medium tracking-[0] text-ink">
+          Oscar
+        </span>
       </div>
 
-      <div className="flex-1 py-2 px-3 flex flex-col gap-0.5">
-        {navItems.map((item) => (
-          <NavItem
-            key={item.id}
-            id={item.id}
-            label={item.label}
-            icon={item.icon}
-            isActive={activeTab === item.id}
-            onClick={() => onTabChange(item.id)}
-            activeClass={item.activeClass}
-            activeIconClass={item.activeIconClass}
-          />
-        ))}
-      </div>
-
-      <div className="border-t border-slate-100">
-        {/* Upgrade to Pro Card - only shown for free users */}
-        {!isProUser && (
-          <div className="bg-gradient-to-br from-cyan-600 to-cyan-500 rounded-xl p-4 m-4 mb-3 text-white">
-            <div className="flex items-center gap-2 mb-2.5">
-              <div className="w-6 h-6 rounded-md bg-white/20 flex items-center justify-center text-white">
-                <Sparkles size={16} />
-              </div>
-              <span className="text-[0.9375rem] font-semibold text-white">OSCAR Pro</span>
-            </div>
-            <p className="text-[0.8125rem] text-white/85 leading-relaxed mb-3">
-              Unlock unlimited recordings, Scribbles, vocabulary entries, and priority AI processing.
-            </p>
-            <button
-              className="flex items-center justify-center gap-1.5 w-full py-2.5 px-3.5 bg-white border-none rounded-lg text-cyan-600 text-sm font-semibold cursor-pointer transition-all duration-200 hover:bg-white/95 hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(6,182,212,0.3)]"
-              onClick={handleUpgrade}
-            >
-              <Crown size={14} />
-              View Pro Plans
-            </button>
+      <div className="px-6 flex-1 flex flex-col gap-7 overflow-y-auto">
+        <div>
+          <CapsLabel>WORKSPACE</CapsLabel>
+          <div className="mt-3 space-y-0.5">
+            {workspaceItems.map((item) => (
+              <NavRow
+                key={item.id}
+                label={item.label}
+                isActive={activeTab === item.id}
+                onClick={() => onTabChange(item.id)}
+              />
+            ))}
           </div>
-        )}
-
-        <div className="py-2 px-3 flex flex-col gap-0.5">
-          <NavItem
-            id="settings"
-            label="Settings"
-            icon={Settings}
-            isActive={activeTab === "settings"}
-            onClick={() => onTabChange("settings")}
-          />
         </div>
 
-        {/* Version indicator */}
-        {appVersion && (
-          <div className="pb-3 px-3 pt-1 border-t border-slate-100">
-            <VersionIndicator
-              version={appVersion}
-              updaterState={updaterState}
-              onCheckForUpdates={onCheckForUpdates}
-              onDownloadUpdate={onDownloadUpdate}
-              onInstallUpdate={onInstallUpdate}
-            />
+        {visibleFolders.length > 0 && (
+          <div className="pt-5 border-t border-cream-300">
+            <CapsLabel>FOLDERS</CapsLabel>
+            <div className="mt-3 space-y-2">
+              {visibleFolders.map((f) => (
+                <div
+                  key={f.name}
+                  className="flex items-center justify-between"
+                >
+                  <span className="text-[12px] text-ink-soft truncate pr-2">{f.name}</span>
+                  <span className="font-mono text-[11px] text-ink-faint">{f.count}</span>
+                </div>
+              ))}
+            </div>
           </div>
+        )}
+      </div>
+
+      <div className="px-6 pt-4 pb-5 border-t border-cream-300 space-y-4">
+        {/* Account block — V2DeskSidebar style: caps tier, avatar + name */}
+        <div>
+          <CapsLabel>{isProUser ? "OSCAR · PRO" : "OSCAR · FREE"}</CapsLabel>
+          <div className="mt-2.5 flex items-center gap-2.5">
+            <div className="h-7 w-7 rounded-full bg-terracotta text-cream font-serif text-[11px] font-medium uppercase flex items-center justify-center shrink-0">
+              {getInitials(userEmail)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div
+                className="text-[13px] text-ink truncate leading-tight"
+                title={displayName}
+              >
+                {displayName}
+              </div>
+              {userEmail && userEmail !== displayName && (
+                <div
+                  className="text-[11px] text-ink-faint truncate leading-tight"
+                  title={userEmail}
+                >
+                  {userEmail}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {!isProUser && (
+          <button
+            onClick={handleUpgrade}
+            className="w-full text-left rounded-xl bg-ink text-cream p-4 cursor-pointer border-none transition-transform duration-150 hover:-translate-y-px"
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <Sparkles size={13} className="text-terracotta" />
+              <CapsLabel>OSCAR · PRO</CapsLabel>
+            </div>
+            <p className="font-serif text-[15px] leading-snug text-cream mb-2.5">
+              Unlimited recordings, Scribbles, and priority AI.
+            </p>
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-terracotta">
+              <Crown size={12} />
+              View Pro plans →
+            </span>
+          </button>
+        )}
+
+        {appVersion && (
+          <VersionIndicator
+            version={appVersion}
+            updaterState={updaterState}
+            onCheckForUpdates={onCheckForUpdates}
+            onDownloadUpdate={onDownloadUpdate}
+            onInstallUpdate={onInstallUpdate}
+          />
         )}
       </div>
     </nav>
   );
 }
 
-// Version indicator component
 function VersionIndicator({
   version,
   updaterState,
@@ -185,46 +239,22 @@ function VersionIndicator({
   onInstallUpdate?: () => void;
 }) {
   const getStatusIcon = () => {
-    if (!updaterState) {
-      return <Cloud size={12} className="text-slate-400" />;
-    }
-    if (updaterState.checking) {
-      return <Loader2 size={12} className="text-slate-400 animate-spin" />;
-    }
-    if (updaterState.readyToInstall) {
-      return <Download size={12} className="text-emerald-500" />;
-    }
-    if (updaterState.downloading) {
-      return <Loader2 size={12} className="text-cyan-500 animate-spin" />;
-    }
-    if (updaterState.updateAvailable) {
-      return <RefreshCw size={12} className="text-cyan-500" />;
-    }
-    if (updaterState.error) {
-      return <AlertCircle size={12} className="text-amber-500" />;
-    }
-    return <Check size={12} className="text-emerald-500" />;
+    if (!updaterState) return <Cloud size={11} className="text-ink-faint" />;
+    if (updaterState.checking) return <Loader2 size={11} className="text-ink-faint animate-spin" />;
+    if (updaterState.readyToInstall) return <Download size={11} className="text-terracotta" />;
+    if (updaterState.downloading) return <Loader2 size={11} className="text-terracotta animate-spin" />;
+    if (updaterState.updateAvailable) return <RefreshCw size={11} className="text-terracotta" />;
+    if (updaterState.error) return <AlertCircle size={11} className="text-[#8c2f25]" />;
+    return <Check size={11} className="text-ink-faint" />;
   };
 
   const getStatusText = () => {
-    if (!updaterState) {
-      return "Check for updates";
-    }
-    if (updaterState.checking) {
-      return "Checking...";
-    }
-    if (updaterState.readyToInstall) {
-      return "Click to restart";
-    }
-    if (updaterState.downloading) {
-      return `Downloading ${updaterState.downloadProgress}%`;
-    }
-    if (updaterState.updateAvailable && updaterState.updateInfo) {
-      return `v${updaterState.updateInfo.version} available`;
-    }
-    if (updaterState.error) {
-      return "Check failed";
-    }
+    if (!updaterState) return "Check for updates";
+    if (updaterState.checking) return "Checking…";
+    if (updaterState.readyToInstall) return "Restart to install";
+    if (updaterState.downloading) return `Downloading ${updaterState.downloadProgress}%`;
+    if (updaterState.updateAvailable && updaterState.updateInfo) return `v${updaterState.updateInfo.version} available`;
+    if (updaterState.error) return "Check failed";
     return "Up to date";
   };
 
@@ -247,25 +277,24 @@ function VersionIndicator({
   };
 
   const isClickable = !updaterState?.checking && !updaterState?.downloading;
+  const highlighted = updaterState?.updateAvailable || updaterState?.readyToInstall;
 
   return (
     <button
       onClick={handleClick}
       disabled={!isClickable}
-      className={`w-full flex items-center gap-2 py-2 px-3 rounded-lg border-none bg-transparent text-xs transition-all duration-200 ${
-        isClickable
-          ? "cursor-pointer hover:bg-slate-50"
-          : "cursor-default"
+      className={`w-full flex items-center gap-2 py-1.5 px-0 bg-transparent border-none transition-opacity ${
+        isClickable ? "cursor-pointer hover:opacity-80" : "cursor-default"
       }`}
     >
       {getStatusIcon()}
-      <span className="text-slate-500">v{version}</span>
-      <span className="text-slate-400">·</span>
-      <span className={`${
-        updaterState?.updateAvailable || updaterState?.readyToInstall
-          ? "text-cyan-600 font-medium"
-          : "text-slate-400"
-      }`}>
+      <span className="font-mono text-[10px] tracking-[0.06em] text-ink-faint">v{version}</span>
+      <span className="text-ink-faint">·</span>
+      <span
+        className={`font-mono text-[10px] tracking-[0.04em] ${
+          highlighted ? "text-terracotta" : "text-ink-faint"
+        }`}
+      >
         {getStatusText()}
       </span>
     </button>

@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   FolderPlus,
   Inbox,
@@ -13,106 +14,75 @@ import {
   Folder,
   CheckSquare,
   Square,
-  ArrowUpDown,
 } from "lucide-react";
 import { TrashSheet } from "@/components/scribble/TrashSheet";
-import { ScribbleListSkeleton } from "@/components/shared/ScribbleListSkeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { Input } from "@/components/ui/input";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { scribblesService } from "@/lib/services/scribbles.service";
-import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import type { DBScribble } from "@/lib/types/scribble.types";
+import {
+  v2,
+  v2Serif,
+  v2Mono,
+  V2Caps,
+  V2Mono,
+  V2Source,
+  V2WebHeader,
+  V2Avatar,
+} from "@/components/v2/V2Primitives";
 
 type SortOption = "updated" | "created" | "length" | "title";
 type SavedViewKey = "all" | "recent" | "starred" | "unfoldered" | `folder:${string}`;
 
-const ITEMS_PER_PAGE = 8;
+const ITEMS_PER_PAGE = 10;
 const RECENT_WINDOW_DAYS = 14;
 const VIEW_STORAGE_KEY = "oscar-scribble-view";
+
 const SYSTEM_VIEWS: Array<{
   id: Exclude<SavedViewKey, `folder:${string}`>;
   label: string;
   icon: typeof Inbox;
-  description: string;
 }> = [
-  {
-    id: "all",
-    label: "All Scribbles",
-    icon: Sparkles,
-    description: "Every saved voice note in one place.",
-  },
-  {
-    id: "recent",
-    label: "Recent",
-    icon: Clock3,
-    description: `Updated in the last ${RECENT_WINDOW_DAYS} days.`,
-  },
-  {
-    id: "starred",
-    label: "Starred",
-    icon: Star,
-    description: "Your keepers, pinned for quick return trips.",
-  },
-  {
-    id: "unfoldered",
-    label: "Unsorted",
-    icon: Inbox,
-    description: "Scribbles that still need a home.",
-  },
+  { id: "all", label: "All Scribbles", icon: Sparkles },
+  { id: "recent", label: "Recent", icon: Clock3 },
+  { id: "starred", label: "Starred", icon: Star },
+  { id: "unfoldered", label: "Unsorted", icon: Inbox },
 ];
 
-function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function formatDateLong(d: string) {
+  return new Date(d)
+    .toLocaleDateString(undefined, {
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+    .toUpperCase();
 }
 
-function getPreview(scribble: DBScribble) {
-  const text = scribble.edited_text || scribble.original_formatted_text;
-  return text.length > 180 ? `${text.slice(0, 180).trim()}...` : text;
+function previewOf(s: DBScribble) {
+  const text = s.edited_text || s.original_formatted_text || "";
+  return text.length > 220 ? `${text.slice(0, 220).trim()}…` : text;
 }
 
 function isFolderView(view: SavedViewKey): view is `folder:${string}` {
   return view.startsWith("folder:");
 }
 
-function getFolderName(view: `folder:${string}`) {
+function folderNameOf(view: `folder:${string}`) {
   return view.slice("folder:".length);
 }
 
-function getRecentCutoff() {
+function recentCutoff() {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - RECENT_WINDOW_DAYS);
   return cutoff.getTime();
 }
 
-function mergeScribbles(previous: DBScribble[], incoming: DBScribble[]) {
-  const map = new Map(previous.map((scribble) => [scribble.id, scribble]));
-  incoming.forEach((scribble) => {
-    map.set(scribble.id, scribble);
-  });
+function mergeScribbles(prev: DBScribble[], next: DBScribble[]) {
+  const map = new Map(prev.map((s) => [s.id, s]));
+  next.forEach((s) => map.set(s.id, s));
   return Array.from(map.values());
 }
 
@@ -120,6 +90,7 @@ export default function ScribblePage() {
   const router = useRouter();
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
+
   const [allScribbles, setAllScribbles] = useState<DBScribble[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,22 +102,22 @@ export default function ScribblePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [trashCount, setTrashCount] = useState(0);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
-  const [isApplyingBulkAction, setIsApplyingBulkAction] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const folderCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    allScribbles.forEach((scribble) => {
-      if (!scribble.folder) return;
-      counts.set(scribble.folder, (counts.get(scribble.folder) ?? 0) + 1);
+    allScribbles.forEach((s) => {
+      if (!s.folder) return;
+      counts.set(s.folder, (counts.get(s.folder) ?? 0) + 1);
     });
     return counts;
   }, [allScribbles]);
 
-  const folders = useMemo(() => {
-    return Array.from(folderCounts.keys()).sort((left, right) => left.localeCompare(right));
-  }, [folderCounts]);
+  const folders = useMemo(
+    () => Array.from(folderCounts.keys()).sort((a, b) => a.localeCompare(b)),
+    [folderCounts]
+  );
 
   useEffect(() => {
     if (authLoading) return;
@@ -154,7 +125,6 @@ export default function ScribblePage() {
       router.push(`/auth?redirectTo=${encodeURIComponent("/scribble")}`);
       return;
     }
-
     void loadWorkspace();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id]);
@@ -166,24 +136,15 @@ export default function ScribblePage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const storedView = window.localStorage.getItem(VIEW_STORAGE_KEY);
-    if (!storedView) return;
-
-    if (
-      storedView === "all" ||
-      storedView === "recent" ||
-      storedView === "starred" ||
-      storedView === "unfoldered"
-    ) {
-      setCurrentView(storedView);
+    const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    if (!stored) return;
+    if (["all", "recent", "starred", "unfoldered"].includes(stored)) {
+      setCurrentView(stored as SavedViewKey);
       return;
     }
-
-    if (storedView.startsWith("folder:")) {
-      const folderName = storedView.slice("folder:".length);
-      if (folders.includes(folderName)) {
-        setCurrentView(storedView as SavedViewKey);
-      }
+    if (stored.startsWith("folder:")) {
+      const name = stored.slice("folder:".length);
+      if (folders.includes(name)) setCurrentView(stored as SavedViewKey);
     }
   }, [folders]);
 
@@ -193,213 +154,148 @@ export default function ScribblePage() {
   }, [currentView]);
 
   useEffect(() => {
-    if (isFolderView(currentView) && !folders.includes(getFolderName(currentView))) {
+    if (isFolderView(currentView) && !folders.includes(folderNameOf(currentView))) {
       setCurrentView("all");
     }
   }, [currentView, folders]);
 
   const viewCounts = useMemo(() => {
-    const recentCutoff = getRecentCutoff();
+    const cutoff = recentCutoff();
     return {
       all: allScribbles.length,
-      recent: allScribbles.filter(
-        (scribble) => new Date(scribble.updated_at).getTime() >= recentCutoff
-      ).length,
-      starred: allScribbles.filter((scribble) => scribble.is_starred).length,
-      unfoldered: allScribbles.filter((scribble) => !scribble.folder).length,
+      recent: allScribbles.filter((s) => new Date(s.updated_at).getTime() >= cutoff).length,
+      starred: allScribbles.filter((s) => s.is_starred).length,
+      unfoldered: allScribbles.filter((s) => !s.folder).length,
     };
   }, [allScribbles]);
 
-  const filteredScribbles = useMemo(() => {
-    const recentCutoff = getRecentCutoff();
-    const query = deferredSearch.trim().toLowerCase();
-
-    let scribbles = allScribbles.filter((scribble) => {
-      if (currentView === "recent") {
-        return new Date(scribble.updated_at).getTime() >= recentCutoff;
-      }
-
-      if (currentView === "starred") {
-        return scribble.is_starred;
-      }
-
-      if (currentView === "unfoldered") {
-        return !scribble.folder;
-      }
-
-      if (isFolderView(currentView)) {
-        return scribble.folder === getFolderName(currentView);
-      }
-
+  const filtered = useMemo(() => {
+    const cutoff = recentCutoff();
+    const q = deferredSearch.trim().toLowerCase();
+    let list = allScribbles.filter((s) => {
+      if (currentView === "recent") return new Date(s.updated_at).getTime() >= cutoff;
+      if (currentView === "starred") return s.is_starred;
+      if (currentView === "unfoldered") return !s.folder;
+      if (isFolderView(currentView)) return s.folder === folderNameOf(currentView);
       return true;
     });
-
-    if (query) {
-      scribbles = scribbles.filter((scribble) => {
-        const content = (scribble.edited_text || scribble.original_formatted_text).toLowerCase();
+    if (q) {
+      list = list.filter((s) => {
+        const content = (s.edited_text || s.original_formatted_text || "").toLowerCase();
         return (
-          scribble.title.toLowerCase().includes(query) ||
-          content.includes(query) ||
-          (scribble.folder ?? "").toLowerCase().includes(query)
+          s.title.toLowerCase().includes(q) ||
+          content.includes(q) ||
+          (s.folder ?? "").toLowerCase().includes(q)
         );
       });
     }
-
-    scribbles.sort((left, right) => {
+    list.sort((l, r) => {
       switch (sortBy) {
         case "created":
-          return (
-            new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
-          );
+          return new Date(r.created_at).getTime() - new Date(l.created_at).getTime();
         case "length":
           return (
-            (right.edited_text || right.original_formatted_text).length -
-            (left.edited_text || left.original_formatted_text).length
+            (r.edited_text || r.original_formatted_text || "").length -
+            (l.edited_text || l.original_formatted_text || "").length
           );
         case "title":
-          return left.title.localeCompare(right.title);
-        case "updated":
+          return l.title.localeCompare(r.title);
         default:
-          return (
-            new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
-          );
+          return new Date(r.updated_at).getTime() - new Date(l.updated_at).getTime();
       }
     });
-
-    return scribbles;
+    return list;
   }, [allScribbles, currentView, deferredSearch, sortBy]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredScribbles.length / ITEMS_PER_PAGE));
-  const paginatedScribbles = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredScribbles.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredScribbles, currentPage]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const paged = useMemo(
+    () => filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filtered, currentPage]
+  );
 
   const selectedCount = selectedIds.size;
   const pageSelectionState = useMemo(() => {
-    if (paginatedScribbles.length === 0) return "none";
-    const selectedOnPage = paginatedScribbles.filter((scribble) => selectedIds.has(scribble.id)).length;
-    if (selectedOnPage === 0) return "none";
-    if (selectedOnPage === paginatedScribbles.length) return "all";
+    if (paged.length === 0) return "none";
+    const onPage = paged.filter((s) => selectedIds.has(s.id)).length;
+    if (onPage === 0) return "none";
+    if (onPage === paged.length) return "all";
     return "some";
-  }, [paginatedScribbles, selectedIds]);
+  }, [paged, selectedIds]);
 
   const activeViewLabel = useMemo(() => {
-    if (isFolderView(currentView)) return getFolderName(currentView);
-    return SYSTEM_VIEWS.find((view) => view.id === currentView)?.label ?? "Scribble";
+    if (isFolderView(currentView)) return folderNameOf(currentView);
+    return SYSTEM_VIEWS.find((v) => v.id === currentView)?.label ?? "Library";
   }, [currentView]);
-
-  const activeViewDescription = useMemo(() => {
-    if (isFolderView(currentView)) {
-      return `${folderCounts.get(getFolderName(currentView)) ?? 0} Scribbles in this folder.`;
-    }
-
-    return (
-      SYSTEM_VIEWS.find((view) => view.id === currentView)?.description ??
-      "Every saved voice note in one place."
-    );
-  }, [currentView, folderCounts]);
 
   async function loadWorkspace() {
     setIsLoading(true);
     setError(null);
-
     const [scribblesResult, trashedResult] = await Promise.all([
       scribblesService.getScribbles(),
       scribblesService.getTrashedScribbles(),
     ]);
-
-    if (scribblesResult.error) {
-      setError("Could not load Scribble right now. Please try again.");
-    } else {
-      setAllScribbles(scribblesResult.data ?? []);
-    }
-    if (!trashedResult.error) {
-      setTrashCount(trashedResult.data?.length ?? 0);
-    }
-
+    if (scribblesResult.error) setError("Could not load your library. Please try again.");
+    else setAllScribbles(scribblesResult.data ?? []);
+    if (!trashedResult.error) setTrashCount(trashedResult.data?.length ?? 0);
     setIsLoading(false);
   }
 
-  function updateScribblesInState(updatedScribbles: DBScribble[]) {
-    setAllScribbles((previous) => mergeScribbles(previous, updatedScribbles));
+  function updateScribblesInState(updated: DBScribble[]) {
+    setAllScribbles((prev) => mergeScribbles(prev, updated));
   }
 
-  function handleToggleSelection(id: string) {
-    setSelectedIds((previous) => {
-      const next = new Set(previous);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+  function toggleSelection(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
 
-  function handleToggleSelectPage() {
-    setSelectedIds((previous) => {
-      const next = new Set(previous);
-
-      if (pageSelectionState === "all") {
-        paginatedScribbles.forEach((scribble) => next.delete(scribble.id));
-      } else {
-        paginatedScribbles.forEach((scribble) => next.add(scribble.id));
-      }
-
+  function toggleSelectPage() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (pageSelectionState === "all") paged.forEach((s) => next.delete(s.id));
+      else paged.forEach((s) => next.add(s.id));
       return next;
     });
   }
 
-  async function handleToggleStar(scribble: DBScribble, event: React.MouseEvent) {
-    event.stopPropagation();
-    const newStarred = !scribble.is_starred;
-
-    setAllScribbles((previous) =>
-      previous.map((item) =>
-        item.id === scribble.id ? { ...item, is_starred: newStarred } : item
-      )
+  async function handleToggleStar(s: DBScribble, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const newStarred = !s.is_starred;
+    setAllScribbles((prev) =>
+      prev.map((item) => (item.id === s.id ? { ...item, is_starred: newStarred } : item))
     );
-
-    const { data, error } = await scribblesService.toggleStar(scribble.id, newStarred);
-    if (error || !data) {
-      setAllScribbles((previous) =>
-        previous.map((item) =>
-          item.id === scribble.id ? { ...item, is_starred: scribble.is_starred } : item
-        )
+    const { data, error: e2 } = await scribblesService.toggleStar(s.id, newStarred);
+    if (e2 || !data) {
+      setAllScribbles((prev) =>
+        prev.map((item) => (item.id === s.id ? { ...item, is_starred: s.is_starred } : item))
       );
-      toast({
-        title: "Couldn’t update star",
-        description: "Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Couldn't update star", variant: "destructive" });
       return;
     }
-
     updateScribblesInState([data]);
   }
 
-  async function handleDeleteOne(scribbleId: string, event: React.MouseEvent) {
-    event.stopPropagation();
+  async function handleDeleteOne(id: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
     if (!window.confirm("Move this Scribble to trash?")) return;
-
-    const { error: deleteError } = await scribblesService.deleteScribble(scribbleId);
-    if (deleteError) {
-      toast({
-        title: "Couldn’t move Scribble to trash",
-        description: "Please try again.",
-        variant: "destructive",
-      });
+    const { error: e2 } = await scribblesService.deleteScribble(id);
+    if (e2) {
+      toast({ title: "Couldn't move Scribble to trash", variant: "destructive" });
       return;
     }
-
-    setAllScribbles((previous) => previous.filter((scribble) => scribble.id !== scribbleId));
-    setSelectedIds((previous) => {
-      const next = new Set(previous);
-      next.delete(scribbleId);
+    setAllScribbles((prev) => prev.filter((s) => s.id !== id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
       return next;
     });
-    setTrashCount((previous) => previous + 1);
+    setTrashCount((t) => t + 1);
   }
 
   async function applyBulkUpdate(
@@ -407,644 +303,500 @@ export default function ScribblePage() {
     successMessage: string
   ) {
     if (selectedCount === 0) return;
-
-    setIsApplyingBulkAction(true);
+    setIsApplying(true);
     const ids = Array.from(selectedIds);
-    const { data, error: updateError } = await scribblesService.updateScribbles(ids, updates);
-
-    if (updateError || !data) {
-      toast({
-        title: "Bulk action failed",
-        description: "Please try again.",
-        variant: "destructive",
-      });
-      setIsApplyingBulkAction(false);
+    const { data, error: e2 } = await scribblesService.updateScribbles(ids, updates);
+    if (e2 || !data) {
+      toast({ title: "Bulk action failed", variant: "destructive" });
+      setIsApplying(false);
       return;
     }
-
     updateScribblesInState(data);
     setSelectedIds(new Set());
-    toast({
-      title: successMessage,
-      description: `${data.length} Scribble${data.length === 1 ? "" : "s"} updated.`,
-    });
-    setIsApplyingBulkAction(false);
+    toast({ title: successMessage, description: `${data.length} Scribble${data.length === 1 ? "" : "s"} updated.` });
+    setIsApplying(false);
   }
 
   async function handleDeleteSelected() {
     if (selectedCount === 0) return;
     if (!window.confirm(`Move ${selectedCount} selected Scribbles to trash?`)) return;
-
-    setIsApplyingBulkAction(true);
+    setIsApplying(true);
     const ids = Array.from(selectedIds);
-    const { data, error: deleteError } = await scribblesService.deleteScribbles(ids);
-
-    if (deleteError || !data) {
-      toast({
-        title: "Couldn’t move Scribbles to trash",
-        description: "Please try again.",
-        variant: "destructive",
-      });
-      setIsApplyingBulkAction(false);
+    const { data, error: e2 } = await scribblesService.deleteScribbles(ids);
+    if (e2 || !data) {
+      toast({ title: "Couldn't move Scribbles to trash", variant: "destructive" });
+      setIsApplying(false);
       return;
     }
-
-    setAllScribbles((previous) => previous.filter((scribble) => !selectedIds.has(scribble.id)));
+    setAllScribbles((prev) => prev.filter((s) => !selectedIds.has(s.id)));
     setSelectedIds(new Set());
-    setTrashCount((previous) => previous + data.length);
-    toast({
-      title: "Moved to trash",
-      description: `${data.length} Scribble${data.length === 1 ? "" : "s"} moved to trash.`,
-    });
-    setIsApplyingBulkAction(false);
+    setTrashCount((t) => t + data.length);
+    toast({ title: "Moved to trash", description: `${data.length} Scribble${data.length === 1 ? "" : "s"} moved.` });
+    setIsApplying(false);
   }
 
-  async function handleCreateFolderFromSelection() {
-    const trimmedName = newFolderName.trim();
-
-    if (!trimmedName) {
-      toast({
-        title: "Folder name required",
-        description: "Give the folder a name first.",
-        variant: "destructive",
-      });
+  async function handleCreateFolder() {
+    const name = newFolderName.trim();
+    if (!name) {
+      toast({ title: "Folder name required", variant: "destructive" });
       return;
     }
-
     if (selectedCount === 0) {
-      toast({
-        title: "Select Scribbles first",
-        description: "Folders are created the first time you move one or more Scribbles into them.",
-        variant: "destructive",
-      });
+      toast({ title: "Select Scribbles first", description: "Folders are created when you move Scribbles into them.", variant: "destructive" });
       return;
     }
-
-    await applyBulkUpdate({ folder: trimmedName }, "Folder created");
-    setCurrentView(`folder:${trimmedName}`);
+    await applyBulkUpdate({ folder: name }, "Folder created");
+    setCurrentView(`folder:${name}`);
     setNewFolderName("");
-  }
-
-  function handleTrashRestore() {
-    void loadWorkspace();
-  }
-
-  function renderPaginationItems() {
-    const items = [];
-    const maxVisiblePages = 5;
-
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-    if (endPage - startPage + 1 < maxVisiblePages) {
-      startPage = Math.max(1, endPage - maxVisiblePages + 1);
-    }
-
-    if (startPage > 1) {
-      items.push(
-        <PaginationItem key="1">
-          <PaginationLink
-            href="#"
-            onClick={(event) => {
-              event.preventDefault();
-              setCurrentPage(1);
-            }}
-          >
-            1
-          </PaginationLink>
-        </PaginationItem>
-      );
-
-      if (startPage > 2) {
-        items.push(<PaginationEllipsis key="ellipsis-start" />);
-      }
-    }
-
-    for (let page = startPage; page <= endPage; page += 1) {
-      items.push(
-        <PaginationItem key={page}>
-          <PaginationLink
-            href="#"
-            isActive={currentPage === page}
-            onClick={(event) => {
-              event.preventDefault();
-              setCurrentPage(page);
-            }}
-          >
-            {page}
-          </PaginationLink>
-        </PaginationItem>
-      );
-    }
-
-    if (endPage < totalPages) {
-      if (endPage < totalPages - 1) {
-        items.push(<PaginationEllipsis key="ellipsis-end" />);
-      }
-
-      items.push(
-        <PaginationItem key={totalPages}>
-          <PaginationLink
-            href="#"
-            onClick={(event) => {
-              event.preventDefault();
-              setCurrentPage(totalPages);
-            }}
-          >
-            {totalPages}
-          </PaginationLink>
-        </PaginationItem>
-      );
-    }
-
-    return items;
   }
 
   if (isLoading || authLoading) {
     return (
-      <main className="flex min-h-screen flex-col items-center px-4 pt-24 pb-24">
-        <div className="w-full max-w-5xl">
-          <div className="mb-8 space-y-3">
-            <div className="h-4 w-24 rounded-full bg-white/10" />
-            <div className="h-10 w-64 rounded-full bg-white/10" />
-          </div>
-          <ScribbleListSkeleton />
-        </div>
+      <main className="min-h-screen flex items-center justify-center" style={{ background: v2.cream }}>
+        <Spinner />
       </main>
     );
   }
 
-  const isEmptyWorkspace = allScribbles.length === 0;
+  const firstName =
+    (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
+    user?.email?.split("@")[0] ||
+    "S";
 
   return (
-    <main className="min-h-screen bg-[#020617] px-4 pt-24 pb-24 text-white overflow-x-hidden">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 min-w-0">
-        <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3 mt-5">
-            <h1 className="text-4xl font-semibold tracking-tight text-white">
-              Scribble
-            </h1>
-            <p className="max-w-2xl text-sm leading-6 text-slate-400">
-              Organize every Scribble in one calm workspace - jump between recent, starred, and folder views,
-              then tidy multiple Scribbles at once without leaving the page.
-            </p>
-          </div>
+    <main style={{ background: v2.cream, color: v2.ink, minHeight: "100vh", fontFamily: "var(--font-figtree), system-ui" }}>
+      <V2WebHeader
+        active="LIBRARY"
+        right={
+          <>
+            <V2Caps>{firstName.toUpperCase()}</V2Caps>
+            <V2Avatar size={32} initial={firstName.charAt(0).toUpperCase()} />
+          </>
+        }
+      />
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-500/30 hover:text-cyan-200 lg:hidden"
-            >
-              <Folder className="h-4 w-4" />
-              Views
-            </button>
-            <button
-              onClick={() => setIsTrashOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-500/30 hover:text-cyan-200"
-            >
-              <Trash2 className="h-4 w-4" />
-              Trash
-              {trashCount > 0 && (
-                <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-200">
-                  {trashCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => router.push("/recording")}
-              className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
-            >
-              <Sparkles className="h-4 w-4" />
-              New Scribble
-            </button>
-          </div>
-        </header>
+      <section className="px-6 md:px-14 pt-16 md:pt-20 pb-10 md:pb-12">
+        <V2Caps>
+          YOUR LIBRARY · {allScribbles.length} SCRIBBLE{allScribbles.length === 1 ? "" : "S"}
+          {trashCount > 0 ? ` · ${trashCount} IN TRASH` : ""}
+        </V2Caps>
+        <h1
+          className="mt-3"
+          style={{
+            fontFamily: v2Serif,
+            fontSize: "clamp(48px, 9vw, 84px)",
+            lineHeight: 0.96,
+            letterSpacing: "-0.025em",
+            fontWeight: 500,
+          }}
+        >
+          Everything you <em style={{ fontStyle: "italic", color: v2.accent }}>kept</em>.
+        </h1>
+        <p className="mt-7 max-w-xl text-[16px] leading-relaxed" style={{ color: v2.inkSoft }}>
+          Search by what you said, where you said it from, or when. The library is yours — Oscar
+          only helps you find your way back.
+        </p>
 
-        {error && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-            {error}
-          </div>
-        )}
+        <div
+          className="mt-8 flex items-center gap-4 max-w-2xl"
+          style={{
+            background: v2.cream2,
+            border: `1px solid ${v2.rule}`,
+            borderRadius: 999,
+            padding: "13px 22px",
+          }}
+        >
+          <Search className="h-4 w-4" style={{ color: v2.inkFaint }} />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="What did I say about pricing?"
+            className="flex-1 bg-transparent outline-none"
+            style={{ fontSize: 15, color: v2.ink }}
+          />
+          <V2Mono style={{ fontSize: 10, color: v2.inkFaint, letterSpacing: "0.16em" }}>⌘K</V2Mono>
+        </div>
 
-        <div className="grid gap-4 lg:gap-6 lg:grid-cols-[280px,minmax(0,1fr)] min-w-0">
-          <aside className={cn(
-            "space-y-4 min-w-0",
-            "lg:block",
-            isSidebarOpen ? "block" : "hidden lg:block"
-          )}>
-            <section className="rounded-[28px] p-4 border border-cyan-700/30 shadow-xl min-w-0">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-white">Saved Views</h2>
-                <span className="text-xs text-slate-500">{allScribbles.length} total</span>
-              </div>
+        <div className="mt-6 flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => router.push("/recording")}
+            className="inline-flex items-center gap-3 rounded-full px-5 py-2.5 text-[14px] font-medium"
+            style={{ background: v2.ink, color: v2.cream }}
+          >
+            <span className="inline-block rounded-full" style={{ height: 7, width: 7, background: v2.accent }} />
+            New Scribble
+          </button>
+          <button
+            onClick={() => setIsTrashOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-[13px]"
+            style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Trash
+            {trashCount > 0 && (
+              <V2Mono style={{ fontSize: 10, color: v2.accent, marginLeft: 2 }}>{trashCount}</V2Mono>
+            )}
+          </button>
+        </div>
+      </section>
 
-              <div className="space-y-1.5">
-                {SYSTEM_VIEWS.map((view) => {
-                  const Icon = view.icon;
-                  const isActive = currentView === view.id;
-                  const count = viewCounts[view.id];
+      <section className="px-6 md:px-14 pt-8 md:pt-10 pb-6" style={{ borderTop: `1px solid ${v2.rule}` }}>
+        <div className="grid grid-cols-12 gap-6 md:gap-10 items-start">
+          <div className="col-span-12 md:col-span-3">
+            <V2Caps>SAVED VIEWS</V2Caps>
+            <div className="mt-4 space-y-1">
+              {SYSTEM_VIEWS.map((v) => {
+                const isActive = currentView === v.id;
+                const count = viewCounts[v.id];
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => setCurrentView(v.id)}
+                    className="w-full flex items-center justify-between py-1.5 text-left transition"
+                    style={{ color: isActive ? v2.ink : v2.inkSoft, fontWeight: isActive ? 500 : 400, fontSize: 13 }}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      {isActive && <span style={{ color: v2.accent }}>→</span>}
+                      {v.label}
+                    </span>
+                    <V2Mono style={{ fontSize: 11, color: v2.inkFaint }}>{count}</V2Mono>
+                  </button>
+                );
+              })}
+            </div>
 
-                  return (
-                    <button
-                      key={view.id}
-                      onClick={() => setCurrentView(view.id)}
-                      className={cn(
-                        "flex w-full items-start justify-between rounded-2xl px-3 py-3 text-left transition",
-                        isActive
-                          ? "bg-cyan-500/10 text-cyan-100 ring-1 ring-cyan-500/30"
-                          : "bg-transparent text-slate-300 hover:bg-white/5 hover:text-white"
-                      )}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            "mt-0.5 rounded-full p-1.5",
-                            isActive ? "bg-cyan-500/20" : "bg-white/5"
-                          )}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium">{view.label}</div>
-                          <div className="mt-1 text-xs leading-5 text-slate-500">
-                            {view.description}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs font-semibold text-slate-400">
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="rounded-[28px] p-4 border border-cyan-700/30 shadow-xl min-w-0">
-              <div className="mb-3 space-y-1">
-                <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                  <Folder className="h-4 w-4 text-cyan-300" />
-                  Folders
-                </div>
-                <p className="text-xs leading-5 text-slate-500">
-                  Create a folder by moving selected Scribbles into it.
-                </p>
-              </div>
-
-              <div className="mb-4 flex gap-2 min-w-0">
-                <Input
+            <div className="mt-8">
+              <V2Caps>FOLDERS</V2Caps>
+              <div className="mt-4 flex items-center gap-2">
+                <input
                   value={newFolderName}
-                  onChange={(event) => setNewFolderName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !isApplyingBulkAction) {
-                      void handleCreateFolderFromSelection();
-                    }
-                  }}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !isApplying && handleCreateFolder()}
                   placeholder="New folder"
-                  className="border-white/10 bg-white/5 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/30 min-w-0"
+                  className="flex-1 bg-transparent outline-none py-1.5 text-[13px]"
+                  style={{ borderBottom: `1px solid ${v2.rule}`, color: v2.ink }}
                 />
                 <button
-                  onClick={() => void handleCreateFolderFromSelection()}
-                  disabled={isApplyingBulkAction}
-                  className="inline-flex h-10 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 text-cyan-100 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                  onClick={() => void handleCreateFolder()}
+                  disabled={isApplying}
+                  className="rounded-full p-1.5 transition"
+                  style={{ color: v2.accent }}
                   title="Create folder from selection"
                 >
-                  {isApplyingBulkAction ? (
-                    <Spinner className="h-4 w-4" />
-                  ) : (
-                    <FolderPlus className="h-4 w-4" />
-                  )}
+                  {isApplying ? <Spinner className="h-3.5 w-3.5" /> : <FolderPlus className="h-3.5 w-3.5" />}
                 </button>
               </div>
-
               {folders.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 px-3 py-4 text-sm text-slate-500">
+                <p className="mt-3 text-[12px]" style={{ color: v2.inkFaint }}>
                   No folders yet.
-                </div>
+                </p>
               ) : (
-                <div className="space-y-1.5">
-                  {folders.map((folderName) => {
-                    const isActive = currentView === `folder:${folderName}`;
+                <div className="mt-3 space-y-1">
+                  {folders.map((name) => {
+                    const isActive = currentView === `folder:${name}`;
                     return (
                       <button
-                        key={folderName}
-                        onClick={() => setCurrentView(`folder:${folderName}`)}
-                        className={cn(
-                          "flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left transition",
-                          isActive
-                            ? "bg-cyan-500/10 text-cyan-100 ring-1 ring-cyan-500/30"
-                            : "bg-transparent text-slate-300 hover:bg-white/5 hover:text-white"
-                        )}
+                        key={name}
+                        onClick={() => setCurrentView(`folder:${name}`)}
+                        className="w-full flex items-center justify-between py-1.5 text-left"
+                        style={{
+                          color: isActive ? v2.ink : v2.inkSoft,
+                          fontWeight: isActive ? 500 : 400,
+                          fontSize: 13,
+                        }}
                       >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div
-                            className={cn(
-                              "rounded-full p-1.5",
-                              isActive ? "bg-cyan-500/20" : "bg-white/5"
-                            )}
-                          >
-                            <Folder className="h-4 w-4" />
-                          </div>
-                          <span className="truncate text-sm font-medium">{folderName}</span>
-                        </div>
-                        <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs font-semibold text-slate-400">
-                          {folderCounts.get(folderName) ?? 0}
+                        <span className="flex items-center gap-2.5 truncate">
+                          {isActive && <span style={{ color: v2.accent }}>→</span>}
+                          <Folder className="h-3.5 w-3.5" />
+                          <span className="truncate">{name}</span>
                         </span>
+                        <V2Mono style={{ fontSize: 11, color: v2.inkFaint }}>{folderCounts.get(name) ?? 0}</V2Mono>
                       </button>
                     );
                   })}
                 </div>
               )}
-            </section>
-          </aside>
+            </div>
+          </div>
 
-          <section className="rounded-[32px] p-4 md:p-6 border border-cyan-700/30 shadow-xl min-w-0">
-            <div className="flex flex-col gap-4 border-b border-cyan-500/20 pb-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-semibold tracking-tight text-white">
-                    {activeViewLabel}
-                  </h2>
-                  <p className="text-sm text-slate-400">{activeViewDescription}</p>
-                </div>
-                <div className="text-sm text-slate-500">
-                  {filteredScribbles.length} result{filteredScribbles.length === 1 ? "" : "s"}
-                </div>
+          <div className="col-span-12 md:col-span-9">
+            <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
+              <div className="flex items-center gap-2 flex-wrap">
+                <V2Caps>FILTER</V2Caps>
+                <span
+                  style={{
+                    fontFamily: v2Serif,
+                    fontSize: 18,
+                    fontWeight: 500,
+                    color: v2.ink,
+                    letterSpacing: "-0.005em",
+                  }}
+                >
+                  {activeViewLabel}
+                </span>
+                <span style={{ fontSize: 13, color: v2.inkFaint, marginLeft: 8 }}>
+                  · {filtered.length} result{filtered.length === 1 ? "" : "s"}
+                </span>
               </div>
 
-              <div className="flex flex-col gap-3 lg:flex-col xl:flex-row xl:items-center">
-                <div className="relative flex-1 min-w-0">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search Scribble by title, text, or folder..."
-                    className="border-white/10 bg-white/5 pl-10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/30"
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <Select
-                    value={sortBy}
-                    onValueChange={(value) => setSortBy(value as SortOption)}
-                  >
-                    <SelectTrigger className="h-10 w-full md:w-[180px] border-white/10 bg-white/5 text-white">
-                      <div className="flex items-center gap-2 text-sm text-slate-300">
-                        <ArrowUpDown className="h-4 w-4 text-slate-500" />
-                        <SelectValue placeholder="Sort" />
-                      </div>
-                    </SelectTrigger>
-                    <SelectContent className="border-white/10 bg-slate-950 text-white">
-                      <SelectItem value="updated">Recently Updated</SelectItem>
-                      <SelectItem value="created">Recently Created</SelectItem>
-                      <SelectItem value="length">Longest First</SelectItem>
-                      <SelectItem value="title">Title A-Z</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <button
-                    onClick={handleToggleSelectPage}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-sm font-medium text-slate-200 transition hover:border-cyan-500/20 hover:text-white"
-                  >
-                    {pageSelectionState === "all" ? (
-                      <CheckSquare className="h-4 w-4 text-cyan-300" />
-                    ) : (
-                      <Square className="h-4 w-4 text-slate-500" />
-                    )}
-                    {pageSelectionState === "all" ? "Clear page" : "Select page"}
-                  </button>
-                </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={toggleSelectPage}
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px]"
+                  style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                >
+                  {pageSelectionState === "all" ? (
+                    <CheckSquare className="h-3.5 w-3.5" style={{ color: v2.accent }} />
+                  ) : (
+                    <Square className="h-3.5 w-3.5" />
+                  )}
+                  {pageSelectionState === "all" ? "Clear page" : "Select page"}
+                </button>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortOption)}
+                  className="rounded-full px-3 py-1.5 text-[12px] bg-transparent outline-none"
+                  style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft, fontFamily: v2Mono }}
+                >
+                  <option value="updated">Recently updated</option>
+                  <option value="created">Recently created</option>
+                  <option value="length">Longest first</option>
+                  <option value="title">Title A–Z</option>
+                </select>
               </div>
             </div>
 
-            {selectedCount > 0 && (
-              <div className="mt-4 flex flex-col gap-3 rounded-[24px] border border-cyan-500/20 bg-cyan-500/8 p-4">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div className="text-sm text-cyan-50">
-                    <span className="font-semibold">{selectedCount}</span> Scribble
-                    {selectedCount === 1 ? "" : "s"} selected
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => void applyBulkUpdate({ is_starred: true }, "Starred selection")}
-                      disabled={isApplyingBulkAction}
-                      className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/15 disabled:opacity-50"
-                    >
-                      Star
-                    </button>
-                    <button
-                      onClick={() => void applyBulkUpdate({ is_starred: false }, "Unstarred selection")}
-                      disabled={isApplyingBulkAction}
-                      className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/15 disabled:opacity-50"
-                    >
-                      Unstar
-                    </button>
-                    <button
-                      onClick={() => void applyBulkUpdate({ folder: null }, "Removed from folder")}
-                      disabled={isApplyingBulkAction}
-                      className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/15 disabled:opacity-50"
-                    >
-                      Clear folder
-                    </button>
-                    <button
-                      onClick={() => void handleDeleteSelected()}
-                      disabled={isApplyingBulkAction}
-                      className="rounded-full border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-100 transition hover:bg-red-500/15 disabled:opacity-50"
-                    >
-                      Move to trash
-                    </button>
-                  </div>
-                </div>
+            {error && (
+              <div
+                className="mb-6 px-4 py-3 rounded-lg text-[13px]"
+                style={{ background: "rgba(184,98,61,0.08)", border: `1px solid ${v2.accent}`, color: v2.accent }}
+              >
+                {error}
+              </div>
+            )}
 
-                {folders.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {folders.map((folderName) => (
-                      <button
-                        key={folderName}
-                        onClick={() => void applyBulkUpdate({ folder: folderName }, `Moved to ${folderName}`)}
-                        disabled={isApplyingBulkAction}
-                        className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/15 disabled:opacity-50"
+            {selectedCount > 0 && (
+              <div
+                className="mb-6 p-4 rounded-lg flex flex-wrap items-center gap-3 justify-between"
+                style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+              >
+                <V2Caps color={v2.accent}>
+                  {selectedCount} SELECTED
+                </V2Caps>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => void applyBulkUpdate({ is_starred: true }, "Starred")}
+                    disabled={isApplying}
+                    className="rounded-full px-3 py-1.5 text-[12px]"
+                    style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                  >
+                    Star
+                  </button>
+                  <button
+                    onClick={() => void applyBulkUpdate({ is_starred: false }, "Unstarred")}
+                    disabled={isApplying}
+                    className="rounded-full px-3 py-1.5 text-[12px]"
+                    style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                  >
+                    Unstar
+                  </button>
+                  <button
+                    onClick={() => void applyBulkUpdate({ folder: null }, "Removed from folder")}
+                    disabled={isApplying}
+                    className="rounded-full px-3 py-1.5 text-[12px]"
+                    style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                  >
+                    Clear folder
+                  </button>
+                  <button
+                    onClick={() => void handleDeleteSelected()}
+                    disabled={isApplying}
+                    className="rounded-full px-3 py-1.5 text-[12px]"
+                    style={{ background: v2.accent, color: v2.cream }}
+                  >
+                    Move to trash
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {allScribbles.length === 0 ? (
+              <div className="py-20 text-center">
+                <V2Caps color={v2.accent}>YOUR LIBRARY · DAY ONE</V2Caps>
+                <h3
+                  className="mt-3"
+                  style={{
+                    fontFamily: v2Serif,
+                    fontSize: 56,
+                    lineHeight: 0.98,
+                    letterSpacing: "-0.025em",
+                    fontWeight: 500,
+                  }}
+                >
+                  Nothing here<br />
+                  <em style={{ color: v2.accent }}>yet</em>.
+                </h3>
+                <p
+                  className="mt-6 mx-auto max-w-md text-[15px] leading-relaxed"
+                  style={{ color: v2.inkSoft }}
+                >
+                  Make your first Scribble. Oscar will clean, title, and file it here.
+                </p>
+                <button
+                  onClick={() => router.push("/recording")}
+                  className="mt-8 rounded-full px-6 py-3 text-[14px] font-medium inline-flex items-center gap-2.5"
+                  style={{ background: v2.ink, color: v2.cream }}
+                >
+                  <span
+                    className="inline-block rounded-full"
+                    style={{ height: 7, width: 7, background: v2.accent }}
+                  />
+                  Record a Scribble
+                </button>
+              </div>
+            ) : paged.length === 0 ? (
+              <div className="py-20 text-center">
+                <V2Caps>NOTHING MATCHES THIS VIEW</V2Caps>
+                <p className="mt-4 text-[15px]" style={{ color: v2.inkSoft }}>
+                  Try a different saved view or clear the search.
+                </p>
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    setCurrentView("all");
+                  }}
+                  className="mt-6 rounded-full px-4 py-2 text-[13px]"
+                  style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                >
+                  Reset filters
+                </button>
+              </div>
+            ) : (
+              <div>
+                {paged.map((s) => {
+                  const isSelected = selectedIds.has(s.id);
+                  return (
+                    <article
+                      key={s.id}
+                      className="grid grid-cols-12 gap-4 md:gap-10 py-7"
+                      style={{
+                        borderTop: `1px solid ${v2.rule}`,
+                        background: isSelected ? "rgba(184,98,61,0.04)" : "transparent",
+                      }}
+                    >
+                      <div className="col-span-12 md:col-span-2 flex items-start gap-3">
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            toggleSelection(s.id);
+                          }}
+                          aria-label={isSelected ? "Deselect" : "Select"}
+                          style={{ color: isSelected ? v2.accent : v2.inkFaint }}
+                          className="mt-1 shrink-0"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="h-4 w-4" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </button>
+                        <div>
+                          <V2Mono style={{ fontSize: 12, color: v2.ink }}>
+                            {formatDateLong(s.updated_at)}
+                          </V2Mono>
+                          <div className="mt-1">
+                            <V2Source
+                              name={s.folder ? s.folder.toUpperCase() : "SCRIBBLE"}
+                              kind={s.is_starred ? "STARRED" : undefined}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <Link
+                        href={`/scribble/${s.id}`}
+                        className="col-span-12 md:col-span-9 group"
                       >
-                        Move to {folderName}
-                      </button>
-                    ))}
+                        <h3
+                          style={{
+                            fontFamily: v2Serif,
+                            fontSize: 22,
+                            lineHeight: 1.25,
+                            letterSpacing: "-0.01em",
+                            fontWeight: 500,
+                          }}
+                        >
+                          {s.title || "Untitled Scribble"}
+                        </h3>
+                        <p
+                          className="mt-1.5 text-[13px] leading-relaxed"
+                          style={{ color: v2.inkSoft, maxWidth: 720 }}
+                        >
+                          {previewOf(s)}
+                        </p>
+                      </Link>
+                      <div className="col-span-12 md:col-span-1 flex md:justify-end items-start gap-2">
+                        <button
+                          onClick={(e) => void handleToggleStar(s, e)}
+                          className="p-1.5 rounded-full transition"
+                          style={{
+                            color: s.is_starred ? v2.accent : v2.inkFaint,
+                          }}
+                          title={s.is_starred ? "Unstar" : "Star"}
+                        >
+                          <Star
+                            className="h-4 w-4"
+                            style={s.is_starred ? { fill: v2.accent } : undefined}
+                          />
+                        </button>
+                        <button
+                          onClick={(e) => void handleDeleteOne(s.id, e)}
+                          className="p-1.5 rounded-full transition"
+                          style={{ color: v2.inkFaint }}
+                          title="Move to trash"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+
+                {totalPages > 1 && (
+                  <div
+                    className="mt-10 pt-6 flex items-center justify-between"
+                    style={{ borderTop: `1px solid ${v2.rule}` }}
+                  >
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="rounded-full px-3 py-1.5 text-[12px] disabled:opacity-40"
+                      style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                    >
+                      ← Previous
+                    </button>
+                    <V2Mono style={{ fontSize: 11, color: v2.inkFaint, letterSpacing: "0.1em" }}>
+                      PAGE {currentPage} / {totalPages}
+                    </V2Mono>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="rounded-full px-3 py-1.5 text-[12px] disabled:opacity-40"
+                      style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                    >
+                      Next →
+                    </button>
                   </div>
                 )}
               </div>
             )}
-
-            <div className="mt-5 min-h-[420px]">
-              {isEmptyWorkspace ? (
-                <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[28px] border border-dashed border-white/10 px-6 text-center">
-                  <Sparkles className="mb-4 h-12 w-12 text-cyan-400/70" />
-                  <h3 className="text-2xl font-semibold text-white">No Scribbles yet</h3>
-                  <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
-                    Record a Scribble and OSCAR will clean it up, title it, and file it
-                    here for you.
-                  </p>
-                  <button
-                    onClick={() => router.push("/recording")}
-                    className="mt-6 rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
-                  >
-                    New Scribble
-                  </button>
-                </div>
-              ) : filteredScribbles.length === 0 ? (
-                <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[28px] border border-dashed border-white/10 px-6 text-center">
-                  <Search className="mb-4 h-12 w-12 text-slate-600" />
-                  <h3 className="text-2xl font-semibold text-white">Nothing matches this view</h3>
-                  <p className="mt-3 max-w-md text-sm leading-6 text-slate-400">
-                    Try a different saved view or clear the search to bring more
-                    Scribbles back into view.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setSearchQuery("");
-                      setCurrentView("all");
-                    }}
-                    className="mt-6 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-cyan-500/20 hover:text-white"
-                  >
-                    Reset filters
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {paginatedScribbles.map((scribble) => {
-                    const isSelected = selectedIds.has(scribble.id);
-
-                    return (
-                      <article
-                        key={scribble.id}
-                        className={cn(
-                          "group rounded-[28px] px-4 py-4 transition border md:px-5",
-                          isSelected
-                            ? "bg-cyan-500/[0.08] border-cyan-500/30"
-                            : "bg-white/[0.02] border-cyan-700/30 hover:bg-white/[0.04]"
-                        )}
-                      >
-                        <div className="flex gap-4">
-                          <button
-                            onClick={() => handleToggleSelection(scribble.id)}
-                            className="mt-1 h-5 w-5 shrink-0 rounded-md text-slate-400 transition hover:text-cyan-200"
-                            aria-label={isSelected ? "Deselect Scribble" : "Select Scribble"}
-                          >
-                            {isSelected ? (
-                              <CheckSquare className="h-5 w-5 text-cyan-300" />
-                            ) : (
-                              <Square className="h-5 w-5" />
-                            )}
-                          </button>
-
-                          <div
-                            className="min-w-0 flex-1 cursor-pointer"
-                            onClick={() => router.push(`/scribble/${scribble.id}`)}
-                          >
-                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                              <div className="min-w-0 space-y-2">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <h3 className="truncate text-lg font-semibold text-white">
-                                    {scribble.title || "Untitled Scribble"}
-                                  </h3>
-                                  {scribble.folder && (
-                                    <button
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setCurrentView(`folder:${scribble.folder}`);
-                                      }}
-                                      className="inline-flex items-center gap-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-200"
-                                    >
-                                      <Folder className="h-3 w-3" />
-                                      {scribble.folder}
-                                    </button>
-                                  )}
-                                </div>
-
-                                <p className="max-w-3xl text-sm leading-6 text-slate-400">
-                                  {getPreview(scribble)}
-                                </p>
-                              </div>
-
-                              <div className="shrink-0 text-xs text-slate-500">
-                                {formatDate(scribble.updated_at)}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex shrink-0 items-start gap-1">
-                            <button
-                              onClick={(event) => void handleToggleStar(scribble, event)}
-                              className={cn(
-                                "rounded-xl p-2 transition",
-                                scribble.is_starred
-                                  ? "text-cyan-300 hover:bg-cyan-500/10"
-                                  : "text-slate-500 hover:bg-white/5 hover:text-cyan-200"
-                              )}
-                              title={scribble.is_starred ? "Unstar Scribble" : "Star Scribble"}
-                            >
-                              <Star
-                                className={cn(
-                                  "h-4 w-4",
-                                  scribble.is_starred && "fill-current"
-                                )}
-                              />
-                            </button>
-                            <button
-                              onClick={(event) => void handleDeleteOne(scribble.id, event)}
-                              className="rounded-xl p-2 text-slate-500 transition hover:bg-white/5 hover:text-red-200"
-                              title="Move Scribble to trash"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {filteredScribbles.length > 0 && totalPages > 1 && (
-              <div className="mt-6 overflow-x-auto pb-2">
-                <Pagination>
-                  <PaginationContent className="flex-nowrap gap-1">
-                    <PaginationItem>
-                      <PaginationPrevious
-                        href="#"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          if (currentPage > 1) setCurrentPage(currentPage - 1);
-                        }}
-                        className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                      />
-                    </PaginationItem>
-                    {renderPaginationItems()}
-                    <PaginationItem>
-                      <PaginationNext
-                        href="#"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-                        }}
-                        className={
-                          currentPage === totalPages
-                            ? "pointer-events-none opacity-50"
-                            : "cursor-pointer"
-                        }
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              </div>
-            )}
-          </section>
+          </div>
         </div>
-      </div>
+      </section>
 
       <TrashSheet
         open={isTrashOpen}
         onOpenChange={setIsTrashOpen}
-        onRestore={handleTrashRestore}
+        onRestore={() => void loadWorkspace()}
       />
     </main>
   );

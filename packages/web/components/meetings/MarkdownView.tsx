@@ -2,6 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { v2 } from "@/components/v2/V2Primitives";
 
 interface MarkdownViewProps {
   children: string;
@@ -17,10 +18,8 @@ function stripCitationTokens(markdown: string): string {
 export function MarkdownView({ children, className }: MarkdownViewProps) {
   return (
     <div
-      className={
-        className ??
-        "prose prose-sm prose-invert max-w-none text-slate-300 leading-relaxed"
-      }
+      className={className ?? "prose prose-sm max-w-none leading-relaxed"}
+      style={{ color: v2.ink }}
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -30,7 +29,8 @@ export function MarkdownView({ children, className }: MarkdownViewProps) {
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-cyan-400 underline"
+              className="underline"
+              style={{ color: v2.accent }}
             >
               {children}
             </a>

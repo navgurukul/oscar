@@ -165,7 +165,7 @@ export function useRazorpayCheckout({
           email: userEmail,
         },
         theme: {
-          color: "#06b6d4", // cyan-500
+          color: "#b8623d", // v2 accent
         },
         modal: {
           ondismiss: () => {

@@ -1,6 +1,5 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: ["class"],
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -20,16 +19,32 @@ module.exports = {
   				'serif'
   			],
   			mono: [
+  				'var(--font-ibm-plex-mono)',
   				'ui-monospace',
   				'monospace'
   			]
   		},
   		colors: {
-  			cyan: {
-  				'400': '#22d3ee',
-  				'500': '#06b6d4',
-  				'600': '#0891b2',
-  				'700': '#0e7490'
+  			cream: {
+  				DEFAULT: '#f7f4ee',
+  				50: '#faf8f3',
+  				100: '#f7f4ee',
+  				200: '#efeae0',
+  				300: '#e5e0d6',
+  				400: '#d8d2c4'
+  			},
+  			ink: {
+  				DEFAULT: '#1a1816',
+  				soft: '#5a5852',
+  				faint: '#8b8780',
+  				night: '#0f0d0a'
+  			},
+  			terracotta: {
+  				DEFAULT: '#b8623d',
+  				50: '#f7e6dd',
+  				100: '#e8c9b8',
+  				500: '#b8623d',
+  				600: '#a25234'
   			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
@@ -63,14 +78,7 @@ module.exports = {
   			},
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
-  			ring: 'hsl(var(--ring))',
-  			chart: {
-  				'1': 'hsl(var(--chart-1))',
-  				'2': 'hsl(var(--chart-2))',
-  				'3': 'hsl(var(--chart-3))',
-  				'4': 'hsl(var(--chart-4))',
-  				'5': 'hsl(var(--chart-5))'
-  			}
+  			ring: 'hsl(var(--ring))'
   		},
   		borderRadius: {
   			lg: 'var(--radius)',

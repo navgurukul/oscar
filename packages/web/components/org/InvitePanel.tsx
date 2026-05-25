@@ -2,16 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Mail, Link2, Copy, X, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -26,9 +17,23 @@ import type {
   OrganizationInvite,
   OrganizationInviteCreated,
 } from "@oscar/shared/types";
+import { v2, v2Mono, V2Caps } from "@/components/v2/V2Primitives";
 
 interface Props {
   organizationId: string;
+}
+
+function formatRelative(iso: string | null | undefined) {
+  if (!iso) return "NEVER";
+  const date = new Date(iso);
+  const now = Date.now();
+  const diffMs = date.getTime() - now;
+  if (diffMs <= 0) return "EXPIRED";
+  const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  if (days < 1) return "TODAY";
+  if (days === 1) return "1 DAY";
+  if (days < 30) return `${days} DAYS`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase();
 }
 
 export function InvitePanel({ organizationId }: Props) {
@@ -71,13 +76,10 @@ export function InvitePanel({ organizationId }: Props) {
         } else if (invite.email_status === "failed") {
           description = `Email delivery failed${invite.email_error ? `: ${invite.email_error}` : ""}. Share the link manually.`;
         } else {
-          description = "Email isn't configured on this environment yet — share the invite link manually.";
+          description = "Email isn't configured yet — share the link manually.";
         }
       }
-      toast({
-        title: withEmail ? "Email invite created" : "Invite link ready",
-        description,
-      });
+      toast({ title: withEmail ? "Email invite created" : "Invite link ready", description });
     } catch (err) {
       toast({
         title: "Invite failed",
@@ -111,117 +113,153 @@ export function InvitePanel({ organizationId }: Props) {
   };
 
   return (
-    <Card className="bg-slate-900 border-cyan-700/30">
-      <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
-          <Mail className="w-5 h-5 text-cyan-500" />
-          Invite teammates
-        </CardTitle>
-        <CardDescription className="text-gray-400">
-          Send an email-pinned invite or generate a shareable link.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="invite-email" className="text-gray-300">Email</Label>
-              <Input
-                id="invite-email"
-                type="email"
-                placeholder="teammate@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="bg-slate-800 border-slate-700 text-white"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-gray-300">Role</Label>
-              <Select value={role} onValueChange={(value) => setRole(value as InvitedRole)}>
-                <SelectTrigger className="w-32 bg-slate-800 border-slate-700 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-cyan-700/30 text-white">
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={() => void create(true)}
-              disabled={busy || !email.includes("@")}
-              className="bg-cyan-500 hover:bg-cyan-600 text-white"
+    <div className="space-y-10">
+      {/* Send an invite */}
+      <section
+        className="rounded-lg p-7"
+        style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
+      >
+        <V2Caps>SEND AN INVITE</V2Caps>
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
+          <Input
+            type="email"
+            placeholder="name@work.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="text-[14px]"
+            style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
+          />
+          <Select value={role} onValueChange={(value) => setRole(value as InvitedRole)}>
+            <SelectTrigger
+              className="w-32 text-[13px]"
+              style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
             >
-              <Mail className="w-4 h-4 mr-2" /> Send invite
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void create(false)}
-              disabled={busy}
-              className="border-cyan-700/40 text-gray-200 hover:bg-slate-800"
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
             >
-              <Link2 className="w-4 h-4 mr-2" /> Get shareable link
-            </Button>
-          </div>
+              <SelectItem value="member">Member</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="mt-4 flex gap-2 flex-wrap">
+          <button
+            onClick={() => void create(true)}
+            disabled={busy || !email.includes("@")}
+            className="text-[12px] rounded-full px-4 py-2 font-medium inline-flex items-center gap-1.5 disabled:opacity-50"
+            style={{ background: v2.ink, color: v2.cream }}
+          >
+            <Mail className="w-3.5 h-3.5" />
+            Send invite
+          </button>
+          <button
+            onClick={() => void create(false)}
+            disabled={busy}
+            className="text-[12px] rounded-full px-4 py-2 inline-flex items-center gap-1.5 disabled:opacity-50"
+            style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            Get shareable link
+          </button>
         </div>
 
         {latest && (
-          <div className="rounded-lg border border-cyan-700/30 bg-slate-800/60 p-3">
-            <Label className="text-gray-300 text-xs">Invite link</Label>
-            <div className="mt-1 flex items-center gap-2">
+          <div
+            className="mt-5 rounded-md p-4"
+            style={{ background: v2.cream, border: `1px solid ${v2.rule}` }}
+          >
+            <V2Caps>INVITE LINK</V2Caps>
+            <div className="mt-2 flex items-center gap-2">
               <Input
                 readOnly
                 value={latest.url}
-                className="bg-slate-900 border-slate-700 text-white text-xs"
+                className="text-xs"
+                style={{
+                  background: v2.cream2,
+                  border: `1px solid ${v2.rule}`,
+                  color: v2.ink,
+                  fontFamily: v2Mono,
+                }}
               />
-              <Button
+              <button
                 onClick={() => void copy()}
-                variant="ghost"
-                size="sm"
-                className="text-cyan-400 hover:bg-cyan-500/10"
+                className="p-2 rounded-full"
+                style={{ background: v2.ink, color: v2.cream }}
+                aria-label="Copy"
               >
                 {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              </Button>
+              </button>
             </div>
-            <p className="text-gray-500 text-xs mt-2">
+            <p className="mt-2 text-[12px]" style={{ color: v2.inkSoft }}>
               {latest.email
                 ? `Only ${latest.email} can accept this invite.`
                 : "Anyone with this link can join until it expires."}
             </p>
           </div>
         )}
+      </section>
 
-        {invites.length > 0 && (
-          <div>
-            <Label className="text-gray-300 text-xs uppercase tracking-wide">Pending invites</Label>
-            <ul className="mt-2 divide-y divide-cyan-700/20">
-              {invites.map((inv) => (
-                <li key={inv.id} className="flex items-center justify-between py-2">
-                  <div className="min-w-0">
-                    <p className="text-white text-sm truncate">
-                      {inv.email ?? "Shareable link"}
-                    </p>
-                    <p className="text-gray-500 text-xs">
-                      {inv.role} · expires{" "}
-                      {inv.expires_at ? new Date(inv.expires_at).toLocaleDateString() : "never"}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
+      {/* Pending list */}
+      {invites.length > 0 && (
+        <section>
+          <V2Caps>PENDING · {invites.length}</V2Caps>
+          <div className="mt-3">
+            {invites.map((inv) => (
+              <div
+                key={inv.id}
+                className="grid grid-cols-12 gap-2 md:gap-4 py-4 items-center"
+                style={{ borderBottom: `1px solid ${v2.rule}` }}
+              >
+                <span
+                  className="truncate md:hidden"
+                  style={{
+                    fontFamily: v2Mono,
+                    fontSize: 13,
+                    color: v2.ink,
+                    gridColumn: "span 12 / span 12",
+                  }}
+                >
+                  {inv.email ?? "Shareable link"}
+                </span>
+                <span
+                  className="hidden md:block truncate"
+                  style={{
+                    fontFamily: v2Mono,
+                    fontSize: 13,
+                    color: v2.ink,
+                    gridColumn: "span 5 / span 5",
+                  }}
+                >
+                  {inv.email ?? "Shareable link"}
+                </span>
+                <span
+                  className="col-span-4 md:col-span-3 capitalize"
+                  style={{ fontSize: 13, color: v2.inkSoft }}
+                >
+                  {inv.role}
+                </span>
+                <div className="col-span-6 md:col-span-3">
+                  <V2Caps>
+                    EXPIRES {formatRelative(inv.expires_at)}
+                  </V2Caps>
+                </div>
+                <div className="col-span-2 md:col-span-1 text-right">
+                  <button
                     onClick={() => void revoke(inv.id)}
-                    className="h-8 w-8 p-0 text-gray-400 hover:text-red-400 hover:bg-red-500/10"
+                    className="p-1.5 rounded-full"
+                    style={{ color: v2.inkFaint }}
+                    title="Revoke"
                   >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </section>
+      )}
+    </div>
   );
 }

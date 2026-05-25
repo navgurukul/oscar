@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import { useSearchParams } from "next/navigation";
 import { Spinner } from "@/components/ui/spinner";
 import { createClient } from "@/lib/supabase/client";
+import { v2 } from "@/components/v2/V2Primitives";
 
 function DesktopCallbackContent() {
   const searchParams = useSearchParams();
@@ -155,96 +156,171 @@ function DesktopCallbackContent() {
 
   if (state === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-black">
-        <div className="text-center">
-          <Spinner className="text-cyan-500 mx-auto mb-4" />
-          <p className="text-gray-400">Completing authentication…</p>
+      <main
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "#f7f4ee", color: "#1a1816", fontFamily: "var(--font-figtree), system-ui" }}
+      >
+        <div className="text-center max-w-md px-6">
+          <span
+            style={{
+              fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "#8b8780",
+              fontSize: 10,
+            }}
+          >
+            01 · WAITING
+          </span>
+          <div className="mt-6 inline-flex items-center gap-1.5" style={{ height: 14 }}>
+            {Array.from({ length: 12 }).map((_, i) => (
+              <span
+                key={i}
+                className="rounded-full animate-pulse"
+                style={{
+                  width: 3,
+                  height: 6 + (i % 3) * 4,
+                  background: i < 4 ? "#b8623d" : "#d8d2c4",
+                  animationDelay: `${i * 0.08}s`,
+                }}
+              />
+            ))}
+          </div>
+          <h2
+            className="mt-7"
+            style={{
+              fontFamily: '"EB Garamond", Georgia, serif',
+              fontSize: 32,
+              lineHeight: 1.05,
+              fontWeight: 500,
+              letterSpacing: "-0.015em",
+            }}
+          >
+            Logging you in…
+          </h2>
+          <p className="mt-3 text-[14px] leading-relaxed" style={{ color: "#5a5852" }}>
+            Holding open a secure handoff to the desktop app.
+          </p>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (state === "error") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-black">
-        <div className="text-center max-w-sm px-6">
-          <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-6 h-6 text-red-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </div>
-          <h2 className="text-white font-semibold text-lg mb-2">
-            Authentication failed
+      <main
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "#f7f4ee", color: "#1a1816", fontFamily: "var(--font-figtree), system-ui" }}
+      >
+        <div className="text-center max-w-md px-6">
+          <span
+            style={{
+              fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: v2.danger,
+              fontSize: 10,
+            }}
+          >
+            03 · COULDN&rsquo;T HAND OFF
+          </span>
+          <svg className="mt-6 mx-auto" width="44" height="44" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="11" stroke={v2.danger} strokeWidth="1.3" />
+            <path
+              d="M12 7v6M12 16v0.5"
+              stroke={v2.danger}
+              strokeWidth="2.4"
+              strokeLinecap="round"
+            />
+          </svg>
+          <h2
+            className="mt-6"
+            style={{
+              fontFamily: '"EB Garamond", Georgia, serif',
+              fontSize: 32,
+              lineHeight: 1.05,
+              fontWeight: 500,
+              letterSpacing: "-0.015em",
+            }}
+          >
+            Oscar didn&rsquo;t hear back.
           </h2>
-          <p className="text-gray-400 text-sm mb-6">{errorMessage}</p>
+          <p className="mt-3 text-[14px] leading-relaxed" style={{ color: "#5a5852" }}>
+            {errorMessage}
+          </p>
           <a
             href="/auth"
-            className="inline-block px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded-lg transition-colors"
+            className="mt-7 inline-block rounded-full px-5 py-2.5 text-[13px] font-medium"
+            style={{ background: "#1a1816", color: "#f7f4ee" }}
           >
             Try again
           </a>
         </div>
-      </div>
+      </main>
     );
   }
 
   // state === "ready"
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-black">
-      <div className="text-center max-w-sm px-6">
-        {/* Success check */}
-        <div className="w-12 h-12 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mx-auto mb-5">
-          <svg
-            className="w-6 h-6 text-cyan-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-        </div>
-
-        <h2 className="text-white font-semibold text-xl mb-2">
-          You&apos;re signed in
+    <main
+      className="min-h-screen flex items-center justify-center"
+      style={{ background: "#f7f4ee", color: "#1a1816", fontFamily: "var(--font-figtree), system-ui" }}
+    >
+      <div className="text-center max-w-md px-6">
+        <span
+          style={{
+            fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: "#b8623d",
+            fontSize: 10,
+          }}
+        >
+          02 · SUCCESS
+        </span>
+        <svg className="mt-6 mx-auto" width="44" height="44" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="11" stroke="#b8623d" strokeWidth="1.3" />
+          <path
+            d="M7 12l3.5 3.5L17 9"
+            stroke="#b8623d"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <h2
+          className="mt-6"
+          style={{
+            fontFamily: '"EB Garamond", Georgia, serif',
+            fontSize: 36,
+            lineHeight: 1.05,
+            fontWeight: 500,
+            letterSpacing: "-0.015em",
+          }}
+        >
+          You&rsquo;re in. <em style={{ fontStyle: "italic", color: "#b8623d" }}>Switch to Oscar.</em>
         </h2>
-        <p className="text-gray-400 text-sm mb-7">
-          Click the button below to open the Oscar desktop app.
+        <p className="mt-3 text-[14px] leading-relaxed" style={{ color: "#5a5852" }}>
+          The desktop app picked up the handoff. You can close this tab.
         </p>
 
         <a
           href={deepLinkUrl || "#"}
-          className="block w-full py-3 px-5 bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-gray-950 text-sm font-semibold rounded-lg transition-colors text-center"
+          className="mt-8 inline-block rounded-full px-6 py-3 text-[14px] font-medium"
+          style={{ background: "#1a1816", color: "#f7f4ee" }}
         >
-          Open Oscar
+          Back to Oscar
         </a>
 
-        <p className="mt-4 text-xs text-gray-600">
-          If Oscar doesn&apos;t open, make sure the app is{" "}
-          <a
-            href="/download"
-            className="text-gray-400 hover:text-gray-300 underline"
-          >
+        <p className="mt-5 text-[12px]" style={{ color: "#8b8780" }}>
+          If Oscar doesn&rsquo;t open, make sure the app is{" "}
+          <a href="/download" className="underline" style={{ color: "#5a5852" }}>
             installed
           </a>{" "}
-          and has been launched at least once.
+          and launched at least once.
         </p>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -252,9 +328,12 @@ export default function DesktopCallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-black">
-          <Spinner className="text-cyan-500" />
-        </div>
+        <main
+          className="min-h-screen flex items-center justify-center"
+          style={{ background: "#f7f4ee" }}
+        >
+          <Spinner />
+        </main>
       }
     >
       <DesktopCallbackContent />

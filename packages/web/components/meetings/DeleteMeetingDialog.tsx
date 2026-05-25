@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { v2, v2Serif } from "@/components/v2/V2Primitives";
 
 interface DeleteMeetingDialogProps {
   open: boolean;
@@ -26,27 +27,37 @@ export function DeleteMeetingDialog({
 }: DeleteMeetingDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="bg-slate-900 border-slate-800">
+      <AlertDialogContent
+        style={{ background: v2.cream, border: `1px solid ${v2.rule}`, color: v2.ink }}
+      >
         <AlertDialogHeader>
-          <AlertDialogTitle className="text-white">
+          <AlertDialogTitle
+            style={{
+              fontFamily: v2Serif,
+              fontSize: 22,
+              fontWeight: 500,
+              letterSpacing: "-0.015em",
+              color: v2.ink,
+            }}
+          >
             Delete this meeting?
           </AlertDialogTitle>
-          <AlertDialogDescription className="text-slate-400">
+          <AlertDialogDescription style={{ color: v2.inkSoft }}>
             This action cannot be undone. The meeting notes, transcript, and all
             associated data will be permanently removed.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel
-            className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white"
             disabled={isDeleting}
+            style={{ background: v2.cream2, border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
           >
             Cancel
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            className="bg-red-600 text-white hover:bg-red-700"
             disabled={isDeleting}
+            style={{ background: v2.danger, color: v2.cream }}
           >
             {isDeleting ? "Deleting..." : "Delete"}
           </AlertDialogAction>

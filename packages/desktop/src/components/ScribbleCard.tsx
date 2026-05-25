@@ -1,6 +1,7 @@
 import { Star, Trash2, Loader2 } from "lucide-react";
 import type { DBScribble } from "../types/scribble.types";
 import { formatScribbleDate } from "../lib/utils";
+import { ContextLabel } from "./ContextLabel";
 
 interface ScribbleCardProps {
   scribble: DBScribble;
@@ -32,8 +33,13 @@ export function ScribbleCard({
           <h2 className="scribble-card-title">
             {scribble.title || "Untitled Scribble"}
           </h2>
-          <p className="scribble-card-date">
-            {formatScribbleDate(scribble.created_at)}
+          <p className="scribble-card-date flex items-center gap-2">
+            <span>{formatScribbleDate(scribble.created_at)}</span>
+            <ContextLabel
+              appKey={scribble.dictation_app_key}
+              source={scribble.dictation_context_source}
+              variant="compact"
+            />
           </p>
         </div>
         <div className="scribble-card-actions">

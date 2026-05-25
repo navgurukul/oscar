@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { AnimatePresence } from "motion/react";
-import { BookOpen } from "lucide-react";
 import { vocabularyService } from "@/lib/services/vocabulary.service";
 import { useToast } from "@/hooks/use-toast";
 import { Spinner } from "@/components/ui/spinner";
@@ -11,6 +10,7 @@ import { VocabularyForm } from "./VocabularyForm";
 import { VocabularyEntryCard, type EditState } from "./VocabularyEntryCard";
 import type { DBVocabularyEntry } from "@/lib/types/vocabulary.types";
 import { SUBSCRIPTION_CONFIG } from "@/lib/constants";
+import { v2, V2Caps } from "@/components/v2/V2Primitives";
 
 interface VocabularySectionProps {
   userId: string;
@@ -200,62 +200,48 @@ export function VocabularySection({
 
   return (
     <>
-      <div className="bg-slate-900 rounded-2xl border border-cyan-700/30 p-6 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <BookOpen className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-xl font-semibold text-white">
-              Custom Vocabulary
-            </h2>
-          </div>
-          <span className="text-sm text-gray-400">
-            {vocabulary.length}/{maxEntries ?? "Unlimited"} entries
-          </span>
-        </div>
-
-        <p className="text-gray-400 text-sm mb-6">
-          Add names, technical terms, or abbreviations that are often
-          misrecognized. These will be used to improve speech-to-text accuracy.
-        </p>
-
-        {/* Add Form */}
+      <div className="space-y-7">
         <VocabularyForm onSubmit={handleAddEntry} isLoading={isAdding} />
 
-        {/* Vocabulary List */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Spinner className="text-cyan-500" />
-          </div>
-        ) : vocabulary.length === 0 ? (
-          <div className="text-center py-8 border border-dashed border-slate-700 rounded-lg">
-            <BookOpen className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-            <p className="text-gray-400">No custom vocabulary yet</p>
-            <p className="text-gray-500 text-sm mt-1">
-              Start by adding frequently used names or technical terms.
+        <div
+          className="pt-7"
+          style={{ borderTop: `1px solid ${v2.rule}` }}
+        >
+          <V2Caps>
+            YOUR VOCABULARY · {vocabulary.length}
+            {maxEntries ? ` / ${maxEntries}` : ""} WORDS
+          </V2Caps>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Spinner />
+            </div>
+          ) : vocabulary.length === 0 ? (
+            <p className="mt-6 text-[14px] leading-relaxed" style={{ color: v2.inkSoft }}>
+              No custom vocabulary yet. Add frequently mistyped names or technical terms.
             </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <AnimatePresence mode="popLayout">
-              {vocabulary.map((entry) => (
-                <VocabularyEntryCard
-                  key={entry.id}
-                  entry={entry}
-                  isEditing={editingId === entry.id}
-                  editState={editState}
-                  onStartEdit={startEditing}
-                  onCancelEdit={cancelEditing}
-                  onSaveEdit={handleUpdateEntry}
-                  onDelete={handleDeleteEntry}
-                  onEditStateChange={handleEditStateChange}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
+          ) : (
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-x-10">
+              <AnimatePresence mode="popLayout">
+                {vocabulary.map((entry) => (
+                  <VocabularyEntryCard
+                    key={entry.id}
+                    entry={entry}
+                    isEditing={editingId === entry.id}
+                    editState={editState}
+                    onStartEdit={startEditing}
+                    onCancelEdit={cancelEditing}
+                    onSaveEdit={handleUpdateEntry}
+                    onDelete={handleDeleteEntry}
+                    onEditStateChange={handleEditStateChange}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Upgrade prompt for vocabulary limit (free tier) */}
       {showUpgradePrompt && (
         <UpgradePrompt
           limitType="vocabulary"

@@ -11,6 +11,9 @@ importers:
       '@radix-ui/react-dropdown-menu':
         specifier: ^2.1.16
         version: 2.1.16(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
 
   packages/desktop:
     dependencies:

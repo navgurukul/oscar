@@ -1,165 +1,149 @@
+import { V2LegalLayout } from "@/components/v2/V2LegalLayout";
+
+const TOC = [
+  "What we collect",
+  "Third-party services",
+  "Use of information",
+  "Retention, deletion, export",
+  "Security",
+  "Children",
+  "Contact",
+];
+
 export default function PrivacyPolicyPage() {
   return (
-    <main className="min-h-screen py-16 px-4 mt-16">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            Privacy Policy
-          </h1>
-          <p className="text-gray-400">Last updated: February 22, 2026</p>
-        </div>
-
-        <div className="space-y-8 text-gray-300">
-          <p className="mb-8 text-base leading-relaxed">
-            Welcome to OSCAR (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;). We are committed to protecting your privacy. This Privacy Policy explains what is collected, how it is used, and with whom it is shared when you use our voice capture application. It may be revised from time to time. We will notify you of any changes by posting the new policy on this page and updating the &quot;Last updated&quot; date.
-          </p>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Information We Collect
-            </h2>
-            
-            <ul className="space-y-5 list-disc pl-6">
-              <li className="mb-4">
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Personal Information
-                </h3>
-                <p className="ml-6 text-base leading-relaxed">
-                  When you register, OSCAR only collects a valid email address and, if you sign in via Google or another OAuth provider, your name and profile picture as shared by that provider. We request only the minimum permissions needed — your name and email address.
-                </p>
-              </li>
-
-              <li className="mb-4">
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Voice and Content Data
-                </h3>
-                <p className="ml-6 text-base leading-relaxed">
-                  When you record a voice capture, your audio is processed in real-time to generate a text transcription. OSCAR does not permanently store your audio recordings on our servers. The audio is discarded as soon as transcription is complete. Only the resulting transcribed and formatted text is saved to your account.
-                </p>
-              </li>
-
-              <li className="mb-4">
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Payment Information
-                </h3>
-                <p className="ml-6 text-base leading-relaxed">
-                  OSCAR does not directly collect payment information. Payments are processed through Razorpay (www.razorpay.com). As a result of this integration, some billing details such as your payment method type, billing address, and transaction amount may be visible to OSCAR through Razorpay&apos;s tools. Your full card details are never stored on our servers.
-                </p>
-              </li>
-
-              <li>
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Usage Data
-                </h3>
-                <p className="ml-6 text-base leading-relaxed">
-                  OSCAR also collects basic usage data such as recording count, duration, and feature interactions. This helps us understand how the product is being used and improve it over time.
-                </p>
-              </li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Third-Party Services
-            </h2>
-            
-            <ul className="space-y-5 list-disc pl-6">
-              <li className="mb-4">
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Google Gemini
-                </h3>
-                <p className="ml-6 text-base leading-relaxed">
-                  For processing your voice recordings and formatting the resulting text, OSCAR uses the Google Gemini API. As a result, your transcribed text is transmitted to Google&apos;s servers during processing. When accessed through the Gemini API (paid tier), your data is not used to train Google&apos;s models. Further information can be found in the Google AI terms of service. By using OSCAR, you consent to this transfer.
-                </p>
-              </li>
-
-              <li className="mb-4">
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Supabase
-                </h3>
-                <p className="ml-6 text-base leading-relaxed">
-                  For authentication, database, and file storage, OSCAR uses Supabase (www.supabase.com). Your account data and Scribbles are stored on Supabase&apos;s servers, which encrypt data at rest.
-                </p>
-              </li>
-
-              <li className="mb-4">
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Razorpay
-                </h3>
-                <p className="ml-6 text-base leading-relaxed">
-                  For payment processing and subscription management, OSCAR uses Razorpay (www.razorpay.com). Their privacy policy governs how they handle your billing information.
-                </p>
-              </li>
-
-              <li>
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Cookies and Storage
-                </h3>
-                <p className="ml-6 text-base leading-relaxed">
-                  OSCAR sets cookies for authentication purposes and to enable essential platform functionality — specifically a session ID cookie, a session signature cookie to prevent tampering, and a cookie to identify the current logged-in user. OSCAR also uses browser local storage to save your app preferences.
-                </p>
-              </li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Use of Information
-            </h2>
-            <p className="text-base leading-relaxed">
-              The information collected is used solely to provide you the services you have subscribed to on OSCAR and to continually improve your experience. We do not sell your personal data to third parties. We do not display advertisements. If we send you any non-essential communications, you may opt out at any time.
+    <V2LegalLayout
+      active="PRIVACY"
+      eyebrow="LEGAL · PRIVACY POLICY · LAST UPDATED FEB 22, 2026"
+      title={
+        <>
+          What we <em style={{ fontStyle: "italic", color: "#b8623d" }}>do</em> with your voice.
+        </>
+      }
+      lead={
+        <>
+          Oscar is a voice tool. We take that responsibility seriously. The short version:{" "}
+          <strong>we keep what makes the product work, and nothing else</strong>.
+        </>
+      }
+      toc={TOC}
+    >
+      <section id="what-we-collect">
+        <h2>What we collect</h2>
+        <ul>
+          <li>
+            <h3>Personal information</h3>
+            <p>
+              When you register, Oscar collects a valid email address and, if you sign in via Google or
+              another OAuth provider, your name and profile picture as shared by that provider. We
+              request only the minimum permissions needed.
             </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Data Retention, Deletion, and Export
-            </h2>
-            
-            <div className="space-y-4">
-              <p className="text-base leading-relaxed">
-                All Scribbles created by you and stored on our servers will be retained for as long as your account remains active. Audio from your recordings is automatically discarded from our servers immediately after transcription — we do not retain your audio files.
-              </p>
-              
-              <p className="text-base leading-relaxed">
-                All content you create on OSCAR is private and not visible to other users. However, data stored on our servers is accessible to OSCAR&apos;s operators for the purposes of support and service maintenance.
-              </p>
-              
-              
-              <p className="text-base leading-relaxed">
-                If you would like to delete your account and associated data, you can do so from your account settings.
-              </p>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Security
-            </h2>
-            <p className="text-base leading-relaxed">
-              We implement appropriate technical and organizational measures to protect your data, including encryption at rest, secure authentication, and restricted access controls. In the event of a data breach that materially affects your personal information, we will notify you promptly. No method of transmission over the Internet is 100% secure, but we take your data seriously and work continuously to safeguard it.
+          </li>
+          <li>
+            <h3>Voice and content</h3>
+            <p>
+              When you record, audio is processed in real time to generate a transcript. Oscar does not
+              permanently store audio recordings on our servers. The audio is discarded as soon as
+              transcription is complete. Only the resulting text is saved to your account.
             </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Children&apos;s Privacy
-            </h2>
-            <p className="text-base leading-relaxed">
-              Our service is not intended for children under 13. We do not knowingly collect data from children under 13.
+          </li>
+          <li>
+            <h3>Payment</h3>
+            <p>
+              Oscar does not directly collect payment information. Payments are processed through
+              Razorpay. Billing metadata (method type, address, amount) may be visible to Oscar via
+              Razorpay&rsquo;s tools. Full card details are never stored on our servers.
             </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-bold text-white mb-6">
-              Contact Us
-            </h2>
-            <p className="text-base leading-relaxed">
-              If you have questions about this Privacy Policy, please contact us through the settings page or at the contact information provided in our application.
+          </li>
+          <li>
+            <h3>Usage</h3>
+            <p>
+              Oscar collects basic usage data — recording count, duration, feature interactions — to
+              understand how the product is used and improve it.
             </p>
-          </section>
-        </div>
-      </div>
-    </main>
+          </li>
+        </ul>
+      </section>
+
+      <section id="third-party-services">
+        <h2>Third-party services</h2>
+        <ul>
+          <li>
+            <h3>Google Gemini</h3>
+            <p>
+              For processing voice recordings and formatting the resulting text, Oscar uses the Google
+              Gemini API. Transcribed text is transmitted to Google&rsquo;s servers during processing.
+              On the paid tier, your data is not used to train Google&rsquo;s models.
+            </p>
+          </li>
+          <li>
+            <h3>Supabase</h3>
+            <p>
+              For authentication, database, and file storage, Oscar uses Supabase. Account data and
+              Scribbles are stored on Supabase&rsquo;s servers, which encrypt data at rest.
+            </p>
+          </li>
+          <li>
+            <h3>Razorpay</h3>
+            <p>
+              For payment processing and subscription management, Oscar uses Razorpay. Their privacy
+              policy governs how they handle your billing information.
+            </p>
+          </li>
+          <li>
+            <h3>Cookies and storage</h3>
+            <p>
+              Oscar sets cookies for authentication and essential platform functionality — a session ID,
+              a signature to prevent tampering, and a user identifier. Local storage holds app
+              preferences.
+            </p>
+          </li>
+        </ul>
+      </section>
+
+      <section id="use-of-information">
+        <h2>Use of information</h2>
+        <p>
+          The information collected is used solely to provide the services you have subscribed to and
+          to improve your experience. We do not sell your personal data. We do not display
+          advertisements. Non-essential communications can be opted out of at any time.
+        </p>
+      </section>
+
+      <section id="retention-deletion-export">
+        <h2>Retention, deletion, export</h2>
+        <p>
+          Scribbles you create stay until you delete them or close your account. Audio from recordings
+          is discarded immediately after transcription — we do not retain audio files. Account deletion
+          triggers a 30-day soft-delete, after which everything is purged from databases and backups.
+        </p>
+      </section>
+
+      <section id="security">
+        <h2>Security</h2>
+        <p>
+          We implement encryption at rest, secure authentication, and restricted access controls. In
+          the event of a breach that materially affects your personal information, we will notify you
+          promptly. No method of transmission over the Internet is 100% secure, but we work
+          continuously to safeguard your data.
+        </p>
+      </section>
+
+      <section id="children">
+        <h2>Children</h2>
+        <p>
+          Our service is not intended for children under 13. We do not knowingly collect data from
+          children under 13.
+        </p>
+      </section>
+
+      <section id="contact">
+        <h2>Contact</h2>
+        <p>
+          If you have questions about this Privacy Policy, contact us through the settings page or at
+          the contact information provided in our application.
+        </p>
+      </section>
+    </V2LegalLayout>
   );
 }
