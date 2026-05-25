@@ -49,9 +49,17 @@ export interface TermRow {
   aliases?: string[] | null;
 }
 
+interface VocabularyRow {
+  term: string;
+  pronunciation?: string | null;
+  context?: string | null;
+}
+
 export interface ChunkRow {
   document_id: string;
+  title?: string | null;
   content: string;
+  similarity?: number | null;
 }
 
 const empty: OrgContextResult = {
@@ -74,8 +82,87 @@ export interface BuildOrgContextOptions {
   minSimilarity?: number;
 }
 
-function compileStreamPrompt(matchedPeople: PeopleAliasRow[], matchedTerms: TermRow[]): string {
-  if (matchedPeople.length === 0 && matchedTerms.length === 0) return "";
+const STREAM_CONTEXT_CHAR_BUDGET = 2400;
+const STREAM_DOCUMENT_CHAR_BUDGET = 1800;
+
+function cleanDocumentExcerpt(text: string, maxChars: number): string {
+  const cleaned = text
+    .replace(/\[\[\d+\]\]\([^)]+\)/g, "")
+    .replace(/\[([^\]]+)\]\((?:https?|view):\/\/[^)]+\)/g, "$1")
+    .replace(/(?:https?|view):\/\/\S+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned.length > maxChars
+    ? `${cleaned.slice(0, maxChars).trimEnd()}...`
+    : cleaned;
+}
+
+async function fetchRecentDocumentChunks(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  organizationId: string,
+  limit: number,
+  perDocumentChars: number
+): Promise<ChunkRow[]> {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("id, title, summary, extracted_text")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.warn("[orgContext] document fallback failed:", error);
+    return [];
+  }
+
+  const chunks: ChunkRow[] = [];
+
+  for (const doc of data ?? []) {
+    const excerpt = cleanDocumentExcerpt(
+      [doc.summary, doc.extracted_text].filter(Boolean).join("\n\n"),
+      perDocumentChars
+    );
+    if (!excerpt) continue;
+    chunks.push({
+      document_id: doc.id,
+      title: doc.title,
+      content: excerpt,
+    });
+  }
+
+  return chunks;
+}
+
+function mergeTerms(rows: TermRow[]): TermRow[] {
+  const byTerm = new Map<string, TermRow>();
+  for (const row of rows) {
+    const key = row.canonical_term.trim().toLowerCase();
+    if (!key || byTerm.has(key)) continue;
+    byTerm.set(key, row);
+  }
+  return Array.from(byTerm.values());
+}
+
+function vocabularyRowsToTerms(rows: VocabularyRow[]): TermRow[] {
+  return rows
+    .filter((row) => row.term?.trim())
+    .map((row) => ({
+      canonical_term: row.term.trim(),
+      aliases: row.pronunciation?.trim() ? [row.pronunciation.trim()] : [],
+      category: "terminology",
+      definition_or_context: row.context?.trim() || null,
+      confidence: 1,
+    }));
+}
+
+function compileStreamPrompt(
+  matchedPeople: PeopleAliasRow[],
+  matchedTerms: TermRow[],
+  chunks: ChunkRow[],
+  maxChars: number
+): string {
+  if (matchedPeople.length === 0 && matchedTerms.length === 0 && chunks.length === 0) return "";
   
   let block = "## Organization Context Guidelines\n";
   block += "Use these spelling, name, and terminology guidelines when cleaning up the transcript:\n\n";
@@ -99,6 +186,25 @@ function compileStreamPrompt(matchedPeople: PeopleAliasRow[], matchedTerms: Term
       if (t.definition_or_context) line += ` — ${t.definition_or_context}`;
       block += line + "\n";
     });
+    block += "\n";
+  }
+
+  if (chunks.length > 0) {
+    block += "### Reference Document Terms\n";
+    block += "These excerpts contain exact workspace project/product spellings. Use them only to correct likely speech-recognition errors.\n";
+
+    for (const chunk of chunks) {
+      const label = chunk.title ? ` from "${chunk.title}"` : "";
+      const line = `- Excerpt${label}: ${chunk.content}\n`;
+      if (block.length + line.length > maxChars) {
+        const remaining = maxChars - block.length - 32;
+        if (remaining > 120) {
+          block += `- Excerpt${label}: ${chunk.content.slice(0, remaining).trimEnd()}...\n`;
+        }
+        break;
+      }
+      block += line;
+    }
   }
   
   return block.trim();
@@ -148,7 +254,8 @@ function compileScribblePrompt(
     
     let addedChunks = 0;
     for (const chunk of chunks) {
-      const excerpt = `Excerpt from Document:\n"""\n${chunk.content}\n"""\n\n`;
+      const label = chunk.title ? `"${chunk.title}"` : "Document";
+      const excerpt = `Excerpt from ${label}:\n"""\n${chunk.content}\n"""\n\n`;
       if (currentChars + chunksBlock.length + excerpt.length > maxChars) {
         break;
       }
@@ -209,7 +316,8 @@ function compileMinutesPrompt(
     
     let addedChunks = 0;
     for (const chunk of chunks) {
-      const excerpt = `Excerpt from Document:\n"""\n${chunk.content}\n"""\n\n`;
+      const label = chunk.title ? `"${chunk.title}"` : "Document";
+      const excerpt = `Excerpt from ${label}:\n"""\n${chunk.content}\n"""\n\n`;
       if (currentChars + chunksBlock.length + excerpt.length > maxChars) {
         break;
       }
@@ -262,13 +370,39 @@ export const ContextCompiler = {
     const supabase = getSupabaseAdmin();
     const query = params.rawTranscript || "";
 
-    const [peopleResult, termsResult] = await Promise.all([
+    const [peopleResult, termsResult, orgVocabularyResult, userVocabularyResult] = await Promise.all([
       supabase.from("org_people_aliases").select("*").eq("organization_id", orgId),
       supabase.from("org_terms").select("*").eq("organization_id", orgId),
+      supabase
+        .from("user_vocabulary")
+        .select("term, pronunciation, context")
+        .eq("organization_id", orgId),
+      supabase
+        .from("user_vocabulary")
+        .select("term, pronunciation, context")
+        .eq("user_id", params.userId)
+        .is("organization_id", null),
     ]);
 
+    if (peopleResult.error) {
+      console.warn("[orgContext] org_people_aliases unavailable:", peopleResult.error);
+    }
+    if (termsResult.error) {
+      console.warn("[orgContext] org_terms unavailable:", termsResult.error);
+    }
+    if (orgVocabularyResult.error) {
+      console.warn("[orgContext] org vocabulary unavailable:", orgVocabularyResult.error);
+    }
+    if (userVocabularyResult.error) {
+      console.warn("[orgContext] user vocabulary unavailable:", userVocabularyResult.error);
+    }
+
     const people: PeopleAliasRow[] = peopleResult.data || [];
-    const terms: TermRow[] = termsResult.data || [];
+    const terms: TermRow[] = mergeTerms([
+      ...(termsResult.data || []),
+      ...vocabularyRowsToTerms(orgVocabularyResult.data || []),
+      ...vocabularyRowsToTerms(userVocabularyResult.data || []),
+    ]);
 
     const matchedPeople: PeopleAliasRow[] = [];
     const matchedTerms: TermRow[] = [];
@@ -333,10 +467,29 @@ export const ContextCompiler = {
       }
     }
 
+    if (params.profile === "stream" || matchedChunks.length === 0) {
+      const fallbackChunks = await fetchRecentDocumentChunks(
+        supabase,
+        orgId,
+        params.profile === "minutes" ? 5 : 3,
+        params.profile === "stream" ? STREAM_DOCUMENT_CHAR_BUDGET : 1800
+      );
+      if (params.profile === "stream") {
+        matchedChunks = fallbackChunks;
+      } else if (matchedChunks.length === 0) {
+        matchedChunks = fallbackChunks;
+      }
+    }
+
     let block = "";
     if (params.profile === "stream") {
       const highConfTerms = matchedTerms.filter(t => (t.confidence ?? 1.0) >= 0.7);
-      block = compileStreamPrompt(matchedPeople, highConfTerms);
+      block = compileStreamPrompt(
+        matchedPeople,
+        highConfTerms,
+        matchedChunks,
+        STREAM_CONTEXT_CHAR_BUDGET
+      );
     } else if (params.profile === "scribble") {
       block = compileScribblePrompt(matchedPeople, matchedTerms, matchedChunks, 4800);
     } else if (params.profile === "minutes") {
