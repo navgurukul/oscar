@@ -64,6 +64,7 @@ interface OrgRewriteRule {
 const MERCURY_API_BASE_URL = "https://api.inceptionlabs.ai/v1";
 const MERCURY_MODEL = "mercury-2";
 const DICTATION_PROMPT_VERSION = "context-v1";
+const STREAM_CONTEXT_CHAR_BUDGET = 2400;
 const DICTATION_CATEGORIES = [
   "default",
   "ide",
@@ -249,6 +250,119 @@ function applyOrgRewriteRules(text: string, orgContextBlock: string): string {
   }
 
   return output;
+}
+
+function splitVocabularyAliases(value?: string | null): string[] {
+  return (value ?? "")
+    .split(/[,;/|]+/)
+    .map(sanitizeOneLine)
+    .filter(Boolean);
+}
+
+function decodeBearerUserId(authHeader: string): string | null {
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+
+  try {
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const parsed = JSON.parse(atob(padded)) as { sub?: unknown };
+    return typeof parsed.sub === "string" ? parsed.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+async function restSelect<T>(
+  supabaseUrl: string,
+  serviceKey: string,
+  path: string,
+): Promise<T[]> {
+  const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+    },
+  });
+
+  if (!response.ok) return [];
+  const data = await response.json();
+  return Array.isArray(data) ? (data as T[]) : [];
+}
+
+function compileVocabularyContext(
+  rows: Array<{ term?: string | null; pronunciation?: string | null; context?: string | null }>,
+): string {
+  const seen = new Set<string>();
+  const lines: string[] = [
+    "## Organization Context Guidelines",
+    "Use these spelling, name, and terminology guidelines when cleaning up the transcript:",
+    "",
+    "When a heard-as alias appears in the transcript, rewrite it to the exact quoted canonical spelling.",
+    "",
+    "### Terms & Vocabulary",
+  ];
+
+  for (const row of rows) {
+    const term = sanitizeOneLine(row.term);
+    const key = term.toLowerCase();
+    if (!term || seen.has(key)) continue;
+    seen.add(key);
+
+    const aliases = splitVocabularyAliases(row.pronunciation);
+    let line = `- "${term}" [terminology]`;
+    if (aliases.length > 0) line += ` (Heard as: ${aliases.join(", ")})`;
+    const context = sanitizeOneLine(row.context);
+    if (context) line += ` — ${context}`;
+
+    const nextLength = lines.join("\n").length + line.length + 1;
+    if (nextLength > STREAM_CONTEXT_CHAR_BUDGET) break;
+    lines.push(line);
+  }
+
+  return lines.length > 6 ? lines.join("\n").trim() : "";
+}
+
+async function buildOrgContextFallback(authHeader: string): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  const userId = decodeBearerUserId(authHeader);
+  if (!supabaseUrl || !serviceKey || !userId) return "";
+
+  const encodedUserId = encodeURIComponent(userId);
+  const activeRows = await restSelect<{ organization_id?: string | null }>(
+    supabaseUrl,
+    serviceKey,
+    `user_active_org?select=organization_id&user_id=eq.${encodedUserId}&limit=1`,
+  );
+
+  let orgId = activeRows[0]?.organization_id ?? null;
+  if (!orgId) {
+    const memberRows = await restSelect<{ organization_id?: string | null }>(
+      supabaseUrl,
+      serviceKey,
+      `organization_members?select=organization_id&user_id=eq.${encodedUserId}&order=joined_at.asc&limit=1`,
+    );
+    orgId = memberRows[0]?.organization_id ?? null;
+  }
+  if (!orgId) return "";
+
+  const encodedOrgId = encodeURIComponent(orgId);
+  const [orgRows, userRows] = await Promise.all([
+    restSelect<{ term?: string | null; pronunciation?: string | null; context?: string | null }>(
+      supabaseUrl,
+      serviceKey,
+      `user_vocabulary?select=term,pronunciation,context&organization_id=eq.${encodedOrgId}&order=term.asc`,
+    ),
+    restSelect<{ term?: string | null; pronunciation?: string | null; context?: string | null }>(
+      supabaseUrl,
+      serviceKey,
+      `user_vocabulary?select=term,pronunciation,context&user_id=eq.${encodedUserId}&organization_id=is.null&order=term.asc`,
+    ),
+  ]);
+
+  return compileVocabularyContext([...orgRows, ...userRows]);
 }
 
 function getRoutingCategory(
@@ -510,8 +624,12 @@ Deno.serve(async (req: Request) => {
     // string from the caller does not waste tokens. Stream cleanup keeps the
     // context too — that is the whole point of the parity work; the budget is
     // capped client-side by truncating excerpts in buildOrgContext.
-    const trimmedOrgContext =
+    const suppliedOrgContext =
       typeof orgContextBlock === "string" ? orgContextBlock.trim() : "";
+    const fallbackOrgContext = suppliedOrgContext
+      ? ""
+      : await buildOrgContextFallback(authHeader);
+    const trimmedOrgContext = suppliedOrgContext || fallbackOrgContext;
     const system = trimmedOrgContext
       ? `${baseSystem}\n\n---\n\n${trimmedOrgContext}`
       : baseSystem;
@@ -586,6 +704,7 @@ Deno.serve(async (req: Request) => {
     console.info(
       `[ai-process-timing] mode=${mode} inputChars=${text.length} ` +
         `profile=${effectivePromptProfile ?? "default"} ` +
+        `orgCtxChars=${trimmedOrgContext.length} ` +
         `maxOut=${maxOutputTokens} ` +
         `outChars=${correctedOutput.length} ` +
         `mercuryHeaders=${Math.round(tMercuryFirstByte - tMercury0)}ms ` +
