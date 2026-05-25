@@ -6,6 +6,17 @@ import { generateText, getGeminiApiKey } from "./ai-route";
 import { API_CONFIG } from "../constants";
 
 const BUCKET = "org-documents";
+const TERM_CATEGORIES = ["acronym", "product", "project", "tool", "terminology"] as const;
+type TermCategory = (typeof TERM_CATEGORIES)[number];
+
+type ExtractedTerm = {
+  canonical_term?: unknown;
+  aliases?: unknown;
+  asr_aliases?: unknown;
+  category?: unknown;
+  definition_or_context?: unknown;
+  confidence?: unknown;
+};
 
 export interface DocumentRow {
   id: string;
@@ -81,6 +92,129 @@ export function chunkTextSemantically(text: string, maxSize: number = 1800): str
     chunks.push(currentChunk);
   }
   return chunks;
+}
+
+function cleanOneLine(value: unknown): string {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+}
+
+function cleanStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(cleanOneLine).filter(Boolean);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (!value || seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function splitTermForSpeech(term: string): string[] {
+  return term
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/[-_/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function generateAsrAliases(term: string): string[] {
+  const words = splitTermForSpeech(term);
+  const aliases = new Set<string>();
+
+  if (words.length > 1) {
+    aliases.add(words.join(" "));
+    aliases.add(words.join(", "));
+  }
+
+  if (/^[A-Z0-9]{2,8}$/.test(term)) {
+    aliases.add(term.split("").join(" "));
+  }
+
+  if (/AI$/i.test(term) && words.length > 1) {
+    aliases.add(`${words.slice(0, -1).join(" ")} AI`);
+    aliases.add(`${words.slice(0, -1).join(" ")} A I`);
+  }
+
+  for (let i = 0; i < words.length; i++) {
+    if (/^[A-Z]$/i.test(words[i])) {
+      const copy = [...words];
+      copy[i] = `${copy[i]} word`;
+      aliases.add(copy.join(" "));
+      copy[i] = `${copy[i]}s`;
+      aliases.add(copy.join(" "));
+    }
+  }
+
+  return uniqueStrings(Array.from(aliases).filter((alias) => alias.toLowerCase() !== term.toLowerCase()));
+}
+
+function normalizeCategory(value: unknown): TermCategory {
+  return TERM_CATEGORIES.includes(value as TermCategory) ? (value as TermCategory) : "terminology";
+}
+
+function parseJsonObject(value: string): unknown {
+  const trimmed = value.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(trimmed.slice(start, end + 1));
+    }
+    throw new Error("No JSON object found in extraction output");
+  }
+}
+
+async function upsertOrgVocabularyTerm(params: {
+  organizationId: string;
+  userId: string;
+  term: string;
+  aliases: string[];
+  context: string | null;
+}): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data: existing } = await supabase
+    .from("user_vocabulary")
+    .select("id, pronunciation")
+    .eq("organization_id", params.organizationId)
+    .ilike("term", params.term)
+    .limit(1)
+    .maybeSingle();
+
+  const pronunciation = uniqueStrings([
+    ...cleanOneLine(existing?.pronunciation).split(/[,;/|]+/).map((v) => v.trim()).filter(Boolean),
+    ...params.aliases,
+  ]).join(", ");
+
+  if (existing?.id) {
+    await supabase
+      .from("user_vocabulary")
+      .update({
+        term: params.term,
+        pronunciation: pronunciation || null,
+        context: params.context,
+      })
+      .eq("id", existing.id);
+    return;
+  }
+
+  await supabase.from("user_vocabulary").insert({
+    user_id: params.userId,
+    organization_id: params.organizationId,
+    term: params.term,
+    pronunciation: pronunciation || null,
+    context: params.context,
+  });
 }
 
 export async function uploadDocument(params: {
@@ -226,7 +360,8 @@ export async function uploadDocument(params: {
       const apiKey = getGeminiApiKey();
       const extractionPrompt = `Analyze the following document and extract:
 1. Organization terms: acronyms, products, projects, tools, and technical terminology.
-2. Organization people: names of people, their emails, roles, and any common aliases (e.g. short names, nicknames), phonetic aliases (how their name sounds), or common ASR (Speech-to-Text) errors for their name.
+2. For every term, include likely aliases and common ASR (Speech-to-Text) mistakes. Think like a dictation system: split camelCase, expand acronyms, include phonetic spellings, comma-separated variants, and likely wrong words.
+3. Organization people: names of people, their emails, roles, and any common aliases (e.g. short names, nicknames), phonetic aliases (how their name sounds), or common ASR errors for their name.
 
 Output the result as a JSON object matching the following structure:
 {
@@ -234,6 +369,7 @@ Output the result as a JSON object matching the following structure:
     {
       "canonical_term": "OSCAR",
       "aliases": ["Oscar App", "Oscar Voice"],
+      "asr_aliases": ["Oscar", "Oskar", "Oscar Voice App"],
       "category": "product",
       "definition_or_context": "The AI voice note application.",
       "confidence": 0.95
@@ -251,7 +387,11 @@ Output the result as a JSON object matching the following structure:
   ]
 }
 
-Ensure the output is valid JSON. Do not include any explanations, markdown code blocks, or text before/after the JSON.`;
+Rules:
+- canonical_term must be the exact spelling from the document.
+- aliases and asr_aliases must not include unrelated products or facts.
+- prefer product/project names and acronyms over ordinary English words.
+- Ensure the output is valid JSON. Do not include any explanations, markdown code blocks, or text before/after the JSON.`;
 
       const jsonStr = await generateText({
         apiKey,
@@ -265,22 +405,43 @@ Ensure the output is valid JSON. Do not include any explanations, markdown code 
         timeoutMs: 25000,
       });
 
-      const extractedData = JSON.parse(jsonStr);
+      const extractedData = parseJsonObject(jsonStr) as { terms?: unknown; people?: unknown };
 
       if (extractedData.terms && Array.isArray(extractedData.terms)) {
-        for (const term of extractedData.terms) {
-          if (!term.canonical_term || !term.category) continue;
-          const category = ['acronym', 'product', 'project', 'tool', 'terminology'].includes(term.category)
-            ? term.category
-            : 'terminology';
-          await supabase.from("org_terms").upsert({
+        for (const rawTerm of extractedData.terms as ExtractedTerm[]) {
+          const canonicalTerm = cleanOneLine(rawTerm.canonical_term);
+          if (!canonicalTerm) continue;
+          const category = normalizeCategory(rawTerm.category);
+          const aliases = uniqueStrings([
+            ...cleanStringArray(rawTerm.aliases),
+            ...cleanStringArray(rawTerm.asr_aliases),
+            ...generateAsrAliases(canonicalTerm),
+          ]);
+          const context = cleanOneLine(rawTerm.definition_or_context) || null;
+          const confidence =
+            typeof rawTerm.confidence === "number" && Number.isFinite(rawTerm.confidence)
+              ? rawTerm.confidence
+              : 1.0;
+
+          const { error: termErr } = await supabase.from("org_terms").upsert({
             organization_id: params.organizationId,
-            canonical_term: term.canonical_term,
-            aliases: term.aliases || [],
+            canonical_term: canonicalTerm,
+            aliases,
             category,
-            definition_or_context: term.definition_or_context || null,
-            confidence: term.confidence || 1.0,
+            definition_or_context: context,
+            confidence,
           }, { onConflict: "organization_id,canonical_term" });
+          if (termErr) {
+            console.warn("[documents] org_terms upsert failed:", termErr);
+          }
+
+          await upsertOrgVocabularyTerm({
+            organizationId: params.organizationId,
+            userId: params.userId,
+            term: canonicalTerm,
+            aliases,
+            context,
+          });
         }
       }
 

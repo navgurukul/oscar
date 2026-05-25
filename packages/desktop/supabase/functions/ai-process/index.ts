@@ -259,6 +259,19 @@ function splitVocabularyAliases(value?: string | null): string[] {
     .filter(Boolean);
 }
 
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const cleaned = sanitizeOneLine(value);
+    const key = cleaned.toLowerCase();
+    if (!cleaned || seen.has(key)) continue;
+    seen.add(key);
+    out.push(cleaned);
+  }
+  return out;
+}
+
 function decodeBearerUserId(authHeader: string): string | null {
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   const payload = token.split(".")[1];
@@ -292,7 +305,14 @@ async function restSelect<T>(
 }
 
 function compileVocabularyContext(
-  rows: Array<{ term?: string | null; pronunciation?: string | null; context?: string | null }>,
+  rows: Array<{
+    term?: string | null;
+    pronunciation?: string | null;
+    aliases?: string[] | null;
+    category?: string | null;
+    context?: string | null;
+  }>,
+  chunks: Array<{ content?: string | null }> = [],
 ): string {
   const seen = new Set<string>();
   const lines: string[] = [
@@ -310,8 +330,11 @@ function compileVocabularyContext(
     if (!term || seen.has(key)) continue;
     seen.add(key);
 
-    const aliases = splitVocabularyAliases(row.pronunciation);
-    let line = `- "${term}" [terminology]`;
+    const aliases = uniqueStrings([
+      ...splitVocabularyAliases(row.pronunciation),
+      ...(row.aliases ?? []),
+    ]);
+    let line = `- "${term}" [${sanitizeOneLine(row.category) || "terminology"}]`;
     if (aliases.length > 0) line += ` (Heard as: ${aliases.join(", ")})`;
     const context = sanitizeOneLine(row.context);
     if (context) line += ` — ${context}`;
@@ -319,6 +342,18 @@ function compileVocabularyContext(
     const nextLength = lines.join("\n").length + line.length + 1;
     if (nextLength > STREAM_CONTEXT_CHAR_BUDGET) break;
     lines.push(line);
+  }
+
+  if (chunks.length > 0 && lines.join("\n").length < STREAM_CONTEXT_CHAR_BUDGET - 240) {
+    lines.push("", "### Reference Document Terms");
+    for (const chunk of chunks) {
+      const content = sanitizeOneLine(chunk.content).slice(0, 700);
+      if (!content) continue;
+      const line = `- Excerpt: ${content}`;
+      const nextLength = lines.join("\n").length + line.length + 1;
+      if (nextLength > STREAM_CONTEXT_CHAR_BUDGET) break;
+      lines.push(line);
+    }
   }
 
   return lines.length > 6 ? lines.join("\n").trim() : "";
@@ -349,7 +384,17 @@ async function buildOrgContextFallback(authHeader: string): Promise<string> {
   if (!orgId) return "";
 
   const encodedOrgId = encodeURIComponent(orgId);
-  const [orgRows, userRows] = await Promise.all([
+  const [termRows, orgRows, userRows, chunkRows] = await Promise.all([
+    restSelect<{
+      canonical_term?: string | null;
+      aliases?: string[] | null;
+      category?: string | null;
+      definition_or_context?: string | null;
+    }>(
+      supabaseUrl,
+      serviceKey,
+      `org_terms?select=canonical_term,aliases,category,definition_or_context&organization_id=eq.${encodedOrgId}&order=canonical_term.asc`,
+    ),
     restSelect<{ term?: string | null; pronunciation?: string | null; context?: string | null }>(
       supabaseUrl,
       serviceKey,
@@ -360,9 +405,23 @@ async function buildOrgContextFallback(authHeader: string): Promise<string> {
       serviceKey,
       `user_vocabulary?select=term,pronunciation,context&user_id=eq.${encodedUserId}&organization_id=is.null&order=term.asc`,
     ),
+    restSelect<{ content?: string | null }>(
+      supabaseUrl,
+      serviceKey,
+      `document_chunks?select=content&organization_id=eq.${encodedOrgId}&order=created_at.desc&limit=3`,
+    ),
   ]);
 
-  return compileVocabularyContext([...orgRows, ...userRows]);
+  return compileVocabularyContext([
+    ...termRows.map((row) => ({
+      term: row.canonical_term,
+      aliases: row.aliases,
+      category: row.category,
+      context: row.definition_or_context,
+    })),
+    ...orgRows,
+    ...userRows,
+  ], chunkRows);
 }
 
 function getRoutingCategory(
