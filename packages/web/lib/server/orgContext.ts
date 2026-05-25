@@ -163,6 +163,28 @@ function vocabularyRowsToTerms(rows: VocabularyRow[]): TermRow[] {
     }));
 }
 
+function termPromptLine(t: TermRow): string {
+  let line = `- "${t.canonical_term}" [${t.category}]`;
+  const aliases = (t.aliases || []).map((alias) => alias.trim()).filter(Boolean);
+  if (aliases.length > 0) line += ` (Heard as: ${aliases.join(", ")})`;
+  if (t.definition_or_context) line += ` — ${t.definition_or_context}`;
+  return line;
+}
+
+function prioritizeTerms(primary: TermRow[], all: TermRow[]): TermRow[] {
+  const seen = new Set<string>();
+  const ordered: TermRow[] = [];
+
+  for (const term of [...primary, ...all]) {
+    const key = term.canonical_term.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    ordered.push(term);
+  }
+
+  return ordered;
+}
+
 function compileStreamPrompt(
   matchedPeople: PeopleAliasRow[],
   matchedTerms: TermRow[],
@@ -173,6 +195,7 @@ function compileStreamPrompt(
   
   let block = "## Organization Context Guidelines\n";
   block += "Use these spelling, name, and terminology guidelines when cleaning up the transcript:\n\n";
+  block += "When a heard-as alias appears in the transcript, rewrite it to the exact quoted canonical spelling.\n\n";
   
   if (matchedPeople.length > 0) {
     block += "### People & Names\n";
@@ -189,9 +212,10 @@ function compileStreamPrompt(
   if (matchedTerms.length > 0) {
     block += "### Terms & Vocabulary\n";
     matchedTerms.forEach((t) => {
-      let line = `- "${t.canonical_term}" [${t.category}]`;
-      if (t.definition_or_context) line += ` — ${t.definition_or_context}`;
-      block += line + "\n";
+      const line = termPromptLine(t) + "\n";
+      if (block.length + line.length <= maxChars) {
+        block += line;
+      }
     });
     block += "\n";
   }
@@ -245,9 +269,7 @@ function compileScribblePrompt(
   if (matchedTerms.length > 0) {
     termsBlock += "### Terms & Vocabulary\n";
     matchedTerms.forEach((t) => {
-      let line = `- "${t.canonical_term}" [${t.category}]`;
-      if (t.definition_or_context) line += ` — ${t.definition_or_context}`;
-      termsBlock += line + "\n";
+      termsBlock += termPromptLine(t) + "\n";
     });
     termsBlock += "\n";
   }
@@ -307,9 +329,7 @@ function compileMinutesPrompt(
   if (matchedTerms.length > 0) {
     termsBlock += "### Terms & Vocabulary\n";
     matchedTerms.forEach((t) => {
-      let line = `- "${t.canonical_term}" [${t.category}]`;
-      if (t.definition_or_context) line += ` — ${t.definition_or_context}`;
-      termsBlock += line + "\n";
+      termsBlock += termPromptLine(t) + "\n";
     });
     termsBlock += "\n";
   }
@@ -342,8 +362,12 @@ function compileMinutesPrompt(
 
 function textContainsWord(text: string, term: string): boolean {
   if (!text || !term) return false;
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(`\\b${escaped}\\b`, "i");
+  const parts = term
+    .trim()
+    .split(/\s+/)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = parts.join("[\\s,.;:!?\"'()\\-]+");
+  const regex = new RegExp(`\\b${pattern}\\b`, "i");
   return regex.test(text);
 }
 
@@ -490,7 +514,8 @@ export const ContextCompiler = {
 
     let block = "";
     if (params.profile === "stream") {
-      const highConfTerms = matchedTerms.filter(t => (t.confidence ?? 1.0) >= 0.7);
+      const streamTerms = prioritizeTerms(matchedTerms, terms);
+      const highConfTerms = streamTerms.filter(t => (t.confidence ?? 1.0) >= 0.7);
       block = compileStreamPrompt(
         matchedPeople,
         highConfTerms,

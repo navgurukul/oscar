@@ -56,6 +56,11 @@ interface AIProcessResponse {
   text: string;
 }
 
+interface OrgRewriteRule {
+  canonical: string;
+  aliases: string[];
+}
+
 const MERCURY_API_BASE_URL = "https://api.inceptionlabs.ai/v1";
 const MERCURY_MODEL = "mercury-2";
 const DICTATION_PROMPT_VERSION = "context-v1";
@@ -173,6 +178,77 @@ const VALID_CATEGORIES = new Set<DictationCategory>(DICTATION_CATEGORIES);
 
 function sanitizeOneLine(value?: string | null): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function aliasToPattern(alias: string): string {
+  return alias
+    .trim()
+    .split(/\s+/)
+    .map(escapeRegExp)
+    .join("[\\s,.;:!?\"'()\\-]+");
+}
+
+function shouldApplyAlias(alias: string, canonical: string): boolean {
+  const normalizedAlias = alias.trim();
+  if (!normalizedAlias) return false;
+  if (normalizedAlias.toLowerCase() === canonical.toLowerCase()) return false;
+  if (/\s/.test(normalizedAlias)) return true;
+  if (/[A-Z]/.test(normalizedAlias)) return true;
+  return normalizedAlias.length >= 8;
+}
+
+function parseOrgRewriteRules(orgContextBlock: string): OrgRewriteRule[] {
+  const rules: OrgRewriteRule[] = [];
+
+  for (const line of orgContextBlock.split("\n")) {
+    const match = line.match(/^-\s+"([^"]+)"[^(]*(?:\(Heard as:\s*([^)]+)\))?/);
+    if (!match) continue;
+
+    const canonical = sanitizeOneLine(match[1]);
+    if (!canonical) continue;
+
+    const aliases = (match[2] ?? "")
+      .split(/[,;/|]+/)
+      .map(sanitizeOneLine)
+      .filter(Boolean);
+
+    rules.push({ canonical, aliases });
+  }
+
+  return rules;
+}
+
+function applyOrgRewriteRules(text: string, orgContextBlock: string): string {
+  const rules = parseOrgRewriteRules(orgContextBlock);
+  if (rules.length === 0) return text;
+
+  let output = text;
+
+  for (const rule of rules) {
+    const aliases = rule.aliases
+      .filter((alias) => shouldApplyAlias(alias, rule.canonical))
+      .sort((left, right) => right.length - left.length);
+
+    for (const alias of aliases) {
+      const regex = new RegExp(`\\b${aliasToPattern(alias)}\\b`, "gi");
+      output = output.replace(regex, rule.canonical);
+    }
+
+    if (/data/i.test(rule.canonical) && /ai$/i.test(rule.canonical)) {
+      const canonical = escapeRegExp(rule.canonical);
+      const wrapped = new RegExp(
+        `\\bdata[\\s,.;:!?\"'()\\-]+${canonical}[\\s,.;:!?\"'()\\-]+AI\\b`,
+        "gi",
+      );
+      output = output.replace(wrapped, rule.canonical);
+    }
+  }
+
+  return output;
 }
 
 function getRoutingCategory(
@@ -494,6 +570,10 @@ Deno.serve(async (req: Request) => {
       typeof choice?.message?.content === "string"
         ? choice.message.content.trim()
         : "";
+    const correctedOutput =
+      mode === "transcribe_cleanup" && trimmedOrgContext
+        ? applyOrgRewriteRules(output, trimmedOrgContext).trim()
+        : output;
 
     const finishReason = choice?.finish_reason ?? "UNKNOWN";
     const usage = data?.usage ?? {};
@@ -507,7 +587,7 @@ Deno.serve(async (req: Request) => {
       `[ai-process-timing] mode=${mode} inputChars=${text.length} ` +
         `profile=${effectivePromptProfile ?? "default"} ` +
         `maxOut=${maxOutputTokens} ` +
-        `outChars=${output.length} ` +
+        `outChars=${correctedOutput.length} ` +
         `mercuryHeaders=${Math.round(tMercuryFirstByte - tMercury0)}ms ` +
         `mercuryBody=${Math.round(tMercuryDone - tMercuryFirstByte)}ms ` +
         `total=${Math.round(tMercuryDone - tMercury0)}ms ` +
@@ -520,7 +600,7 @@ Deno.serve(async (req: Request) => {
     );
 
     if (mode === "transcribe_cleanup") {
-      if (!output || looksLikeRefusal(output)) {
+      if (!correctedOutput || looksLikeRefusal(correctedOutput)) {
         console.info(
           "[ai-process] cleanup empty/refusal, returning empty string",
         );
@@ -528,14 +608,14 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-    } else if (!output) {
+    } else if (!correctedOutput) {
       return new Response(JSON.stringify({ error: "Empty response from AI service." }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    return new Response(JSON.stringify({ text: output } satisfies AIProcessResponse), {
+    return new Response(JSON.stringify({ text: correctedOutput } satisfies AIProcessResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
