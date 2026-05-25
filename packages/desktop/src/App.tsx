@@ -1438,6 +1438,7 @@ function App() {
   const stopHotkeyRecording = () => {
     if (hotkeyStopTailTimerRef.current) return;
 
+    const stopRequestedAt = performance.now();
     const stopRecorder = () => {
       hotkeyStopTailTimerRef.current = null;
       isRecordingRef.current = false;
@@ -1446,11 +1447,9 @@ function App() {
         mediaRecorderRef.current &&
         mediaRecorderRef.current.state === "recording"
       ) {
-        try {
-          mediaRecorderRef.current.requestData();
-        } catch (e) {
-          console.warn("[record] requestData before stop failed:", e);
-        }
+        console.info("[record] stopping after tail buffer", {
+          tailMs: Math.round(performance.now() - stopRequestedAt),
+        });
         mediaRecorderRef.current.stop();
       }
       stopAudioMeter();

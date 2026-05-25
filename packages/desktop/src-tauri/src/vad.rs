@@ -19,9 +19,10 @@ pub const SAMPLE_RATE: u32 = 16_000;
 /// Silero's preferred window and is cheap for the energy detector too.
 pub const FRAME_SAMPLES: usize = 512;
 
-/// Padding around detected speech regions (samples). Keeps short word-final
-/// consonants and breath that the detector might otherwise clip.
-pub const HANGOVER_FRAMES: usize = 6; // ~192ms
+/// Padding around detected speech regions (samples). Keeps word-final
+/// consonants and quiet trailing syllables that the detector might otherwise
+/// clip.
+pub const HANGOVER_FRAMES: usize = 10; // ~320ms
 
 pub trait VoiceActivityDetector: Send {
     /// Returns true if the given frame (`FRAME_SAMPLES` samples) contains
