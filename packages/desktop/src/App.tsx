@@ -65,7 +65,10 @@ import {
   resolveModelForRole,
 } from "./lib/whisper-model-manager";
 import { getStore, loadSetting, saveSetting } from "./lib/store";
+import { getSubscriptionEntitlement } from "@oscar/shared/constants";
 import "./App.css";
+
+const STREAM_TAIL_BUFFER_MS = 200;
 
 function buildFallbackScribbleTitle(text: string): string {
   const normalized = text.replace(/\s+/g, " ").trim();
@@ -298,6 +301,9 @@ function App() {
   const whisperLoadedRef = useRef(false);
   const isRecordingRef = useRef(false);
   const hotkeyStartInFlightRef = useRef(false);
+  const hotkeyStopTailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const streamRef = useRef<MediaStream | null>(null);
   const autoPasteRef = useRef(true);
   const targetAppRef = useRef<string>("");
@@ -919,6 +925,18 @@ function App() {
     window.addEventListener("blur", onWindowBlur);
 
     return () => {
+      const hadPendingTailStop = hotkeyStopTailTimerRef.current !== null;
+      if (hotkeyStopTailTimerRef.current) {
+        clearTimeout(hotkeyStopTailTimerRef.current);
+        hotkeyStopTailTimerRef.current = null;
+      }
+      if (
+        hadPendingTailStop &&
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state === "recording"
+      ) {
+        mediaRecorderRef.current.stop();
+      }
       unlistenStart.then((f) => f());
       unlistenStop.then((f) => f());
       unlistenErr.then((f) => f());
@@ -1418,17 +1436,40 @@ function App() {
   };
 
   const stopHotkeyRecording = () => {
-    isRecordingRef.current = false;
-    setIsRecording(false);
+    if (hotkeyStopTailTimerRef.current) return;
+
+    const stopRecorder = () => {
+      hotkeyStopTailTimerRef.current = null;
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state === "recording"
+      ) {
+        try {
+          mediaRecorderRef.current.requestData();
+        } catch (e) {
+          console.warn("[record] requestData before stop failed:", e);
+        }
+        mediaRecorderRef.current.stop();
+      }
+      stopAudioMeter();
+      // Switch pill to processing (dots) — don't hide yet
+      invoke("set_pill_processing").catch(console.warn);
+    };
+
     if (
       mediaRecorderRef.current &&
       mediaRecorderRef.current.state === "recording"
     ) {
-      mediaRecorderRef.current.stop();
+      hotkeyStopTailTimerRef.current = setTimeout(
+        stopRecorder,
+        STREAM_TAIL_BUFFER_MS,
+      );
+      return;
     }
-    stopAudioMeter();
-    // Switch pill to processing (dots) — don't hide yet
-    invoke("set_pill_processing").catch(console.warn);
+
+    stopRecorder();
   };
 
   // ── Audio processing (shared by hotkey recording) ───────────────────────────
@@ -2291,11 +2332,17 @@ function App() {
       try {
         const { data } = await supabase
           .from("subscriptions")
-          .select("status")
+          .select("tier, status, current_period_end")
           .eq("user_id", user.id)
           .maybeSingle();
 
-        setIsProUser(data?.status === "active");
+        const entitlement = getSubscriptionEntitlement({
+          tier: data?.tier,
+          status: data?.status,
+          currentPeriodEnd: data?.current_period_end,
+        });
+
+        setIsProUser(entitlement.isPro);
       } catch (e) {
         console.error("Failed to fetch subscription:", e);
         setIsProUser(false);
