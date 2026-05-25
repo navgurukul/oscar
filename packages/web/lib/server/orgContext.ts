@@ -144,12 +144,19 @@ function mergeTerms(rows: TermRow[]): TermRow[] {
   return Array.from(byTerm.values());
 }
 
+function splitVocabularyAliases(value?: string | null): string[] {
+  return (value ?? "")
+    .split(/[,;/|]+/)
+    .map((alias) => alias.trim())
+    .filter(Boolean);
+}
+
 function vocabularyRowsToTerms(rows: VocabularyRow[]): TermRow[] {
   return rows
     .filter((row) => row.term?.trim())
     .map((row) => ({
       canonical_term: row.term.trim(),
-      aliases: row.pronunciation?.trim() ? [row.pronunciation.trim()] : [],
+      aliases: splitVocabularyAliases(row.pronunciation),
       category: "terminology",
       definition_or_context: row.context?.trim() || null,
       confidence: 1,
