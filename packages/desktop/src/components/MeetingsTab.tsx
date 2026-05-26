@@ -4,21 +4,15 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { buildMeetingContextPack, copyMarkdownAsRichText } from "@oscar/shared";
 import { aiService } from "../services/ai.service";
 import {
-  FileText,
-  Users,
   Mic,
-  Square,
   Copy,
   Check,
   RotateCcw,
   ChevronLeft,
   Loader2,
   Mail,
-  CalendarDays,
-  Play,
   X,
   Trash2,
-  History,
   RefreshCw,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -27,7 +21,7 @@ import {
   markdownPreview,
   stripEvidenceComments,
 } from "./MarkdownNotesView";
-import { MinutesDistillView } from "./MinutesDistillView";
+import { MinutesDistillView, parseMinutes, type ActionItem } from "./MinutesDistillView";
 import type {
   EnhancedMeetingNoteRequest,
   MeetingAttendee,
@@ -48,19 +42,16 @@ const GOOGLE_CALENDAR_LOGO_URL =
   "https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253";
 const FIGTREE_FONT_STYLE = { fontFamily: '"Figtree", -apple-system, sans-serif' } as const;
 const GARAMOND_FONT_STYLE = { fontFamily: '"EB Garamond", Georgia, serif' } as const;
-const MEETINGS_TAB_CLASS_NAME = "flex flex-1 flex-col overflow-y-auto px-12 pt-10 pb-[120px] bg-cream";
-const MEETINGS_CONTAINER_CLASS_NAME = "mx-auto w-full max-w-[720px]";
-const MEETINGS_TITLE_CLASS_NAME = "mb-3 text-left font-serif font-medium tracking-[-0.02em] text-ink text-[36px] leading-[1.05]";
-const MEETINGS_SUBTITLE_CLASS_NAME = "mb-7 text-sm leading-6 text-ink-soft";
-const SECTION_HEADER_CLASS_NAME = "mb-3 flex items-center gap-[7px] font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint";
-const CALENDAR_EMPTY_CLASS_NAME = "flex flex-col items-center gap-2 px-0 py-3 text-center";
-const PARTICIPANT_PILLS_CLASS_NAME = "flex min-h-8 flex-wrap items-center gap-1.5 py-1";
-const PARTICIPANT_PILL_CLASS_NAME = "inline-flex max-w-[220px] items-center gap-1 rounded-[20px] border border-cream-300 bg-cream-200 px-2 py-[3px] pl-2.5 text-xs leading-[1.3] text-ink-soft";
+const MEETINGS_TAB_CLASS_NAME = "flex flex-1 flex-col overflow-y-auto bg-cream";
+const MEETINGS_CONTAINER_CLASS_NAME = "mx-auto w-full max-w-[1100px]";
+const PARTICIPANT_PILL_CLASS_NAME = "inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-cream-300 bg-cream-200 px-2.5 py-[3px] pl-1 text-xs leading-[1.3] text-ink-soft";
 const PARTICIPANT_PILL_TEXT_CLASS_NAME = "truncate";
 const PARTICIPANT_PILL_REMOVE_CLASS_NAME = "flex size-4 shrink-0 items-center justify-center rounded-full p-0 text-ink-faint transition-colors hover:bg-cream-300 hover:text-ink";
-const RESULT_TABS_CLASS_NAME = "mb-4 flex border-b border-cream-300";
-const RESULT_TAB_CLASS_NAME = "mb-[-1px] inline-flex items-center gap-1.5 border-b-2 border-transparent bg-transparent px-4 py-2.5 text-[0.8125rem] font-medium text-ink-faint transition-colors hover:text-ink-soft";
-const FOOTER_BUTTON_CLASS_NAME = "inline-flex items-center gap-1.5 rounded-lg border border-cream-300 bg-cream-50 px-3.5 py-[7px] text-[0.8125rem] font-medium text-ink-soft transition-colors hover:border-cream-400 hover:bg-cream-200";
+const RESULT_TABS_CLASS_NAME = "mt-5 flex items-center gap-7 border-b border-cream-300";
+const RESULT_TAB_CLASS_NAME = "pb-[10px] border-b-[1.5px] border-transparent bg-transparent font-mono text-[10px] tracking-[0.18em] uppercase text-ink-soft transition-colors hover:text-ink";
+const RESULT_TAB_ACTIVE_CLASS_NAME = "border-b-terracotta text-terracotta";
+const FOOTER_BUTTON_CLASS_NAME = "inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent px-3.5 py-[7px] text-[12px] text-ink-soft transition-colors hover:border-cream-400 hover:bg-cream-50";
+const FOOTER_BUTTON_PRIMARY_CLASS_NAME = "inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-[7px] text-[12px] text-cream transition-colors hover:bg-ink-night";
 
 export type CalendarReconnectResult = "refreshed" | "needs_reconnect" | "retry_later";
 export type MinutesTranscriptionStatus =
@@ -194,23 +185,6 @@ function formatEventTimeRange(event: CalendarEvent): string {
   return `${event.start_time} - ${event.end_time}`;
 }
 
-function groupEventsByDay(
-  events: CalendarEvent[],
-  currentTime: number,
-): Array<{ key: string; label: string; events: CalendarEvent[] }> {
-  const groups = new Map<string, { label: string; events: CalendarEvent[] }>();
-  for (const event of events) {
-    const live = isEventOngoing(event, currentTime);
-    const label = live ? "Ongoing" : getEventDayLabel(event, currentTime);
-    const key = label;
-    if (!groups.has(key)) {
-      groups.set(key, { label, events: [] });
-    }
-    groups.get(key)!.events.push(event);
-  }
-  return Array.from(groups.entries()).map(([key, value]) => ({ key, ...value }));
-}
-
 function buildMeetingLocalDatetime(dateValue: string): string {
   const date = new Date(dateValue);
   if (Number.isNaN(date.getTime())) {
@@ -260,40 +234,98 @@ function buildFallbackTranscriptSegments(
   ];
 }
 
-function getScribblesLoadingLabel(
-  status: MinutesTranscriptionStatus,
-  transcript: string,
-  completed: number,
-  total: number,
-  queue: number,
-): string {
-  if (status === "finalizing") {
-    const normalizedTotal = Math.max(total, completed + queue);
-    if (normalizedTotal > 0) {
-      return `Finalizing transcript (${completed}/${normalizedTotal} segments complete)…`;
-    }
-    return "Finalizing transcript…";
-  }
-
-  if (status === "transcribing") {
-    const normalizedTotal = Math.max(total, completed + queue);
-    if (normalizedTotal > 0) {
-      return `Transcribing segment ${Math.min(completed + 1, normalizedTotal)} of ${normalizedTotal}…`;
-    }
-    return "Transcribing audio…";
-  }
-
-  if (!transcript.trim()) {
-    return "Transcribing audio…";
-  }
-
-  return "Generating enhanced notes…";
-}
-
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+function V2Caps({
+  children,
+  accent = false,
+  className,
+}: {
+  children: React.ReactNode;
+  accent?: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "font-mono text-[10px] tracking-[0.18em] uppercase",
+        accent ? "text-terracotta" : "text-ink-faint",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function V2SectionCap({
+  children,
+  accent = false,
+  right,
+}: {
+  children: React.ReactNode;
+  accent?: boolean;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center min-h-4">
+      <V2Caps accent={accent}>{children}</V2Caps>
+      {right && <span className="ml-auto">{right}</span>}
+    </div>
+  );
+}
+
+function V2PersonChip({
+  name,
+  size = 22,
+  tone = "soft",
+}: {
+  name: string;
+  size?: number;
+  tone?: "soft" | "accent";
+}) {
+  const initial = (name || "·").trim().charAt(0).toUpperCase() || "·";
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-full font-serif font-medium leading-none",
+        tone === "accent"
+          ? "bg-terracotta text-cream"
+          : "bg-terracotta-100 text-ink",
+      )}
+      style={{ width: size, height: size, fontSize: size * 0.5 }}
+    >
+      {initial}
+    </span>
+  );
+}
+
+function V2AttendeePill({
+  name,
+  onRemove,
+}: {
+  name: string;
+  onRemove?: () => void;
+}) {
+  return (
+    <span className={PARTICIPANT_PILL_CLASS_NAME}>
+      <V2PersonChip name={name} size={18} />
+      <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{name}</span>
+      {onRemove && (
+        <button
+          className={PARTICIPANT_PILL_REMOVE_CLASS_NAME}
+          onClick={onRemove}
+          type="button"
+        >
+          <X size={10} />
+        </button>
+      )}
+    </span>
+  );
 }
 
 function MeetingTypePicker({
@@ -367,53 +399,6 @@ function CalendarConnectCard({
   );
 }
 
-function CalendarEventRow({
-  event,
-  onUse,
-  isLive,
-}: {
-  event: CalendarEvent;
-  onUse: (event: CalendarEvent) => void;
-  isLive?: boolean;
-}) {
-  const attendeeLabel =
-    event.attendees.length === 1
-      ? "1 attendee"
-      : `${event.attendees.length} attendees`;
-
-  return (
-    <button
-      className="group grid grid-cols-12 gap-4 items-baseline w-full text-left py-4 border-b border-cream-300 last:border-b-0 bg-transparent border-l-0 border-r-0 border-t-0 cursor-pointer transition-colors hover:bg-cream-50"
-      onClick={() => onUse(event)}
-      type="button"
-    >
-      <div className="col-span-3">
-        <span className="font-mono text-[12px] text-ink tracking-[0.02em]">
-          {formatEventTimeRange(event)}
-        </span>
-        <div className="mt-1 font-mono text-[10px] tracking-[0.16em] uppercase text-ink-faint">
-          {isLive ? (
-            <span className="text-terracotta">● LIVE · {attendeeLabel.toUpperCase()}</span>
-          ) : (
-            attendeeLabel.toUpperCase()
-          )}
-        </div>
-      </div>
-      <div className="col-span-7 min-w-0">
-        <h3 className="font-serif text-[17px] font-medium text-ink leading-[1.2] tracking-[-0.005em] truncate">
-          {event.title}
-        </h3>
-      </div>
-      <div className="col-span-2 text-right">
-        <span className="inline-flex items-center gap-1 font-mono text-[11px] tracking-[0.16em] uppercase text-terracotta">
-          <Play size={9} fill="currentColor" />
-          record →
-        </span>
-      </div>
-    </button>
-  );
-}
-
 export function MeetingsTab({
   isRecording,
   onStartRecording,
@@ -450,7 +435,7 @@ export function MeetingsTab({
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [resultTab, setResultTab] = useState<"notes" | "transcript">("notes");
+  const [resultTab, setResultTab] = useState<"notes" | "transcript" | "rough">("notes");
   const [viewingSaved, setViewingSaved] = useState<SavedMeetingRecord | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState("");
@@ -877,47 +862,187 @@ export function MeetingsTab({
   ) : null;
 
   if (phase === "select") {
+    const showEmptyState =
+      savedMeetings.length === 0 &&
+      nextCalendarEvents.length === 0 &&
+      !googleCalendarToken;
+
+    if (showEmptyState) {
+      return (
+        <div className={MEETINGS_TAB_CLASS_NAME}>
+          <div className={MEETINGS_CONTAINER_CLASS_NAME}>
+            <main className="px-9 pt-12 pb-9">
+              <V2Caps>MINUTES · NOTHING HERE YET</V2Caps>
+              <h1
+                className="mt-2 font-serif font-medium text-ink tracking-[-0.025em] text-[56px] leading-[0.98] max-w-[560px]"
+                style={GARAMOND_FONT_STYLE}
+              >
+                What was <em className="italic text-terracotta">said</em>,
+                <br />
+                then <em className="italic text-terracotta">decided</em>.
+              </h1>
+              <p className="mt-5 max-w-md text-[14.5px] leading-relaxed text-ink-soft">
+                Record a meeting. Keep your rough notes. Oscar turns both into a clean structured summary — decisions, actions, follow-ups, with the transcript right behind it.
+              </p>
+
+              {systemAudioNotice}
+
+              <div className="mt-9 flex max-w-2xl items-center gap-5 rounded-2xl border border-cream-300 bg-cream-200 p-5">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-cream-300 bg-cream">
+                  <img
+                    className="h-6 w-6 object-contain"
+                    src={GOOGLE_CALENDAR_LOGO_URL}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <V2Caps>RECOMMENDED · 1 MIN</V2Caps>
+                  <div
+                    className="mt-1 font-serif text-[18px] font-medium text-ink"
+                    style={GARAMOND_FONT_STYLE}
+                  >
+                    Connect Google Calendar
+                  </div>
+                  <div className="mt-0.5 text-[12.5px] text-ink-soft">
+                    Your upcoming meetings show up here. One click to start recording — titles and attendees come along.
+                  </div>
+                </div>
+                <button
+                  className="shrink-0 rounded-full bg-terracotta-500 px-[18px] py-[9px] text-[13px] font-medium text-cream transition-colors hover:bg-terracotta-600"
+                  onClick={onConnectCalendar}
+                  type="button"
+                >
+                  Connect
+                </button>
+              </div>
+
+              <button
+                className="mt-4 inline-flex items-center gap-1.5 text-[13px] text-ink-soft transition-colors hover:text-ink"
+                onClick={() => {
+                  resetDraftState();
+                  setShowAttendeeEditor(true);
+                }}
+                type="button"
+              >
+                <span className="border-b border-cream-400">
+                  Or start a meeting without a calendar
+                </span>
+                <span className="font-mono">→</span>
+              </button>
+
+              <div className="mt-12 grid max-w-3xl grid-cols-3 gap-7">
+                {[
+                  {
+                    n: "01",
+                    t: "You record",
+                    d: "Tap a meeting on your calendar or start fresh. Oscar captures system + mic audio, labels speakers as they talk.",
+                  },
+                  {
+                    n: "02",
+                    t: "You scribble",
+                    d: "Type rough notes in your own shorthand. Oscar reconciles them with the transcript when you stop.",
+                  },
+                  {
+                    n: "03",
+                    t: "You leave with the minutes",
+                    d: "Decisions, actions with owners, follow-ups. Copy clean, email the room, or paste into Notion.",
+                  },
+                ].map((s) => (
+                  <div
+                    key={s.n}
+                    className="border-t border-cream-400 pt-3.5"
+                  >
+                    <span className="font-mono text-[11px] tracking-[0.16em] text-terracotta">
+                      {s.n}
+                    </span>
+                    <div
+                      className="mt-1.5 font-serif text-[18px] font-medium text-ink tracking-[-0.005em]"
+                      style={GARAMOND_FONT_STYLE}
+                    >
+                      {s.t}
+                    </div>
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-soft">
+                      {s.d}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </main>
+          </div>
+        </div>
+      );
+    }
+
+    const totalListened = savedMeetings.reduce((acc, m) => {
+      const start = Date.parse(m.startedAt);
+      const created = Date.parse(m.createdAt);
+      if (Number.isFinite(start) && Number.isFinite(created) && created > start) {
+        return acc + (created - start);
+      }
+      return acc;
+    }, 0);
+    const listenedHours = Math.floor(totalListened / 3_600_000);
+    const listenedMinutes = Math.floor((totalListened % 3_600_000) / 60_000);
+    const listenedLabel =
+      listenedHours > 0
+        ? `${listenedHours} H ${listenedMinutes} M LISTENED`
+        : listenedMinutes > 0
+          ? `${listenedMinutes} M LISTENED`
+          : "READY TO LISTEN";
+
     return (
       <div className={MEETINGS_TAB_CLASS_NAME}>
         <div className={MEETINGS_CONTAINER_CLASS_NAME}>
-          <div className="mb-7 pb-6 border-b border-cream-300">
-            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint">
-              MINUTES · {savedMeetings?.length ?? 0} SAVED
-            </span>
-            <h1 className={MEETINGS_TITLE_CLASS_NAME} style={GARAMOND_FONT_STYLE}>
-              What was <em className="italic text-terracotta">decided</em>.
-            </h1>
-            <p className="text-sm leading-6 text-ink-soft max-w-[480px]">
-              Record once, keep your rough notes, and let Minutes turn the meeting into a clean structured summary.
-            </p>
+          {/* hero */}
+          <div className="px-9 pt-8 pb-7 border-b border-cream-300">
+            <V2Caps>
+              MINUTES · {savedMeetings.length} SAVED · {listenedLabel}
+            </V2Caps>
+            <div className="mt-1.5 flex items-end justify-between gap-6">
+              <h1
+                className="font-serif font-medium text-ink tracking-[-0.02em] text-[40px] leading-none"
+                style={GARAMOND_FONT_STYLE}
+              >
+                What was <em className="italic text-terracotta">decided</em>.
+              </h1>
+              <div className="mb-1.5 flex items-center gap-2">
+                <button
+                  className="inline-flex items-center gap-2 rounded-full bg-ink px-3.5 py-[7px] text-[12px] text-cream transition-colors hover:bg-ink-night"
+                  onClick={() => {
+                    resetDraftState();
+                    setShowAttendeeEditor(true);
+                    setPhase("recording");
+                  }}
+                  type="button"
+                >
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-terracotta" />
+                  New meeting
+                </button>
+              </div>
+            </div>
           </div>
 
-          {systemAudioNotice}
+          {systemAudioNotice && (
+            <div className="px-9 pt-4">{systemAudioNotice}</div>
+          )}
 
-          <div className="mb-2">
-            <div className={SECTION_HEADER_CLASS_NAME}>
-              <CalendarDays size={14} />
-              <span>Coming up</span>
-              {calendarLoading && <Loader2 size={12} className="animate-spin" />}
-              {googleCalendarToken && (
-                <button
-                  type="button"
-                  onClick={() => fetchCalendarEvents({ force: true })}
-                  disabled={calendarLoading}
-                  className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label="Refresh upcoming meetings"
-                  title="Refresh"
-                >
-                  <RefreshCw
-                    size={12}
-                    className={calendarLoading ? "animate-spin" : ""}
-                  />
-                </button>
-              )}
-            </div>
+          {/* coming up */}
+          <section className="px-9 pt-6 pb-4">
+            <V2SectionCap
+              right={
+                <V2Caps>
+                  {googleCalendarToken
+                    ? "GOOGLE CALENDAR · SYNCED"
+                    : "CALENDAR NOT CONNECTED"}
+                </V2Caps>
+              }
+            >
+              COMING UP
+            </V2SectionCap>
 
             {!googleCalendarToken && !calendarLoading && (
-              <div className={CALENDAR_EMPTY_CLASS_NAME}>
+              <div className="mt-3">
                 <CalendarConnectCard
                   title="Connect Google Calendar"
                   hint="Keep your next meetings synced inside Minutes and jump into recording in one click."
@@ -928,7 +1053,7 @@ export function MeetingsTab({
             )}
 
             {calendarError === "needs_reconnect" && (
-              <div className={CALENDAR_EMPTY_CLASS_NAME}>
+              <div className="mt-3">
                 <CalendarConnectCard
                   title="Reconnect Google Calendar"
                   hint="Your calendar access expired. Reconnect once and OSCAR will keep upcoming meetings ready here."
@@ -940,17 +1065,21 @@ export function MeetingsTab({
             )}
 
             {calendarError === "fetch_error" && (
-              <div className={CALENDAR_EMPTY_CLASS_NAME}>
-                <p className="m-0 text-sm font-medium text-slate-500">Couldn't load events</p>
-                <p className="m-0 max-w-[300px] text-[0.8125rem] leading-[1.45] text-slate-400">
-                  {calendarErrorMsg.includes("not been used") || calendarErrorMsg.includes("disabled")
+              <div className="mt-3 flex flex-col items-start gap-2">
+                <p className="m-0 text-sm font-medium text-ink-soft">
+                  Couldn't load events
+                </p>
+                <p className="m-0 max-w-[420px] text-[0.8125rem] leading-[1.45] text-ink-faint">
+                  {calendarErrorMsg.includes("not been used") ||
+                  calendarErrorMsg.includes("disabled")
                     ? "Enable the Google Calendar API in Cloud Console."
-                    : calendarErrorMsg.includes("403") || calendarErrorMsg.includes("PERMISSION_DENIED")
-                    ? "Permission denied — check Calendar API & OAuth scopes."
-                    : calendarErrorMsg || "Check your internet connection."}
+                    : calendarErrorMsg.includes("403") ||
+                        calendarErrorMsg.includes("PERMISSION_DENIED")
+                      ? "Permission denied — check Calendar API & OAuth scopes."
+                      : calendarErrorMsg || "Check your internet connection."}
                 </p>
                 <button
-                  className="mt-2 rounded-lg bg-terracotta-500 px-[18px] py-2 text-[0.8125rem] font-semibold text-cream transition-colors hover:bg-terracotta-600 active:bg-terracotta-700"
+                  className="rounded-full bg-terracotta-500 px-4 py-1.5 text-[12px] font-medium text-cream transition-colors hover:bg-terracotta-600"
                   onClick={onConnectCalendar}
                   type="button"
                 >
@@ -959,44 +1088,92 @@ export function MeetingsTab({
               </div>
             )}
 
-            {googleCalendarToken && !calendarError && !calendarLoading && (
-              nextCalendarEvents.length === 0 ? (
-                <div className={CALENDAR_EMPTY_CLASS_NAME}>
-                  <p className="m-0 max-w-[300px] text-[0.8125rem] leading-[1.45] text-slate-400">No upcoming meetings on your calendar.</p>
-                </div>
+            {googleCalendarToken &&
+              !calendarError &&
+              !calendarLoading &&
+              (nextCalendarEvents.length === 0 ? (
+                <p className="mt-3 text-[12.5px] text-ink-faint">
+                  No upcoming meetings on your calendar.
+                </p>
               ) : (
                 <motion.div
+                  className="mt-3"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.22 }}
                 >
-                  {groupEventsByDay(nextCalendarEvents, currentTime).map((group) => (
-                    <div key={group.key} className="mb-2">
-                      <div className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint py-2">
-                        {group.label}
-                      </div>
-                      {group.events.map((event, index) => (
-                        <CalendarEventRow
-                          key={`${event.title}-${event.start_at}-${index}`}
-                          event={event}
-                          onUse={startFromEvent}
-                          isLive={isEventOngoing(event, currentTime)}
-                        />
-                      ))}
-                    </div>
-                  ))}
+                  {nextCalendarEvents.map((event, index) => {
+                    const live = isEventOngoing(event, currentTime);
+                    const dayLabel = live
+                      ? "NOW"
+                      : getEventDayLabel(event, currentTime).toUpperCase();
+                    const attendeeText =
+                      event.attendees.length === 1
+                        ? "1 attendee"
+                        : `${event.attendees.length} attendees`;
+                    return (
+                      <button
+                        key={`${event.title}-${event.start_at}-${index}`}
+                        className={cn(
+                          "group grid w-full grid-cols-12 items-center gap-4 border-b border-cream-300 py-2.5 text-left transition-colors hover:bg-cream-50",
+                          index === nextCalendarEvents.length - 1 &&
+                            "border-b-0",
+                        )}
+                        onClick={() => startFromEvent(event)}
+                        type="button"
+                      >
+                        <div className="col-span-3 flex items-center gap-3">
+                          {live ? (
+                            <span className="font-mono text-[11px] tracking-[0.16em] text-terracotta">
+                              ● {dayLabel}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-[11px] tracking-[0.16em] text-ink-faint">
+                              {dayLabel}
+                            </span>
+                          )}
+                          <span className="font-mono text-[12px] text-ink">
+                            {formatEventTimeRange(event)}
+                          </span>
+                        </div>
+                        <div className="col-span-7">
+                          <span
+                            className="font-serif text-[16px] font-medium text-ink tracking-[-0.005em]"
+                            style={GARAMOND_FONT_STYLE}
+                          >
+                            {event.title}
+                          </span>
+                          <span className="ml-3 text-[12px] text-ink-faint">
+                            · {attendeeText}
+                          </span>
+                        </div>
+                        <div className="col-span-2 text-right">
+                          {live ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3 py-1.5 text-[11px] font-medium text-cream">
+                              <span className="inline-block h-[5px] w-[5px] rounded-full bg-cream" />
+                              Record now
+                            </span>
+                          ) : (
+                            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
+                              record →
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </motion.div>
-              )
-            )}
-          </div>
+              ))}
+          </section>
 
+          {/* previous */}
           {savedMeetings.length > 0 && (
-            <div className="mt-9">
-              <div className={SECTION_HEADER_CLASS_NAME}>
-                <History size={11} />
-                <span>Previous meetings · {savedMeetings.length}</span>
-              </div>
-              <div className="flex flex-col">
+            <section className="px-9 pt-6 pb-9">
+              <V2SectionCap right={<V2Caps>SORTED BY RECENT</V2Caps>}>
+                PREVIOUS · {savedMeetings.length} MEETING
+                {savedMeetings.length === 1 ? "" : "S"}
+              </V2SectionCap>
+              <div className="mt-3">
                 {savedMeetings
                   .slice()
                   .sort(
@@ -1013,54 +1190,68 @@ export function MeetingsTab({
                       minute: "2-digit",
                       hour12: false,
                     })}`;
-                    const monthDay = startDate.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    });
+                    const monthDay = startDate
+                      .toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })
+                      .toUpperCase();
+                    const parsedCounts = parseMinutes(meeting.notesMarkdown);
+                    const decCount = parsedCounts.decisions.length;
+                    const actCount = parsedCounts.actions.length;
                     return (
-                      <button
+                      <article
                         key={meeting.id}
-                        className="group grid grid-cols-12 gap-4 items-baseline w-full text-left py-5 border-b border-cream-300 bg-transparent border-l-0 border-r-0 border-t-0 cursor-pointer transition-colors hover:bg-cream-50"
                         onClick={() => {
                           setViewingSaved(meeting);
                           setResultTab("notes");
                           setPhase("view_saved");
                         }}
-                        type="button"
+                        className="group grid cursor-pointer grid-cols-12 gap-4 border-b border-cream-300 py-4"
                       >
                         <div className="col-span-3">
-                          <span className="font-mono text-[12px] text-ink tracking-[0.02em]">
+                          <span className="font-mono text-[12px] text-ink">
                             {dateMono}
                           </span>
-                          <div className="mt-1 font-mono text-[10px] tracking-[0.16em] uppercase text-ink-faint">
-                            MINUTES · {monthDay.toUpperCase()}
-                          </div>
+                          <span className="mt-0.5 block font-mono text-[10px] tracking-[0.16em] text-ink-faint">
+                            MINUTES · {monthDay}
+                          </span>
                         </div>
                         <div className="col-span-7 min-w-0">
-                          <h3 className="font-serif text-[18px] font-medium text-ink leading-[1.2] tracking-[-0.005em]">
+                          <h3
+                            className="font-serif text-[17px] font-medium text-ink tracking-[-0.005em] leading-[1.2]"
+                            style={GARAMOND_FONT_STYLE}
+                          >
                             {meeting.meetingTitle}
                           </h3>
                           {meeting.attendeesCompact && (
-                            <div className="mt-1 text-[12px] text-ink-soft leading-relaxed truncate">
+                            <div className="mt-1 text-[11.5px] text-ink-faint">
                               {meeting.attendeesCompact}
                             </div>
                           )}
                           {meeting.notesMarkdown && (
-                            <p className="mt-1 text-[12px] text-ink-faint leading-relaxed truncate">
+                            <p className="mt-1 truncate text-[12px] leading-relaxed text-ink-soft">
                               {markdownPreview(meeting.notesMarkdown)}
                             </p>
                           )}
                         </div>
-                        <div className="col-span-2 text-right">
-                          <span className="font-mono text-[11px] tracking-[0.16em] uppercase text-terracotta opacity-0 group-hover:opacity-100 transition-opacity">
-                            continue →
-                          </span>
+                        <div className="col-span-2 flex flex-col items-end justify-center gap-1 text-right">
+                          {decCount > 0 && (
+                            <span className="font-mono text-[11px] text-terracotta">
+                              {decCount} decision{decCount === 1 ? "" : "s"}
+                            </span>
+                          )}
+                          {actCount > 0 && (
+                            <span className="font-mono text-[11px] text-ink-faint">
+                              {actCount} action{actCount === 1 ? "" : "s"}
+                            </span>
+                          )}
                         </div>
-                      </button>
+                      </article>
                     );
                   })}
               </div>
-            </div>
+            </section>
           )}
         </div>
       </div>
@@ -1068,141 +1259,193 @@ export function MeetingsTab({
   }
 
   if (phase === "view_saved" && viewingSaved) {
+    const savedParsed = parseMinutes(viewingSaved.notesMarkdown);
+    const savedTurnCount =
+      viewingSaved.transcriptSegments.length > 0
+        ? groupSegmentsIntoTurns(viewingSaved.transcriptSegments, savedSpeakerLabels).length
+        : 0;
+    const savedDateLabel = viewingSaved.meetingLocalDatetime;
+
     return (
       <div className={MEETINGS_TAB_CLASS_NAME}>
         <div className={MEETINGS_CONTAINER_CLASS_NAME}>
-          <button
-            className="mb-4 inline-flex items-center gap-1 rounded-md bg-transparent px-2 py-1 pl-1 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-            onClick={() => {
-              setPhase("select");
-              setViewingSaved(null);
-            }}
-            type="button"
-          >
-            <ChevronLeft size={16} /> Back
-          </button>
-
-          {systemAudioNotice}
-
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div>
-              <h1 className={cn(MEETINGS_TITLE_CLASS_NAME, "mb-0")} style={GARAMOND_FONT_STYLE}>
-                {viewingSaved.meetingTitle}
-              </h1>
-              <p className={cn(MEETINGS_SUBTITLE_CLASS_NAME, "mb-0")}>
-                {viewingSaved.meetingLocalDatetime}
-              </p>
-            </div>
-            <button
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cream-300 bg-transparent text-ink-faint transition-colors hover:border-[#8c2f25] hover:text-[#8c2f25] cursor-pointer"
-              onClick={() => {
-                onDeleteMeeting(viewingSaved.id);
-                setPhase("select");
-                setViewingSaved(null);
-              }}
-              title="Delete meeting"
-              type="button"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-
-          {viewingSaved.attendeesFull.length > 0 && (
-            <div className={cn(PARTICIPANT_PILLS_CLASS_NAME, "mb-3")}>
-              {viewingSaved.attendeesFull.map((attendee, index) => (
-                <span key={`${attendeeLabel(attendee)}-${index}`} className={PARTICIPANT_PILL_CLASS_NAME}>
-                  <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{attendeeLabel(attendee)}</span>
+          {/* header */}
+          <div className="px-9 pt-7 pb-5 border-b border-cream-300">
+            <div className="flex items-center gap-2.5">
+              <button
+                className="inline-flex items-center gap-2 text-ink-faint transition-colors hover:text-ink"
+                onClick={() => {
+                  setPhase("select");
+                  setViewingSaved(null);
+                }}
+                type="button"
+              >
+                <ChevronLeft size={13} />
+                <V2Caps>BACK TO MINUTES</V2Caps>
+              </button>
+              <span className="ml-auto inline-flex items-center gap-3">
+                <span className="font-mono text-[11px] text-ink-faint">
+                  {savedDateLabel}
                 </span>
-              ))}
+                <button
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-cream-300 bg-transparent text-ink-faint transition-colors hover:border-[#8c2f25] hover:text-[#8c2f25]"
+                  onClick={() => {
+                    onDeleteMeeting(viewingSaved.id);
+                    setPhase("select");
+                    setViewingSaved(null);
+                  }}
+                  title="Delete meeting"
+                  type="button"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </span>
             </div>
-          )}
+            <h1
+              className="mt-3 font-serif text-[32px] font-medium tracking-[-0.015em] leading-[1.05] text-ink"
+              style={GARAMOND_FONT_STYLE}
+            >
+              {viewingSaved.meetingTitle}
+            </h1>
+            {viewingSaved.attendeesFull.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                {viewingSaved.attendeesFull.map((attendee, index) => (
+                  <V2AttendeePill
+                    key={`${attendeeLabel(attendee)}-${index}`}
+                    name={attendeeLabel(attendee)}
+                  />
+                ))}
+              </div>
+            )}
 
-          <div className={RESULT_TABS_CLASS_NAME}>
-            <button
-              className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-terracotta text-terracotta")}
-              onClick={() => setResultTab("notes")}
-              type="button"
-            >
-              <FileText size={13} />
-              Notes
-            </button>
-            <button
-              className={cn(RESULT_TAB_CLASS_NAME, resultTab === "transcript" && "border-b-terracotta text-terracotta")}
-              onClick={() => setResultTab("transcript")}
-              type="button"
-            >
-              <Mic size={13} />
-              Transcript
-            </button>
+            {systemAudioNotice && <div className="mt-3">{systemAudioNotice}</div>}
+
+            <div className={RESULT_TABS_CLASS_NAME}>
+              <button
+                className={cn(
+                  RESULT_TAB_CLASS_NAME,
+                  resultTab === "notes" && RESULT_TAB_ACTIVE_CLASS_NAME,
+                )}
+                onClick={() => setResultTab("notes")}
+                type="button"
+              >
+                NOTES
+              </button>
+              <button
+                className={cn(
+                  RESULT_TAB_CLASS_NAME,
+                  resultTab === "transcript" && RESULT_TAB_ACTIVE_CLASS_NAME,
+                )}
+                onClick={() => setResultTab("transcript")}
+                type="button"
+              >
+                TRANSCRIPT
+                {savedTurnCount > 0 && ` · ${savedTurnCount} TURNS`}
+              </button>
+              <button
+                className={cn(
+                  RESULT_TAB_CLASS_NAME,
+                  resultTab === "rough" && RESULT_TAB_ACTIVE_CLASS_NAME,
+                )}
+                onClick={() => setResultTab("rough")}
+                type="button"
+              >
+                YOUR ROUGH NOTES
+              </button>
+            </div>
           </div>
 
+          {/* body */}
           {resultTab === "notes" && (
-            <div>
-              <div className="max-h-[460px] overflow-y-auto py-2 pr-1">
-                <MinutesDistillView markdown={viewingSaved.notesMarkdown} />
-              </div>
-              <div className="flex flex-col gap-2 border-t border-cream-300 pt-4 mt-4">
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    className="inline-flex items-center gap-1.5 rounded-full bg-ink text-cream px-4 py-2 text-[12px] font-medium border-none cursor-pointer transition-opacity hover:opacity-90"
-                    onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
-                    type="button"
-                  >
-                    {copied ? <Check size={12} /> : <Copy size={12} />}
-                    {copied ? "Copied" : "Copy"}
-                  </button>
-                  <button
-                    className="inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent text-ink-soft px-4 py-2 text-[12px] font-medium cursor-pointer transition-colors hover:text-ink hover:border-cream-400"
-                    onClick={() =>
-                      void handleShareByEmail({
-                        subjectTitle: viewingSaved.meetingTitle,
-                        attendeesFull: viewingSaved.attendeesFull,
-                        markdown: viewingSaved.notesMarkdown,
-                      })
-                    }
-                    type="button"
-                  >
-                    <Mail size={12} /> Email
-                  </button>
-                  <button
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent text-ink-soft px-4 py-2 text-[12px] font-medium cursor-pointer transition-colors hover:text-ink hover:border-cream-400",
-                      regenerating && "cursor-not-allowed opacity-60",
-                    )}
-                    onClick={() => void handleRegenerateSaved(viewingSaved)}
-                    disabled={
-                      regenerating ||
-                      (viewingSaved.transcriptSegments.length === 0 &&
-                        !viewingSaved.myNotesMarkdown.trim())
-                    }
-                    type="button"
-                    title="Re-run the AI to regenerate notes from the transcript"
-                  >
-                    {regenerating ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <RefreshCw size={12} />
-                    )}
-                    {regenerating ? "Regenerating…" : "Regenerate"}
-                  </button>
-                </div>
-                {regenerateError && (
-                  <p className="m-0 text-[12px] text-[#8c2f25]">
-                    {regenerateError}
-                  </p>
-                )}
-              </div>
-            </div>
+            <section className="px-9 pt-7 pb-6">
+              <MinutesDistillView markdown={viewingSaved.notesMarkdown} />
+            </section>
           )}
 
           {resultTab === "transcript" && (
-            <div className="p-0">
-              <TranscriptView
+            <section className="px-9 pt-7 pb-6">
+              <TranscriptTurnsRich
                 segments={viewingSaved.transcriptSegments}
                 fallbackText={viewingSaved.transcript}
                 labels={savedSpeakerLabels}
                 emptyMessage="No transcript available."
+                annotatedDecisions={savedParsed.decisions}
+                annotatedActions={savedParsed.actions}
               />
+            </section>
+          )}
+
+          {resultTab === "rough" && (
+            <section className="px-9 pt-7 pb-6">
+              <V2SectionCap>YOUR ROUGH NOTES</V2SectionCap>
+              <div
+                className="mt-4 whitespace-pre-wrap font-serif text-[15.5px] leading-[1.6] text-ink"
+                style={GARAMOND_FONT_STYLE}
+              >
+                {viewingSaved.myNotesMarkdown.trim() || (
+                  <span className="italic text-ink-faint">
+                    No rough notes were saved with this meeting.
+                  </span>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* footer */}
+          <div className="border-t border-cream-300 px-9 py-5 flex items-center gap-2">
+            <button
+              className={FOOTER_BUTTON_PRIMARY_CLASS_NAME}
+              onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
+              type="button"
+            >
+              {copied ? <Check size={11} /> : <Copy size={11} />}
+              {copied ? "Copied" : "Copy clean"}
+            </button>
+            <button
+              className={FOOTER_BUTTON_CLASS_NAME}
+              onClick={() =>
+                void handleShareByEmail({
+                  subjectTitle: viewingSaved.meetingTitle,
+                  attendeesFull: viewingSaved.attendeesFull,
+                  markdown: viewingSaved.notesMarkdown,
+                })
+              }
+              type="button"
+            >
+              <Mail size={11} />
+              Email to attendees
+            </button>
+            <button
+              className={cn(
+                FOOTER_BUTTON_CLASS_NAME,
+                regenerating && "cursor-not-allowed opacity-60",
+              )}
+              onClick={() => void handleRegenerateSaved(viewingSaved)}
+              disabled={
+                regenerating ||
+                (viewingSaved.transcriptSegments.length === 0 &&
+                  !viewingSaved.myNotesMarkdown.trim())
+              }
+              type="button"
+              title="Re-run the AI to regenerate notes from the transcript"
+            >
+              {regenerating ? (
+                <Loader2 size={11} className="animate-spin" />
+              ) : (
+                <RefreshCw size={11} />
+              )}
+              {regenerating ? "Regenerating…" : "Regenerate"}
+            </button>
+            <span className="ml-auto inline-flex items-center gap-3">
+              <V2Caps>SAVED · MINUTES LIBRARY</V2Caps>
+            </span>
+          </div>
+
+          {regenerateError && (
+            <div className="px-9 pb-5">
+              <p className="m-0 text-[12px] text-[#8c2f25]">
+                {regenerateError}
+              </p>
             </div>
           )}
         </div>
@@ -1211,81 +1454,110 @@ export function MeetingsTab({
   }
 
   if (phase === "recording") {
-    const attendeeSummary = attendees.length > 0
-      ? attendees.length <= 2
-        ? attendees.map(attendeeLabel).join(", ")
-        : `${attendeeLabel(attendees[0])}, ${attendeeLabel(attendees[1])} +${attendees.length - 2}`
-      : null;
+    const meetingDateLabel = (() => {
+      const value = meetingStartedAt || selectedCalendarEvent?.start_at || "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      const weekday = date
+        .toLocaleDateString(undefined, { weekday: "short" })
+        .toUpperCase();
+      const monthDay = date
+        .toLocaleDateString(undefined, { month: "short", day: "numeric" })
+        .toUpperCase();
+      const time = date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      return `${weekday} · ${monthDay} · ${time}`;
+    })();
+    const meetingTypeLabel =
+      MEETING_TYPE_OPTIONS.find((option) => option.value === meetingTypeHint)
+        ?.label ?? "Auto";
 
     return (
-      <div className={cn(MEETINGS_TAB_CLASS_NAME, "relative pb-[160px]")}>
-        <div className={MEETINGS_CONTAINER_CLASS_NAME}>
-          {/* ── Compact header: back + title + meta ─────────────────────── */}
-          <div className="mb-4 flex items-start gap-2">
-            <button
-              className="mt-0.5 inline-flex shrink-0 items-center justify-center rounded-md bg-transparent p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-              onClick={handleBack}
-              type="button"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <div className="min-w-0 flex-1">
+      <div className="relative flex flex-1 flex-col overflow-hidden bg-cream">
+        <div className={cn(MEETINGS_CONTAINER_CLASS_NAME, "flex flex-1 flex-col overflow-hidden")}>
+          {/* header */}
+          <div className="px-8 pt-6 pb-4 border-b border-cream-300">
+            <div className="flex items-center gap-2.5">
+              <button
+                className="inline-flex items-center gap-2 text-ink-faint transition-colors hover:text-ink"
+                onClick={handleBack}
+                type="button"
+              >
+                <ChevronLeft size={14} />
+                <V2Caps>BACK TO MINUTES</V2Caps>
+              </button>
+              <span className="ml-auto inline-flex items-center gap-1.5">
+                {isRecording ? (
+                  <>
+                    <span className="inline-block h-[7px] w-[7px] rounded-full bg-terracotta animate-pulse" />
+                    <span className="font-mono text-[11px] text-terracotta">
+                      RECORDING · {formatTime(recordingTime)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="font-mono text-[11px] text-ink-faint">
+                    READY TO RECORD
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="mt-2 flex items-baseline gap-3">
               <input
-                className="w-full border-0 bg-transparent px-0 py-0 text-[1.05rem] font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+                className="min-w-0 flex-1 border-0 bg-transparent p-0 font-serif text-[26px] font-medium leading-[1.1] tracking-[-0.01em] text-ink outline-none placeholder:text-ink-faint"
+                style={GARAMOND_FONT_STYLE}
                 type="text"
-                placeholder="Meeting title"
+                placeholder="Untitled meeting"
                 value={meetingTitle}
                 onChange={(event) => setMeetingTitle(event.target.value)}
-                style={FIGTREE_FONT_STYLE}
               />
-              {/* Collapsed meta line: attendee count + meeting type */}
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.75rem] text-slate-400">
-                {attendeeSummary && (
-                  <button
-                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-600"
-                    onClick={() => setShowAttendeeEditor((v) => !v)}
-                    type="button"
-                  >
-                    <Users size={10} />
-                    <span>{attendeeSummary}</span>
-                  </button>
-                )}
-                {!attendeeSummary && (
-                  <button
-                    className="inline-flex items-center gap-1 text-slate-400 transition-colors hover:text-slate-500"
-                    onClick={() => setShowAttendeeEditor((v) => !v)}
-                    type="button"
-                  >
-                    <Users size={10} />
-                    <span>Add participants</span>
-                  </button>
-                )}
-                <MeetingTypePicker value={meetingTypeHint} onChange={setMeetingTypeHint} />
-              </div>
+              {meetingDateLabel && (
+                <span className="font-mono text-[11px] text-ink-faint">
+                  {meetingDateLabel}
+                </span>
+              )}
             </div>
-          </div>
-
-          {/* ── Expandable attendee editor ──────────────────────────────── */}
-          {showAttendeeEditor && (
-            <motion.div
-              className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              transition={{ duration: 0.15 }}
-            >
-              <div className={cn(PARTICIPANT_PILLS_CLASS_NAME, "gap-1")}>
-                {attendees.map((attendee, index) => (
-                  <span key={`${attendeeLabel(attendee)}-${index}`} className={PARTICIPANT_PILL_CLASS_NAME}>
-                    <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{attendeeLabel(attendee)}</span>
-                    <button className={PARTICIPANT_PILL_REMOVE_CLASS_NAME} onClick={() => removeAttendee(index)} type="button">
-                      <X size={10} />
-                    </button>
-                  </span>
-                ))}
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              {attendees.map((attendee, index) => (
+                <V2AttendeePill
+                  key={`${attendeeLabel(attendee)}-${index}`}
+                  name={attendeeLabel(attendee)}
+                  onRemove={() => removeAttendee(index)}
+                />
+              ))}
+              <button
+                className="inline-flex items-center gap-1 text-[11px] text-ink-faint transition-colors hover:text-ink-soft"
+                onClick={() => setShowAttendeeEditor((v) => !v)}
+                type="button"
+              >
+                · + add
+              </button>
+              <span className="ml-auto inline-flex items-center gap-2 rounded-full border border-cream-300 bg-cream-200 px-2.5 py-[3px] text-[11px] text-ink-soft">
+                Type:
+                <span className="font-medium text-ink">{meetingTypeLabel}</span>
+                <MeetingTypePicker
+                  value={meetingTypeHint}
+                  onChange={setMeetingTypeHint}
+                />
+              </span>
+            </div>
+            {showAttendeeEditor && (
+              <motion.div
+                className="mt-2.5 rounded-xl border border-cream-300 bg-cream-50 px-3 py-2"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                transition={{ duration: 0.15 }}
+              >
                 <input
-                  className="min-w-[100px] flex-1 border-0 bg-transparent px-0.5 py-0.5 text-[0.8125rem] text-slate-700 outline-none placeholder:text-slate-400"
+                  className="w-full border-0 bg-transparent p-1 text-[12px] text-ink outline-none placeholder:text-ink-faint"
                   type="text"
-                  placeholder={attendees.length === 0 ? "Name or email, press Enter" : "Add more..."}
+                  placeholder={
+                    attendees.length === 0
+                      ? "Name or email, press Enter"
+                      : "Add another participant"
+                  }
                   value={participantInput}
                   onChange={(event) => setParticipantInput(event.target.value)}
                   onKeyDown={handleParticipantKeyDown}
@@ -1293,225 +1565,486 @@ export function MeetingsTab({
                   autoFocus
                   style={FIGTREE_FONT_STYLE}
                 />
-              </div>
-            </motion.div>
+              </motion.div>
+            )}
+          </div>
+
+          {systemAudioNotice && (
+            <div className="px-8 pt-3">{systemAudioNotice}</div>
           )}
 
-          {systemAudioNotice}
-
-          {/* ── Notes area (primary focus) ──────────────────────────────── */}
-          <textarea
-            className="min-h-[160px] w-full resize-y rounded-xl border border-cream-300 bg-cream px-4 py-3 text-sm leading-[1.65] text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-cream-400"
-            placeholder="Jot down key points, action items, or anything worth remembering..."
-            value={manualNotes}
-            onChange={(event) => setManualNotes(event.target.value)}
-            rows={6}
-          />
-
-          {/* ── Live transcript (visible only while recording) ──────────── */}
-          {isRecording && (
-            <div className="mt-3">
-              <div className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-medium text-slate-400">
-                <Mic size={11} />
-                <span>Live transcript</span>
-                {minutesTranscriptionStatus === "transcribing" && (
-                  <span className="inline-flex items-center gap-1 text-terracotta-500">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-terracotta-500 animate-pulse" />
+          {/* two-pane: notes | live transcript */}
+          <div className="grid flex-1 grid-cols-12 overflow-hidden">
+            <div className="col-span-6 overflow-auto px-8 py-6 border-r border-cream-300">
+              <V2SectionCap>YOUR ROUGH NOTES · LIVE</V2SectionCap>
+              <textarea
+                className="mt-4 w-full resize-none border-0 bg-transparent p-0 font-serif text-[16px] leading-[1.55] text-ink outline-none placeholder:text-ink-faint min-h-[400px]"
+                style={GARAMOND_FONT_STYLE}
+                placeholder="Type your shorthand. Oscar will reconcile both sides into the minutes."
+                value={manualNotes}
+                onChange={(event) => setManualNotes(event.target.value)}
+              />
+              <p className="mt-3 font-mono text-[11px] text-ink-faint">
+                Type to keep your own shorthand. Oscar will reconcile both sides into the minutes.
+              </p>
+            </div>
+            <div className="col-span-6 overflow-auto bg-cream-200 px-7 py-6">
+              <V2SectionCap
+                accent
+                right={
+                  <span className="font-mono text-[10px] tracking-[0.16em] text-terracotta">
+                    {transcriptSegments.length > 0
+                      ? `${
+                          new Set(
+                            transcriptSegments.map((s) => s.speaker?.source ?? "?"),
+                          ).size
+                        } SPEAKER${
+                          new Set(
+                            transcriptSegments.map((s) => s.speaker?.source ?? "?"),
+                          ).size === 1
+                            ? ""
+                            : "S"
+                        } DETECTED`
+                      : isRecording
+                        ? "LISTENING…"
+                        : ""}
                   </span>
-                )}
-              </div>
-              <div
-                ref={liveTranscriptScrollRef}
-                className="max-h-[180px] min-h-[60px] overflow-y-auto rounded-lg bg-slate-50 px-3.5 py-2.5 text-[0.8125rem] leading-[1.65] text-gray-600"
+                }
               >
+                LIVE TRANSCRIPT · ORACLE WHISPER
+              </V2SectionCap>
+              <div ref={liveTranscriptScrollRef} className="mt-4 space-y-3.5">
                 {transcriptSegments.length > 0 || transcript.trim() ? (
-                  <TranscriptTurns
+                  <LiveTranscriptTurns
                     segments={transcriptSegments}
                     fallbackText={transcript}
                     labels={liveSpeakerLabels}
-                    compact
+                    isLive={isRecording}
                   />
                 ) : (
-                  <span className="italic text-slate-300">Listening…</span>
+                  <p className="font-serif italic text-ink-faint" style={GARAMOND_FONT_STYLE}>
+                    {isRecording
+                      ? "Listening…"
+                      : "Hit record to start capturing the conversation."}
+                  </p>
                 )}
               </div>
             </div>
-          )}
+          </div>
         </div>
 
-        {/* ── Floating record control ────────────────────────────────── */}
-        <div className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-4 rounded-full border border-cream-300 bg-cream/95 px-5 py-2.5 shadow-[0_8px_30px_rgba(26,24,22,0.1)] backdrop-blur-sm">
-          {isRecording && (
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-red-500 animate-pulse" />
-              <span
-                className="text-[1.1rem] font-semibold tracking-[0.02em] text-slate-700 [font-variant-numeric:tabular-nums]"
-                style={FIGTREE_FONT_STYLE}
-              >
-                {formatTime(recordingTime)}
-              </span>
+        {/* floating record pill */}
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-center pb-6">
+          <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-ink py-2 pl-[18px] pr-2 text-cream shadow-[0_12px_32px_rgba(15,13,10,0.22)]">
+            {/* waveform */}
+            <div className="flex items-center gap-[2px] h-4">
+              {Array.from({ length: 18 }).map((_, i) => {
+                const base = 3 + Math.abs(Math.sin(i * 0.7 + 1.2)) * 12;
+                const h = isRecording ? base : base * 0.4;
+                return (
+                  <span
+                    key={i}
+                    className="rounded-[1px] bg-terracotta"
+                    style={{
+                      width: 2,
+                      height: h,
+                      opacity: isRecording ? 0.6 + (i / 18) * 0.4 : 0.3,
+                      transition: "height 200ms ease",
+                    }}
+                  />
+                );
+              })}
             </div>
-          )}
-          <motion.button
-            className={cn(
-              "flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-cream transition-all duration-200",
-              isRecording
-                ? "bg-red-600 shadow-[0_2px_10px_rgba(220,38,38,0.25)] hover:bg-red-700"
-                : "bg-terracotta-500 shadow-[0_2px_10px_rgba(184,98,61,0.25)] hover:bg-terracotta-600",
+            <span className="font-mono text-[12px] text-cream">
+              {formatTime(recordingTime)}
+            </span>
+            {isRecording ? (
+              <button
+                className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream transition-colors hover:bg-terracotta-600"
+                onClick={handleStopRecording}
+                type="button"
+              >
+                <span className="inline-block h-2 w-2 bg-cream" /> Stop & distill
+              </button>
+            ) : (
+              <button
+                className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream transition-colors hover:bg-terracotta-600"
+                onClick={onStartRecording}
+                type="button"
+              >
+                <Mic size={11} /> Start recording
+              </button>
             )}
-            onClick={isRecording ? handleStopRecording : onStartRecording}
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
-            transition={{ duration: 0.15 }}
-            type="button"
-          >
-            {isRecording ? <Square size={22} fill="currentColor" /> : <Mic size={22} />}
-          </motion.button>
-          {!isRecording && (
-            <span className="text-[0.8125rem] font-medium text-slate-400">Tap to record</span>
-          )}
+          </div>
         </div>
       </div>
     );
   }
 
+  if (phase === "processing") {
+    const segTotal = Math.max(
+      minutesSegmentsTotal,
+      minutesSegmentsCompleted + minutesSegmentQueue,
+    );
+    const segDone = segTotal > 0 && minutesSegmentsCompleted >= segTotal;
+    const transcribing =
+      minutesTranscriptionStatus === "transcribing" ||
+      minutesTranscriptionStatus === "finalizing";
+    const distinctSpeakers = new Set(
+      transcriptSegments.map((s) => s.speaker?.source ?? "?"),
+    ).size;
+    const speakerNames =
+      attendees
+        .map(attendeeLabel)
+        .filter(Boolean)
+        .slice(0, 5)
+        .join(", ") || "—";
+    const roughLineCount = manualNotes
+      .split(/\r?\n/)
+      .filter((l) => l.trim()).length;
+
+    type StepState = "done" | "doing" | "pending";
+    const steps: Array<{ state: StepState; label: string; meta: string }> = [
+      {
+        state: segDone || (!transcribing && transcriptSegments.length > 0)
+          ? "done"
+          : transcribing
+            ? "doing"
+            : "pending",
+        label:
+          segTotal > 0
+            ? `Transcribed ${Math.min(minutesSegmentsCompleted, segTotal)} of ${segTotal} segments`
+            : "Transcribing audio",
+        meta: recordingTime
+          ? `${formatTime(recordingTime)} of audio`
+          : "",
+      },
+      {
+        state:
+          distinctSpeakers > 0
+            ? segDone
+              ? "done"
+              : "doing"
+            : "pending",
+        label: distinctSpeakers
+          ? `Resolved ${distinctSpeakers} speaker${distinctSpeakers === 1 ? "" : "s"}`
+          : "Resolving speakers",
+        meta: speakerNames,
+      },
+      {
+        state: manualNotes.trim()
+          ? streaming || result
+            ? "done"
+            : "doing"
+          : "pending",
+        label: manualNotes.trim()
+          ? "Reconciled with your rough notes"
+          : "No rough notes — using transcript only",
+        meta: manualNotes.trim() ? `${roughLineCount} line${roughLineCount === 1 ? "" : "s"} · merged` : "",
+      },
+      {
+        state: result ? "done" : streaming ? "doing" : "pending",
+        label: "Naming the decisions",
+        meta: streaming && !result ? "reading for intent…" : "",
+      },
+      {
+        state: result ? "done" : streaming ? "doing" : "pending",
+        label: "Drafting action items with owners",
+        meta: "",
+      },
+      {
+        state: result ? "done" : streaming ? "doing" : "pending",
+        label: "Listing follow-ups",
+        meta: "",
+      },
+    ];
+    const transcribedDuration = recordingTime
+      ? formatTime(recordingTime)
+      : "your meeting";
+
+    return (
+      <div className={MEETINGS_TAB_CLASS_NAME}>
+        <div className={MEETINGS_CONTAINER_CLASS_NAME}>
+          <main className="flex min-h-full items-center justify-center px-9 py-12">
+            <div className="w-[540px]">
+              <V2Caps accent>JUST FINISHED · LISTENING TO {transcribedDuration} OF YOU</V2Caps>
+              <h1
+                className="mt-3 font-serif text-[44px] font-medium tracking-[-0.02em] leading-none text-ink"
+                style={GARAMOND_FONT_STYLE}
+              >
+                A moment, while
+                <br />
+                Oscar <em className="italic text-terracotta">distills</em>.
+              </h1>
+              <p className="mt-5 text-[14px] leading-relaxed text-ink-soft">
+                Your rough notes are safe. The transcript is saved. You can close this window and come back — the meeting will be in your library when it&rsquo;s done.
+              </p>
+
+              {error && (
+                <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                  {error}
+                </p>
+              )}
+
+              <div className="mt-8 border-y border-cream-300">
+                {steps.map((s, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex items-start gap-4 py-3",
+                      i > 0 && "border-t border-cream-300",
+                    )}
+                  >
+                    <div className="mt-0.5 flex w-4 shrink-0 items-center justify-center">
+                      {s.state === "done" && (
+                        <Check size={13} className="text-ink-soft" strokeWidth={1.6} />
+                      )}
+                      {s.state === "doing" && (
+                        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-terracotta" />
+                      )}
+                      {s.state === "pending" && (
+                        <span className="inline-block h-[5px] w-[5px] rounded-full bg-cream-400" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div
+                        className={cn(
+                          "text-[14px]",
+                          s.state === "pending" ? "text-ink-faint" : "text-ink",
+                          s.state === "doing" && "font-medium",
+                        )}
+                      >
+                        {s.label}
+                        {s.state === "doing" && (
+                          <span
+                            className="ml-1 inline-block animate-pulse bg-terracotta align-[-1px]"
+                            style={{ width: 6, height: 12 }}
+                          />
+                        )}
+                      </div>
+                      {s.meta && (
+                        <div className="mt-0.5 font-mono text-[10.5px] tracking-[0.06em] text-ink-faint">
+                          {s.meta}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 flex items-center gap-3">
+                <span className="font-mono text-[11px] tracking-[0.16em] text-ink-faint">
+                  {result
+                    ? "ALMOST DONE"
+                    : streaming
+                      ? "DISTILLING…"
+                      : transcribing
+                        ? "TRANSCRIBING…"
+                        : "QUEUED"}
+                </span>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── RESULT ──────────────────────────────────────────────────────────
+  const resultParsed = result ? parseMinutes(result) : null;
+  const resultDateLabel = currentRequest.meeting_local_datetime;
+  const finishedDuration = recordingTime ? formatTime(recordingTime) : "";
+  const transcriptTurnCount =
+    transcriptSegments.length > 0
+      ? groupSegmentsIntoTurns(transcriptSegments, liveSpeakerLabels).length
+      : 0;
+
   return (
     <div className={MEETINGS_TAB_CLASS_NAME}>
       <div className={MEETINGS_CONTAINER_CLASS_NAME}>
-        {systemAudioNotice}
-
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <div>
-            <h1 className={cn(MEETINGS_TITLE_CLASS_NAME, "mb-0")} style={GARAMOND_FONT_STYLE}>
-              {currentRequest.meeting_title || "Meeting Notes"}
-            </h1>
-            <p className={cn(MEETINGS_SUBTITLE_CLASS_NAME, "mb-0")}>
-              {currentRequest.meeting_local_datetime}
-            </p>
-          </div>
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-terracotta-50 px-3.5 py-1.5 text-[0.8125rem] font-medium text-terracotta-600">
-            <FileText size={12} />
-            {MEETING_TYPE_OPTIONS.find((option) => option.value === meetingTypeHint)?.label ?? "Auto"}
-          </div>
-        </div>
-
-        {attendees.length > 0 && (
-          <div className={cn(PARTICIPANT_PILLS_CLASS_NAME, "mb-3")}>
-            {attendees.map((attendee, index) => (
-              <span key={`${attendeeLabel(attendee)}-${index}`} className={PARTICIPANT_PILL_CLASS_NAME}>
-                <span className={PARTICIPANT_PILL_TEXT_CLASS_NAME}>{attendeeLabel(attendee)}</span>
-                <button className={PARTICIPANT_PILL_REMOVE_CLASS_NAME} onClick={() => removeAttendee(index)} type="button">
-                  <X size={10} />
-                </button>
+        {/* header */}
+        <div className="px-9 pt-7 pb-5 border-b border-cream-300">
+          <div className="flex items-center gap-2.5">
+            <button
+              className="inline-flex items-center gap-2 text-ink-faint transition-colors hover:text-ink"
+              onClick={handleBack}
+              type="button"
+            >
+              <ChevronLeft size={13} />
+              <V2Caps>BACK TO MINUTES</V2Caps>
+            </button>
+            {result && finishedDuration && (
+              <V2Caps accent>· JUST FINISHED · {finishedDuration}</V2Caps>
+            )}
+            <span className="ml-auto inline-flex items-center gap-1.5">
+              <span className="font-mono text-[11px] text-ink-faint">
+                {resultDateLabel}
               </span>
-            ))}
+            </span>
           </div>
-        )}
+          <h1
+            className="mt-3 font-serif text-[32px] font-medium tracking-[-0.015em] leading-[1.05] text-ink"
+            style={GARAMOND_FONT_STYLE}
+          >
+            {currentRequest.meeting_title || "Meeting Notes"}
+          </h1>
+          {attendees.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {attendees.map((attendee, index) => (
+                <V2AttendeePill
+                  key={`${attendeeLabel(attendee)}-${index}`}
+                  name={attendeeLabel(attendee)}
+                />
+              ))}
+            </div>
+          )}
 
-        <div className={RESULT_TABS_CLASS_NAME}>
-          <button
-            className={cn(RESULT_TAB_CLASS_NAME, resultTab === "notes" && "border-b-terracotta text-terracotta")}
-            onClick={() => setResultTab("notes")}
-            type="button"
-          >
-            <FileText size={13} />
-            Notes
-            {streaming && resultTab === "notes" && <span className="inline-block h-1.5 w-1.5 rounded-full bg-terracotta animate-pulse" />}
-          </button>
-          <button
-            className={cn(RESULT_TAB_CLASS_NAME, resultTab === "transcript" && "border-b-terracotta text-terracotta")}
-            onClick={() => setResultTab("transcript")}
-            type="button"
-          >
-            <Mic size={13} />
-            Transcript
-          </button>
+          {systemAudioNotice && <div className="mt-3">{systemAudioNotice}</div>}
+
+          {/* tab bar */}
+          <div className={RESULT_TABS_CLASS_NAME}>
+            <button
+              className={cn(
+                RESULT_TAB_CLASS_NAME,
+                resultTab === "notes" && RESULT_TAB_ACTIVE_CLASS_NAME,
+              )}
+              onClick={() => setResultTab("notes")}
+              type="button"
+            >
+              NOTES
+            </button>
+            <button
+              className={cn(
+                RESULT_TAB_CLASS_NAME,
+                resultTab === "transcript" && RESULT_TAB_ACTIVE_CLASS_NAME,
+              )}
+              onClick={() => setResultTab("transcript")}
+              type="button"
+            >
+              TRANSCRIPT
+              {transcriptTurnCount > 0 && ` · ${transcriptTurnCount} TURNS`}
+            </button>
+            <button
+              className={cn(
+                RESULT_TAB_CLASS_NAME,
+                resultTab === "rough" && RESULT_TAB_ACTIVE_CLASS_NAME,
+              )}
+              onClick={() => setResultTab("rough")}
+              type="button"
+            >
+              YOUR ROUGH NOTES
+            </button>
+          </div>
         </div>
 
+        {/* body */}
         {resultTab === "notes" && (
-          <>
-            {phase === "processing" && !result && !error && (
-              <div className="flex flex-col items-center gap-4 py-16">
-                <Loader2 size={28} className="animate-spin" />
-                <span className="text-[0.9375rem] font-medium text-slate-500">
-                  {getScribblesLoadingLabel(
-                    minutesTranscriptionStatus,
-                    transcript,
-                    minutesSegmentsCompleted,
-                    minutesSegmentsTotal,
-                    minutesSegmentQueue,
-                  )}
+          <section className="px-9 pt-7 pb-6">
+            {error && (
+              <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                {error}
+              </div>
+            )}
+            {!result && !error && (
+              <div className="flex flex-col items-center gap-3 py-12 text-ink-faint">
+                <Loader2 size={20} className="animate-spin" />
+                <span className="font-mono text-[11px] tracking-[0.16em]">
+                  DISTILLING…
                 </span>
               </div>
             )}
-
-            {(result || error) && (
-              <div className="overflow-hidden rounded-xl border border-cream-300 bg-cream">
-                {error ? (
-                  <div className="px-6 py-5 text-sm text-red-600">{error}</div>
-                ) : (
-                  <div className="max-h-[460px] overflow-y-auto px-6 py-5 text-sm leading-[1.75] text-ink-soft">
-                    <MinutesDistillView markdown={result} />
-                  </div>
-                )}
-
-                {!streaming && result && !error && (
-                  <div className="flex gap-2 border-t border-cream-300 px-4 py-3">
-                    <button
-                      className={cn(FOOTER_BUTTON_CLASS_NAME, "border-terracotta-600 bg-terracotta-600 text-cream hover:border-terracotta-700 hover:bg-terracotta-700")}
-                      onClick={() => void handleCopy(result)}
-                      type="button"
-                    >
-                      {copied ? <Check size={12} /> : <Copy size={12} />}
-                      {copied ? "Copied!" : "Copy"}
-                    </button>
-                    <button
-                      className={cn(
-                        FOOTER_BUTTON_CLASS_NAME,
-                        !hasEmailableParticipants && "opacity-[0.45] hover:border-cream-300 hover:bg-cream",
-                      )}
-                      onClick={() =>
-                        void handleShareByEmail({
-                          subjectTitle: currentRequest.meeting_title,
-                          attendeesFull: currentRequest.attendees_full,
-                          markdown: result,
-                        })
-                      }
-                      title={hasEmailableParticipants ? "Open mail draft" : "Add emails to share"}
-                      type="button"
-                    >
-                      <Mail size={12} /> Email
-                    </button>
-                    <button
-                      className={FOOTER_BUTTON_CLASS_NAME}
-                      onClick={() => {
-                        setResult("");
-                        setError("");
-                        setPhase("processing");
-                        void processTranscript();
-                      }}
-                      type="button"
-                    >
-                      <RotateCcw size={12} /> Retry
-                    </button>
-                    <button className={FOOTER_BUTTON_CLASS_NAME} onClick={handleNewMeeting} type="button">
-                      <Mic size={12} /> New
-                    </button>
-                  </div>
-                )}
-              </div>
+            {result && (
+              <MinutesDistillView markdown={result} />
             )}
-          </>
+          </section>
         )}
 
         {resultTab === "transcript" && (
-          <div className="p-0">
-            <TranscriptView
+          <section className="px-9 pt-7 pb-6">
+            <TranscriptTurnsRich
               segments={transcriptSegments}
               fallbackText={transcript}
               labels={liveSpeakerLabels}
               emptyMessage="No transcript yet."
+              annotatedDecisions={resultParsed?.decisions ?? []}
+              annotatedActions={resultParsed?.actions ?? []}
             />
+          </section>
+        )}
+
+        {resultTab === "rough" && (
+          <section className="px-9 pt-7 pb-6">
+            <V2SectionCap>YOUR ROUGH NOTES</V2SectionCap>
+            <div
+              className="mt-4 font-serif text-[15.5px] leading-[1.6] text-ink whitespace-pre-wrap"
+              style={GARAMOND_FONT_STYLE}
+            >
+              {manualNotes.trim() || (
+                <span className="text-ink-faint italic">
+                  You didn&rsquo;t type any rough notes for this meeting.
+                </span>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* footer actions */}
+        {result && !error && (
+          <div className="border-t border-cream-300 px-9 py-5 flex items-center gap-2">
+            <button
+              className={FOOTER_BUTTON_PRIMARY_CLASS_NAME}
+              onClick={() => void handleCopy(result)}
+              type="button"
+            >
+              {copied ? <Check size={11} /> : <Copy size={11} />}
+              {copied ? "Copied" : "Copy clean"}
+            </button>
+            <button
+              className={cn(
+                FOOTER_BUTTON_CLASS_NAME,
+                !hasEmailableParticipants && "opacity-50",
+              )}
+              onClick={() =>
+                void handleShareByEmail({
+                  subjectTitle: currentRequest.meeting_title,
+                  attendeesFull: currentRequest.attendees_full,
+                  markdown: result,
+                })
+              }
+              title={
+                hasEmailableParticipants
+                  ? "Open mail draft"
+                  : "Add emails to share"
+              }
+              type="button"
+            >
+              <Mail size={11} />
+              Email to attendees
+            </button>
+            <button
+              className={FOOTER_BUTTON_CLASS_NAME}
+              onClick={() => {
+                setResult("");
+                setError("");
+                setPhase("processing");
+                void processTranscript();
+              }}
+              type="button"
+            >
+              <RotateCcw size={11} />
+              Regenerate
+            </button>
+            <span className="ml-auto inline-flex items-center gap-3">
+              <V2Caps>SAVED · MINUTES LIBRARY</V2Caps>
+              <button
+                className="inline-flex items-center gap-1 rounded-full border border-cream-300 bg-transparent px-2 py-1.5 text-ink-faint transition-colors hover:border-cream-400 hover:text-ink"
+                onClick={handleNewMeeting}
+                type="button"
+                title="Start a new meeting"
+              >
+                <Mic size={11} />
+              </button>
+            </span>
           </div>
         )}
       </div>
@@ -1519,19 +2052,26 @@ export function MeetingsTab({
   );
 }
 
-interface TranscriptTurnsProps {
+interface LiveTranscriptTurnsProps {
   segments: MeetingTranscriptSegment[];
   fallbackText: string;
   labels: SpeakerLabels;
-  compact?: boolean;
+  isLive: boolean;
 }
 
-function TranscriptTurns({
+function formatTurnElapsed(turn: TranscriptTurn, baseTime: number): string {
+  const start = Date.parse(turn.startTime);
+  if (!Number.isFinite(start) || !Number.isFinite(baseTime)) return "00:00";
+  const diff = Math.max(0, Math.floor((start - baseTime) / 1000));
+  return formatTime(diff);
+}
+
+function LiveTranscriptTurns({
   segments,
   fallbackText,
   labels,
-  compact = false,
-}: TranscriptTurnsProps) {
+  isLive,
+}: LiveTranscriptTurnsProps) {
   const turns: TranscriptTurn[] =
     segments.length > 0 ? groupSegmentsIntoTurns(segments, labels) : [];
 
@@ -1539,65 +2079,176 @@ function TranscriptTurns({
     const trimmed = fallbackText.trim();
     if (!trimmed) return null;
     return (
-      <div className={cn("whitespace-pre-wrap", compact && "leading-[1.65]")}>
-        <span className="mr-1 font-semibold text-slate-700">
-          {labels.microphone}:
-        </span>
-        <span>{trimmed}</span>
-      </div>
+      <p
+        className="font-serif text-[14px] leading-[1.45] text-ink pl-6"
+        style={GARAMOND_FONT_STYLE}
+      >
+        {trimmed}
+      </p>
     );
   }
 
+  const baseTime = Date.parse(turns[0]?.startTime ?? "");
+
   return (
-    <div className={cn("flex flex-col", compact ? "gap-1.5" : "gap-3")}>
-      {turns.map((turn, index) => (
-        <div key={`${turn.startTime}-${index}`} className="whitespace-pre-wrap">
-          <span
-            className={cn(
-              "mr-1 font-semibold",
-              turn.source === "microphone" ? "text-terracotta-700" : "text-ink",
-            )}
+    <>
+      {turns.map((turn, index) => {
+        const last = index === turns.length - 1;
+        const live = isLive && last;
+        return (
+          <div
+            key={`${turn.startTime}-${index}`}
+            style={{ opacity: live ? 1 : 0.78 }}
           >
-            {turn.label}:
-          </span>
-          <span>{turn.text}</span>
-        </div>
-      ))}
-    </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-ink-faint">
+                {formatTurnElapsed(turn, baseTime)}
+              </span>
+              <V2PersonChip
+                name={turn.label}
+                size={16}
+                tone={live ? "accent" : "soft"}
+              />
+              <V2Caps accent={live}>{turn.label.toUpperCase()}</V2Caps>
+            </div>
+            <p
+              className="mt-1 pl-6 font-serif text-[14px] leading-[1.45] text-ink"
+              style={GARAMOND_FONT_STYLE}
+            >
+              {turn.text}
+              {live && (
+                <span
+                  className="ml-1 inline-block bg-terracotta align-[-2px] animate-pulse"
+                  style={{ width: 7, height: 14 }}
+                />
+              )}
+            </p>
+          </div>
+        );
+      })}
+    </>
   );
 }
 
-interface TranscriptViewProps {
+interface TranscriptTurnsRichProps {
   segments: MeetingTranscriptSegment[];
   fallbackText: string;
   labels: SpeakerLabels;
   emptyMessage: string;
+  annotatedDecisions: string[];
+  annotatedActions: ActionItem[];
 }
 
-function TranscriptView({
+function tokenizeForMatch(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 3);
+}
+
+function turnAnnotation(
+  turn: TranscriptTurn,
+  decisions: string[],
+  actions: ActionItem[],
+): "decision" | "action" | null {
+  const turnTokens = new Set(tokenizeForMatch(turn.text));
+  if (turnTokens.size === 0) return null;
+  const matchScore = (target: string): number => {
+    const targetTokens = tokenizeForMatch(target);
+    if (targetTokens.length === 0) return 0;
+    let hits = 0;
+    for (const t of targetTokens) if (turnTokens.has(t)) hits++;
+    return hits / targetTokens.length;
+  };
+  let bestDec = 0;
+  for (const d of decisions) bestDec = Math.max(bestDec, matchScore(d));
+  let bestAct = 0;
+  for (const a of actions) bestAct = Math.max(bestAct, matchScore(a.task));
+  if (bestDec >= 0.4 && bestDec >= bestAct) return "decision";
+  if (bestAct >= 0.4) return "action";
+  return null;
+}
+
+function TranscriptTurnsRich({
   segments,
   fallbackText,
   labels,
   emptyMessage,
-}: TranscriptViewProps) {
-  const hasContent = segments.length > 0 || fallbackText.trim().length > 0;
+  annotatedDecisions,
+  annotatedActions,
+}: TranscriptTurnsRichProps) {
+  const turns: TranscriptTurn[] =
+    segments.length > 0 ? groupSegmentsIntoTurns(segments, labels) : [];
 
-  if (!hasContent) {
+  if (turns.length === 0) {
+    const trimmed = fallbackText.trim();
+    if (!trimmed) {
+      return (
+        <div className="flex flex-col items-center gap-2 py-10 text-ink-faint">
+          <Mic size={18} />
+          <span className="font-mono text-[11px] tracking-[0.16em]">
+            {emptyMessage.toUpperCase()}
+          </span>
+        </div>
+      );
+    }
     return (
-      <div className="flex flex-col items-center gap-2 px-5 py-10 text-[0.8125rem] text-slate-400">
-        <Mic size={20} />
-        <span>{emptyMessage}</span>
-      </div>
+      <p
+        className="font-serif text-[15.5px] leading-[1.5] text-ink"
+        style={GARAMOND_FONT_STYLE}
+      >
+        {trimmed}
+      </p>
     );
   }
 
+  const baseTime = Date.parse(turns[0]?.startTime ?? "");
+
   return (
-    <div className="max-h-[400px] overflow-y-auto rounded-lg bg-slate-50 px-3.5 py-3 text-[0.8125rem] leading-[1.65] text-gray-700">
-      <TranscriptTurns
-        segments={segments}
-        fallbackText={fallbackText}
-        labels={labels}
-      />
+    <div>
+      {turns.map((turn, index) => {
+        const elapsed = (() => {
+          const start = Date.parse(turn.startTime);
+          if (!Number.isFinite(start) || !Number.isFinite(baseTime)) return "00:00";
+          const diff = Math.max(0, Math.floor((start - baseTime) / 1000));
+          return formatTime(diff);
+        })();
+        const tag = turnAnnotation(
+          turn,
+          annotatedDecisions,
+          annotatedActions,
+        );
+        return (
+          <div
+            key={`${turn.startTime}-${index}`}
+            className={cn(
+              "grid grid-cols-12 gap-5 py-3.5",
+              index < turns.length - 1 && "border-b border-cream-300",
+            )}
+          >
+            <div className="col-span-2 flex flex-col gap-1">
+              <span className="font-mono text-[11px] text-ink">{elapsed}</span>
+              <div className="flex items-center gap-1.5">
+                <V2PersonChip name={turn.label} size={16} tone="soft" />
+                <V2Caps>{turn.label.toUpperCase()}</V2Caps>
+              </div>
+            </div>
+            <div className="col-span-9">
+              <p
+                className="font-serif text-[15.5px] leading-[1.5] tracking-[-0.002em] text-ink"
+                style={GARAMOND_FONT_STYLE}
+              >
+                {turn.text}
+              </p>
+            </div>
+            <div className="col-span-1 text-right">
+              {tag === "decision" && <V2Caps accent>DECISION</V2Caps>}
+              {tag === "action" && <V2Caps>ACTION</V2Caps>}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
