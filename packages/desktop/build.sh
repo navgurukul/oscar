@@ -18,3 +18,5 @@ if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
 fi
 
 npm run tauri build "$@"
+
+
