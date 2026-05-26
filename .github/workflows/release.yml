@@ -242,8 +242,8 @@ jobs:
           ditto "$APP_PATH" "$STAGE/OSCAR.app"
           ln -s /Applications "$STAGE/Applications"
 
-          cp "../../scripts/Install Oscar.command" "$STAGE/Install Oscar.command"
-          chmod +x "$STAGE/Install Oscar.command"
+          cp "../../scripts/InstallOscar.command" "$STAGE/InstallOscar.command"
+          chmod +x "$STAGE/InstallOscar.command"
 
           hdiutil create \
             -volname "OSCAR" \
