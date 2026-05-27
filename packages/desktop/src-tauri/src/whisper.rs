@@ -1,15 +1,86 @@
 //! Whisper model lifecycle (download, load, warm) and core transcription
 //! pipeline shared between dictation and meeting flows.
 
+use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::io::Read;
+use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-use crate::events::{DownloadProgress, OscarEvent};
+use crate::events::{DownloadProgress, DownloadRetry, OscarEvent};
 use crate::hardware::HardwareProfile;
 use crate::state::{
     AppState, TranscriptSegmentResult, TranscriptSpeaker, TranscriptionPerf, TranscriptionResult,
 };
+
+// ── Download tuning ─────────────────────────────────────────────────────────
+//
+// These constants are picked for the realistic worst case: ~500 MB pulled
+// from HuggingFace over a slow / lossy connection (rural India hotel WiFi,
+// metered tether, etc.). The old code had a single 30-minute wall-clock
+// timeout and no retry — one TCP hiccup near the end meant a full restart.
+//
+// Per-chunk timeout is the primary stall detector; the total client timeout
+// is a safety net for the pathological "TCP keeps holding the connection
+// open but bytes never arrive" case where keep-alive masks a dead socket.
+
+const MAX_ATTEMPTS: u32 = 4;
+const CHUNK_TIMEOUT: Duration = Duration::from_secs(30);
+const TOTAL_TIMEOUT: Duration = Duration::from_secs(3600);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+const RETRY_DELAYS: [Duration; 3] = [
+    Duration::from_secs(2),
+    Duration::from_secs(8),
+    Duration::from_secs(30),
+];
+const MIN_VALID_MODEL_BYTES: u64 = 1_000_000;
+const GGML_MAGIC: u32 = 0x67676d6c;
+const MODEL_SIZE_TOLERANCE_PERCENT: u64 = 25;
+
+/// Classified download outcome — drives the retry decision. A `Permanent`
+/// error (4xx that's not 416, bad checksum on a fresh download, filesystem
+/// failure on a path we control) means "stop retrying, the next attempt will
+/// fail the same way." `Transient` means "wait then retry."
+#[derive(Debug)]
+enum DownloadError {
+    Transient(String),
+    Permanent(String),
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelFileValidation {
+    valid: bool,
+    reason: Option<String>,
+    size_bytes: u64,
+    expected_size_bytes: Option<u64>,
+}
+
+impl ModelFileValidation {
+    fn valid(size_bytes: u64, expected_size_bytes: Option<u64>) -> Self {
+        Self {
+            valid: true,
+            reason: None,
+            size_bytes,
+            expected_size_bytes,
+        }
+    }
+
+    fn invalid(
+        reason: impl Into<String>,
+        size_bytes: u64,
+        expected_size_bytes: Option<u64>,
+    ) -> Self {
+        Self {
+            valid: false,
+            reason: Some(reason.into()),
+            size_bytes,
+            expected_size_bytes,
+        }
+    }
+}
 
 /// Cached hardware profile — detection is cheap but we still want a single
 /// source of truth for things like `whisper_thread_count` across all
@@ -19,6 +90,102 @@ fn hardware_profile() -> &'static HardwareProfile {
     PROFILE.get_or_init(HardwareProfile::detect)
 }
 
+fn expected_model_size(path: &Path) -> Option<u64> {
+    let filename = path.file_name()?.to_str()?;
+    crate::models::WhisperModelVariant::all()
+        .iter()
+        .find_map(|variant| {
+            let spec = variant.spec();
+            (spec.filename == filename).then_some(spec.size_bytes)
+        })
+}
+
+fn validate_whisper_model_file_inner(path: &str) -> ModelFileValidation {
+    let path = Path::new(path);
+    let expected_size_bytes = expected_model_size(path);
+
+    if !path.exists() {
+        return ModelFileValidation::invalid("model file missing", 0, expected_size_bytes);
+    }
+
+    let metadata = match path.metadata() {
+        Ok(metadata) => metadata,
+        Err(err) => {
+            return ModelFileValidation::invalid(
+                format!("model metadata unreadable: {}", err),
+                0,
+                expected_size_bytes,
+            );
+        }
+    };
+
+    if !metadata.is_file() {
+        return ModelFileValidation::invalid(
+            "model path is not a file",
+            metadata.len(),
+            expected_size_bytes,
+        );
+    }
+
+    let size_bytes = metadata.len();
+    if size_bytes < MIN_VALID_MODEL_BYTES {
+        return ModelFileValidation::invalid(
+            format!("model file too small: {} bytes", size_bytes),
+            size_bytes,
+            expected_size_bytes,
+        );
+    }
+
+    if let Some(expected) = expected_size_bytes {
+        let lower = expected.saturating_mul(100 - MODEL_SIZE_TOLERANCE_PERCENT) / 100;
+        let upper = expected.saturating_mul(100 + MODEL_SIZE_TOLERANCE_PERCENT) / 100;
+        if size_bytes < lower || size_bytes > upper {
+            return ModelFileValidation::invalid(
+                format!(
+                    "model size mismatch: got {} bytes, expected about {} bytes",
+                    size_bytes, expected
+                ),
+                size_bytes,
+                expected_size_bytes,
+            );
+        }
+    }
+
+    let mut file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(err) => {
+            return ModelFileValidation::invalid(
+                format!("model file unreadable: {}", err),
+                size_bytes,
+                expected_size_bytes,
+            );
+        }
+    };
+    let mut magic = [0u8; 4];
+    if let Err(err) = file.read_exact(&mut magic) {
+        return ModelFileValidation::invalid(
+            format!("model header unreadable: {}", err),
+            size_bytes,
+            expected_size_bytes,
+        );
+    }
+
+    if u32::from_le_bytes(magic) != GGML_MAGIC {
+        return ModelFileValidation::invalid(
+            "model header is not a Whisper GGML file",
+            size_bytes,
+            expected_size_bytes,
+        );
+    }
+
+    ModelFileValidation::valid(size_bytes, expected_size_bytes)
+}
+
+#[tauri::command]
+pub fn validate_whisper_model_file(path: String) -> ModelFileValidation {
+    validate_whisper_model_file_inner(&path)
+}
+
 #[tauri::command]
 pub async fn download_whisper_model(
     url: String,
@@ -26,51 +193,278 @@ pub async fn download_whisper_model(
     sha256: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
-    use tokio::io::AsyncWriteExt;
-
     if let Some(parent) = std::path::Path::new(&path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
     }
 
+    // Idempotent — if the final file already landed from a previous run,
+    // skip the network entirely. Callers (App.tsx, SetupScreen) check
+    // installed paths before calling, but a concurrent invocation could
+    // race past that check.
+    if std::path::Path::new(&path).exists() {
+        let validation = validate_whisper_model_file_inner(&path);
+        if validation.valid {
+            return Ok(format!("Model already present at {}", path));
+        }
+
+        log::warn!(
+            "[whisper] Removing invalid existing model at {}: {}",
+            path,
+            validation.reason.as_deref().unwrap_or("failed validation")
+        );
+        std::fs::remove_file(&path)
+            .map_err(|e| format!("Failed to remove invalid model: {}", e))?;
+    }
+
     // Atomic write: stream to `{path}.partial`, fsync, then rename. Crash or
     // network drop leaves only the .partial sidecar — the final path is never
-    // half-written, so the existence check in JS doubles as a validity check.
+    // half-written. The partial also survives across retries so a failed
+    // attempt resumes from the last byte rather than starting from zero.
     let partial_path = format!("{}.partial", path);
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(1800))
+        .timeout(TOTAL_TIMEOUT)
+        .connect_timeout(CONNECT_TIMEOUT)
+        .tcp_keepalive(Duration::from_secs(60))
+        .pool_idle_timeout(Duration::from_secs(90))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Download failed: {}", e))?;
+    let mut last_error: Option<String> = None;
 
-    if !response.status().is_success() {
-        return Err(format!("Download failed with status: {}", response.status()));
+    for attempt in 1..=MAX_ATTEMPTS {
+        log::info!(
+            "[whisper] Download attempt {}/{} for {}",
+            attempt,
+            MAX_ATTEMPTS,
+            url
+        );
+
+        match attempt_download(&client, &url, &partial_path, sha256.as_deref(), &app).await {
+            Ok(downloaded) => {
+                std::fs::rename(&partial_path, &path)
+                    .map_err(|e| format!("Failed to finalise download: {}", e))?;
+                let validation = validate_whisper_model_file_inner(&path);
+                if !validation.valid {
+                    let reason = validation
+                        .reason
+                        .unwrap_or_else(|| "failed validation".to_string());
+                    let _ = std::fs::remove_file(&path);
+                    return Err(format!("Downloaded model is invalid: {}", reason));
+                }
+                log::info!(
+                    "[whisper] Download complete: {} bytes → {}",
+                    downloaded,
+                    path
+                );
+                return Ok(format!("Downloaded {} bytes to {}", downloaded, path));
+            }
+            Err(DownloadError::Permanent(msg)) => {
+                let _ = std::fs::remove_file(&partial_path);
+                log::error!("[whisper] Download failed permanently: {}", msg);
+                return Err(msg);
+            }
+            Err(DownloadError::Transient(msg)) => {
+                log::warn!(
+                    "[whisper] Download attempt {}/{} failed transiently: {}",
+                    attempt,
+                    MAX_ATTEMPTS,
+                    msg
+                );
+                last_error = Some(msg.clone());
+
+                if attempt < MAX_ATTEMPTS {
+                    let delay = RETRY_DELAYS[(attempt - 1) as usize];
+                    OscarEvent::DownloadRetry(DownloadRetry {
+                        attempt: attempt + 1,
+                        max_attempts: MAX_ATTEMPTS,
+                        delay_secs: delay.as_secs(),
+                        reason: msg,
+                    })
+                    .dispatch(&app);
+                    tokio::time::sleep(delay).await;
+                }
+            }
+        }
     }
 
-    let total_size = response.content_length().unwrap_or(0);
+    Err(format!(
+        "Download failed after {} attempts: {}",
+        MAX_ATTEMPTS,
+        last_error.unwrap_or_else(|| "unknown error".to_string())
+    ))
+}
 
-    let mut file = tokio::fs::File::create(&partial_path)
-        .await
-        .map_err(|e| format!("Failed to create file: {}", e))?;
-
-    let mut hasher = sha256.as_ref().map(|_| Sha256::new());
-    let mut downloaded: u64 = 0;
-    let mut stream = response.bytes_stream();
-    let mut last_emit_pct: u8 = 0;
-
+/// One pass of the HTTP download. Resumes from `{partial_path}` if it exists
+/// and the server honours `Range`; otherwise starts fresh. Returns the total
+/// byte count on success, or a classified error so the caller can decide
+/// whether to retry.
+async fn attempt_download(
+    client: &reqwest::Client,
+    url: &str,
+    partial_path: &str,
+    sha256: Option<&str>,
+    app: &tauri::AppHandle,
+) -> Result<u64, DownloadError> {
     use futures_util::StreamExt;
+    use tokio::io::AsyncWriteExt;
 
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("Failed to read chunk: {}", e))?;
+    let existing_size = tokio::fs::metadata(partial_path)
+        .await
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    let mut request = client.get(url);
+    if existing_size > 0 {
+        request = request.header(reqwest::header::RANGE, format!("bytes={}-", existing_size));
+    }
+
+    let response = request.send().await.map_err(classify_send_error)?;
+    let status = response.status();
+
+    // Decide whether this response actually resumes or starts over. A server
+    // that ignores `Range` and returns 200 OK means we must restart from
+    // byte 0, regardless of what's on disk.
+    let resume = if existing_size > 0 {
+        match status {
+            reqwest::StatusCode::PARTIAL_CONTENT => true,
+            reqwest::StatusCode::OK => false,
+            reqwest::StatusCode::RANGE_NOT_SATISFIABLE => {
+                // .partial is at-or-past the server's file size — likely
+                // corrupt or stale. Wipe and let the retry start fresh.
+                let _ = tokio::fs::remove_file(partial_path).await;
+                return Err(DownloadError::Transient(
+                    "Server rejected resume range (HTTP 416); restarting".to_string(),
+                ));
+            }
+            s if s.is_server_error() => {
+                return Err(DownloadError::Transient(format!(
+                    "Server error on resume: HTTP {}",
+                    s
+                )));
+            }
+            s if s.is_client_error() => {
+                return Err(DownloadError::Permanent(format!(
+                    "Download failed: HTTP {}",
+                    s
+                )));
+            }
+            s => {
+                return Err(DownloadError::Transient(format!(
+                    "Unexpected status on resume: HTTP {}",
+                    s
+                )));
+            }
+        }
+    } else {
+        match status {
+            reqwest::StatusCode::OK => false,
+            s if s.is_server_error() => {
+                return Err(DownloadError::Transient(format!(
+                    "Server error: HTTP {}",
+                    s
+                )));
+            }
+            s if s.is_client_error() => {
+                return Err(DownloadError::Permanent(format!(
+                    "Download failed: HTTP {}",
+                    s
+                )));
+            }
+            s => {
+                return Err(DownloadError::Transient(format!(
+                    "Unexpected status: HTTP {}",
+                    s
+                )));
+            }
+        }
+    };
+
+    // total_size is the FULL file size for progress display. On a 206 the
+    // Content-Length header reflects the *remaining* bytes, not the whole
+    // file, so we parse the total out of Content-Range instead.
+    let total_size = if resume {
+        response
+            .headers()
+            .get(reqwest::header::CONTENT_RANGE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(parse_content_range_total)
+            .unwrap_or(0)
+    } else {
+        response.content_length().unwrap_or(0)
+    };
+
+    let (mut file, mut downloaded, mut hasher) = if resume {
+        let file = tokio::fs::OpenOptions::new()
+            .append(true)
+            .open(partial_path)
+            .await
+            .map_err(|e| DownloadError::Transient(format!("Open partial: {}", e)))?;
+
+        // Replay existing bytes through the hasher so the final digest covers
+        // the whole file, not just the resumed tail. Skipped when no checksum
+        // was requested (the common case from SetupScreen).
+        let hasher = if sha256.is_some() {
+            Some(rehash_partial(partial_path).await?)
+        } else {
+            None
+        };
+
+        (file, existing_size, hasher)
+    } else {
+        // Either no partial existed, or the server ignored our Range header.
+        // Truncate any stale partial and start over.
+        let file = tokio::fs::File::create(partial_path)
+            .await
+            .map_err(|e| DownloadError::Transient(format!("Create partial: {}", e)))?;
+        let hasher = sha256.map(|_| Sha256::new());
+        (file, 0u64, hasher)
+    };
+
+    let mut stream = response.bytes_stream();
+    let mut last_emit_pct: u8 = if total_size > 0 {
+        ((downloaded as f64 / total_size as f64) * 100.0) as u8
+    } else {
+        0
+    };
+
+    // Emit a progress event up front so the UI reflects the resumed offset
+    // immediately rather than appearing to start at 0%.
+    if downloaded > 0 && total_size > 0 {
+        OscarEvent::DownloadProgress(DownloadProgress {
+            downloaded,
+            total: total_size,
+            percentage: last_emit_pct,
+        })
+        .dispatch(app);
+    }
+
+    loop {
+        // Per-chunk stall guard. reqwest's own timeout is wall-clock for the
+        // entire request, which masks a stalled stream — we need to abort
+        // any single chunk wait that exceeds CHUNK_TIMEOUT so the retry
+        // loop can take over with a fresh connection.
+        let next = match tokio::time::timeout(CHUNK_TIMEOUT, stream.next()).await {
+            Ok(n) => n,
+            Err(_) => {
+                return Err(DownloadError::Transient(format!(
+                    "No data received for {}s",
+                    CHUNK_TIMEOUT.as_secs()
+                )));
+            }
+        };
+
+        let chunk = match next {
+            Some(Ok(c)) => c,
+            Some(Err(e)) => {
+                return Err(DownloadError::Transient(format!("Read error: {}", e)));
+            }
+            None => break,
+        };
 
         file.write_all(&chunk)
             .await
-            .map_err(|e| format!("Failed to write file: {}", e))?;
+            .map_err(|e| DownloadError::Transient(format!("Write: {}", e)))?;
 
         if let Some(h) = hasher.as_mut() {
             h.update(&chunk);
@@ -78,46 +472,108 @@ pub async fn download_whisper_model(
 
         downloaded += chunk.len() as u64;
 
-        let percentage = if total_size > 0 {
-            ((downloaded as f64 / total_size as f64) * 100.0) as u8
+        let pct = if total_size > 0 {
+            ((downloaded as f64 / total_size as f64) * 100.0).min(100.0) as u8
         } else {
             0
         };
 
         // Throttle emit to whole-percent changes — avoids flooding the
         // webview IPC channel on fast networks.
-        if percentage != last_emit_pct {
-            last_emit_pct = percentage;
+        if pct != last_emit_pct {
+            last_emit_pct = pct;
             OscarEvent::DownloadProgress(DownloadProgress {
                 downloaded,
                 total: total_size,
-                percentage,
+                percentage: pct,
             })
-            .dispatch(&app);
+            .dispatch(app);
         }
     }
 
-    file.flush().await.map_err(|e| format!("Failed to flush file: {}", e))?;
+    file.flush()
+        .await
+        .map_err(|e| DownloadError::Transient(format!("Flush: {}", e)))?;
     file.sync_all()
         .await
-        .map_err(|e| format!("Failed to fsync file: {}", e))?;
+        .map_err(|e| DownloadError::Transient(format!("Fsync: {}", e)))?;
     drop(file);
 
-    if let (Some(expected), Some(h)) = (sha256.as_ref(), hasher) {
+    // Guard against silently truncated downloads — Content-Length said N
+    // but the connection closed at M < N. Treat as transient so the next
+    // attempt resumes the tail.
+    if total_size > 0 && downloaded != total_size {
+        return Err(DownloadError::Transient(format!(
+            "Incomplete download: {}/{} bytes",
+            downloaded, total_size
+        )));
+    }
+
+    if let (Some(expected), Some(h)) = (sha256, hasher) {
         let actual = format!("{:x}", h.finalize());
         if !actual.eq_ignore_ascii_case(expected) {
-            let _ = std::fs::remove_file(&partial_path);
-            return Err(format!(
+            let _ = std::fs::remove_file(partial_path);
+            return Err(DownloadError::Permanent(format!(
                 "Checksum mismatch: expected {}, got {}",
                 expected, actual
-            ));
+            )));
         }
     }
 
-    std::fs::rename(&partial_path, &path)
-        .map_err(|e| format!("Failed to finalise download: {}", e))?;
+    Ok(downloaded)
+}
 
-    Ok(format!("Downloaded {} bytes to {}", downloaded, path))
+/// Stream the existing `.partial` through a fresh SHA256 so a resumed
+/// download still produces a checksum over the whole file. Only called when
+/// the caller requested checksum validation AND we're resuming.
+async fn rehash_partial(partial_path: &str) -> Result<Sha256, DownloadError> {
+    use tokio::io::AsyncReadExt;
+
+    let mut file = tokio::fs::File::open(partial_path)
+        .await
+        .map_err(|e| DownloadError::Transient(format!("Re-open partial: {}", e)))?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .await
+            .map_err(|e| DownloadError::Transient(format!("Read partial: {}", e)))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hasher)
+}
+
+/// Map a reqwest send-phase error to our retry classification. Network /
+/// timeout / connection errors are always transient; HTTP-status errors
+/// follow the 4xx-permanent / 5xx-transient split.
+fn classify_send_error(e: reqwest::Error) -> DownloadError {
+    if e.is_timeout() || e.is_connect() || e.is_request() {
+        return DownloadError::Transient(format!("Network error: {}", e));
+    }
+    if let Some(status) = e.status() {
+        if status.is_server_error() {
+            return DownloadError::Transient(format!("HTTP {}: {}", status, e));
+        }
+        if status.is_client_error() {
+            return DownloadError::Permanent(format!("HTTP {}: {}", status, e));
+        }
+    }
+    DownloadError::Transient(format!("Request error: {}", e))
+}
+
+/// Parse the total file size out of a `Content-Range: bytes A-B/TOTAL`
+/// response header. Returns `None` when the server reports `*` (unknown).
+fn parse_content_range_total(header: &str) -> Option<u64> {
+    let slash_idx = header.rfind('/')?;
+    let total_str = header[slash_idx + 1..].trim();
+    if total_str == "*" {
+        return None;
+    }
+    total_str.parse::<u64>().ok()
 }
 
 #[tauri::command]
@@ -146,6 +602,18 @@ fn load_whisper_model_inner(
             path,
         );
         return Ok("Whisper model already loaded".to_string());
+    }
+
+    let validation = validate_whisper_model_file_inner(path);
+    if !validation.valid {
+        let reason = validation
+            .reason
+            .unwrap_or_else(|| "failed validation".to_string());
+        log::error!("[whisper] Refusing to load invalid model: {}", reason);
+        return Err(format!(
+            "Whisper model file is invalid or incomplete: {}",
+            reason
+        ));
     }
 
     log::info!("[whisper] Loading model from: {}", path);

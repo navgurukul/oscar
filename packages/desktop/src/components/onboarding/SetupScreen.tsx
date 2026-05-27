@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   detectHardware,
   formatModelSize,
@@ -12,7 +12,7 @@ import {
   downloadModel,
   resolveModelForRole,
 } from "../../lib/whisper-model-manager";
-import type { DownloadProgress } from "../../lib/app-types";
+import type { DownloadProgress, DownloadRetry } from "../../lib/app-types";
 import { CoverShowcase } from "./CoverShowcase";
 import { StepIndicator } from "./StepIndicator";
 
@@ -26,13 +26,29 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
   const [phase, setPhase] = useState<Phase>("detecting");
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
+  const [retry, setRetry] = useState<DownloadRetry | null>(null);
   const [hardware, setHardware] = useState<HardwareProfile | null>(null);
   const [recommendation, setRecommendation] =
     useState<ModelRecommendation | null>(null);
 
+  // Always read the *latest* onComplete via a ref. Keeping it in the
+  // detection effect's dep array would re-run the effect every time the
+  // parent re-renders (the callback's identity is not stable), wiping the
+  // in-flight "downloading" phase back to "ready" mid-download.
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  // Re-entry guard: a stray second click on "Download Model" must not start a
+  // second concurrent backend download — two tasks racing on the same
+  // `.partial` file produce interleaved progress events and corrupt the file.
+  const downloadingRef = useRef(false);
+
   // Detect hardware + compute recommendation up front so the download prompt
   // can show the user a size and a one-line "why this model" before they
-  // commit to the download.
+  // commit to the download. Mount-only: re-running this on every parent
+  // re-render would clobber the "downloading" phase.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -47,7 +63,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
 
         // Already installed — skip download entirely.
         if (resolved) {
-          await onComplete();
+          await onCompleteRef.current();
           return;
         }
 
@@ -61,31 +77,46 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
     return () => {
       cancelled = true;
     };
-  }, [onComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design; see onCompleteRef above
+  }, []);
 
   const downloadAndComplete = async () => {
-    if (!recommendation) return;
+    if (!recommendation || downloadingRef.current) return;
+    downloadingRef.current = true;
     setPhase("downloading");
     setError("");
+    setRetry(null);
     setProgress({ downloaded: 0, total: recommendation.spec.sizeBytes, percentage: 0 });
 
-    const unlisten = await listen<DownloadProgress>(
+    const unlistenProgress = await listen<DownloadProgress>(
       "download-progress",
       (event) => {
+        // A retry has produced fresh bytes — clear the retry banner so the
+        // progress bar takes over visually.
+        setRetry(null);
         setProgress(event.payload);
+      },
+    );
+    const unlistenRetry = await listen<DownloadRetry>(
+      "download-retry",
+      (event) => {
+        setRetry(event.payload);
       },
     );
 
     try {
       await downloadModel(recommendation.spec);
-      unlisten();
       // Opportunistic — never block setup on cleanup.
       void cleanupLegacyModels([recommendation.spec.variant]);
-      await onComplete();
+      await onCompleteRef.current();
     } catch (downloadError) {
-      unlisten();
       setError(`Download failed: ${downloadError}`);
+      setRetry(null);
       setPhase("ready");
+    } finally {
+      unlistenProgress();
+      unlistenRetry();
+      downloadingRef.current = false;
     }
   };
 
@@ -133,6 +164,13 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
                 {pct ? `${Math.round(pct)}%` : "Starting..."}
               </p>
             </div>
+            {retry && (
+              <p className="mt-2 text-[0.8rem] text-slate-500">
+                Connection interrupted — retrying ({retry.attempt}/
+                {retry.max_attempts}) in {retry.delay_secs}s. Resuming where
+                we left off.
+              </p>
+            )}
             {error && <p className="setup-error">{error}</p>}
           </div>
         </>

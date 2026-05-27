@@ -37,6 +37,7 @@ import type {
 } from "./types/scribble.types";
 import type {
   DownloadProgress,
+  DownloadRetry,
   HotkeyContextEventPayload,
   MicrophonePermissionState,
   RoleModelState,
@@ -1100,10 +1101,19 @@ function App() {
       if (existing) return existing;
 
       const queuedDownload = modelDownloadQueueRef.current.then(async () => {
-        const unlisten = await listen<DownloadProgress>(
+        const unlistenProgress = await listen<DownloadProgress>(
           "download-progress",
           (event) => {
             syncDownloadProgress(spec.variant, event.payload.percentage);
+          },
+        );
+        const unlistenRetry = await listen<DownloadRetry>(
+          "download-retry",
+          (event) => {
+            const { attempt, max_attempts, reason } = event.payload;
+            console.warn(
+              `[whisper] download retry ${attempt}/${max_attempts}: ${reason}`,
+            );
           },
         );
 
@@ -1112,7 +1122,8 @@ function App() {
           syncDownloadProgress(spec.variant, 100);
           return path;
         } finally {
-          unlisten();
+          unlistenProgress();
+          unlistenRetry();
         }
       });
 
@@ -2486,6 +2497,22 @@ function App() {
                   onClearAllTranscripts={() => {
                     setLocalTranscripts([]);
                     saveSetting("localTranscripts", []);
+                  }}
+                  onSaveAsScribble={async (transcript) => {
+                    const { error } = await scribblesService.createScribble({
+                      user_id: user.id,
+                      title: buildFallbackScribbleTitle(transcript.text),
+                      raw_text: transcript.text,
+                      original_formatted_text: transcript.text,
+                      edited_text: null,
+                    });
+                    if (error) throw error;
+                    setScribbleRefreshKey((k) => k + 1);
+                    setLocalTranscripts((prev) => {
+                      const updated = prev.filter((t) => t.id !== transcript.id);
+                      saveSetting("localTranscripts", updated);
+                      return updated;
+                    });
                   }}
                 />
               )}

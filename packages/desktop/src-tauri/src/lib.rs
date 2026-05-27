@@ -115,6 +115,7 @@ pub fn run() {
             whisper::download_whisper_model,
             whisper::load_whisper_model,
             whisper::ensure_whisper_model_loaded,
+            whisper::validate_whisper_model_file,
             whisper::warm_whisper_runtime,
             whisper::transcribe_audio,
             meeting::transcribe_meeting_audio,

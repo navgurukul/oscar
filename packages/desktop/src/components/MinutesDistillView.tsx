@@ -3,12 +3,12 @@ import { MarkdownNotesView, stripEvidenceComments } from "./MarkdownNotesView";
 
 type Section = "decisions" | "actions" | "followups" | "other";
 
-interface ActionItem {
+export interface ActionItem {
   owner: string | null;
   task: string;
 }
 
-interface ParsedMinutes {
+export interface ParsedMinutes {
   decisions: string[];
   actions: ActionItem[];
   followups: string[];
@@ -44,7 +44,7 @@ function parseActionItem(raw: string): ActionItem {
   return { owner: null, task: trimmed };
 }
 
-function parseMinutes(markdown: string): ParsedMinutes {
+export function parseMinutes(markdown: string): ParsedMinutes {
   const decisions: string[] = [];
   const actions: ActionItem[] = [];
   const followups: string[] = [];
