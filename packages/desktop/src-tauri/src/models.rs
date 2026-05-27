@@ -36,7 +36,8 @@ impl WhisperModelVariant {
             Tiny => ModelSpec {
                 variant: *self,
                 filename: "ggml-tiny.bin",
-                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+                url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-tiny.bin",
+                sha256: "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
                 size_bytes: 77_700_000,
                 min_ram_gb: 2,
                 quality: 1,
@@ -45,7 +46,8 @@ impl WhisperModelVariant {
             Base => ModelSpec {
                 variant: *self,
                 filename: "ggml-base.bin",
-                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+                url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-base.bin",
+                sha256: "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
                 size_bytes: 147_900_000,
                 min_ram_gb: 2,
                 quality: 2,
@@ -54,7 +56,8 @@ impl WhisperModelVariant {
             Small => ModelSpec {
                 variant: *self,
                 filename: "ggml-small.bin",
-                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+                url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-small.bin",
+                sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
                 size_bytes: 487_600_000,
                 min_ram_gb: 4,
                 quality: 3,
@@ -63,7 +66,8 @@ impl WhisperModelVariant {
             Medium => ModelSpec {
                 variant: *self,
                 filename: "ggml-medium.bin",
-                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+                url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-medium.bin",
+                sha256: "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
                 size_bytes: 1_530_000_000,
                 min_ram_gb: 6,
                 quality: 4,
@@ -72,7 +76,8 @@ impl WhisperModelVariant {
             LargeV3TurboQ5 => ModelSpec {
                 variant: *self,
                 filename: "ggml-large-v3-turbo-q5_0.bin",
-                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+                url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-large-v3-turbo-q5_0.bin",
+                sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
                 size_bytes: 574_000_000,
                 min_ram_gb: 4,
                 quality: 5,
@@ -81,7 +86,8 @@ impl WhisperModelVariant {
             LargeV3Turbo => ModelSpec {
                 variant: *self,
                 filename: "ggml-large-v3-turbo.bin",
-                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
+                url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-large-v3-turbo.bin",
+                sha256: "07617879c4a257c3e119b7cc5f8ab95146811f9e59933abefebbd1f4da6b8037",
                 size_bytes: 1_620_000_000,
                 min_ram_gb: 8,
                 quality: 6,
@@ -105,6 +111,7 @@ pub struct ModelSpec {
     pub variant: WhisperModelVariant,
     pub filename: &'static str,
     pub url: &'static str,
+    pub sha256: &'static str,
     pub size_bytes: u64,
     pub min_ram_gb: u32,
     pub quality: u8,

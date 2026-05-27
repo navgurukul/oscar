@@ -227,6 +227,7 @@ pub async fn download_whisper_model(
         .connect_timeout(CONNECT_TIMEOUT)
         .tcp_keepalive(Duration::from_secs(60))
         .pool_idle_timeout(Duration::from_secs(90))
+        .user_agent("Mozilla/5.0 (compatible; Oscar/1.0)")
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
