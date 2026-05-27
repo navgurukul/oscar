@@ -106,6 +106,13 @@ export interface DownloadProgress {
   percentage: number;
 }
 
+export interface DownloadRetry {
+  attempt: number;
+  max_attempts: number;
+  delay_secs: number;
+  reason: string;
+}
+
 export interface DictationContextEnvelope {
   context: DictationContextSnapshot;
 }
