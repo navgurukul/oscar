@@ -20,6 +20,7 @@ export interface ModelSpec {
   variant: WhisperModelVariant;
   filename: string;
   url: string;
+  sha256: string;
   sizeBytes: number;
   minRamGb: number;
   quality: number;
@@ -50,7 +51,8 @@ export const FALLBACK_MODELS: Record<WhisperModelVariant, ModelSpec> = {
   tiny: {
     variant: "tiny",
     filename: "ggml-tiny.bin",
-    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+    url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-tiny.bin",
+    sha256: "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
     sizeBytes: 77_700_000,
     minRamGb: 2,
     quality: 1,
@@ -59,7 +61,8 @@ export const FALLBACK_MODELS: Record<WhisperModelVariant, ModelSpec> = {
   base: {
     variant: "base",
     filename: "ggml-base.bin",
-    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+    url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-base.bin",
+    sha256: "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
     sizeBytes: 147_900_000,
     minRamGb: 2,
     quality: 2,
@@ -68,7 +71,8 @@ export const FALLBACK_MODELS: Record<WhisperModelVariant, ModelSpec> = {
   small: {
     variant: "small",
     filename: "ggml-small.bin",
-    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+    url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-small.bin",
+    sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
     sizeBytes: 487_600_000,
     minRamGb: 4,
     quality: 3,
@@ -77,7 +81,8 @@ export const FALLBACK_MODELS: Record<WhisperModelVariant, ModelSpec> = {
   medium: {
     variant: "medium",
     filename: "ggml-medium.bin",
-    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+    url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-medium.bin",
+    sha256: "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
     sizeBytes: 1_530_000_000,
     minRamGb: 6,
     quality: 4,
@@ -86,7 +91,8 @@ export const FALLBACK_MODELS: Record<WhisperModelVariant, ModelSpec> = {
   "large-v3-turbo-q5_0": {
     variant: "large-v3-turbo-q5_0",
     filename: "ggml-large-v3-turbo-q5_0.bin",
-    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+    url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-large-v3-turbo-q5_0.bin",
+    sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
     sizeBytes: 574_000_000,
     minRamGb: 4,
     quality: 5,
@@ -95,7 +101,8 @@ export const FALLBACK_MODELS: Record<WhisperModelVariant, ModelSpec> = {
   "large-v3-turbo": {
     variant: "large-v3-turbo",
     filename: "ggml-large-v3-turbo.bin",
-    url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
+    url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-large-v3-turbo.bin",
+    sha256: "07617879c4a257c3e119b7cc5f8ab95146811f9e59933abefebbd1f4da6b8037",
     sizeBytes: 1_620_000_000,
     minRamGb: 8,
     quality: 6,

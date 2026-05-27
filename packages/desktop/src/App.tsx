@@ -1118,7 +1118,7 @@ function App() {
         );
 
         try {
-          const path = await downloadModel(spec);
+          const path = await downloadModel(spec, spec.sha256);
           syncDownloadProgress(spec.variant, 100);
           return path;
         } finally {

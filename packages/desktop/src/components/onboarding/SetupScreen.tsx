@@ -88,7 +88,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
     );
 
     try {
-      await downloadModel(recommendation.spec);
+      await downloadModel(recommendation.spec, recommendation.spec.sha256);
       unlistenProgress();
       unlistenRetry();
       // Opportunistic — never block setup on cleanup.
