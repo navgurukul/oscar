@@ -105,7 +105,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
     );
 
     try {
-      await downloadModel(recommendation.spec);
+      await downloadModel(recommendation.spec, recommendation.spec.sha256);
       // Opportunistic — never block setup on cleanup.
       void cleanupLegacyModels([recommendation.spec.variant]);
       await onCompleteRef.current();
