@@ -16,6 +16,21 @@ pub fn delete_file(path: String) -> Result<String, String> {
     }
 }
 
+/// Returns the full path to a model file inside `~/.oscar/models/`, creating
+/// the directory if it doesn't exist. Path is resolved via Tauri's home_dir
+/// so it uses the correct OS separator on Windows, macOS, and Linux.
+#[tauri::command]
+pub fn get_model_path(filename: String, app: tauri::AppHandle) -> Result<String, String> {
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|e| format!("Failed to resolve home directory: {}", e))?;
+    let models_dir = home.join(".oscar").join("models");
+    std::fs::create_dir_all(&models_dir)
+        .map_err(|e| format!("Failed to create models directory: {}", e))?;
+    Ok(models_dir.join(&filename).to_string_lossy().to_string())
+}
+
 /// Append a single JSON line to `<app_data_dir>/perf.jsonl`. The caller is
 /// expected to pass a pre-serialised JSON object as `json_line` — we treat the
 /// payload as opaque and only enforce the newline boundary so the file stays a

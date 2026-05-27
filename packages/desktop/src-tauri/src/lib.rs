@@ -149,6 +149,7 @@ pub fn run() {
             filesystem::check_file_exists,
             filesystem::delete_file,
             filesystem::append_perf_log,
+            filesystem::get_model_path,
             calendar::get_calendar_events,
             hardware::detect_hardware,
             hardware::recommend_whisper_model,

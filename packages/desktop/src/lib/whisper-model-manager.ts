@@ -5,7 +5,6 @@ import {
   FALLBACK_MODELS,
   type ModelSpec,
   recommendWhisperModel,
-  relativeModelPath,
   variantFromFilename,
   type ModelPreset,
   type ModelRecommendation,
@@ -33,8 +32,9 @@ interface ModelFileValidation {
 export async function absolutePathFor(
   variant: WhisperModelVariant,
 ): Promise<string> {
-  const home = await homeDir();
-  return `${home}/${relativeModelPath(variant)}`;
+  return invoke<string>("get_model_path", {
+    filename: FALLBACK_MODELS[variant].filename,
+  });
 }
 
 async function fileExists(path: string): Promise<boolean> {
@@ -199,12 +199,11 @@ export async function cleanupLegacyModels(
   keepVariants: WhisperModelVariant[],
 ): Promise<void> {
   const keepSet = new Set(keepVariants);
-  const home = await homeDir();
 
   for (const filename of LEGACY_FILENAMES) {
     const variant = variantFromFilename(filename);
     if (variant && keepSet.has(variant)) continue;
-    const path = `${home}/.oscar/models/${filename}`;
+    const path = await invoke<string>("get_model_path", { filename });
     if (await fileExists(path)) {
       try {
         await invoke("delete_file", { path });
