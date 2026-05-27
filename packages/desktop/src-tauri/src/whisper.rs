@@ -1,7 +1,10 @@
 //! Whisper model lifecycle (download, load, warm) and core transcription
 //! pipeline shared between dictation and meeting flows.
 
+use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::io::Read;
+use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
@@ -32,6 +35,9 @@ const RETRY_DELAYS: [Duration; 3] = [
     Duration::from_secs(8),
     Duration::from_secs(30),
 ];
+const MIN_VALID_MODEL_BYTES: u64 = 1_000_000;
+const GGML_MAGIC: u32 = 0x67676d6c;
+const MODEL_SIZE_TOLERANCE_PERCENT: u64 = 25;
 
 /// Classified download outcome — drives the retry decision. A `Permanent`
 /// error (4xx that's not 416, bad checksum on a fresh download, filesystem
@@ -43,12 +49,141 @@ enum DownloadError {
     Permanent(String),
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelFileValidation {
+    valid: bool,
+    reason: Option<String>,
+    size_bytes: u64,
+    expected_size_bytes: Option<u64>,
+}
+
+impl ModelFileValidation {
+    fn valid(size_bytes: u64, expected_size_bytes: Option<u64>) -> Self {
+        Self {
+            valid: true,
+            reason: None,
+            size_bytes,
+            expected_size_bytes,
+        }
+    }
+
+    fn invalid(
+        reason: impl Into<String>,
+        size_bytes: u64,
+        expected_size_bytes: Option<u64>,
+    ) -> Self {
+        Self {
+            valid: false,
+            reason: Some(reason.into()),
+            size_bytes,
+            expected_size_bytes,
+        }
+    }
+}
+
 /// Cached hardware profile — detection is cheap but we still want a single
 /// source of truth for things like `whisper_thread_count` across all
 /// transcription calls in a session.
 fn hardware_profile() -> &'static HardwareProfile {
     static PROFILE: OnceLock<HardwareProfile> = OnceLock::new();
     PROFILE.get_or_init(HardwareProfile::detect)
+}
+
+fn expected_model_size(path: &Path) -> Option<u64> {
+    let filename = path.file_name()?.to_str()?;
+    crate::models::WhisperModelVariant::all()
+        .iter()
+        .find_map(|variant| {
+            let spec = variant.spec();
+            (spec.filename == filename).then_some(spec.size_bytes)
+        })
+}
+
+fn validate_whisper_model_file_inner(path: &str) -> ModelFileValidation {
+    let path = Path::new(path);
+    let expected_size_bytes = expected_model_size(path);
+
+    if !path.exists() {
+        return ModelFileValidation::invalid("model file missing", 0, expected_size_bytes);
+    }
+
+    let metadata = match path.metadata() {
+        Ok(metadata) => metadata,
+        Err(err) => {
+            return ModelFileValidation::invalid(
+                format!("model metadata unreadable: {}", err),
+                0,
+                expected_size_bytes,
+            );
+        }
+    };
+
+    if !metadata.is_file() {
+        return ModelFileValidation::invalid(
+            "model path is not a file",
+            metadata.len(),
+            expected_size_bytes,
+        );
+    }
+
+    let size_bytes = metadata.len();
+    if size_bytes < MIN_VALID_MODEL_BYTES {
+        return ModelFileValidation::invalid(
+            format!("model file too small: {} bytes", size_bytes),
+            size_bytes,
+            expected_size_bytes,
+        );
+    }
+
+    if let Some(expected) = expected_size_bytes {
+        let lower = expected.saturating_mul(100 - MODEL_SIZE_TOLERANCE_PERCENT) / 100;
+        let upper = expected.saturating_mul(100 + MODEL_SIZE_TOLERANCE_PERCENT) / 100;
+        if size_bytes < lower || size_bytes > upper {
+            return ModelFileValidation::invalid(
+                format!(
+                    "model size mismatch: got {} bytes, expected about {} bytes",
+                    size_bytes, expected
+                ),
+                size_bytes,
+                expected_size_bytes,
+            );
+        }
+    }
+
+    let mut file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(err) => {
+            return ModelFileValidation::invalid(
+                format!("model file unreadable: {}", err),
+                size_bytes,
+                expected_size_bytes,
+            );
+        }
+    };
+    let mut magic = [0u8; 4];
+    if let Err(err) = file.read_exact(&mut magic) {
+        return ModelFileValidation::invalid(
+            format!("model header unreadable: {}", err),
+            size_bytes,
+            expected_size_bytes,
+        );
+    }
+
+    if u32::from_le_bytes(magic) != GGML_MAGIC {
+        return ModelFileValidation::invalid(
+            "model header is not a Whisper GGML file",
+            size_bytes,
+            expected_size_bytes,
+        );
+    }
+
+    ModelFileValidation::valid(size_bytes, expected_size_bytes)
+}
+
+#[tauri::command]
+pub fn validate_whisper_model_file(path: String) -> ModelFileValidation {
+    validate_whisper_model_file_inner(&path)
 }
 
 #[tauri::command]
@@ -67,7 +202,18 @@ pub async fn download_whisper_model(
     // installed paths before calling, but a concurrent invocation could
     // race past that check.
     if std::path::Path::new(&path).exists() {
-        return Ok(format!("Model already present at {}", path));
+        let validation = validate_whisper_model_file_inner(&path);
+        if validation.valid {
+            return Ok(format!("Model already present at {}", path));
+        }
+
+        log::warn!(
+            "[whisper] Removing invalid existing model at {}: {}",
+            path,
+            validation.reason.as_deref().unwrap_or("failed validation")
+        );
+        std::fs::remove_file(&path)
+            .map_err(|e| format!("Failed to remove invalid model: {}", e))?;
     }
 
     // Atomic write: stream to `{path}.partial`, fsync, then rename. Crash or
@@ -98,6 +244,14 @@ pub async fn download_whisper_model(
             Ok(downloaded) => {
                 std::fs::rename(&partial_path, &path)
                     .map_err(|e| format!("Failed to finalise download: {}", e))?;
+                let validation = validate_whisper_model_file_inner(&path);
+                if !validation.valid {
+                    let reason = validation
+                        .reason
+                        .unwrap_or_else(|| "failed validation".to_string());
+                    let _ = std::fs::remove_file(&path);
+                    return Err(format!("Downloaded model is invalid: {}", reason));
+                }
                 log::info!(
                     "[whisper] Download complete: {} bytes → {}",
                     downloaded,
@@ -448,6 +602,18 @@ fn load_whisper_model_inner(
             path,
         );
         return Ok("Whisper model already loaded".to_string());
+    }
+
+    let validation = validate_whisper_model_file_inner(path);
+    if !validation.valid {
+        let reason = validation
+            .reason
+            .unwrap_or_else(|| "failed validation".to_string());
+        log::error!("[whisper] Refusing to load invalid model: {}", reason);
+        return Err(format!(
+            "Whisper model file is invalid or incomplete: {}",
+            reason
+        ));
     }
 
     log::info!("[whisper] Loading model from: {}", path);
