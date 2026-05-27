@@ -32,6 +32,7 @@ pub(crate) enum OscarEvent {
     PillSetPhase(String),
     PillSettingsInit(serde_json::Value),
     DownloadProgress(DownloadProgress),
+    DownloadRetry(DownloadRetry),
 }
 
 /// Download progress for the Whisper model download command. Lives here so
@@ -41,6 +42,17 @@ pub(crate) struct DownloadProgress {
     pub downloaded: u64,
     pub total: u64,
     pub percentage: u8,
+}
+
+/// Fired between download attempts when the previous attempt failed with a
+/// transient error and we're about to wait `delay_secs` then retry. UI uses
+/// this to surface "retrying… (N/M)" instead of a frozen progress bar.
+#[derive(Clone, Serialize, Debug)]
+pub(crate) struct DownloadRetry {
+    pub attempt: u32,
+    pub max_attempts: u32,
+    pub delay_secs: u64,
+    pub reason: String,
 }
 
 fn fire<R: Runtime, T: Serialize + Clone>(
@@ -70,6 +82,7 @@ impl OscarEvent {
             OscarEvent::PillSetPhase(_) => "pill-set-phase",
             OscarEvent::PillSettingsInit(_) => "pill-settings-init",
             OscarEvent::DownloadProgress(_) => "download-progress",
+            OscarEvent::DownloadRetry(_) => "download-retry",
         }
     }
 
@@ -95,6 +108,7 @@ impl OscarEvent {
             OscarEvent::PillSetPhase(phase) => fire(app, &target, name, phase),
             OscarEvent::PillSettingsInit(value) => fire(app, &target, name, value),
             OscarEvent::DownloadProgress(progress) => fire(app, &target, name, progress),
+            OscarEvent::DownloadRetry(retry) => fire(app, &target, name, retry),
         }
     }
 }

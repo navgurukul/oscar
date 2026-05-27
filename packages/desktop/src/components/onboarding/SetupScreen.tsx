@@ -12,7 +12,7 @@ import {
   downloadModel,
   resolveModelForRole,
 } from "../../lib/whisper-model-manager";
-import type { DownloadProgress } from "../../lib/app-types";
+import type { DownloadProgress, DownloadRetry } from "../../lib/app-types";
 import { CoverShowcase } from "./CoverShowcase";
 import { StepIndicator } from "./StepIndicator";
 
@@ -26,6 +26,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
   const [phase, setPhase] = useState<Phase>("detecting");
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
+  const [retry, setRetry] = useState<DownloadRetry | null>(null);
   const [hardware, setHardware] = useState<HardwareProfile | null>(null);
   const [recommendation, setRecommendation] =
     useState<ModelRecommendation | null>(null);
@@ -67,24 +68,37 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
     if (!recommendation) return;
     setPhase("downloading");
     setError("");
+    setRetry(null);
     setProgress({ downloaded: 0, total: recommendation.spec.sizeBytes, percentage: 0 });
 
-    const unlisten = await listen<DownloadProgress>(
+    const unlistenProgress = await listen<DownloadProgress>(
       "download-progress",
       (event) => {
+        // A retry has produced fresh bytes — clear the retry banner so the
+        // progress bar takes over visually.
+        setRetry(null);
         setProgress(event.payload);
+      },
+    );
+    const unlistenRetry = await listen<DownloadRetry>(
+      "download-retry",
+      (event) => {
+        setRetry(event.payload);
       },
     );
 
     try {
       await downloadModel(recommendation.spec);
-      unlisten();
+      unlistenProgress();
+      unlistenRetry();
       // Opportunistic — never block setup on cleanup.
       void cleanupLegacyModels([recommendation.spec.variant]);
       await onComplete();
     } catch (downloadError) {
-      unlisten();
+      unlistenProgress();
+      unlistenRetry();
       setError(`Download failed: ${downloadError}`);
+      setRetry(null);
       setPhase("ready");
     }
   };
@@ -133,6 +147,13 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
                 {pct ? `${Math.round(pct)}%` : "Starting..."}
               </p>
             </div>
+            {retry && (
+              <p className="mt-2 text-[0.8rem] text-slate-500">
+                Connection interrupted — retrying ({retry.attempt}/
+                {retry.max_attempts}) in {retry.delay_secs}s. Resuming where
+                we left off.
+              </p>
+            )}
             {error && <p className="setup-error">{error}</p>}
           </div>
         </>

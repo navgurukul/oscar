@@ -37,6 +37,7 @@ import type {
 } from "./types/scribble.types";
 import type {
   DownloadProgress,
+  DownloadRetry,
   HotkeyContextEventPayload,
   MicrophonePermissionState,
   RoleModelState,
@@ -1100,10 +1101,19 @@ function App() {
       if (existing) return existing;
 
       const queuedDownload = modelDownloadQueueRef.current.then(async () => {
-        const unlisten = await listen<DownloadProgress>(
+        const unlistenProgress = await listen<DownloadProgress>(
           "download-progress",
           (event) => {
             syncDownloadProgress(spec.variant, event.payload.percentage);
+          },
+        );
+        const unlistenRetry = await listen<DownloadRetry>(
+          "download-retry",
+          (event) => {
+            const { attempt, max_attempts, reason } = event.payload;
+            console.warn(
+              `[whisper] download retry ${attempt}/${max_attempts}: ${reason}`,
+            );
           },
         );
 
@@ -1112,7 +1122,8 @@ function App() {
           syncDownloadProgress(spec.variant, 100);
           return path;
         } finally {
-          unlisten();
+          unlistenProgress();
+          unlistenRetry();
         }
       });
 
