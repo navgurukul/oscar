@@ -23,6 +23,13 @@ export interface InstalledModel {
   spec: ModelSpec;
 }
 
+interface ModelFileValidation {
+  valid: boolean;
+  reason?: string | null;
+  sizeBytes: number;
+  expectedSizeBytes?: number | null;
+}
+
 export async function absolutePathFor(
   variant: WhisperModelVariant,
 ): Promise<string> {
@@ -38,12 +45,24 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
+async function isUsableModelFile(path: string): Promise<boolean> {
+  try {
+    const validation = await invoke<ModelFileValidation>(
+      "validate_whisper_model_file",
+      { path },
+    );
+    return validation.valid;
+  } catch {
+    return false;
+  }
+}
+
 /// List the variants currently installed in `$HOME/.oscar/models`.
 export async function listInstalledModels(): Promise<InstalledModel[]> {
   const installed: InstalledModel[] = [];
   for (const spec of Object.values(FALLBACK_MODELS)) {
     const path = await absolutePathFor(spec.variant);
-    if (await fileExists(path)) {
+    if (await isUsableModelFile(path)) {
       installed.push({ variant: spec.variant, path, spec });
     }
   }
@@ -57,7 +76,7 @@ export async function resolveInstalledPath(
   variant: WhisperModelVariant,
 ): Promise<string | null> {
   const primary = await absolutePathFor(variant);
-  if (await fileExists(primary)) return primary;
+  if (await isUsableModelFile(primary)) return primary;
 
   const home = await homeDir();
   const filename = FALLBACK_MODELS[variant].filename;
@@ -67,7 +86,7 @@ export async function resolveInstalledPath(
     `/usr/local/share/whisper/${filename}`,
   ];
   for (const candidate of candidates) {
-    if (await fileExists(candidate)) return candidate;
+    if (await isUsableModelFile(candidate)) return candidate;
   }
   return null;
 }

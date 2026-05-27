@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { scribblesService } from "@/lib/services/scribbles.service";
+import { meetingsService } from "@/lib/services/meetings.service";
 import type { DBScribble } from "@/lib/types/scribble.types";
+import type { SavedMeetingRecord } from "@oscar/shared/types";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
 import {
   v2,
@@ -45,26 +47,139 @@ const MODES: Array<[string, string, string, string]> = [
   ],
 ];
 
-function formatDate(dateString: string) {
-  const date = new Date(dateString);
-  const now = new Date();
-  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diffDays = Math.floor((nowOnly.getTime() - dateOnly.getTime()) / (1000 * 3600 * 24));
-  const time = date
-    .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })
-    .toUpperCase();
-  if (diffDays === 0) return `TODAY · ${time}`;
-  if (diffDays === 1) return `YESTERDAY · ${time}`;
-  return `${diffDays} DAYS AGO`;
+type FilterKey = "all" | "minutes" | "scribbles";
+
+type FeedEvent =
+  | {
+      kind: "scribble";
+      id: string;
+      timestamp: string;
+      title: string;
+      body: string;
+      folder: string | null;
+      href: string;
+    }
+  | {
+      kind: "minutes";
+      id: string;
+      timestamp: string;
+      title: string;
+      body: string;
+      meta: string;
+      href: string;
+    };
+
+function formatTime24(iso: string) {
+  return new Date(iso).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
-function SignedInHome({ recents, firstName }: { recents: DBScribble[]; firstName: string }) {
+function isToday(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
+function meetingPreview(m: SavedMeetingRecord): string {
+  const source =
+    m.notesMarkdown || m.myNotesMarkdown || m.transcript || "Meeting captured.";
+  const flat = source.replace(/[#>*_`]+/g, " ").replace(/\s+/g, " ").trim();
+  return flat.length > 260 ? `${flat.slice(0, 260).trim()}…` : flat;
+}
+
+function meetingMeta(m: SavedMeetingRecord): string {
+  const parts: string[] = [];
+  const attendees = m.attendeesCompact?.trim() || "";
+  const count = attendees ? attendees.split(",").filter(Boolean).length : 0;
+  if (count > 0) parts.push(`${count} ${count === 1 ? "ATTENDEE" : "ATTENDEES"}`);
+  if (m.meetingTypeHint && m.meetingTypeHint !== "general") {
+    parts.push(m.meetingTypeHint.toUpperCase());
+  }
+  return parts.join(" · ");
+}
+
+function scribblePreview(s: DBScribble): string {
+  const text = s.edited_text || s.original_formatted_text || "";
+  return text.length > 280 ? `${text.slice(0, 280).trim()}…` : text;
+}
+
+function SignedInHome({
+  scribbles,
+  meetings,
+  firstName,
+}: {
+  scribbles: DBScribble[];
+  meetings: SavedMeetingRecord[];
+  firstName: string;
+}) {
+  const [filter, setFilter] = useState<FilterKey>("all");
+
+  const events: FeedEvent[] = useMemo(() => {
+    const scribbleEvents: FeedEvent[] = scribbles
+      .filter((s) => isToday(s.created_at))
+      .map((s) => ({
+        kind: "scribble" as const,
+        id: s.id,
+        timestamp: s.created_at,
+        title: s.title || UI_STRINGS.UNTITLED_SCRIBBLE,
+        body: scribblePreview(s),
+        folder: s.folder,
+        href: `${ROUTES.SCRIBBLE}/${s.id}`,
+      }));
+    const meetingEvents: FeedEvent[] = meetings
+      .filter((m) => isToday(m.startedAt))
+      .map((m) => ({
+        kind: "minutes" as const,
+        id: m.id,
+        timestamp: m.startedAt,
+        title: m.meetingTitle || "Untitled Meeting",
+        body: meetingPreview(m),
+        meta: meetingMeta(m),
+        href: `${ROUTES.MEETINGS}/${m.id}`,
+      }));
+    return [...scribbleEvents, ...meetingEvents].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [scribbles, meetings]);
+
+  const visible = useMemo(() => {
+    if (filter === "all") return events;
+    if (filter === "minutes") return events.filter((e) => e.kind === "minutes");
+    return events.filter((e) => e.kind === "scribble");
+  }, [events, filter]);
+
+  const counts = useMemo(() => {
+    const m = events.filter((e) => e.kind === "minutes").length;
+    const s = events.filter((e) => e.kind === "scribble").length;
+    return { minutes: m, scribbles: s, all: events.length };
+  }, [events]);
+
+  const heroLine = useMemo(() => {
+    if (events.length === 0) {
+      return `Welcome back, ${firstName}. Live dictation lives on the desktop — what you save shows up here.`;
+    }
+    const bits: string[] = [];
+    if (counts.minutes > 0) {
+      bits.push(`${counts.minutes} ${counts.minutes === 1 ? "Minute" : "Minutes"}`);
+    }
+    if (counts.scribbles > 0) {
+      bits.push(`${counts.scribbles} ${counts.scribbles === 1 ? "Scribble" : "Scribbles"}`);
+    }
+    return `${bits.join(" and ")} saved today. Live dictation lives on the desktop — what you save shows up here.`;
+  }, [events.length, counts, firstName]);
+
   return (
     <main style={{ background: v2.cream, color: v2.ink, fontFamily: "var(--font-figtree), system-ui" }}>
       <V2WebHeader active="TODAY" />
 
-      <section className="px-6 md:px-14 pt-16 md:pt-24 pb-12">
+      <section className="px-6 md:px-14 pt-16 md:pt-20 pb-10 md:pb-12">
         <V2Caps>
           {new Date()
             .toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
@@ -82,12 +197,12 @@ function SignedInHome({ recents, firstName }: { recents: DBScribble[]; firstName
             maxWidth: 920,
           }}
         >
-          Hello, {firstName}.<br />
-          Ready to <em style={{ fontStyle: "italic", color: v2.accent }}>listen</em>?
+          What you <em style={{ fontStyle: "italic", color: v2.accent }}>kept</em>
+          <br />
+          today.
         </h1>
         <p className="mt-7 max-w-xl text-[16px] leading-relaxed" style={{ color: v2.inkSoft }}>
-          Press record and Oscar shapes your voice into a Scribble — clean, titled, and filed
-          before you finish your second sentence.
+          {heroLine}
         </p>
         <div className="mt-10 flex items-center gap-6 flex-wrap">
           <Link
@@ -95,124 +210,240 @@ function SignedInHome({ recents, firstName }: { recents: DBScribble[]; firstName
             className="inline-flex items-center gap-3 rounded-full px-6 py-3"
             style={{ background: v2.ink, color: v2.cream, fontSize: 14, fontWeight: 500 }}
           >
-            <span className="inline-block rounded-full" style={{ height: 7, width: 7, background: v2.accent }} />
+            <span
+              className="inline-block rounded-full"
+              style={{ height: 7, width: 7, background: v2.accent }}
+            />
             Record a Scribble
           </Link>
-          <Link href="/scribble" className="text-[14px]" style={{ color: v2.inkSoft }}>
-            · or open the library
+          <Link href={ROUTES.MEETINGS} className="text-[14px]" style={{ color: v2.inkSoft }}>
+            · or open Minutes
           </Link>
         </div>
       </section>
 
-      <section className="px-6 md:px-14 pt-12 pb-24" style={{ borderTop: `1px solid ${v2.rule}` }}>
-        <div className="grid grid-cols-12 gap-6 md:gap-10 mb-10">
+      <section
+        className="px-6 md:px-14 pt-10 md:pt-12 pb-20 md:pb-24"
+        style={{ borderTop: `1px solid ${v2.rule}` }}
+      >
+        <div className="grid grid-cols-12 gap-6 md:gap-10 mb-10 md:mb-12">
           <div className="col-span-12 md:col-span-2">
             <V2Caps>RECENT · IN ORDER</V2Caps>
           </div>
-          <div className="col-span-12 md:col-span-10 flex items-center gap-7">
-            <span
-              style={{ fontSize: 13, color: v2.ink, borderBottom: `1px solid ${v2.ink}`, paddingBottom: 1 }}
-            >
-              All
-            </span>
-            <Link href="/scribble" className="text-[13px]" style={{ color: v2.inkSoft }}>
-              Scribble
-            </Link>
-            <Link href="/meetings" className="text-[13px]" style={{ color: v2.inkSoft }}>
-              Minutes
-            </Link>
+          <div className="col-span-12 md:col-span-10 flex items-center gap-7 flex-wrap">
+            <V2Caps>FILTER</V2Caps>
+            <FilterChip
+              label="All"
+              active={filter === "all"}
+              count={counts.all}
+              onClick={() => setFilter("all")}
+            />
+            <FilterChip
+              label="Minutes"
+              active={filter === "minutes"}
+              count={counts.minutes}
+              onClick={() => setFilter("minutes")}
+            />
+            <FilterChip
+              label="Scribbles"
+              active={filter === "scribbles"}
+              count={counts.scribbles}
+              onClick={() => setFilter("scribbles")}
+            />
             <Link
-              href="/scribble"
+              href={ROUTES.SCRIBBLE}
               style={{ marginLeft: "auto", fontSize: 13, color: v2.accent }}
             >
-              View library →
+              Open library →
             </Link>
           </div>
         </div>
 
-        {recents.length === 0 ? (
-          <div
-            className="rounded-xl py-16 px-6 text-center"
-            style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
-          >
-            <V2Caps color={v2.accent}>FIRST SCRIBBLE</V2Caps>
-            <h3
-              className="mt-3"
-              style={{
-                fontFamily: v2Serif,
-                fontSize: 36,
-                lineHeight: 1.05,
-                letterSpacing: "-0.02em",
-                fontWeight: 500,
-              }}
-            >
-              Nothing here <em style={{ color: v2.accent }}>yet</em>.
-            </h3>
-            <p className="mt-3 mx-auto max-w-md text-[14px] leading-relaxed" style={{ color: v2.inkSoft }}>
-              Hit record below. Oscar will clean, title, and file the result.
-            </p>
-            <Link
-              href={ROUTES.RECORDING}
-              className="inline-flex items-center gap-3 mt-7 rounded-full px-5 py-2.5"
-              style={{ background: v2.ink, color: v2.cream, fontSize: 14, fontWeight: 500 }}
-            >
-              <span className="inline-block rounded-full" style={{ height: 7, width: 7, background: v2.accent }} />
-              Make your first Scribble
-            </Link>
-          </div>
+        {visible.length === 0 ? (
+          <EmptyTodayState filter={filter} hasAny={events.length > 0} firstName={firstName} />
         ) : (
-          <div className="space-y-10">
-            {recents.map((s) => {
-              const preview = (s.edited_text || s.original_formatted_text || "").slice(0, 280);
-              return (
-                <Link
-                  key={s.id}
-                  href={`${ROUTES.SCRIBBLE}/${s.id}`}
-                  className="grid grid-cols-12 gap-6 md:gap-10 group"
-                >
-                  <div className="col-span-12 md:col-span-2 pt-1.5">
-                    <V2Mono style={{ fontSize: 13, color: v2.ink }}>
-                      {formatDate(s.created_at)}
-                    </V2Mono>
-                    <div className="mt-1.5">
-                      <V2Source name="SCRIBBLE" kind={s.folder ? s.folder.toUpperCase() : undefined} />
-                    </div>
-                  </div>
-                  <div className="col-span-12 md:col-span-10">
-                    <h3
-                      style={{
-                        fontFamily: v2Serif,
-                        fontSize: 24,
-                        lineHeight: 1.25,
-                        letterSpacing: "-0.005em",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {s.title || UI_STRINGS.UNTITLED_SCRIBBLE}
-                    </h3>
-                    <p
-                      className="mt-2 text-[14px] leading-relaxed"
-                      style={{ color: v2.inkSoft, maxWidth: 720 }}
-                    >
-                      {preview}
-                      {(s.edited_text || s.original_formatted_text || "").length > 280 ? "…" : ""}
-                    </p>
-                  </div>
-                </Link>
-              );
-            })}
+          <div className="space-y-10 md:space-y-12">
+            {visible.map((e) => (
+              <FeedRow key={`${e.kind}:${e.id}`} event={e} />
+            ))}
           </div>
         )}
       </section>
 
       <footer
-        className="px-6 md:px-14 py-10 flex items-center justify-between"
+        className="px-6 md:px-14 py-10 flex items-center justify-between flex-wrap gap-4"
         style={{ borderTop: `1px solid ${v2.rule}` }}
       >
         <V2Caps>OSCAR · LISTENING SURFACE</V2Caps>
-        <V2Caps>{recents.length} RECENT · OPEN LIBRARY →</V2Caps>
+        <V2Caps>
+          {events.length} SAVED TODAY · {scribbles.length} IN LIBRARY
+        </V2Caps>
       </footer>
     </main>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  count,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5"
+      style={{
+        fontSize: 13,
+        color: active ? v2.ink : v2.inkSoft,
+        borderBottom: active ? `1px solid ${v2.ink}` : "1px solid transparent",
+        paddingBottom: 1,
+        background: "transparent",
+      }}
+    >
+      <span>{label}</span>
+      <V2Mono style={{ fontSize: 10, color: v2.inkFaint, letterSpacing: "0.14em" }}>
+        {count}
+      </V2Mono>
+    </button>
+  );
+}
+
+function FeedRow({ event }: { event: FeedEvent }) {
+  const time = formatTime24(event.timestamp);
+  const isMinutes = event.kind === "minutes";
+  const sourceName = isMinutes
+    ? "MINUTES"
+    : event.folder
+      ? event.folder.toUpperCase()
+      : "SCRIBBLE";
+  const sourceKind = isMinutes ? event.meta || undefined : undefined;
+  return (
+    <Link href={event.href} className="grid grid-cols-12 gap-6 md:gap-10 group">
+      <div className="col-span-12 md:col-span-2 pt-1.5">
+        <V2Mono style={{ fontSize: 14, color: v2.ink, letterSpacing: "0.02em" }}>
+          {time}
+        </V2Mono>
+        <div className="mt-1.5">
+          <V2Source name={sourceName} kind={sourceKind} />
+        </div>
+      </div>
+      <div className="col-span-12 md:col-span-10">
+        <h3
+          style={{
+            fontFamily: v2Serif,
+            fontSize: 26,
+            lineHeight: 1.2,
+            color: v2.ink,
+            letterSpacing: "-0.01em",
+            fontWeight: 500,
+          }}
+        >
+          {event.title}
+        </h3>
+        <p
+          className="mt-2"
+          style={{
+            fontFamily: v2Serif,
+            fontSize: 18,
+            lineHeight: 1.45,
+            color: v2.inkSoft,
+            letterSpacing: "-0.002em",
+            maxWidth: 760,
+            textWrap: "pretty",
+          }}
+        >
+          {event.body}
+        </p>
+        {isMinutes && (
+          <div
+            className="mt-4 flex items-start gap-4 pt-4"
+            style={{ borderTop: `1px solid ${v2.rule}` }}
+          >
+            <V2Caps color={v2.accent}>OSCAR ↓</V2Caps>
+            <p
+              className="text-[13px] leading-relaxed"
+              style={{ color: v2.inkSoft, maxWidth: 640 }}
+            >
+              Decisions, actions, and follow-ups distilled.
+            </p>
+            <span style={{ marginLeft: "auto", fontSize: 12, color: v2.accent }}>Open →</span>
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+function EmptyTodayState({
+  filter,
+  hasAny,
+  firstName,
+}: {
+  filter: FilterKey;
+  hasAny: boolean;
+  firstName: string;
+}) {
+  if (hasAny && filter !== "all") {
+    return (
+      <div className="py-12 md:py-16 text-center">
+        <V2Caps>NOTHING IN THIS FILTER · YET</V2Caps>
+        <p className="mt-4 text-[15px]" style={{ color: v2.inkSoft }}>
+          Try the other tabs above — today still has things in it.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-12 gap-6 md:gap-10">
+      <div className="col-span-12 md:col-span-2 pt-1.5">
+        <V2Mono style={{ fontSize: 14, color: v2.inkFaint, letterSpacing: "0.02em" }}>
+          --:--
+        </V2Mono>
+        <div className="mt-1.5">
+          <V2Source name="WAITING" kind="" />
+        </div>
+      </div>
+      <div className="col-span-12 md:col-span-10">
+        <h3
+          style={{
+            fontFamily: v2Serif,
+            fontSize: 36,
+            lineHeight: 1.1,
+            letterSpacing: "-0.02em",
+            fontWeight: 500,
+          }}
+        >
+          Today is <em style={{ fontStyle: "italic", color: v2.accent }}>quiet</em>, {firstName}.
+        </h3>
+        <p className="mt-3 text-[15px] leading-relaxed" style={{ color: v2.inkSoft, maxWidth: 640 }}>
+          Nothing saved yet — and that&rsquo;s fine. Record a Scribble below, or capture a meeting
+          in Minutes. The spine fills in as you go.
+        </p>
+        <div className="mt-7 flex items-center gap-5 flex-wrap">
+          <Link
+            href={ROUTES.RECORDING}
+            className="inline-flex items-center gap-3 rounded-full px-5 py-2.5"
+            style={{ background: v2.ink, color: v2.cream, fontSize: 14, fontWeight: 500 }}
+          >
+            <span
+              className="inline-block rounded-full"
+              style={{ height: 7, width: 7, background: v2.accent }}
+            />
+            Record a Scribble
+          </Link>
+          <Link href={ROUTES.MEETINGS} className="text-[14px]" style={{ color: v2.inkSoft }}>
+            · or open Minutes
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -378,14 +609,20 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
 export default function Home() {
   const { session, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const [recents, setRecents] = useState<DBScribble[]>([]);
+  const [scribbles, setScribbles] = useState<DBScribble[]>([]);
+  const [meetings, setMeetings] = useState<SavedMeetingRecord[]>([]);
 
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
     (async () => {
-      const { data, error } = await scribblesService.getScribbles();
-      if (!cancelled && !error && data) setRecents(data.slice(0, 5));
+      const [scribblesResult, meetingsResult] = await Promise.all([
+        scribblesService.getScribbles(),
+        meetingsService.getMeetings(),
+      ]);
+      if (cancelled) return;
+      if (!scribblesResult.error && scribblesResult.data) setScribbles(scribblesResult.data);
+      if (!meetingsResult.error && meetingsResult.data) setMeetings(meetingsResult.data);
     })();
     return () => {
       cancelled = true;
@@ -402,7 +639,7 @@ export default function Home() {
       (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
       user?.email?.split("@")[0] ||
       "there";
-    return <SignedInHome recents={recents} firstName={firstName} />;
+    return <SignedInHome scribbles={scribbles} meetings={meetings} firstName={firstName} />;
   }
 
   return <MarketingLanding onStart={handleStart} />;

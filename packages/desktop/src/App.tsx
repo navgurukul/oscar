@@ -2498,6 +2498,22 @@ function App() {
                     setLocalTranscripts([]);
                     saveSetting("localTranscripts", []);
                   }}
+                  onSaveAsScribble={async (transcript) => {
+                    const { error } = await scribblesService.createScribble({
+                      user_id: user.id,
+                      title: buildFallbackScribbleTitle(transcript.text),
+                      raw_text: transcript.text,
+                      original_formatted_text: transcript.text,
+                      edited_text: null,
+                    });
+                    if (error) throw error;
+                    setScribbleRefreshKey((k) => k + 1);
+                    setLocalTranscripts((prev) => {
+                      const updated = prev.filter((t) => t.id !== transcript.id);
+                      saveSetting("localTranscripts", updated);
+                      return updated;
+                    });
+                  }}
                 />
               )}
 
