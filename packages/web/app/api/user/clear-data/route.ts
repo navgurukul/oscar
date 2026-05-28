@@ -6,11 +6,16 @@
  * The account itself is preserved.
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { deleteAllUserData } from "@/lib/server/delete-user-data";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
+import { RATE_LIMITS } from "@/lib/constants";
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient();
     const {
@@ -21,6 +26,13 @@ export async function DELETE() {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const rateLimitResult = await applyRateLimit(
+      getClientIdentifier(user.id, request),
+      "user-clear-data",
+      RATE_LIMITS.USER_DESTRUCTIVE
+    );
+    if (rateLimitResult) return rateLimitResult;
 
     const { error } = await deleteAllUserData(supabase, user.id);
     if (error) {

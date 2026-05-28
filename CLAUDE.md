@@ -127,10 +127,12 @@ app/
 **Components** (`components/`):
 ```
 scribble/          # TrashSheet
-recording/      # HomeRecordingButton, RecordingControls, RecordingTimer, PermissionErrorModal
+recording/      # RecordingControls, RecordingTimer, PermissionErrorModal
 results/        # ScribbleEditor, ScribbleEditorSkeleton, ScribbleActions, FeedbackWidget
 settings/       # AccountSection, BillingSection, VocabularySection, FolderManagementSection, DataPrivacySection
-shared/         # FloatingNavbar, Footer, ProcessingScreen, AuthEdgeButton, ScribbleListSkeleton
+shared/         # Footer
+meetings/       # MeetingSearchBar, MeetingNotesEditor, MeetingMetadataEditor, MarkdownView, DeleteMeetingDialog, CopyShareLinkButton
+v2/             # V2Primitives (V2AppHeader/V2WebHeader/V2TeamHeader/V2MarketingHeader, wordmark, caps), V2AccountMenu, V2LegalLayout, V2OrgSettingsShell
 subscription/   # PricingCard, RazorpayCheckout, UpgradePrompt, UsageIndicator
 ui/             # shadcn primitives + custom: sparkles, dotted-glow-background, animated-testimonials, lamp
 ```

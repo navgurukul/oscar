@@ -10,8 +10,11 @@ interface MarkdownViewProps {
 }
 
 function stripCitationTokens(markdown: string): string {
+  // Strip every [[...]] citation token (Oscar emits both [[seg:abc]] and
+  // shorter [[12-0]] timestamp refs) plus stray HTML comments.
   return markdown
-    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\s*\[\[[^\]\n]+\]\]/g, "")
     .replace(/[ \t]+\n/g, "\n");
 }
 

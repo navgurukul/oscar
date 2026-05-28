@@ -10,12 +10,16 @@
  * This prevents free users from processing recordings beyond their monthly limit.
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { usageService } from "@/lib/services/usage.service";
-import { SUBSCRIPTION_CONFIG } from "@/lib/constants";
+import { SUBSCRIPTION_CONFIG, RATE_LIMITS } from "@/lib/constants";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
     // Authenticate user
     const supabase = await createClient();
@@ -27,6 +31,13 @@ export async function POST() {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const rateLimitResult = await applyRateLimit(
+      getClientIdentifier(user.id, request),
+      "usage-increment",
+      RATE_LIMITS.USAGE_WRITE
+    );
+    if (rateLimitResult) return rateLimitResult;
 
     // PRE-FLIGHT CHECK: Verify user hasn't exceeded monthly limit
     // This calls get_monthly_usage() internally and compares against tier limits

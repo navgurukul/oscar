@@ -45,11 +45,29 @@ import { ROUTES } from "@/lib/constants";
 type Tab = "notes" | "transcript" | "rough";
 
 function stripCitations(markdown: string): string {
+  // Oscar's enhance pipeline emits citation tokens like [[seg:abc-123]] and
+  // shortened [[12-0]] timestamp refs. Strip every [[...]] token plus stray
+  // HTML comments — they shouldn't reach the rendered notes.
   return markdown
     .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/\s*\[\[[^\]\n]+\]\]/g, "")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
+}
+
+function cleanBulletText(text: string): string {
+  // Strip GFM task markers ([ ], [x]) and inline markdown emphasis from
+  // bullet content so the distillation columns read cleanly.
+  return text
+    .replace(/^\[[ xX]\]\s+/, "")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function displayAttendeeName(raw: string): string {
+  if (!raw) return "";
+  return raw.includes("@") ? raw.split("@")[0]! : raw;
 }
 
 function formatHeader(iso: string): string {
@@ -126,8 +144,11 @@ function parseSections(markdown: string): ParsedSections {
       continue;
     }
     const bullet = line.match(/^(?:[-*+]|\d+[.)])\s+(.+)$/);
-    if (bullet && current) {
-      listBuf.push(bullet[1].replace(/[*_`]/g, "").trim());
+    const bareTask = !bullet ? line.match(/^\[[ xX]\]\s+(.+)$/) : null;
+    const captured = bullet?.[1] ?? bareTask?.[1] ?? null;
+    if (captured && current) {
+      const cleaned = cleanBulletText(captured);
+      if (cleaned) listBuf.push(cleaned);
     }
   }
   commitBuf();
@@ -332,12 +353,12 @@ export default function MeetingDetailPage() {
   }
 
   const attendees = meeting.attendeesFull?.length
-    ? meeting.attendeesFull.map((a) => ({
-        name: a.name?.trim() || a.email?.split("@")[0] || "·",
-      }))
+    ? meeting.attendeesFull
+        .map((a) => ({ name: displayAttendeeName(a.name?.trim() || a.email || "") }))
+        .filter((a) => a.name)
     : (meeting.attendeesCompact || "")
         .split(",")
-        .map((s) => s.trim())
+        .map((s) => displayAttendeeName(s.trim()))
         .filter(Boolean)
         .map((name) => ({ name }));
 

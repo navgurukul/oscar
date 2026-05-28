@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getOrigin, requireAuth } from "@/lib/server/orgRoutes";
 import {
   createInvite,
@@ -7,6 +7,11 @@ import {
 } from "@/lib/server/organization";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
 import { isEmailEnabled, sendInviteEmail } from "@/lib/server/email";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
+import { RATE_LIMITS } from "@/lib/constants";
 import type { InvitedRole } from "@oscar/shared/types";
 
 function isInvitedRole(value: unknown): value is InvitedRole {
@@ -28,9 +33,16 @@ export async function GET(request: Request) {
   return NextResponse.json(invites);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (!auth.ok) return auth.response;
+
+  const rateLimitResult = await applyRateLimit(
+    getClientIdentifier(auth.user.id, request),
+    "org-invite-create",
+    RATE_LIMITS.ORG_INVITE
+  );
+  if (rateLimitResult) return rateLimitResult;
 
   let body: { organization_id?: string; email?: string | null; role?: unknown };
   try {

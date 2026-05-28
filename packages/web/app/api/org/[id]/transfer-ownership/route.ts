@@ -1,13 +1,25 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/orgRoutes";
 import { getMemberRole, transferOwnership } from "@/lib/server/organization";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
+import { RATE_LIMITS } from "@/lib/constants";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function PATCH(request: Request, context: Ctx) {
+export async function PATCH(request: NextRequest, context: Ctx) {
   const auth = await requireAuth();
   if (!auth.ok) return auth.response;
   const { id } = await context.params;
+
+  const rateLimitResult = await applyRateLimit(
+    getClientIdentifier(auth.user.id, request),
+    "org-transfer-ownership",
+    RATE_LIMITS.USER_DESTRUCTIVE
+  );
+  if (rateLimitResult) return rateLimitResult;
 
   const callerRole = await getMemberRole(auth.user.id, id);
   if (callerRole !== "owner") {
