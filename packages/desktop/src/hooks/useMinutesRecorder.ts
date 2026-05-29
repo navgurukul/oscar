@@ -85,6 +85,7 @@ export function useMinutesRecorder({
     useRef<((mode?: "rotate" | "final") => void) | null>(null);
   const sessionIdRef = useRef(0);
   const stopRequestedRef = useRef(false);
+  const startingRef = useRef(false);
   const nextSegmentIndexRef = useRef(0);
   const segmentQueueRef = useRef<MeetingSegmentJob[]>([]);
   const segmentWorkerRunningRef = useRef(false);
@@ -504,84 +505,104 @@ export function useMinutesRecorder({
   };
 
   const startRecording = async () => {
+    // Re-entrancy guard: the system-audio start below can take a few seconds,
+    // during which `isRecording` is still false and the Start button stays
+    // clickable. Without this guard a second click (or re-invoke) races a
+    // second capture start against the first — the loser returns "already
+    // active" (code 1), falls back to mic-only, and the meeting loses every
+    // remote participant (the "only one speaker" symptom).
+    if (startingRef.current || isRecordingRef.current) return;
     if (!canStartRecordingRef.current()) return;
-
-    setSystemAudioWarning("");
-    resetPipelineState();
+    startingRef.current = true;
 
     try {
-      await ensureWhisperModelLoadedRef.current("minutes");
-      await warmVoiceEngineRef.current();
-    } catch (err) {
-      console.error("[meeting-record] failed to prepare Whisper model:", err);
-      return;
-    }
+      setSystemAudioWarning("");
+      resetPipelineState();
 
-    let stream: MediaStream;
-    if (
-      warmStreamRef.current &&
-      warmStreamRef.current.getAudioTracks().some((t) => t.readyState === "live")
-    ) {
-      stream = warmStreamRef.current;
-    } else {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: getAudioConstraintsRef.current(),
-        });
-        warmStreamRef.current = stream;
+        await ensureWhisperModelLoadedRef.current("minutes");
+        await warmVoiceEngineRef.current();
       } catch (err) {
-        console.error("[meeting-record] getUserMedia failed:", err);
-        return;
-      }
-    }
-
-    sessionIdRef.current += 1;
-    const sessionId = sessionIdRef.current;
-    stopRequestedRef.current = false;
-    transcriptRef.current = "";
-    await invoke("clear_meeting_segment_buffers").catch((err) => {
-      console.warn("[meeting-record] failed to clear segment buffers:", err);
-    });
-
-    if (systemAudioEnabled && systemAudioSupported) {
-      // Clear any stale capture state from a prior session (component unmount,
-      // hot-reload, or rotation error) before starting. Backend stop is
-      // idempotent on macOS (sck_stop_capture) and Windows (WASAPI state check).
-      await invoke("stop_system_audio_capture").catch(() => {});
-      try {
-        await invoke("start_system_audio_capture");
-        systemAudioActiveRef.current = true;
-        sessionUsesSystemAudioRef.current = true;
-        setSystemAudioWarning("");
-        console.log("[meeting-record] System audio capture started");
-      } catch (err) {
-        console.warn(
-          "[meeting-record] System audio capture failed, mic only:",
+        console.error(
+          "[meeting-record] failed to prepare Whisper model:",
           err,
         );
+        return;
+      }
+
+      let stream: MediaStream;
+      if (
+        warmStreamRef.current &&
+        warmStreamRef.current
+          .getAudioTracks()
+          .some((t) => t.readyState === "live")
+      ) {
+        stream = warmStreamRef.current;
+      } else {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: getAudioConstraintsRef.current(),
+          });
+          warmStreamRef.current = stream;
+        } catch (err) {
+          console.error("[meeting-record] getUserMedia failed:", err);
+          return;
+        }
+      }
+
+      sessionIdRef.current += 1;
+      const sessionId = sessionIdRef.current;
+      stopRequestedRef.current = false;
+      transcriptRef.current = "";
+      await invoke("clear_meeting_segment_buffers").catch((err) => {
+        console.warn(
+          "[meeting-record] failed to clear segment buffers:",
+          err,
+        );
+      });
+
+      if (systemAudioEnabled && systemAudioSupported) {
+        // Clear any stale capture state from a prior session (component unmount,
+        // hot-reload, or rotation error) before starting. Backend stop is
+        // idempotent on macOS (sck_stop_capture) and Windows (WASAPI state check).
+        await invoke("stop_system_audio_capture").catch(() => {});
+        try {
+          await invoke("start_system_audio_capture");
+          systemAudioActiveRef.current = true;
+          sessionUsesSystemAudioRef.current = true;
+          setSystemAudioWarning("");
+          console.log("[meeting-record] System audio capture started");
+        } catch (err) {
+          console.warn(
+            "[meeting-record] System audio capture failed, mic only:",
+            err,
+          );
+          systemAudioActiveRef.current = false;
+          sessionUsesSystemAudioRef.current = false;
+          const reason = String(err).replace(/^Error:\s*/i, "");
+          setSystemAudioWarning(
+            `${reason} Meeting recording will continue with your microphone only.`,
+          );
+        }
+      } else {
         systemAudioActiveRef.current = false;
         sessionUsesSystemAudioRef.current = false;
-        const reason = String(err).replace(/^Error:\s*/i, "");
-        setSystemAudioWarning(
-          `${reason} Meeting recording will continue with your microphone only.`,
-        );
+        setSystemAudioWarning("");
       }
-    } else {
-      systemAudioActiveRef.current = false;
-      sessionUsesSystemAudioRef.current = false;
-      setSystemAudioWarning("");
-    }
 
-    startVadMonitor(stream);
-    isRecordingRef.current = true;
-    setIsRecording(true);
-    setRecordingTime(0);
-    setTranscript("");
-    setTranscriptionStatus("recording");
-    timerRef.current = setInterval(() => {
-      setRecordingTime((prev) => prev + 1);
-    }, 1000);
-    startSegmentRecorder(sessionId);
+      startVadMonitor(stream);
+      isRecordingRef.current = true;
+      setIsRecording(true);
+      setRecordingTime(0);
+      setTranscript("");
+      setTranscriptionStatus("recording");
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+      startSegmentRecorder(sessionId);
+    } finally {
+      startingRef.current = false;
+    }
   };
 
   const stopRecording = () => {

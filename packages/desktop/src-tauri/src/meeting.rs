@@ -16,16 +16,26 @@ pub fn is_system_audio_supported() -> bool {
 }
 
 #[tauri::command]
-pub fn start_system_audio_capture() -> Result<String, String> {
+pub async fn start_system_audio_capture() -> Result<String, String> {
     log::info!("[system-audio] start_system_audio_capture called");
-    system_audio::backend().start_capture()?;
+    // The macOS backend blocks on a ScreenCaptureKit semaphore (up to 15s) and
+    // Windows/Linux spawn capture threads. Run off the main thread so a slow or
+    // hung start never freezes the UI ("recording did not start") — sync Tauri
+    // commands execute on the event-loop thread.
+    tauri::async_runtime::spawn_blocking(|| system_audio::backend().start_capture())
+        .await
+        .map_err(|e| format!("[system-audio] start worker join error: {e}"))??;
     Ok("System audio capture started".to_string())
 }
 
 #[tauri::command]
-pub fn stop_system_audio_capture() -> Result<String, String> {
+pub async fn stop_system_audio_capture() -> Result<String, String> {
     log::info!("[system-audio] stop_system_audio_capture called");
-    system_audio::backend().stop_capture();
+    // stop_capture blocks on a stop semaphore (up to 5s on macOS); keep it off
+    // the main thread for the same reason as start.
+    tauri::async_runtime::spawn_blocking(|| system_audio::backend().stop_capture())
+        .await
+        .map_err(|e| format!("[system-audio] stop worker join error: {e}"))?;
     Ok("System audio capture stopped".to_string())
 }
 
@@ -114,31 +124,38 @@ pub fn clear_meeting_segment_buffers(
 }
 
 #[tauri::command]
-pub fn rotate_meeting_system_audio_segment(
+pub async fn rotate_meeting_system_audio_segment(
     segment_index: usize,
     restart_capture: bool,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
-    let backend = system_audio::backend();
-    backend.stop_capture();
-    let segment = backend.drain();
-    let sample_count = segment.len();
+    // Rotation runs at every segment boundary and calls blocking stop (+ start
+    // when restarting). Keep it off the main thread so recording does not hitch.
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let backend = system_audio::backend();
+        backend.stop_capture();
+        let segment = backend.drain();
+        let sample_count = segment.len();
 
-    {
-        let mut app_state = state.lock().map_err(|e| e.to_string())?;
-        app_state
-            .meeting_system_audio_segments
-            .insert(segment_index, segment);
-    }
+        {
+            let mut app_state = state.lock().map_err(|e| e.to_string())?;
+            app_state
+                .meeting_system_audio_segments
+                .insert(segment_index, segment);
+        }
 
-    if restart_capture {
-        backend.start_capture()?;
-    }
+        if restart_capture {
+            backend.start_capture()?;
+        }
 
-    Ok(format!(
-        "Stored system audio segment {} ({} samples)",
-        segment_index, sample_count
-    ))
+        Ok(format!(
+            "Stored system audio segment {} ({} samples)",
+            segment_index, sample_count
+        ))
+    })
+    .await
+    .map_err(|e| format!("[meeting] rotate worker join error: {e}"))?
 }
 
 #[tauri::command]

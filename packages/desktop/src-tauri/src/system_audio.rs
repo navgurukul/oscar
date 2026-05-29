@@ -134,8 +134,12 @@ mod platform {
 
     pub fn start_capture() -> Result<(), String> {
         let mut state = STATE.lock().map_err(|_| "State lock poisoned".to_string())?;
-        if state.is_some() {
-            return Err("System audio capture is already active".to_string());
+        // Idempotent start: tear down any leftover capture (unclean stop, prior
+        // crash, or a raced start) before opening a fresh one, instead of
+        // failing with "already active" and stranding the caller on mic-only.
+        if let Some(cap) = state.take() {
+            cap.stop_flag.store(true, Ordering::Relaxed);
+            let _ = cap.thread.join();
         }
 
         let buffer: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
@@ -331,8 +335,12 @@ mod platform {
 
     pub fn start_capture() -> Result<(), String> {
         let mut state = STATE.lock().map_err(|_| "State lock poisoned".to_string())?;
-        if state.is_some() {
-            return Err("System audio capture is already active".to_string());
+        // Idempotent start: tear down any leftover capture (unclean stop, prior
+        // crash, or a raced start) before opening a fresh one, instead of
+        // failing with "already active" and stranding the caller on mic-only.
+        if let Some(mut cap) = state.take() {
+            cap.stop_flag.store(true, Ordering::Relaxed);
+            let _ = cap.process.kill();
         }
 
         let monitor = default_sink_monitor().ok_or_else(|| {
