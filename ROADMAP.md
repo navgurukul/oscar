@@ -4,7 +4,7 @@ Product ideas, planned features. Not prioritized — ordering loose.
 
 ## Plan Status Snapshot
 
-- **Context-aware dictation**: In progress. Desktop capture, routing, prompt versioning, settings toggle, and Stream cleanup wiring exist. Remaining work: saved-note metadata consistency, feedback analytics by context, and user-facing context labels.
+- **Context-aware dictation**: In progress. Desktop capture, routing, prompt versioning, settings toggle, Stream cleanup wiring, and saved-note metadata persistence exist. Remaining work: feedback analytics by context, and user-facing context labels on web.
 - **Vibe Coding Mode**: Planned. Design mocks exist; no dedicated API route, hook, or mode selector shipped yet.
 - **VAD for hands-free dictation**: Partly shipped. Whisper now has a VAD pre-filter to strip silence before inference, and Stream has a 200 ms release tail buffer. Hands-free auto-arm / auto-finalize is still planned.
 - **Littlebird.ai-style work memory clone**: Added below as a product-flow bet. Scope should stay Oscar-native: voice-first, explicit privacy controls, no invisible capture by default.
@@ -23,12 +23,12 @@ Product ideas, planned features. Not prioritized — ordering loose.
 - Routing supports `default`, `ide`, `email`, `docs`, `chat`, and `browser` categories.
 - Desktop Stream passes context/routing into `transcribe_cleanup`.
 - Settings expose context-aware dictation behind AI cleanup.
+- Routing metadata is persisted on every desktop save path: the Stream history record and promoting a local transcript to a saved Scribble both carry category, app key, context source, and prompt version. (Web has no record-time context — context awareness is desktop-only by design.)
 
 **Remaining**:
 
-- Persist routing metadata consistently on every saved note path.
 - Add feedback analytics grouped by category, app key, context source, and prompt version.
-- Add small user-facing context labels where useful.
+- Add small user-facing context labels on the web scribble list/detail (desktop already renders them via `ContextLabel`).
 
 **Problem**: Oscar formats all notes same way regardless of where user works. Note dictated inside VS Code needs different treatment than Gmail or Notion.
 
@@ -360,6 +360,6 @@ From `Agents.md` future enhancements, consolidated here:
 - [ ] Summary generation agent
 - [ ] Tag/category suggestion agent
 - [ ] Sentiment analysis agent
-- [ ] Prompt versioning — track which prompt version generated each note
+- [x] Prompt versioning — track which prompt version generated each note (shipped: `DICTATION_PROMPT_VERSION = "context-v1"`, persisted on scribbles + streams, queryable in feedback stats)
 - [ ] Automated alerts when helpful-rate drops below threshold
 - [ ] Training data export for fine-tuning
