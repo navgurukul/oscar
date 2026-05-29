@@ -53,6 +53,11 @@ import {
   getMicrophonePermissionState,
   isMacOS,
 } from "./lib/desktop-platform";
+import {
+  DEFAULT_CLEANUP_STYLE,
+  type CleanupStyle,
+  type CleanupStyleWire,
+} from "./lib/cleanup-style";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
 import {
   FALLBACK_MODELS,
@@ -265,6 +270,17 @@ function App() {
   // Transcription language ("auto" = whisper auto-detects, "hi-en" = Hinglish)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("hi-en");
 
+  // Persisted cleanup style (tone of AI-cleaned dictation). Applies on every
+  // dictation regardless of trigger source.
+  const [cleanupStyle, setCleanupStyle] =
+    useState<CleanupStyle>(DEFAULT_CLEANUP_STYLE);
+  // Prompt Engineer: ephemeral, per-session rewrite mode toggled from the pill.
+  // Never persisted — resets to off on app restart so quick notes aren't
+  // surprise-rewritten across launches. The live indicator renders on the pill
+  // (promptEngineerRef drives cleanup), so the state value itself is unread —
+  // kept setter-only for parity with the other pill-synced settings.
+  const [_promptEngineer, setPromptEngineer] = useState(false);
+
   // Selected microphone device id ("" = system default)
   const [selectedMicId, setSelectedMicId] = useState("");
   const selectedMicIdRef = useRef("");
@@ -318,6 +334,8 @@ function App() {
   const meterRafRef = useRef<number | null>(null);
   const aiEditingRef = useRef(false);
   const transcriptionLanguageRef = useRef<string>("hi-en");
+  const cleanupStyleRef = useRef<CleanupStyle>(DEFAULT_CLEANUP_STYLE);
+  const promptEngineerRef = useRef(false);
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
   const authInitRef = useRef(false);
@@ -673,6 +691,7 @@ function App() {
         savedSystemAudioEnabled,
         savedMeetingsData,
         savedMinutesDataResetVersion,
+        savedCleanupStyle,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
         loadSetting<boolean>("autoPaste", true),
@@ -696,6 +715,7 @@ function App() {
         loadSetting<boolean>("systemAudioEnabled", true),
         loadSetting<SavedMeetingRecord[]>("savedMeetings", []),
         loadSetting<string>("minutesDataResetVersion", ""),
+        loadSetting<CleanupStyle>("cleanupStyle", DEFAULT_CLEANUP_STYLE),
       ]);
 
       const micPermission = await getMicrophonePermissionState().catch(
@@ -753,6 +773,8 @@ function App() {
       setMeetingModel((prev) => ({ ...prev, preset: savedMinutesPreset }));
       minutesModelPresetRef.current = savedMinutesPreset;
       setSystemAudioEnabled(savedSystemAudioEnabled);
+      setCleanupStyle(savedCleanupStyle);
+      cleanupStyleRef.current = savedCleanupStyle;
       const hasLegacyCalendarConnection =
         Boolean(savedCalToken || savedCalRefreshToken) && !savedCalConnectedUserId;
       if (hasLegacyCalendarConnection) {
@@ -860,6 +882,8 @@ function App() {
       language?: string;
       autoPaste?: boolean;
       aiImprovement?: boolean;
+      cleanupStyle?: CleanupStyle;
+      promptEngineer?: boolean;
     }>("pill-settings-update", (ev) => {
       const p = ev.payload || {};
       if (p.language !== undefined) {
@@ -877,6 +901,16 @@ function App() {
         aiImprovementEnabledRef.current = p.aiImprovement;
         void saveSetting("aiImprovementEnabled", p.aiImprovement);
       }
+      if (p.cleanupStyle !== undefined) {
+        setCleanupStyle(p.cleanupStyle);
+        cleanupStyleRef.current = p.cleanupStyle;
+        void saveSetting("cleanupStyle", p.cleanupStyle);
+      }
+      if (p.promptEngineer !== undefined) {
+        // Ephemeral, per-session — deliberately not persisted.
+        setPromptEngineer(p.promptEngineer);
+        promptEngineerRef.current = p.promptEngineer;
+      }
     });
 
     // When the pill window has wired its listeners, push current settings.
@@ -885,6 +919,8 @@ function App() {
         language: transcriptionLanguageRef.current,
         autoPaste: autoPasteRef.current,
         aiImprovement: aiImprovementEnabledRef.current,
+        cleanupStyle: cleanupStyleRef.current,
+        promptEngineer: promptEngineerRef.current,
       }).catch(console.warn);
     });
 
@@ -1670,6 +1706,21 @@ function App() {
         ? routeDictationContext(activeDictationContext)
         : null;
       const dictationMetadata = buildDictationMetadata(dictationRouting);
+      // Prompt Engineer (ephemeral) overrides the persisted tone style.
+      const effectiveStylePreset: CleanupStyleWire = promptEngineerRef.current
+        ? "prompt-engineer"
+        : cleanupStyleRef.current;
+      // Record the effective style on the saved metadata so feedback analytics
+      // can attribute helpful-rate per style — no schema change, it rides the
+      // existing dictation_prompt_version field (e.g. "context-v1/concise").
+      if (
+        effectiveStylePreset !== "faithful" &&
+        "dictation_prompt_version" in dictationMetadata &&
+        dictationMetadata.dictation_prompt_version
+      ) {
+        dictationMetadata.dictation_prompt_version =
+          `${dictationMetadata.dictation_prompt_version}/${effectiveStylePreset}`;
+      }
       let cleanupReturnedEmpty = false;
 
       // Silent AI cleanup via the backend AI function.
@@ -1683,6 +1734,9 @@ function App() {
             "transcribe_cleanup",
             {
               promptProfile: "stream",
+              // User-chosen tone, or the per-session prompt-engineer override.
+              // Sent unconditionally (independent of context-aware routing).
+              stylePreset: effectiveStylePreset,
               // Capture wire-level breakdown so perf.jsonl can distinguish
               // "server is slow" (ttfb dominates) from "network is slow"
               // (dns/tcp/tls dominate) for the ai-cleanup stage.
@@ -2299,6 +2353,8 @@ function App() {
       language: transcriptionLanguageRef.current,
       autoPaste: autoPasteRef.current,
       aiImprovement: enabled,
+      cleanupStyle: cleanupStyleRef.current,
+      promptEngineer: promptEngineerRef.current,
     }).catch(console.warn);
   }, []);
 
@@ -2505,6 +2561,17 @@ function App() {
                       raw_text: transcript.text,
                       original_formatted_text: transcript.text,
                       edited_text: null,
+                      // Carry the dictation routing context captured at record
+                      // time onto the saved scribble, matching the Stream
+                      // history path so metadata persists on every save path
+                      // (and the ContextLabel badge renders on the scribble).
+                      dictation_category: transcript.dictation_category ?? null,
+                      dictation_variant: transcript.dictation_variant ?? null,
+                      dictation_app_key: transcript.dictation_app_key ?? null,
+                      dictation_context_source:
+                        transcript.dictation_context_source ?? null,
+                      dictation_prompt_version:
+                        transcript.dictation_prompt_version ?? null,
                     });
                     if (error) throw error;
                     setScribbleRefreshKey((k) => k + 1);
@@ -2582,6 +2649,19 @@ function App() {
               {activeTab === "settings" && (
                 <SettingsTab
                   transcriptionLanguage={transcriptionLanguage}
+                  cleanupStyle={cleanupStyle}
+                  onCleanupStyleChange={(style) => {
+                    setCleanupStyle(style);
+                    cleanupStyleRef.current = style;
+                    saveSetting("cleanupStyle", style);
+                    invoke("pill_push_settings", {
+                      language: transcriptionLanguageRef.current,
+                      autoPaste: autoPasteRef.current,
+                      aiImprovement: aiImprovementEnabledRef.current,
+                      cleanupStyle: style,
+                      promptEngineer: promptEngineerRef.current,
+                    }).catch(console.warn);
+                  }}
                   onLanguageChange={(lang) => {
                     setTranscriptionLanguage(lang);
                     transcriptionLanguageRef.current = lang;
@@ -2590,6 +2670,8 @@ function App() {
                       language: lang,
                       autoPaste: autoPasteRef.current,
                       aiImprovement: aiImprovementEnabledRef.current,
+                      cleanupStyle: cleanupStyleRef.current,
+                      promptEngineer: promptEngineerRef.current,
                     }).catch(console.warn);
                   }}
                   selectedMicId={selectedMicId}

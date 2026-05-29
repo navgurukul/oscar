@@ -565,6 +565,23 @@
         </button>
       </div>
       <div class="settings-divider"></div>
+      <!-- Cleanup style (persisted tone) -->
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px;">
+        <span>Cleanup style</span>
+        <div id="style-seg" style="display:flex;gap:4px;">
+          <button class="style-opt" data-style="faithful" style="flex:1;font-size:10px;padding:4px 6px;border-radius:7px;border:1px solid rgba(26,24,22,.15);background:transparent;color:rgba(26,24,22,.6);cursor:pointer;font-family:inherit;">Faithful</button>
+          <button class="style-opt" data-style="polished" style="flex:1;font-size:10px;padding:4px 6px;border-radius:7px;border:1px solid rgba(26,24,22,.15);background:transparent;color:rgba(26,24,22,.6);cursor:pointer;font-family:inherit;">Polished</button>
+          <button class="style-opt" data-style="concise" style="flex:1;font-size:10px;padding:4px 6px;border-radius:7px;border:1px solid rgba(26,24,22,.15);background:transparent;color:rgba(26,24,22,.6);cursor:pointer;font-family:inherit;">Concise</button>
+        </div>
+      </div>
+      <!-- Prompt Engineer (ephemeral, per session) -->
+      <div class="settings-row">
+        <span>Prompt Engineer<span style="display:block;font-size:9px;opacity:.6;">Rewrite speech into a prompt · this session</span></span>
+        <button class="toggle" id="toggle-pe" aria-label="Prompt Engineer">
+          <span class="knob"></span>
+        </button>
+      </div>
+      <div class="settings-divider"></div>
       <div class="lang-row" id="lang-row">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
           <circle cx="7" cy="7" r="5.5" stroke="rgba(26,24,22,.55)" stroke-width="1.3" />
@@ -615,6 +632,7 @@
               <span class="ctx-app" id="ctx-app"></span>
             </span>
             <span class="ready-text" id="ready-text">Click to dictate</span>
+            <span id="mode-badge" style="display:none;align-items:center;font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#0e7490;background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.3);border-radius:999px;padding:2px 7px;margin-left:6px;"></span>
           </div>
           <!-- Recording waveform -->
           <div class="waveform" data-body="recording" id="waveform"></div>
@@ -710,6 +728,8 @@
       language: 'hi-en',
       autoPaste: true,
       aiImprovement: true,
+      cleanupStyle: 'faithful',   // persisted tone
+      promptEngineer: false,      // ephemeral, per session
     };
 
     const LANG_LABELS = {
@@ -718,6 +738,12 @@
       'hi-en': 'Hinglish',
       'hi': 'Hindi',
       'es': 'Español',
+    };
+
+    const STYLE_LABELS = {
+      faithful: 'Faithful',
+      polished: 'Polished',
+      concise: 'Concise',
     };
 
     function normalizePhase(next) {
@@ -799,6 +825,31 @@
       document.querySelectorAll('.lang-item').forEach((el) => {
         el.classList.toggle('sel', el.dataset.lang === settings.language);
       });
+      // Prompt Engineer toggle
+      const peToggle = document.getElementById('toggle-pe');
+      if (peToggle) peToggle.classList.toggle('on', !!settings.promptEngineer);
+      // Cleanup style segmented buttons (inline styles so no extra CSS needed)
+      document.querySelectorAll('.style-opt').forEach((el) => {
+        const sel = el.dataset.style === settings.cleanupStyle;
+        el.style.background = sel ? 'rgba(6,182,212,.14)' : 'transparent';
+        el.style.color = sel ? '#0e7490' : 'rgba(26,24,22,.6)';
+        el.style.borderColor = sel ? 'rgba(6,182,212,.4)' : 'rgba(26,24,22,.15)';
+        el.style.fontWeight = sel ? '600' : '500';
+      });
+      updateModeBadge();
+    }
+
+    // Active-mode indicator on the expanded pill — so a non-default cleanup
+    // style (and especially the rewrite mode) is never silent.
+    function updateModeBadge() {
+      const el = document.getElementById('mode-badge');
+      if (!el) return;
+      let label = '';
+      if (settings.promptEngineer) label = 'Prompt Engineer';
+      else if (settings.cleanupStyle && settings.cleanupStyle !== 'faithful')
+        label = STYLE_LABELS[settings.cleanupStyle] || settings.cleanupStyle;
+      el.textContent = label;
+      el.style.display = label ? 'inline-flex' : 'none';
     }
 
     /* ─── Context label ("Optimized for X") ────────────────────────────── */
@@ -960,6 +1011,21 @@
       renderSettingsUI();
       emitTauri('pill-settings-update', { aiImprovement: settings.aiImprovement });
     });
+    document.getElementById('toggle-pe').addEventListener('click', (e) => {
+      e.stopPropagation();
+      settings.promptEngineer = !settings.promptEngineer;
+      renderSettingsUI();
+      // Ephemeral — the host keeps this in a ref only, never persisted.
+      emitTauri('pill-settings-update', { promptEngineer: settings.promptEngineer });
+    });
+    document.querySelectorAll('.style-opt').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        settings.cleanupStyle = el.dataset.style;
+        renderSettingsUI();
+        emitTauri('pill-settings-update', { cleanupStyle: settings.cleanupStyle });
+      });
+    });
     document.getElementById('lang-row').addEventListener('click', (e) => {
       e.stopPropagation();
       langPage = true;
@@ -1009,6 +1075,8 @@
             if (p.language) settings.language = p.language;
             if (typeof p.autoPaste === 'boolean') settings.autoPaste = p.autoPaste;
             if (typeof p.aiImprovement === 'boolean') settings.aiImprovement = p.aiImprovement;
+            if (p.cleanupStyle) settings.cleanupStyle = p.cleanupStyle;
+            if (typeof p.promptEngineer === 'boolean') settings.promptEngineer = p.promptEngineer;
             renderSettingsUI();
           }),
 

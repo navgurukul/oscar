@@ -22,6 +22,10 @@ import {
   type ModelPreset,
 } from "../lib/whisper-models";
 import type { RoleModelState, WhisperModelRole } from "../lib/app-types";
+import {
+  CLEANUP_STYLE_OPTIONS,
+  type CleanupStyle,
+} from "../lib/cleanup-style";
 import { scribblesService } from "../services/scribbles.service";
 import type { DBScribble } from "../types/scribble.types";
 
@@ -238,6 +242,8 @@ interface SettingsTabProps {
   transcriptionLanguage: string;
   selectedMicId: string;
   onLanguageChange: (lang: string) => void;
+  cleanupStyle: CleanupStyle;
+  onCleanupStyleChange: (style: CleanupStyle) => void;
   onMicChange: (deviceId: string) => void;
   onClearData: () => void;
   userEmail?: string;
@@ -263,6 +269,8 @@ export function SettingsTab({
   transcriptionLanguage,
   selectedMicId,
   onLanguageChange,
+  cleanupStyle,
+  onCleanupStyleChange,
   onMicChange,
   onClearData,
   userEmail,
@@ -607,6 +615,37 @@ export function SettingsTab({
                 "For Minutes and long meeting transcription.",
                 meetingModel,
               )}
+            </SettingsSection>
+
+            {/* Cleanup style — persisted tone for AI-cleaned dictation. The
+                Prompt Engineer rewrite mode is intentionally NOT here; it's an
+                ephemeral, per-session toggle that lives on the recording pill. */}
+            <SettingsSection caps="CLEANUP STYLE">
+              <div className="st-row">
+                <div className="st-row-text">
+                  <div className="st-row-label">Dictation cleanup</div>
+                  <div className="st-row-desc">
+                    {CLEANUP_STYLE_OPTIONS.find((o) => o.value === cleanupStyle)
+                      ?.hint ?? ""}
+                  </div>
+                </div>
+                <div className="st-row-action">
+                  <select
+                    className="st-select"
+                    value={cleanupStyle}
+                    onChange={(e) =>
+                      onCleanupStyleChange(e.target.value as CleanupStyle)
+                    }
+                    aria-label="Dictation cleanup style"
+                  >
+                    {CLEANUP_STYLE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </SettingsSection>
 
             <SettingsSection caps="EXPERIMENTAL">

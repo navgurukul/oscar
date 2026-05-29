@@ -12,6 +12,7 @@ import type {
   DictationContextSnapshot,
   DictationRoutingResult,
 } from "../types/scribble.types";
+import type { CleanupStyleWire } from "../lib/cleanup-style";
 
 export type DesktopAIMode =
   | "transcribe_cleanup"
@@ -33,6 +34,10 @@ interface AIProcessRequest {
   context?: DictationContextSnapshot;
   routing?: DictationRoutingResult;
   promptProfile?: AIProcessPromptProfile;
+  // User-chosen cleanup style (or the ephemeral prompt-engineer override).
+  // Only meaningful for transcribe_cleanup; the edge function ignores it for
+  // other modes. Missing = faithful (today's behaviour).
+  stylePreset?: CleanupStyleWire;
   // Workspace context (active-org vocabulary + reference docs) packaged by
   // orgContextService. Appended to the Mercury system prompt when present.
   orgContextBlock?: string;
@@ -636,6 +641,7 @@ export const aiService = {
       context?: DictationContextSnapshot;
       routing?: DictationRoutingResult;
       promptProfile?: AIProcessPromptProfile;
+      stylePreset?: CleanupStyleWire;
       /**
        * Optional callback invoked once with per-call wire timing. Used by the
        * dictation perf instrumentation to record DNS/TCP/TLS/TTFB/download
@@ -666,6 +672,7 @@ export const aiService = {
         context: options?.context,
         routing: options?.routing,
         promptProfile: options?.promptProfile,
+        stylePreset: options?.stylePreset,
         orgContextBlock: orgContext.block || undefined,
       },
       options?.onTiming,

@@ -396,10 +396,19 @@ pub fn pill_push_settings(
     language: String,
     auto_paste: bool,
     ai_improvement: bool,
+    cleanup_style: String,
+    prompt_engineer: bool,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        let _ = (app, language, auto_paste, ai_improvement);
+        let _ = (
+            app,
+            language,
+            auto_paste,
+            ai_improvement,
+            cleanup_style,
+            prompt_engineer,
+        );
         return Ok(());
     }
 
@@ -409,6 +418,8 @@ pub fn pill_push_settings(
             "language": language,
             "autoPaste": auto_paste,
             "aiImprovement": ai_improvement,
+            "cleanupStyle": cleanup_style,
+            "promptEngineer": prompt_engineer,
         });
         OscarEvent::PillSettingsInit(payload).dispatch(&app);
         Ok(())
