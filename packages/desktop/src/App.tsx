@@ -274,12 +274,11 @@ function App() {
   // dictation regardless of trigger source.
   const [cleanupStyle, setCleanupStyle] =
     useState<CleanupStyle>(DEFAULT_CLEANUP_STYLE);
-  // Prompt Engineer: ephemeral, per-session rewrite mode toggled from the pill.
-  // Never persisted — resets to off on app restart so quick notes aren't
-  // surprise-rewritten across launches. The live indicator renders on the pill
-  // (promptEngineerRef drives cleanup), so the state value itself is unread —
-  // kept setter-only for parity with the other pill-synced settings.
-  const [_promptEngineer, setPromptEngineer] = useState(false);
+  // Prompt mode: persisted rewrite mode that turns dictated speech into a
+  // ready-to-paste prompt. Toggleable from Settings and the recording pill; the
+  // always-visible pill badge is the guardrail against forgetting it's on.
+  // promptModeRef drives cleanup; the state value feeds the Settings toggle.
+  const [promptMode, setPromptMode] = useState(false);
 
   // Selected microphone device id ("" = system default)
   const [selectedMicId, setSelectedMicId] = useState("");
@@ -335,7 +334,7 @@ function App() {
   const aiEditingRef = useRef(false);
   const transcriptionLanguageRef = useRef<string>("hi-en");
   const cleanupStyleRef = useRef<CleanupStyle>(DEFAULT_CLEANUP_STYLE);
-  const promptEngineerRef = useRef(false);
+  const promptModeRef = useRef(false);
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
   const authInitRef = useRef(false);
@@ -692,6 +691,7 @@ function App() {
         savedMeetingsData,
         savedMinutesDataResetVersion,
         savedCleanupStyle,
+        savedPromptMode,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
         loadSetting<boolean>("autoPaste", true),
@@ -716,6 +716,7 @@ function App() {
         loadSetting<SavedMeetingRecord[]>("savedMeetings", []),
         loadSetting<string>("minutesDataResetVersion", ""),
         loadSetting<CleanupStyle>("cleanupStyle", DEFAULT_CLEANUP_STYLE),
+        loadSetting<boolean>("promptMode", false),
       ]);
 
       const micPermission = await getMicrophonePermissionState().catch(
@@ -775,6 +776,8 @@ function App() {
       setSystemAudioEnabled(savedSystemAudioEnabled);
       setCleanupStyle(savedCleanupStyle);
       cleanupStyleRef.current = savedCleanupStyle;
+      setPromptMode(savedPromptMode);
+      promptModeRef.current = savedPromptMode;
       const hasLegacyCalendarConnection =
         Boolean(savedCalToken || savedCalRefreshToken) && !savedCalConnectedUserId;
       if (hasLegacyCalendarConnection) {
@@ -883,7 +886,7 @@ function App() {
       autoPaste?: boolean;
       aiImprovement?: boolean;
       cleanupStyle?: CleanupStyle;
-      promptEngineer?: boolean;
+      promptMode?: boolean;
     }>("pill-settings-update", (ev) => {
       const p = ev.payload || {};
       if (p.language !== undefined) {
@@ -906,10 +909,10 @@ function App() {
         cleanupStyleRef.current = p.cleanupStyle;
         void saveSetting("cleanupStyle", p.cleanupStyle);
       }
-      if (p.promptEngineer !== undefined) {
-        // Ephemeral, per-session — deliberately not persisted.
-        setPromptEngineer(p.promptEngineer);
-        promptEngineerRef.current = p.promptEngineer;
+      if (p.promptMode !== undefined) {
+        setPromptMode(p.promptMode);
+        promptModeRef.current = p.promptMode;
+        void saveSetting("promptMode", p.promptMode);
       }
     });
 
@@ -920,7 +923,7 @@ function App() {
         autoPaste: autoPasteRef.current,
         aiImprovement: aiImprovementEnabledRef.current,
         cleanupStyle: cleanupStyleRef.current,
-        promptEngineer: promptEngineerRef.current,
+        promptMode: promptModeRef.current,
       }).catch(console.warn);
     });
 
@@ -1706,8 +1709,9 @@ function App() {
         ? routeDictationContext(activeDictationContext)
         : null;
       const dictationMetadata = buildDictationMetadata(dictationRouting);
-      // Prompt Engineer (ephemeral) overrides the persisted tone style.
-      const effectiveStylePreset: CleanupStyleWire = promptEngineerRef.current
+      // Prompt mode overrides the persisted tone style. The wire value stays
+      // "prompt-engineer" — the deployed edge function matches that string.
+      const effectiveStylePreset: CleanupStyleWire = promptModeRef.current
         ? "prompt-engineer"
         : cleanupStyleRef.current;
       // Record the effective style on the saved metadata so feedback analytics
@@ -2354,7 +2358,7 @@ function App() {
       autoPaste: autoPasteRef.current,
       aiImprovement: enabled,
       cleanupStyle: cleanupStyleRef.current,
-      promptEngineer: promptEngineerRef.current,
+      promptMode: promptModeRef.current,
     }).catch(console.warn);
   }, []);
 
@@ -2659,7 +2663,20 @@ function App() {
                       autoPaste: autoPasteRef.current,
                       aiImprovement: aiImprovementEnabledRef.current,
                       cleanupStyle: style,
-                      promptEngineer: promptEngineerRef.current,
+                      promptMode: promptModeRef.current,
+                    }).catch(console.warn);
+                  }}
+                  promptMode={promptMode}
+                  onPromptModeChange={(on) => {
+                    setPromptMode(on);
+                    promptModeRef.current = on;
+                    saveSetting("promptMode", on);
+                    invoke("pill_push_settings", {
+                      language: transcriptionLanguageRef.current,
+                      autoPaste: autoPasteRef.current,
+                      aiImprovement: aiImprovementEnabledRef.current,
+                      cleanupStyle: cleanupStyleRef.current,
+                      promptMode: on,
                     }).catch(console.warn);
                   }}
                   onLanguageChange={(lang) => {
@@ -2671,7 +2688,7 @@ function App() {
                       autoPaste: autoPasteRef.current,
                       aiImprovement: aiImprovementEnabledRef.current,
                       cleanupStyle: cleanupStyleRef.current,
-                      promptEngineer: promptEngineerRef.current,
+                      promptMode: promptModeRef.current,
                     }).catch(console.warn);
                   }}
                   selectedMicId={selectedMicId}

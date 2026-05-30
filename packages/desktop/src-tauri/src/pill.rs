@@ -397,7 +397,7 @@ pub fn pill_push_settings(
     auto_paste: bool,
     ai_improvement: bool,
     cleanup_style: String,
-    prompt_engineer: bool,
+    prompt_mode: bool,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
@@ -407,7 +407,7 @@ pub fn pill_push_settings(
             auto_paste,
             ai_improvement,
             cleanup_style,
-            prompt_engineer,
+            prompt_mode,
         );
         return Ok(());
     }
@@ -419,7 +419,7 @@ pub fn pill_push_settings(
             "autoPaste": auto_paste,
             "aiImprovement": ai_improvement,
             "cleanupStyle": cleanup_style,
-            "promptEngineer": prompt_engineer,
+            "promptMode": prompt_mode,
         });
         OscarEvent::PillSettingsInit(payload).dispatch(&app);
         Ok(())

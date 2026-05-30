@@ -524,6 +524,35 @@
     }
     .lang-item:hover { background: rgba(184, 98, 61, 0.08); }
     .lang-item.sel { background: rgba(184, 98, 61, 0.15); color: #b8623d; font-weight: 500; }
+
+    /* Two-line label (name + quiet sub-text) for toggle rows like Prompt mode */
+    .row-label { display: flex; flex-direction: column; gap: 2px; }
+    .row-label .row-sub {
+      font-size: 10px;
+      font-weight: 400;
+      color: rgba(26, 24, 22, 0.5);
+      letter-spacing: 0;
+    }
+
+    /* Cleanup style sub-menu — mirrors the Language sub-menu pattern */
+    .style-list {
+      background: #faf8f3;
+      border-radius: 8px;
+      padding: 2px;
+      display: none;
+    }
+    .settings-pop[data-page="style"] .style-list { display: block; }
+    .settings-pop[data-page="style"] > :not(.style-list) { display: none; }
+    .style-item {
+      display: flex;
+      align-items: center;
+      padding: 9px 12px;
+      cursor: pointer;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .style-item:hover { background: rgba(184, 98, 61, 0.08); }
+    .style-item.sel { background: rgba(184, 98, 61, 0.15); color: #b8623d; font-weight: 500; }
   </style>
 </head>
 <body data-phase="rest" data-settings-open="false">
@@ -565,19 +594,23 @@
         </button>
       </div>
       <div class="settings-divider"></div>
-      <!-- Cleanup style (persisted tone) -->
-      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px;">
-        <span>Cleanup style</span>
-        <div id="style-seg" style="display:flex;gap:4px;">
-          <button class="style-opt" data-style="faithful" style="flex:1;font-size:10px;padding:4px 6px;border-radius:7px;border:1px solid rgba(26,24,22,.15);background:transparent;color:rgba(26,24,22,.6);cursor:pointer;font-family:inherit;">Faithful</button>
-          <button class="style-opt" data-style="polished" style="flex:1;font-size:10px;padding:4px 6px;border-radius:7px;border:1px solid rgba(26,24,22,.15);background:transparent;color:rgba(26,24,22,.6);cursor:pointer;font-family:inherit;">Polished</button>
-          <button class="style-opt" data-style="concise" style="flex:1;font-size:10px;padding:4px 6px;border-radius:7px;border:1px solid rgba(26,24,22,.15);background:transparent;color:rgba(26,24,22,.6);cursor:pointer;font-family:inherit;">Concise</button>
-        </div>
+      <!-- Cleanup style (persisted) — row opens a sub-page, matching Language -->
+      <div class="lang-row" id="style-row">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M9.2 2.4l2.4 2.4-6.6 6.6-2.9.5.5-2.9 6.6-6.6z" stroke="rgba(26,24,22,.55)" stroke-width="1.3" stroke-linejoin="round" />
+        </svg>
+        <span class="label">Cleanup style</span>
+        <span class="val">
+          <span id="style-label">Faithful</span>
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <path d="M2.5 4.2L5.5 7.2L8.5 4.2" stroke="rgba(26,24,22,.55)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
       </div>
-      <!-- Prompt Engineer (ephemeral, per session) -->
+      <!-- Prompt mode (persisted) -->
       <div class="settings-row">
-        <span>Prompt Engineer<span style="display:block;font-size:9px;opacity:.6;">Rewrite speech into a prompt · this session</span></span>
-        <button class="toggle" id="toggle-pe" aria-label="Prompt Engineer">
+        <span class="row-label">Prompt mode<span class="row-sub">Rewrite speech into a prompt</span></span>
+        <button class="toggle" id="toggle-pe" aria-label="Prompt mode">
           <span class="knob"></span>
         </button>
       </div>
@@ -611,6 +644,19 @@
         <div class="lang-item" data-lang="hi"><span>Hindi</span></div>
         <div class="lang-item" data-lang="es"><span>Español</span></div>
       </div>
+
+      <!-- Cleanup style sub-page -->
+      <div class="style-list">
+        <button class="lang-back" id="style-back">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M6 2L3 5L6 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Back
+        </button>
+        <div class="style-item" data-style="faithful"><span>Faithful</span></div>
+        <div class="style-item" data-style="polished"><span>Polished</span></div>
+        <div class="style-item" data-style="concise"><span>Concise</span></div>
+      </div>
     </div>
 
     <!-- The full pill -->
@@ -632,7 +678,7 @@
               <span class="ctx-app" id="ctx-app"></span>
             </span>
             <span class="ready-text" id="ready-text">Click to dictate</span>
-            <span id="mode-badge" style="display:none;align-items:center;font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#0e7490;background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.3);border-radius:999px;padding:2px 7px;margin-left:6px;"></span>
+            <span id="mode-badge" style="display:none;align-items:center;font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#b8623d;background:rgba(184,98,61,.12);border:1px solid rgba(184,98,61,.3);border-radius:999px;padding:2px 7px;margin-left:6px;"></span>
           </div>
           <!-- Recording waveform -->
           <div class="waveform" data-body="recording" id="waveform"></div>
@@ -729,7 +775,7 @@
       autoPaste: true,
       aiImprovement: true,
       cleanupStyle: 'faithful',   // persisted tone
-      promptEngineer: false,      // ephemeral, per session
+      promptMode: false,          // persisted rewrite mode
     };
 
     const LANG_LABELS = {
@@ -825,16 +871,16 @@
       document.querySelectorAll('.lang-item').forEach((el) => {
         el.classList.toggle('sel', el.dataset.lang === settings.language);
       });
-      // Prompt Engineer toggle
+      // Prompt mode toggle
       const peToggle = document.getElementById('toggle-pe');
-      if (peToggle) peToggle.classList.toggle('on', !!settings.promptEngineer);
-      // Cleanup style segmented buttons (inline styles so no extra CSS needed)
-      document.querySelectorAll('.style-opt').forEach((el) => {
-        const sel = el.dataset.style === settings.cleanupStyle;
-        el.style.background = sel ? 'rgba(6,182,212,.14)' : 'transparent';
-        el.style.color = sel ? '#0e7490' : 'rgba(26,24,22,.6)';
-        el.style.borderColor = sel ? 'rgba(6,182,212,.4)' : 'rgba(26,24,22,.15)';
-        el.style.fontWeight = sel ? '600' : '500';
+      if (peToggle) peToggle.classList.toggle('on', !!settings.promptMode);
+      // Cleanup style: row value label + sub-page selection
+      const styleLabelEl = document.getElementById('style-label');
+      if (styleLabelEl)
+        styleLabelEl.textContent =
+          STYLE_LABELS[settings.cleanupStyle] || settings.cleanupStyle;
+      document.querySelectorAll('.style-item').forEach((el) => {
+        el.classList.toggle('sel', el.dataset.style === settings.cleanupStyle);
       });
       updateModeBadge();
     }
@@ -845,7 +891,7 @@
       const el = document.getElementById('mode-badge');
       if (!el) return;
       let label = '';
-      if (settings.promptEngineer) label = 'Prompt Engineer';
+      if (settings.promptMode) label = 'Prompt mode';
       else if (settings.cleanupStyle && settings.cleanupStyle !== 'faithful')
         label = STYLE_LABELS[settings.cleanupStyle] || settings.cleanupStyle;
       el.textContent = label;
@@ -1013,17 +1059,26 @@
     });
     document.getElementById('toggle-pe').addEventListener('click', (e) => {
       e.stopPropagation();
-      settings.promptEngineer = !settings.promptEngineer;
+      settings.promptMode = !settings.promptMode;
       renderSettingsUI();
-      // Ephemeral — the host keeps this in a ref only, never persisted.
-      emitTauri('pill-settings-update', { promptEngineer: settings.promptEngineer });
+      emitTauri('pill-settings-update', { promptMode: settings.promptMode });
     });
-    document.querySelectorAll('.style-opt').forEach((el) => {
+    // Cleanup style sub-page (open / back / select) — mirrors Language
+    document.getElementById('style-row').addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.getElementById('settings-pop').setAttribute('data-page', 'style');
+    });
+    document.getElementById('style-back').addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.getElementById('settings-pop').setAttribute('data-page', 'main');
+    });
+    document.querySelectorAll('.style-item').forEach((el) => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         settings.cleanupStyle = el.dataset.style;
         renderSettingsUI();
         emitTauri('pill-settings-update', { cleanupStyle: settings.cleanupStyle });
+        document.getElementById('settings-pop').setAttribute('data-page', 'main');
       });
     });
     document.getElementById('lang-row').addEventListener('click', (e) => {
@@ -1076,7 +1131,7 @@
             if (typeof p.autoPaste === 'boolean') settings.autoPaste = p.autoPaste;
             if (typeof p.aiImprovement === 'boolean') settings.aiImprovement = p.aiImprovement;
             if (p.cleanupStyle) settings.cleanupStyle = p.cleanupStyle;
-            if (typeof p.promptEngineer === 'boolean') settings.promptEngineer = p.promptEngineer;
+            if (typeof p.promptMode === 'boolean') settings.promptMode = p.promptMode;
             renderSettingsUI();
           }),
 
