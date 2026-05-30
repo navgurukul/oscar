@@ -51,8 +51,20 @@ fn focus_main_window(app_handle: &tauri::AppHandle) {
     }
 }
 
+/// Strip the query/fragment from a URL before logging. OAuth callbacks
+/// (`oscar://auth/callback?access_token=...&refresh_token=...`) arrive as deep
+/// links; logging the full URL would persist live credentials to the log file.
+fn redact_url(url: &str) -> String {
+    let cut = url.find(['?', '#']).unwrap_or(url.len());
+    if cut == url.len() {
+        url.to_string()
+    } else {
+        format!("{}?<redacted>", &url[..cut])
+    }
+}
+
 fn forward_deep_link(app_handle: &tauri::AppHandle, url: String) {
-    log::info!("[deep-link] received: {}", url);
+    log::info!("[deep-link] received: {}", redact_url(&url));
     set_pending_deep_link(url.clone());
     focus_main_window(app_handle);
     OscarEvent::DeepLink(url).dispatch(app_handle);
@@ -91,7 +103,8 @@ pub fn run() {
         // OS starts a new process for custom-scheme URLs; this plugin forwards
         // that launch to the already-running process instead.
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            log::info!("[single-instance] additional launch: {:?}", argv);
+            let safe_argv: Vec<String> = argv.iter().map(|a| redact_url(a)).collect();
+            log::info!("[single-instance] additional launch: {:?}", safe_argv);
             focus_main_window(app);
         }));
     }
@@ -203,7 +216,7 @@ pub fn run() {
                 Ok(Some(urls)) => {
                     for url in urls {
                         let url_str = url.to_string();
-                        log::info!("[deep-link] current launch URL: {}", url_str);
+                        log::info!("[deep-link] current launch URL: {}", redact_url(&url_str));
                         set_pending_deep_link(url_str);
                     }
                 }
