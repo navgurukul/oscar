@@ -174,6 +174,12 @@
     }
     .pill-btn:hover { background: rgba(26, 24, 22, 0.06); }
     .pill-btn.active { background: rgba(184, 98, 61, 0.1); }
+    /* Prompt-mode quick toggle: muted when off, terracotta when on. Doubles as
+       the always-visible "prompt mode is on" indicator (replaces the old text
+       badge that widened the pill). */
+    .pm-btn { color: rgba(26, 24, 22, 0.4); }
+    .pm-btn.on { color: #b8623d; background: rgba(184, 98, 61, 0.14); }
+    .pm-btn.on:hover { background: rgba(184, 98, 61, 0.2); }
 
     /* ─── State bodies ─────────────────────────────────────────────────── */
     /* Idle: 13 small dots */
@@ -678,7 +684,6 @@
               <span class="ctx-app" id="ctx-app"></span>
             </span>
             <span class="ready-text" id="ready-text">Click to dictate</span>
-            <span id="mode-badge" style="display:none;align-items:center;font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#b8623d;background:rgba(184,98,61,.12);border:1px solid rgba(184,98,61,.3);border-radius:999px;padding:2px 7px;margin-left:6px;"></span>
           </div>
           <!-- Recording waveform -->
           <div class="waveform" data-body="recording" id="waveform"></div>
@@ -701,6 +706,11 @@
         <div class="pill-divider"></div>
 
         <div class="pill-actions">
+          <button class="pill-btn pm-btn" id="btn-prompt-mode" aria-label="Prompt mode" aria-pressed="false" title="Prompt mode — rewrite speech into a prompt">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1.5L8.1 5.9L12.5 7L8.1 8.1L7 12.5L5.9 8.1L1.5 7L5.9 5.9Z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" />
+            </svg>
+          </button>
           <button class="pill-btn" id="btn-settings" aria-label="Settings">
             <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
               <path d="M2.5 4.2L5.5 7.2L8.5 4.2" stroke="#1a1816" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
@@ -882,20 +892,17 @@
       document.querySelectorAll('.style-item').forEach((el) => {
         el.classList.toggle('sel', el.dataset.style === settings.cleanupStyle);
       });
-      updateModeBadge();
+      updatePromptModeBtn();
     }
 
-    // Active-mode indicator on the expanded pill — so a non-default cleanup
-    // style (and especially the rewrite mode) is never silent.
-    function updateModeBadge() {
-      const el = document.getElementById('mode-badge');
-      if (!el) return;
-      let label = '';
-      if (settings.promptMode) label = 'Prompt mode';
-      else if (settings.cleanupStyle && settings.cleanupStyle !== 'faithful')
-        label = STYLE_LABELS[settings.cleanupStyle] || settings.cleanupStyle;
-      el.textContent = label;
-      el.style.display = label ? 'inline-flex' : 'none';
+    // Prompt-mode indicator + control: the pill action-row icon (terracotta
+    // when on). Compact and fixed-width, so it never widens the pill the way a
+    // text badge did.
+    function updatePromptModeBtn() {
+      const btn = document.getElementById('btn-prompt-mode');
+      if (!btn) return;
+      btn.classList.toggle('on', !!settings.promptMode);
+      btn.setAttribute('aria-pressed', settings.promptMode ? 'true' : 'false');
     }
 
     /* ─── Context label ("Optimized for X") ────────────────────────────── */
@@ -1042,6 +1049,14 @@
     document.getElementById('btn-settings').addEventListener('click', (e) => {
       e.stopPropagation();
       setSettingsOpen(!settingsOpen);
+    });
+    // Quick prompt-mode toggle right on the pill (next to the caret), so users
+    // can flip it without opening settings. Stays in sync with the popover row.
+    document.getElementById('btn-prompt-mode').addEventListener('click', (e) => {
+      e.stopPropagation();
+      settings.promptMode = !settings.promptMode;
+      renderSettingsUI();
+      emitTauri('pill-settings-update', { promptMode: settings.promptMode });
     });
 
     /* Settings popover interactions */
