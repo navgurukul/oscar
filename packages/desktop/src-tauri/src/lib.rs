@@ -60,29 +60,30 @@ fn forward_deep_link(app_handle: &tauri::AppHandle, url: String) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::init();
-
-    log::info!("========================================");
-    log::info!("OSCAR v{} starting", env!("CARGO_PKG_VERSION"));
-    log::info!("OS: {} {}", std::env::consts::OS, std::env::consts::ARCH);
-    log::info!(
-        "DISPLAY={}",
-        std::env::var("DISPLAY").unwrap_or_else(|_| "(not set)".into())
-    );
-    log::info!(
-        "XDG_SESSION_TYPE={}",
-        std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "(not set)".into())
-    );
-    log::info!(
-        "WAYLAND_DISPLAY={}",
-        std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "(not set)".into())
-    );
-    log::info!("========================================");
-
     let is_recording = Arc::new(AtomicBool::new(false));
 
-    log::info!("[init] Initializing Tauri plugins...");
     let mut builder = tauri::Builder::default();
+
+    // Persistent file logging. The auto-updater self-exits the app on Windows to
+    // run the NSIS installer (`std::process::exit(0)` inside `install()`), so the
+    // download → install → on_before_exit flow leaves no trace on stderr. Write it
+    // to the app log dir instead — on Windows:
+    //   %LOCALAPPDATA%\com.souvikdeb.oscar\logs\oscar.log
+    // `tauri_plugin_updater` is logged at Trace so its install path is captured.
+    builder = builder.plugin(
+        tauri_plugin_log::Builder::new()
+            .target(tauri_plugin_log::Target::new(
+                tauri_plugin_log::TargetKind::LogDir {
+                    file_name: Some("oscar".into()),
+                },
+            ))
+            .target(tauri_plugin_log::Target::new(
+                tauri_plugin_log::TargetKind::Stdout,
+            ))
+            .level(log::LevelFilter::Info)
+            .level_for("tauri_plugin_updater", log::LevelFilter::Trace)
+            .build(),
+    );
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
@@ -157,6 +158,22 @@ pub fn run() {
         ])
         .setup(move |app| {
             log::info!("[setup] Tauri setup started");
+            log::info!("========================================");
+            log::info!("OSCAR v{} starting", app.package_info().version);
+            log::info!("OS: {} {}", std::env::consts::OS, std::env::consts::ARCH);
+            log::info!(
+                "DISPLAY={}",
+                std::env::var("DISPLAY").unwrap_or_else(|_| "(not set)".into())
+            );
+            log::info!(
+                "XDG_SESSION_TYPE={}",
+                std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "(not set)".into())
+            );
+            log::info!(
+                "WAYLAND_DISPLAY={}",
+                std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "(not set)".into())
+            );
+            log::info!("========================================");
 
             // Set overlay titlebar on macOS only (not supported on Linux/GTK)
             #[cfg(target_os = "macos")]

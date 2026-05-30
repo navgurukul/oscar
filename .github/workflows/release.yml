@@ -142,6 +142,16 @@ jobs:
             echo "Updated $FILE: $(grep '"version"' "$FILE")"
           fi
 
+          # Update Cargo.toml [package] version. jq can't edit TOML, and the in-app
+          # version banner / PE FileVersion derive from CARGO_PKG_VERSION, so it must
+          # match the tag. Replaces only the first line-anchored `version = ` (the
+          # [package] one; dependency versions are inline like `foo = { version = }`).
+          FILE="packages/desktop/src-tauri/Cargo.toml"
+          if [ -f "$FILE" ]; then
+            VERSION="$VERSION" perl -i -pe 'if (/^version = / && !$d) { s/^version = .*/version = "$ENV{VERSION}"/; $d=1 }' "$FILE"
+            echo "Updated $FILE: $(grep -m1 '^version' "$FILE")"
+          fi
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
