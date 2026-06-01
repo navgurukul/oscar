@@ -1990,6 +1990,89 @@ function App() {
 
   // ── Scribble recording (click to start/stop, saves a Scribble) ───────────
 
+  // Shared core: take decoded 16 kHz mono PCM → transcribe → format → title →
+  // save as a Scribble. Used by both the mic-recorded path and audio-file
+  // import so the two stay in lockstep.
+  const runScribblePipeline = async (
+    audioData: Float32Array,
+    finish: (msg: string | null) => void,
+  ) => {
+    const uid = user?.id;
+    if (!uid) {
+      setStatus("Sign in to save Scribbles.");
+      finish("Sign in to save Scribbles.");
+      return;
+    }
+    if (audioData.length < 1600) {
+      setStatus("That recording was too short. Try again.");
+      finish("Too short. Try again.");
+      return;
+    }
+
+    try {
+      await ensureWhisperModelLoaded("dictation");
+      const result = await invoke<Transcription>("transcribe_audio", {
+        audioData: Array.from(audioData),
+        initialPrompt: buildInitialPrompt(
+          transcriptionLanguage,
+          dictWordsRef.current,
+        ),
+        language: getWhisperLanguage(transcriptionLanguage, "dictation"),
+      });
+
+      const rawText = result.text?.trim() ?? "";
+      if (!rawText) {
+        setStatus("No speech detected.");
+        finish("No speech detected. Try again.");
+        return;
+      }
+
+      let formattedText = rawText;
+      let title = "";
+      if (aiImprovementEnabledRef.current) {
+        setScribbleStatus("polishing");
+        setStatus("polishing");
+        try {
+          const formatted = await aiService.formatScribble(rawText);
+          if (formatted.trim()) {
+            formattedText = formatted.trim();
+          }
+        } catch (aiErr) {
+          console.warn("[scribble] format failed, saving raw transcript:", aiErr);
+        }
+
+        setScribbleStatus("titling");
+        try {
+          title = await aiService.generateScribbleTitle(formattedText);
+        } catch (titleErr) {
+          console.warn("[scribble] title generation failed, using fallback:", titleErr);
+        }
+      }
+
+      setScribbleStatus("saving");
+      setStatus("saving");
+      const { error } = await scribblesService.createScribble({
+        user_id: uid,
+        title: title || buildFallbackScribbleTitle(formattedText),
+        raw_text: rawText,
+        original_formatted_text: formattedText,
+        edited_text: null,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setScribbleRefreshKey((key) => key + 1);
+      setStatus("Scribble saved.");
+      finish("Scribble saved ✓");
+    } catch (e) {
+      console.error("[scribble] failed:", e);
+      setStatus(`Scribble failed: ${e}`);
+      finish(`Failed: ${e}`);
+    }
+  };
+
   const processScribbleAudio = async () => {
     const finish = (msg: string | null) => {
       setIsProcessing(false);
@@ -2056,74 +2139,73 @@ function App() {
       audioContext.close();
     }
 
-    if (audioData.length < 1600) {
-      setStatus("Scribble recording was too short. Try again.");
-      finish("Recording was too short. Try again.");
+    await runScribblePipeline(audioData, finish);
+  };
+
+  // Import an existing audio file as a Scribble — decode → 16 kHz mono →
+  // same transcribe/format/title/save core as a mic recording.
+  const importScribbleFromFile = async (file: File) => {
+    const finish = (msg: string | null) => {
+      setIsProcessing(false);
+      setIsScribbleProcessing(false);
+      isScribbleProcessingRef.current = false;
+      setScribbleStatus(msg);
+      if (msg) {
+        window.setTimeout(() => {
+          setScribbleStatus((current) => (current === msg ? null : current));
+        }, 2500);
+      }
+    };
+
+    if (!user?.id) {
+      setStatus("Sign in to save Scribbles.");
+      finish("Sign in to save Scribbles.");
+      return;
+    }
+    if (
+      isRecordingRef.current ||
+      isScribbleRecordingRef.current ||
+      isScribbleProcessingRef.current
+    ) {
+      return;
+    }
+    const looksLikeAudio =
+      file.type.startsWith("audio/") ||
+      /\.(mp3|m4a|wav|webm|ogg|oga|aac|flac|mp4)$/i.test(file.name);
+    if (!looksLikeAudio) {
+      setStatus("That doesn't look like an audio file.");
+      finish("Unsupported file type.");
       return;
     }
 
+    setIsProcessing(true);
+    setIsScribbleProcessing(true);
+    isScribbleProcessingRef.current = true;
+    setScribbleStatus("transcribing");
+    setStatus(`Importing ${file.name}…`);
+
+    let audioData: Float32Array;
+    const audioContext = new AudioContext({ sampleRate: 16000 });
     try {
-      await ensureWhisperModelLoaded("dictation");
-      const result = await invoke<Transcription>("transcribe_audio", {
-        audioData: Array.from(audioData),
-        initialPrompt: buildInitialPrompt(
-          transcriptionLanguage,
-          dictWordsRef.current,
-        ),
-        language: getWhisperLanguage(transcriptionLanguage, "dictation"),
-      });
-
-      const rawText = result.text?.trim() ?? "";
-      if (!rawText) {
-        setStatus("No speech detected. Try speaking louder or closer.");
-        finish("No speech detected. Try again.");
-        return;
+      const arrayBuffer = await file.arrayBuffer();
+      const decoded = await audioContext.decodeAudioData(arrayBuffer);
+      const numChannels = decoded.numberOfChannels;
+      const length = decoded.length;
+      const mono = new Float32Array(length);
+      for (let ch = 0; ch < numChannels; ch++) {
+        const channel = decoded.getChannelData(ch);
+        for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
       }
-
-      let formattedText = rawText;
-      let title = "";
-      if (aiImprovementEnabledRef.current) {
-        setScribbleStatus("polishing");
-        setStatus("polishing");
-        try {
-          const formatted = await aiService.formatScribble(rawText);
-          if (formatted.trim()) {
-            formattedText = formatted.trim();
-          }
-        } catch (aiErr) {
-          console.warn("[scribble] format failed, saving raw transcript:", aiErr);
-        }
-
-        setScribbleStatus("titling");
-        try {
-          title = await aiService.generateScribbleTitle(formattedText);
-        } catch (titleErr) {
-          console.warn("[scribble] title generation failed, using fallback:", titleErr);
-        }
-      }
-
-      setScribbleStatus("saving");
-      setStatus("saving");
-      const { error } = await scribblesService.createScribble({
-        user_id: user.id,
-        title: title || buildFallbackScribbleTitle(formattedText),
-        raw_text: rawText,
-        original_formatted_text: formattedText,
-        edited_text: null,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      setScribbleRefreshKey((key) => key + 1);
-      setStatus("Scribble saved.");
-      finish("Scribble saved ✓");
+      audioData = mono;
     } catch (e) {
-      console.error("[scribble] failed:", e);
-      setStatus(`Scribble failed: ${e}`);
-      finish(`Failed: ${e}`);
+      setStatus(`Could not read that audio file: ${e}`);
+      finish("Could not read that file.");
+      audioContext.close();
+      return;
     }
+    audioContext.close();
+
+    await runScribblePipeline(audioData, finish);
   };
 
   const startScribbleRecording = async () => {
@@ -2646,6 +2728,7 @@ function App() {
                       void startScribbleRecording();
                     }
                   }}
+                  onImportAudio={(file) => void importScribbleFromFile(file)}
                   recordingTime={scribbleRecordingTime}
                 />
               )}
