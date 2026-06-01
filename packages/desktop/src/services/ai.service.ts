@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import { getValidAccessToken } from "../lib/auth-session";
 import { orgContextService } from "./orgContext.service";
 import { applyTranscriptPostProcessing } from "@oscar/shared/prompts";
 import { API_CONFIG, MEETING_CONFIG } from "@oscar/shared/constants";
@@ -402,16 +403,12 @@ async function extractInvokeError(error: unknown): Promise<string> {
   return fallback;
 }
 
+// Delegates to the shared resilient getter: refreshes a near-expired token once
+// and throws a typed AuthSessionError when the session is unrecoverable, so the
+// dictation flow can prompt re-auth instead of silently pasting the raw
+// transcript. See lib/auth-session.ts.
 async function getSessionAccessToken(): Promise<string> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
-    throw new Error("AI features require a valid OSCAR sign-in.");
-  }
-
-  return session.access_token;
+  return getValidAccessToken();
 }
 
 // ── Web AI route client ────────────────────────────────────────────────────

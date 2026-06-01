@@ -61,7 +61,8 @@
     body[data-phase="processing"] .handle,
     body[data-phase="inserted"] .handle,
     body[data-phase="copied"] .handle,
-    body[data-phase="error"] .handle {
+    body[data-phase="error"] .handle,
+    body[data-phase="auth"] .handle {
       opacity: 0;
     }
 
@@ -91,7 +92,8 @@
     body[data-phase="processing"] .hit-zone,
     body[data-phase="inserted"] .hit-zone,
     body[data-phase="copied"] .hit-zone,
-    body[data-phase="error"] .hit-zone {
+    body[data-phase="error"] .hit-zone,
+    body[data-phase="auth"] .hit-zone {
       left: 0;
       bottom: 0;
       transform: none;
@@ -116,7 +118,8 @@
     body[data-phase="processing"] .pill-wrap,
     body[data-phase="inserted"] .pill-wrap,
     body[data-phase="copied"] .pill-wrap,
-    body[data-phase="error"] .pill-wrap {
+    body[data-phase="error"] .pill-wrap,
+    body[data-phase="auth"] .pill-wrap {
       transform: translateX(-50%) translateY(0) scale(1);
       opacity: 1;
       pointer-events: auto;
@@ -284,6 +287,22 @@
       letter-spacing: .02em;
     }
 
+    /* Auth-needed glyph — AI cleanup requires sign-in. Terracotta (actionable
+       prompt) rather than the rose error treatment. */
+    .auth-body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 22px;
+      color: #B8623D;
+    }
+    .auth-body span {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: .02em;
+    }
+
     /* "Click to dictate" body (expanded hover state) */
     .ready-body {
       display: flex;
@@ -337,6 +356,7 @@
     body[data-phase="inserted"]  .pill-body [data-body="idle"]    { display: flex; }
     body[data-phase="copied"]    .pill-body [data-body="idle"]    { display: flex; }
     body[data-phase="error"]     .pill-body [data-body="error"]   { display: flex; }
+    body[data-phase="auth"]      .pill-body [data-body="auth"]    { display: flex; }
 
     /* ─── Inserted toast ───────────────────────────────────────────────── */
     .toast {
@@ -701,6 +721,14 @@
             </svg>
             <span id="error-text">no input</span>
           </div>
+          <!-- Auth needed — raw text pasted, AI cleanup skipped until re-sign-in -->
+          <div class="auth-body" data-body="auth">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M10 6V4.2A2.7 2.7 0 0 0 4.6 4.2V6" stroke="#B8623D" stroke-width="1.3" stroke-linecap="round" />
+              <rect x="3" y="6" width="8" height="6" rx="1.4" stroke="#B8623D" stroke-width="1.3" />
+            </svg>
+            <span>Sign in to enable AI</span>
+          </div>
         </div>
 
         <div class="pill-divider"></div>
@@ -812,6 +840,7 @@
         case 'inserted':
         case 'copied':
         case 'error':
+        case 'auth':
           return next;
         default:
           return phase || 'rest';
@@ -833,7 +862,8 @@
       // non-hover phase.
       if (next !== 'ready') clearTimeout(readyHoldTimer);
       if (next === 'recording' || next === 'processing' ||
-          next === 'inserted' || next === 'copied' || next === 'error') {
+          next === 'inserted' || next === 'copied' || next === 'error' ||
+          next === 'auth') {
         clearTimeout(leaveTimer);
       }
       // Closing pill collapses settings too.

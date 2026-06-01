@@ -36,6 +36,7 @@ fn normalize_phase(phase: &str) -> &'static str {
         "inserted" => "inserted",
         "copied" => "copied",
         "error" => "error",
+        "auth" => "auth",
         "settings" => "settings",
         _ => "rest",
     }
@@ -336,6 +337,7 @@ pub fn set_pill_phase(app: tauri::AppHandle, phase: String) -> Result<(), String
                 "processing" => "⟳ Processing — Oscar",
                 "inserted" => "✓ Inserted — Oscar",
                 "error" => "⚠ Oscar",
+                "auth" => "Sign in to enable AI — Oscar",
                 _ => "Oscar",
             };
             tray.set_tooltip(Some(label)).ok();

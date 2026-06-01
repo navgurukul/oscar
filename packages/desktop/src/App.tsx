@@ -5,6 +5,7 @@ import { aiService } from "./services/ai.service";
 import { streamsService } from "./services/streams.service";
 import { scribblesService } from "./services/scribbles.service";
 import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -25,6 +26,7 @@ import { MeetingsTab } from "./components/MeetingsTab";
 import { AuthScreen } from "./components/onboarding/AuthScreen";
 import { PermissionsScreen } from "./components/onboarding/PermissionsScreen";
 import { SetupScreen } from "./components/onboarding/SetupScreen";
+import { isAuthSessionError, revalidateSession } from "./lib/auth-session";
 import {
   isContextAwarePlatform,
   routeDictationContext,
@@ -474,6 +476,26 @@ function App() {
     setUser(null);
   }, [clearCalendarConnection]);
 
+  // Invoked when an authenticated call fails because the session is dead. Clears
+  // the stale session (→ AuthScreen) and brings the main window forward so the
+  // user can re-authenticate — the dictation flow runs with the main window
+  // hidden, so without this the sign-in screen would never be seen. Returns
+  // true when the session actually recovered (a transient blip), in which case
+  // no re-auth prompt is needed.
+  const promptReauth = useCallback(async (): Promise<boolean> => {
+    const recovered = await revalidateSession({ force: true });
+    if (recovered) return true;
+    try {
+      const win = getCurrentWindow();
+      await win.show();
+      await win.unminimize();
+      await win.setFocus();
+    } catch (e) {
+      console.warn("[auth] could not focus main window for re-auth:", e);
+    }
+    return false;
+  }, []);
+
   // ── Supabase auth listener ─────────────────────────────────────────────────
 
   useEffect(() => {
@@ -495,6 +517,11 @@ function App() {
       sessionRef.current = s;
       setUser(s?.user ?? null);
       setAuthLoading(false);
+      // Proactively validate a restored session. A hard restart (e.g.
+      // auto-update relaunch) can leave a stale/rotated refresh token that
+      // getSession() still hands back; revalidate clears it now → AuthScreen,
+      // instead of letting the first dictation fail AI cleanup silently.
+      if (s) void revalidateSession();
     });
 
     const {
@@ -520,6 +547,25 @@ function App() {
     return () => subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: auth listener + one-time session check
   }, [clearCalendarConnection, googleCalendarConnectedUserId]);
+
+  // Re-validate the session whenever the window regains focus / visibility. The
+  // app is often left running with the main window hidden while the user
+  // dictates via the pill; a token can expire (or its refresh token rot) in that
+  // gap. Catching it on resume clears a dead session before the next AI call.
+  useEffect(() => {
+    const onResume = () => {
+      void revalidateSession();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") onResume();
+    };
+    window.addEventListener("focus", onResume);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onResume);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   // ── Deep link handler for OAuth callback ────────────────────────────────────
 
@@ -1543,6 +1589,10 @@ function App() {
     let rawWhisperText: string | null = null;
     let finalCleanedText: string | null = null;
     let pasteHappened = false;
+    // Set when AI cleanup was skipped because the session is dead. The raw
+    // transcript still pastes (no text lost), but the pill reports "sign in to
+    // enable AI" instead of a normal success toast.
+    let aiAuthFailed = false;
 
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
@@ -1778,11 +1828,24 @@ function App() {
           }
         } catch (aiErr) {
           timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
-          // Silently fall back to raw transcript — user never sees this
-          console.warn(
-            "[ai] silent cleanup failed, using raw transcript:",
-            aiErr,
-          );
+          if (isAuthSessionError(aiErr)) {
+            // Dead session: don't fail silently — the raw transcript still
+            // pastes, but flag it so the pill prompts re-auth and the main
+            // window is raised to the sign-in screen. promptReauth returns true
+            // when the session actually recovered (a transient blip), in which
+            // case we leave the normal success toast alone.
+            const recovered = await promptReauth();
+            aiAuthFailed = !recovered;
+            if (!recovered) {
+              console.warn("[ai] cleanup skipped — session invalid, prompting re-auth");
+            }
+          } else {
+            // Other failures: fall back to raw transcript silently.
+            console.warn(
+              "[ai] silent cleanup failed, using raw transcript:",
+              aiErr,
+            );
+          }
         }
       }
 
@@ -1916,13 +1979,19 @@ function App() {
       setIsProcessing(false);
       // Success path: show the outcome toast — "Inserted" when auto-paste
       // landed the text in the focused app, "Copied" when only the clipboard
-      // was set. Then collapse the pill back to its resting edge handle.
+      // was set. When the session was dead, the raw transcript still pasted but
+      // AI cleanup was skipped, so report "sign in to enable AI" instead and
+      // dwell a touch longer so it's readable. Then collapse to the edge handle.
       if (!hadError) {
-        const finalPhase = pasteHappened ? "inserted" : "copied";
+        const finalPhase = aiAuthFailed
+          ? "auth"
+          : pasteHappened
+            ? "inserted"
+            : "copied";
         invoke("set_pill_phase", { phase: finalPhase }).catch(console.warn);
         setTimeout(() => {
           invoke("hide_recording_pill").catch(console.warn);
-        }, 1500);
+        }, aiAuthFailed ? 2400 : 1500);
       }
       const totalMs = Math.round(performance.now() - tStart);
       const timingParts = Object.entries(timings)
