@@ -195,15 +195,6 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^3.23.4
         version: 3.23.4
-      '@tsparticles/engine':
-        specifier: ^3.9.1
-        version: 3.9.1
-      '@tsparticles/react':
-        specifier: ^3.0.0
-        version: 3.0.0(@tsparticles/engine@3.9.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@tsparticles/slim':
-        specifier: ^3.9.1
-        version: 3.9.1
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -4581,8 +4572,7 @@ snapshots:
 
   '@humanwhocodes/object-schema@2.0.3': {}
 
-  '@img/colour@1.1.0':
-    optional: true
+  '@img/colour@1.1.0': {}
 
   '@img/sharp-darwin-arm64@0.34.5':
     optionalDependencies:
@@ -6448,8 +6438,7 @@ snapshots:
 
   dequal@2.0.3: {}
 
-  detect-libc@2.1.2:
-    optional: true
+  detect-libc@2.1.2: {}
 
   detect-node-es@1.1.0: {}
 
@@ -8416,7 +8405,6 @@ snapshots:
       '@img/sharp-win32-arm64': 0.34.5
       '@img/sharp-win32-ia32': 0.34.5
       '@img/sharp-win32-x64': 0.34.5
-    optional: true
 
   shebang-command@2.0.0:
     dependencies:

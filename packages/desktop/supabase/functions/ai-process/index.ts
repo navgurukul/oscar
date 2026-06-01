@@ -1,4 +1,9 @@
 import { corsHeaders } from "../_shared/cors.ts";
+import {
+  getStreamStyleInstruction,
+  isPromptEngineerStyle,
+  STREAM_PROMPT_ENGINEER_SYSTEM_PROMPT,
+} from "./cleanup-style.ts";
 
 type Mode =
   | "transcribe_cleanup"
@@ -44,6 +49,10 @@ interface AIProcessRequest {
   context?: DictationContextSnapshot;
   routing?: DictationRoutingResult;
   promptProfile?: PromptProfile;
+  // User-chosen cleanup style: "faithful" (default) | "polished" | "concise"
+  // append a tone line; "prompt-engineer" swaps the system prompt for the
+  // rewrite mode. Only honoured for transcribe_cleanup. Missing = faithful.
+  stylePreset?: string;
   // Optional workspace-context block built by the desktop caller from the
   // user's active org vocabulary + reference documents. Appended to the
   // system prompt verbatim when present, so the Mercury cleanup respects
@@ -524,17 +533,36 @@ function buildContextAwareCleanupPrompt(
 function buildStreamCleanupPrompt(
   text: string,
   routing?: DictationRoutingResult,
+  stylePreset?: string,
 ): { system: string; user: string } {
+  // Prompt Engineer is a rewrite mode: swap the SYSTEM prompt entirely so the
+  // model may restructure/expand instead of the locked "format only" formatter.
+  if (isPromptEngineerStyle(stylePreset)) {
+    const user = [
+      "Rewrite the dictated request inside the <transcript> tags into a single ready-to-paste prompt.",
+      "<transcript>",
+      text,
+      "</transcript>",
+    ].join("\n");
+    return { system: STREAM_PROMPT_ENGINEER_SYSTEM_PROMPT, user };
+  }
+
   const category = getRoutingCategory(routing);
   const appKey = sanitizeOneLine(routing?.appKey) || "default";
+  // Tone presets ("polished" / "concise") add one line to the USER prompt and
+  // compose with the category instruction; faithful / unknown add nothing.
+  const styleInstruction = getStreamStyleInstruction(stylePreset);
 
   const user = [
     `Context: ${category}; app=${appKey}`,
     getStreamCategoryInstruction(category),
+    styleInstruction,
     "<transcript>",
     text,
     "</transcript>",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return { system: STREAM_CLEANUP_SYSTEM_PROMPT, user };
 }
@@ -544,11 +572,12 @@ function buildPrompt(
   text: string,
   context?: DictationContextSnapshot,
   routing?: DictationRoutingResult,
+  stylePreset?: string,
 ): { system: string; user: string } {
   if (mode === "transcribe_cleanup") {
     // Hot path for Stream and Scribble dictation. Keep this prompt tiny so
     // paste is not blocked behind hundreds of fixed prompt tokens.
-    return buildStreamCleanupPrompt(text, routing);
+    return buildStreamCleanupPrompt(text, routing, stylePreset);
   }
 
   const system =
@@ -657,6 +686,7 @@ Deno.serve(async (req: Request) => {
       mode,
       context,
       routing,
+      stylePreset,
       orgContextBlock,
     }: AIProcessRequest = await req.json();
     if (!text || typeof text !== "string" || !text.trim()) {
@@ -697,11 +727,16 @@ Deno.serve(async (req: Request) => {
 
     const effectivePromptProfile =
       mode === "transcribe_cleanup" ? "stream" : undefined;
+    // Prompt Engineer rewrites + expands, so it needs token headroom and a
+    // little reasoning — the opposite of the tight, no-reasoning cleanup path.
+    const isPromptEngineer =
+      mode === "transcribe_cleanup" && isPromptEngineerStyle(stylePreset);
     const { system: baseSystem, user: prompt } = buildPrompt(
       mode,
       text,
       context,
       routing,
+      stylePreset,
     );
 
     // Append the workspace context block when present. Trimmed so an empty
@@ -720,8 +755,9 @@ Deno.serve(async (req: Request) => {
 
     // Cleanup output should be close to input length. Stream dictation gets a
     // tighter cap because it blocks paste; longer modes keep the safer ceiling.
-    const maxOutputTokens =
-      effectivePromptProfile === "stream"
+    const maxOutputTokens = isPromptEngineer
+      ? 1024
+      : effectivePromptProfile === "stream"
         ? Math.min(512, Math.max(96, Math.ceil(text.length / 3) + 32))
         : Math.min(
             2048,
@@ -745,10 +781,11 @@ Deno.serve(async (req: Request) => {
           ],
           max_tokens: maxOutputTokens,
           // Mercury 2 spends reasoning tokens before output; on the tight
-          // stream-cleanup budget that starved the completion to 0. Disable.
-          reasoning_effort: "minimal",
+          // stream-cleanup budget that starved the completion to 0, so cleanup
+          // disables it. Prompt Engineer restructures, so allow a little.
+          reasoning_effort: isPromptEngineer ? "low" : "minimal",
           // Mercury rejects temperature < 0.5 (auto-clamps to 0.75 with warning).
-          temperature: 0.5,
+          temperature: isPromptEngineer ? 0.6 : 0.5,
         }),
       },
     );

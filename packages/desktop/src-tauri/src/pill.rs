@@ -36,6 +36,7 @@ fn normalize_phase(phase: &str) -> &'static str {
         "inserted" => "inserted",
         "copied" => "copied",
         "error" => "error",
+        "auth" => "auth",
         "settings" => "settings",
         _ => "rest",
     }
@@ -336,6 +337,7 @@ pub fn set_pill_phase(app: tauri::AppHandle, phase: String) -> Result<(), String
                 "processing" => "⟳ Processing — Oscar",
                 "inserted" => "✓ Inserted — Oscar",
                 "error" => "⚠ Oscar",
+                "auth" => "Sign in to enable AI — Oscar",
                 _ => "Oscar",
             };
             tray.set_tooltip(Some(label)).ok();
@@ -396,10 +398,19 @@ pub fn pill_push_settings(
     language: String,
     auto_paste: bool,
     ai_improvement: bool,
+    cleanup_style: String,
+    prompt_mode: bool,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        let _ = (app, language, auto_paste, ai_improvement);
+        let _ = (
+            app,
+            language,
+            auto_paste,
+            ai_improvement,
+            cleanup_style,
+            prompt_mode,
+        );
         return Ok(());
     }
 
@@ -409,6 +420,8 @@ pub fn pill_push_settings(
             "language": language,
             "autoPaste": auto_paste,
             "aiImprovement": ai_improvement,
+            "cleanupStyle": cleanup_style,
+            "promptMode": prompt_mode,
         });
         OscarEvent::PillSettingsInit(payload).dispatch(&app);
         Ok(())

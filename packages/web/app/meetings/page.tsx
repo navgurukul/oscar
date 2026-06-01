@@ -57,12 +57,22 @@ function formatDuration(segments: SavedMeetingRecord["transcriptSegments"]): str
 function attendeeList(m: SavedMeetingRecord): string[] {
   if (m.attendeesFull?.length) {
     return m.attendeesFull
-      .map((a) => a.name?.trim() || a.email?.split("@")[0] || "")
+      .map((a) => displayAttendeeName(a.name?.trim() || a.email || ""))
       .filter(Boolean);
   }
   return m.attendeesCompact
-    ? m.attendeesCompact.split(",").map((s) => s.trim()).filter(Boolean)
+    ? m.attendeesCompact
+        .split(",")
+        .map((s) => displayAttendeeName(s.trim()))
+        .filter(Boolean)
     : [];
+}
+
+function displayAttendeeName(raw: string): string {
+  // Emails get the @domain stripped so the chip reads as a name, not an
+  // address. Non-email strings pass through untouched.
+  if (!raw) return "";
+  return raw.includes("@") ? raw.split("@")[0]! : raw;
 }
 
 function countSection(markdown: string, sectionNames: string[]): number {
@@ -88,8 +98,12 @@ function previewLine(markdown: string): string {
   if (!markdown) return "";
   const flat = markdown
     .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/\s*\[\[[^\]\n]+\]\]/g, "")
     .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[-*+]\s+/gm, "")
+    .replace(/^\d+[.)]\s+/gm, "")
+    .replace(/^\[[ xX]\]\s+/gm, "")
+    .replace(/\[[ xX]\]\s+/g, "")
     .replace(/[*_`>]/g, "")
     .replace(/\s+/g, " ")
     .trim();

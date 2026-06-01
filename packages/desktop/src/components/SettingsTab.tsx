@@ -22,6 +22,10 @@ import {
   type ModelPreset,
 } from "../lib/whisper-models";
 import type { RoleModelState, WhisperModelRole } from "../lib/app-types";
+import {
+  CLEANUP_STYLE_OPTIONS,
+  type CleanupStyle,
+} from "../lib/cleanup-style";
 import { scribblesService } from "../services/scribbles.service";
 import type { DBScribble } from "../types/scribble.types";
 
@@ -238,6 +242,10 @@ interface SettingsTabProps {
   transcriptionLanguage: string;
   selectedMicId: string;
   onLanguageChange: (lang: string) => void;
+  cleanupStyle: CleanupStyle;
+  onCleanupStyleChange: (style: CleanupStyle) => void;
+  promptMode: boolean;
+  onPromptModeChange: (on: boolean) => void;
   onMicChange: (deviceId: string) => void;
   onClearData: () => void;
   userEmail?: string;
@@ -263,6 +271,10 @@ export function SettingsTab({
   transcriptionLanguage,
   selectedMicId,
   onLanguageChange,
+  cleanupStyle,
+  onCleanupStyleChange,
+  promptMode,
+  onPromptModeChange,
   onMicChange,
   onClearData,
   userEmail,
@@ -607,6 +619,49 @@ export function SettingsTab({
                 "For Minutes and long meeting transcription.",
                 meetingModel,
               )}
+            </SettingsSection>
+
+            {/* How Oscar treats dictated text: a persisted cleanup tone plus
+                the Prompt mode rewrite toggle (also on the recording pill). */}
+            <SettingsSection caps="CLEANUP STYLE">
+              <SettingRow
+                label="Dictation cleanup"
+                description={
+                  CLEANUP_STYLE_OPTIONS.find((o) => o.value === cleanupStyle)
+                    ?.hint ?? "How Oscar polishes dictated text."
+                }
+                align="center"
+              >
+                <select
+                  className="st-select"
+                  value={cleanupStyle}
+                  onChange={(e) =>
+                    onCleanupStyleChange(e.target.value as CleanupStyle)
+                  }
+                  aria-label="Dictation cleanup style"
+                >
+                  {CLEANUP_STYLE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </SettingRow>
+
+              <SettingRow
+                label="Prompt mode"
+                description="Rewrites your speech into a clean, ready-to-paste prompt instead of just tidying it."
+                align="center"
+              >
+                <div className="flex items-center gap-4">
+                  <MonoValue value={promptMode ? "ON" : "OFF"} on={promptMode} />
+                  <Toggle
+                    checked={promptMode}
+                    onChange={() => onPromptModeChange(!promptMode)}
+                    label="Prompt mode"
+                  />
+                </div>
+              </SettingRow>
             </SettingsSection>
 
             <SettingsSection caps="EXPERIMENTAL">

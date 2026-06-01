@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import { getValidAccessToken } from "../lib/auth-session";
 import { orgContextService } from "./orgContext.service";
 import { applyTranscriptPostProcessing } from "@oscar/shared/prompts";
 import { API_CONFIG, MEETING_CONFIG } from "@oscar/shared/constants";
@@ -12,6 +13,7 @@ import type {
   DictationContextSnapshot,
   DictationRoutingResult,
 } from "../types/scribble.types";
+import type { CleanupStyleWire } from "../lib/cleanup-style";
 
 export type DesktopAIMode =
   | "transcribe_cleanup"
@@ -33,6 +35,10 @@ interface AIProcessRequest {
   context?: DictationContextSnapshot;
   routing?: DictationRoutingResult;
   promptProfile?: AIProcessPromptProfile;
+  // User-chosen cleanup style (or the ephemeral prompt-engineer override).
+  // Only meaningful for transcribe_cleanup; the edge function ignores it for
+  // other modes. Missing = faithful (today's behaviour).
+  stylePreset?: CleanupStyleWire;
   // Workspace context (active-org vocabulary + reference docs) packaged by
   // orgContextService. Appended to the Mercury system prompt when present.
   orgContextBlock?: string;
@@ -397,16 +403,12 @@ async function extractInvokeError(error: unknown): Promise<string> {
   return fallback;
 }
 
+// Delegates to the shared resilient getter: refreshes a near-expired token once
+// and throws a typed AuthSessionError when the session is unrecoverable, so the
+// dictation flow can prompt re-auth instead of silently pasting the raw
+// transcript. See lib/auth-session.ts.
 async function getSessionAccessToken(): Promise<string> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
-    throw new Error("AI features require a valid OSCAR sign-in.");
-  }
-
-  return session.access_token;
+  return getValidAccessToken();
 }
 
 // ── Web AI route client ────────────────────────────────────────────────────
@@ -636,6 +638,7 @@ export const aiService = {
       context?: DictationContextSnapshot;
       routing?: DictationRoutingResult;
       promptProfile?: AIProcessPromptProfile;
+      stylePreset?: CleanupStyleWire;
       /**
        * Optional callback invoked once with per-call wire timing. Used by the
        * dictation perf instrumentation to record DNS/TCP/TLS/TTFB/download
@@ -666,6 +669,7 @@ export const aiService = {
         context: options?.context,
         routing: options?.routing,
         promptProfile: options?.promptProfile,
+        stylePreset: options?.stylePreset,
         orgContextBlock: orgContext.block || undefined,
       },
       options?.onTiming,

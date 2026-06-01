@@ -9,6 +9,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { razorpayService } from "@/lib/services/razorpay.service";
 import { subscriptionService } from "@/lib/services/subscription.service";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
+import { RATE_LIMITS } from "@/lib/constants";
 import type { VerifyPaymentRequest } from "@/lib/types/subscription.types";
 
 export async function POST(request: NextRequest) {
@@ -23,6 +28,13 @@ export async function POST(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const rateLimitResult = await applyRateLimit(
+      getClientIdentifier(user.id, request),
+      "payment-verify",
+      RATE_LIMITS.PAYMENT_VERIFY
+    );
+    if (rateLimitResult) return rateLimitResult;
 
     // Parse request body
     const body: VerifyPaymentRequest = await request.json();

@@ -4,10 +4,11 @@ Product ideas, planned features. Not prioritized — ordering loose.
 
 ## Plan Status Snapshot
 
-- **Context-aware dictation**: In progress. Desktop capture, routing, prompt versioning, settings toggle, and Stream cleanup wiring exist. Remaining work: saved-note metadata consistency, feedback analytics by context, and user-facing context labels.
+- **Context-aware dictation**: In progress. Desktop capture, routing, prompt versioning, settings toggle, Stream cleanup wiring, and saved-note metadata persistence exist. Remaining work: feedback analytics by context, and user-facing context labels on web.
 - **Vibe Coding Mode**: Planned. Design mocks exist; no dedicated API route, hook, or mode selector shipped yet.
 - **VAD for hands-free dictation**: Partly shipped. Whisper now has a VAD pre-filter to strip silence before inference, and Stream has a 200 ms release tail buffer. Hands-free auto-arm / auto-finalize is still planned.
 - **Littlebird.ai-style work memory clone**: Added below as a product-flow bet. Scope should stay Oscar-native: voice-first, explicit privacy controls, no invisible capture by default.
+- **Observability**: Planned. No error tracking, no analytics, no AI-quality telemetry wired today. Production runs blind. Detail below.
 
 ---
 
@@ -22,12 +23,12 @@ Product ideas, planned features. Not prioritized — ordering loose.
 - Routing supports `default`, `ide`, `email`, `docs`, `chat`, and `browser` categories.
 - Desktop Stream passes context/routing into `transcribe_cleanup`.
 - Settings expose context-aware dictation behind AI cleanup.
+- Routing metadata is persisted on every desktop save path: the Stream history record and promoting a local transcript to a saved Scribble both carry category, app key, context source, and prompt version. (Web has no record-time context — context awareness is desktop-only by design.)
 
 **Remaining**:
 
-- Persist routing metadata consistently on every saved note path.
 - Add feedback analytics grouped by category, app key, context source, and prompt version.
-- Add small user-facing context labels where useful.
+- Add small user-facing context labels on the web scribble list/detail (desktop already renders them via `ContextLabel`).
 
 **Problem**: Oscar formats all notes same way regardless of where user works. Note dictated inside VS Code needs different treatment than Gmail or Notion.
 
@@ -233,6 +234,119 @@ Install desktop
 
 ---
 
+## Observability
+
+**Status**: Planned. Highest-leverage foundational gap — nothing else on this list is safe to optimize without it.
+
+**Problem**: Oscar runs in production with no error tracking, no funnel analytics, and no AI-quality telemetry. Failures only surface when users complain. Regressions in formatting quality, recording reliability, or billing flows are invisible until churn shows up in MRR. Prompt iteration is blind: feedback table exists but no dashboard. Rate-limit blocks, 5xx spikes, Whisper crashes on edge devices, Razorpay webhook drops, slow Gemini calls — all silent today.
+
+**Idea**: Three layers stitched together, each with a clear ownership boundary:
+
+1. **Errors + traces** — every server route, edge function, desktop Rust panic, frontend exception lands in one place with stack + user/org context.
+2. **Product analytics** — funnel events from landing → signup → first record → first save → first share → retention cohorts. Per-tier (free/pro) breakdowns.
+3. **AI quality telemetry** — per-call latency, token cost, retry count, helpful-rate, feedback reason tags, prompt version. Drives prompt iteration.
+
+**Recommended stack** (cheap, batteries-included):
+
+| Layer | Tool | Why |
+|---|---|---|
+| Errors + traces | Sentry | Free tier covers Oscar's scale, supports Next.js + Tauri + Rust + Edge Functions in one project, source maps + release tracking already match `vX.Y.Z` tag flow. |
+| Product analytics | PostHog (self-hosted or cloud) | Event + funnel + cohort + session replay in one tool. EU host option for data residency. Free up to 1M events/mo. |
+| AI quality telemetry | PostHog `$ai` events or Helicone | PostHog handles it if we want one tool; Helicone is purpose-built for LLM observability with caching/rate-limit insights baked in. |
+
+Decide between PostHog-only and PostHog + Helicone after first month based on whether AI-specific signals (token cost per user, prompt regression detection) need richer tooling than generic events provide.
+
+**Surfaces affected**:
+
+- **Web (`packages/web`)**: Sentry Next.js SDK, PostHog browser client, server-side PostHog for API route events.
+- **Desktop (`packages/desktop`)**: Sentry Tauri (JS frontend) + `sentry-rust` (backend), PostHog desktop client.
+- **Edge functions (`supabase/functions/*`)**: Sentry Deno SDK, PostHog Node-style client.
+- **Shared (`packages/shared`)**: thin `analytics` wrapper exposing `track(event, props)` + `captureError(err, ctx)` so app code stays platform-agnostic.
+
+**Key events to track** (canonical names; keep stable):
+
+- `auth.signed_up`, `auth.signed_in`, `auth.signed_out`
+- `recording.started`, `recording.finished`, `recording.cancelled`, `recording.failed`
+- `scribble.saved`, `scribble.deleted`, `scribble.shared`
+- `meeting.started`, `meeting.ended`, `meeting.enhanced`
+- `stream.dictation.fired`, `stream.dictation.pasted`
+- `ai.format.requested`, `ai.format.succeeded`, `ai.format.failed`, `ai.format.retried`
+- `ai.title.requested`, `ai.title.succeeded`, `ai.title.failed`
+- `feedback.submitted` (with `helpful`, `reason`, `prompt_version`)
+- `billing.checkout.opened`, `billing.subscribed`, `billing.cancelled`, `billing.payment_failed`
+- `usage.limit_hit` (per-tier abuse signal)
+- `rate_limit.blocked` (security signal)
+
+**Properties on every event** (auto-attached by wrapper):
+
+- `user_id`, `org_id`, `plan_tier`, `platform` (`web` / `desktop` / `edge`), `version`, `route`, `session_id`.
+
+**AI-call telemetry shape**:
+
+```ts
+analytics.track('ai.format.succeeded', {
+  prompt_version,
+  model: 'gemini-2.5-flash',
+  input_tokens,
+  output_tokens,
+  latency_ms,
+  retry_count,
+  stream_chunks,
+  context_profile, // scribble | minutes | stream
+  org_id,
+})
+```
+
+**Dashboards / alerts day-one**:
+
+- Funnel: landing → signup → first save (retention week 1).
+- AI error rate by route + by `prompt_version` (alert if > 2 % over 1 h).
+- Rate-limit hit rate by endpoint (alert if > 50 hits / 5 min — abuse signal).
+- p95 latency for `/api/ai/format`, `/api/ai/title`, `meeting-enhance`.
+- Razorpay webhook delivery success (alert on any failure).
+- Whisper crash rate per OS/arch.
+- Helpful-rate trend per prompt version (alert if 7-day average drops > 5 pp).
+
+**Privacy + compliance**:
+
+- Never log raw transcripts, audio buffers, or PII.
+- Hash `user_id` if PostHog data residency requires it; keep mapping server-side.
+- Honor opt-out: respect `Do Not Track`; expose a "share usage data" toggle in Settings → Data & Privacy.
+- Strip query strings + bodies in Sentry breadcrumbs for AI/billing routes.
+
+**Implementation touch points**:
+
+- New env vars: `SENTRY_DSN_WEB`, `SENTRY_DSN_DESKTOP`, `SENTRY_DSN_EDGE`, `POSTHOG_KEY`, `POSTHOG_HOST`.
+- New helper: `packages/shared/src/analytics/` with `track()`, `captureError()`, `identify()`, `setOrgContext()`.
+- Wire Sentry in `packages/web/instrumentation.ts` (Next.js convention) and `app/error.tsx` / `app/global-error.tsx`.
+- Wire Sentry in `packages/desktop/src-tauri/src/lib.rs` (panic hook + `sentry::init`) and `packages/desktop/src/main.tsx` (JS SDK).
+- Add Sentry release upload step to `.github/workflows/release.yml` keyed off the `vX.Y.Z` tag (source maps for web, debug files for desktop).
+- Thread `analytics.track()` into existing AI service paths in `packages/web/lib/services/ai.service.ts` and `packages/desktop/src/services/ai.service.ts`.
+- Wrap `applyRateLimit()` result so blocks emit `rate_limit.blocked` automatically.
+- Add `Settings → Data & Privacy` toggle that disables PostHog (Sentry stays on for crash-fixing).
+
+**MVP cut** (one week of work):
+
+1. Sentry on web + Edge Functions only. Skip desktop Rust + Tauri until web stabilizes.
+2. PostHog with the 12 canonical events above. Skip session replay for now.
+3. Two dashboards: signup funnel + AI error rate. Skip alerts until baseline is known.
+4. Privacy toggle in settings.
+
+**Phase 2** (after MVP signals are trusted):
+
+- Desktop Sentry (Rust + JS) with crash dumps from auto-updater.
+- AI-specific dashboard: token cost per user, helpful-rate per prompt version, prompt-regression alerts.
+- Session replay scoped to error sessions only (cost control).
+- Synthetic monitoring on critical paths (login, record, save, share).
+
+**Out of scope**:
+
+- Full APM (Datadog/New Relic). Sentry's perf monitoring is enough at this stage.
+- Custom event warehouse (BigQuery/Snowflake) — defer until PostHog limits bite.
+- User-level cost attribution dashboards — needs Stripe migration first if global.
+
+---
+
 ## Other Backlog Items
 
 From `Agents.md` future enhancements, consolidated here:
@@ -246,6 +360,6 @@ From `Agents.md` future enhancements, consolidated here:
 - [ ] Summary generation agent
 - [ ] Tag/category suggestion agent
 - [ ] Sentiment analysis agent
-- [ ] Prompt versioning — track which prompt version generated each note
+- [x] Prompt versioning — track which prompt version generated each note (shipped: `DICTATION_PROMPT_VERSION = "context-v1"`, persisted on scribbles + streams, queryable in feedback stats)
 - [ ] Automated alerts when helpful-rate drops below threshold
 - [ ] Training data export for fine-tuning

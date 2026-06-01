@@ -51,8 +51,20 @@ fn focus_main_window(app_handle: &tauri::AppHandle) {
     }
 }
 
+/// Strip the query/fragment from a URL before logging. OAuth callbacks
+/// (`oscar://auth/callback?access_token=...&refresh_token=...`) arrive as deep
+/// links; logging the full URL would persist live credentials to the log file.
+fn redact_url(url: &str) -> String {
+    let cut = url.find(['?', '#']).unwrap_or(url.len());
+    if cut == url.len() {
+        url.to_string()
+    } else {
+        format!("{}?<redacted>", &url[..cut])
+    }
+}
+
 fn forward_deep_link(app_handle: &tauri::AppHandle, url: String) {
-    log::info!("[deep-link] received: {}", url);
+    log::info!("[deep-link] received: {}", redact_url(&url));
     set_pending_deep_link(url.clone());
     focus_main_window(app_handle);
     OscarEvent::DeepLink(url).dispatch(app_handle);
@@ -60,29 +72,30 @@ fn forward_deep_link(app_handle: &tauri::AppHandle, url: String) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::init();
-
-    log::info!("========================================");
-    log::info!("OSCAR v{} starting", env!("CARGO_PKG_VERSION"));
-    log::info!("OS: {} {}", std::env::consts::OS, std::env::consts::ARCH);
-    log::info!(
-        "DISPLAY={}",
-        std::env::var("DISPLAY").unwrap_or_else(|_| "(not set)".into())
-    );
-    log::info!(
-        "XDG_SESSION_TYPE={}",
-        std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "(not set)".into())
-    );
-    log::info!(
-        "WAYLAND_DISPLAY={}",
-        std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "(not set)".into())
-    );
-    log::info!("========================================");
-
     let is_recording = Arc::new(AtomicBool::new(false));
 
-    log::info!("[init] Initializing Tauri plugins...");
     let mut builder = tauri::Builder::default();
+
+    // Persistent file logging. The auto-updater self-exits the app on Windows to
+    // run the NSIS installer (`std::process::exit(0)` inside `install()`), so the
+    // download → install → on_before_exit flow leaves no trace on stderr. Write it
+    // to the app log dir instead — on Windows:
+    //   %LOCALAPPDATA%\com.souvikdeb.oscar\logs\oscar.log
+    // `tauri_plugin_updater` is logged at Trace so its install path is captured.
+    builder = builder.plugin(
+        tauri_plugin_log::Builder::new()
+            .target(tauri_plugin_log::Target::new(
+                tauri_plugin_log::TargetKind::LogDir {
+                    file_name: Some("oscar".into()),
+                },
+            ))
+            .target(tauri_plugin_log::Target::new(
+                tauri_plugin_log::TargetKind::Stdout,
+            ))
+            .level(log::LevelFilter::Info)
+            .level_for("tauri_plugin_updater", log::LevelFilter::Trace)
+            .build(),
+    );
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
@@ -90,7 +103,8 @@ pub fn run() {
         // OS starts a new process for custom-scheme URLs; this plugin forwards
         // that launch to the already-running process instead.
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            log::info!("[single-instance] additional launch: {:?}", argv);
+            let safe_argv: Vec<String> = argv.iter().map(|a| redact_url(a)).collect();
+            log::info!("[single-instance] additional launch: {:?}", safe_argv);
             focus_main_window(app);
         }));
     }
@@ -149,6 +163,7 @@ pub fn run() {
             filesystem::check_file_exists,
             filesystem::delete_file,
             filesystem::append_perf_log,
+            filesystem::get_model_path,
             calendar::get_calendar_events,
             hardware::detect_hardware,
             hardware::recommend_whisper_model,
@@ -156,6 +171,22 @@ pub fn run() {
         ])
         .setup(move |app| {
             log::info!("[setup] Tauri setup started");
+            log::info!("========================================");
+            log::info!("OSCAR v{} starting", app.package_info().version);
+            log::info!("OS: {} {}", std::env::consts::OS, std::env::consts::ARCH);
+            log::info!(
+                "DISPLAY={}",
+                std::env::var("DISPLAY").unwrap_or_else(|_| "(not set)".into())
+            );
+            log::info!(
+                "XDG_SESSION_TYPE={}",
+                std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "(not set)".into())
+            );
+            log::info!(
+                "WAYLAND_DISPLAY={}",
+                std::env::var("WAYLAND_DISPLAY").unwrap_or_else(|_| "(not set)".into())
+            );
+            log::info!("========================================");
 
             // Set overlay titlebar on macOS only (not supported on Linux/GTK)
             #[cfg(target_os = "macos")]
@@ -185,7 +216,7 @@ pub fn run() {
                 Ok(Some(urls)) => {
                     for url in urls {
                         let url_str = url.to_string();
-                        log::info!("[deep-link] current launch URL: {}", url_str);
+                        log::info!("[deep-link] current launch URL: {}", redact_url(&url_str));
                         set_pending_deep_link(url_str);
                     }
                 }

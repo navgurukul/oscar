@@ -5,13 +5,18 @@
  * Cancels the user's subscription at period end
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { razorpayService } from "@/lib/services/razorpay.service";
 import { subscriptionService } from "@/lib/services/subscription.service";
 import { getActiveOrg, getMemberRole } from "@/lib/server/organization";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
+import { RATE_LIMITS } from "@/lib/constants";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
     // Authenticate user
     const supabase = await createClient();
@@ -23,6 +28,13 @@ export async function POST() {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const rateLimitResult = await applyRateLimit(
+      getClientIdentifier(user.id, request),
+      "payment-cancel",
+      RATE_LIMITS.PAYMENT_CANCEL
+    );
+    if (rateLimitResult) return rateLimitResult;
 
     // Phase 4: gate cancellation behind workspace admin/owner role.
     const active = await getActiveOrg(user.id);

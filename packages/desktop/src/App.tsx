@@ -5,6 +5,7 @@ import { aiService } from "./services/ai.service";
 import { streamsService } from "./services/streams.service";
 import { scribblesService } from "./services/scribbles.service";
 import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -25,6 +26,7 @@ import { MeetingsTab } from "./components/MeetingsTab";
 import { AuthScreen } from "./components/onboarding/AuthScreen";
 import { PermissionsScreen } from "./components/onboarding/PermissionsScreen";
 import { SetupScreen } from "./components/onboarding/SetupScreen";
+import { isAuthSessionError, revalidateSession } from "./lib/auth-session";
 import {
   isContextAwarePlatform,
   routeDictationContext,
@@ -53,6 +55,11 @@ import {
   getMicrophonePermissionState,
   isMacOS,
 } from "./lib/desktop-platform";
+import {
+  DEFAULT_CLEANUP_STYLE,
+  type CleanupStyle,
+  type CleanupStyleWire,
+} from "./lib/cleanup-style";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
 import {
   FALLBACK_MODELS,
@@ -265,6 +272,16 @@ function App() {
   // Transcription language ("auto" = whisper auto-detects, "hi-en" = Hinglish)
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("hi-en");
 
+  // Persisted cleanup style (tone of AI-cleaned dictation). Applies on every
+  // dictation regardless of trigger source.
+  const [cleanupStyle, setCleanupStyle] =
+    useState<CleanupStyle>(DEFAULT_CLEANUP_STYLE);
+  // Prompt mode: persisted rewrite mode that turns dictated speech into a
+  // ready-to-paste prompt. Toggleable from Settings and the recording pill; the
+  // always-visible pill badge is the guardrail against forgetting it's on.
+  // promptModeRef drives cleanup; the state value feeds the Settings toggle.
+  const [promptMode, setPromptMode] = useState(false);
+
   // Selected microphone device id ("" = system default)
   const [selectedMicId, setSelectedMicId] = useState("");
   const selectedMicIdRef = useRef("");
@@ -318,6 +335,8 @@ function App() {
   const meterRafRef = useRef<number | null>(null);
   const aiEditingRef = useRef(false);
   const transcriptionLanguageRef = useRef<string>("hi-en");
+  const cleanupStyleRef = useRef<CleanupStyle>(DEFAULT_CLEANUP_STYLE);
+  const promptModeRef = useRef(false);
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
   const authInitRef = useRef(false);
@@ -457,6 +476,26 @@ function App() {
     setUser(null);
   }, [clearCalendarConnection]);
 
+  // Invoked when an authenticated call fails because the session is dead. Clears
+  // the stale session (→ AuthScreen) and brings the main window forward so the
+  // user can re-authenticate — the dictation flow runs with the main window
+  // hidden, so without this the sign-in screen would never be seen. Returns
+  // true when the session actually recovered (a transient blip), in which case
+  // no re-auth prompt is needed.
+  const promptReauth = useCallback(async (): Promise<boolean> => {
+    const recovered = await revalidateSession({ force: true });
+    if (recovered) return true;
+    try {
+      const win = getCurrentWindow();
+      await win.show();
+      await win.unminimize();
+      await win.setFocus();
+    } catch (e) {
+      console.warn("[auth] could not focus main window for re-auth:", e);
+    }
+    return false;
+  }, []);
+
   // ── Supabase auth listener ─────────────────────────────────────────────────
 
   useEffect(() => {
@@ -478,6 +517,11 @@ function App() {
       sessionRef.current = s;
       setUser(s?.user ?? null);
       setAuthLoading(false);
+      // Proactively validate a restored session. A hard restart (e.g.
+      // auto-update relaunch) can leave a stale/rotated refresh token that
+      // getSession() still hands back; revalidate clears it now → AuthScreen,
+      // instead of letting the first dictation fail AI cleanup silently.
+      if (s) void revalidateSession();
     });
 
     const {
@@ -503,6 +547,25 @@ function App() {
     return () => subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: auth listener + one-time session check
   }, [clearCalendarConnection, googleCalendarConnectedUserId]);
+
+  // Re-validate the session whenever the window regains focus / visibility. The
+  // app is often left running with the main window hidden while the user
+  // dictates via the pill; a token can expire (or its refresh token rot) in that
+  // gap. Catching it on resume clears a dead session before the next AI call.
+  useEffect(() => {
+    const onResume = () => {
+      void revalidateSession();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") onResume();
+    };
+    window.addEventListener("focus", onResume);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onResume);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
 
   // ── Deep link handler for OAuth callback ────────────────────────────────────
 
@@ -673,6 +736,8 @@ function App() {
         savedSystemAudioEnabled,
         savedMeetingsData,
         savedMinutesDataResetVersion,
+        savedCleanupStyle,
+        savedPromptMode,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
         loadSetting<boolean>("autoPaste", true),
@@ -696,6 +761,8 @@ function App() {
         loadSetting<boolean>("systemAudioEnabled", true),
         loadSetting<SavedMeetingRecord[]>("savedMeetings", []),
         loadSetting<string>("minutesDataResetVersion", ""),
+        loadSetting<CleanupStyle>("cleanupStyle", DEFAULT_CLEANUP_STYLE),
+        loadSetting<boolean>("promptMode", false),
       ]);
 
       const micPermission = await getMicrophonePermissionState().catch(
@@ -753,6 +820,10 @@ function App() {
       setMeetingModel((prev) => ({ ...prev, preset: savedMinutesPreset }));
       minutesModelPresetRef.current = savedMinutesPreset;
       setSystemAudioEnabled(savedSystemAudioEnabled);
+      setCleanupStyle(savedCleanupStyle);
+      cleanupStyleRef.current = savedCleanupStyle;
+      setPromptMode(savedPromptMode);
+      promptModeRef.current = savedPromptMode;
       const hasLegacyCalendarConnection =
         Boolean(savedCalToken || savedCalRefreshToken) && !savedCalConnectedUserId;
       if (hasLegacyCalendarConnection) {
@@ -860,6 +931,8 @@ function App() {
       language?: string;
       autoPaste?: boolean;
       aiImprovement?: boolean;
+      cleanupStyle?: CleanupStyle;
+      promptMode?: boolean;
     }>("pill-settings-update", (ev) => {
       const p = ev.payload || {};
       if (p.language !== undefined) {
@@ -877,6 +950,16 @@ function App() {
         aiImprovementEnabledRef.current = p.aiImprovement;
         void saveSetting("aiImprovementEnabled", p.aiImprovement);
       }
+      if (p.cleanupStyle !== undefined) {
+        setCleanupStyle(p.cleanupStyle);
+        cleanupStyleRef.current = p.cleanupStyle;
+        void saveSetting("cleanupStyle", p.cleanupStyle);
+      }
+      if (p.promptMode !== undefined) {
+        setPromptMode(p.promptMode);
+        promptModeRef.current = p.promptMode;
+        void saveSetting("promptMode", p.promptMode);
+      }
     });
 
     // When the pill window has wired its listeners, push current settings.
@@ -885,6 +968,8 @@ function App() {
         language: transcriptionLanguageRef.current,
         autoPaste: autoPasteRef.current,
         aiImprovement: aiImprovementEnabledRef.current,
+        cleanupStyle: cleanupStyleRef.current,
+        promptMode: promptModeRef.current,
       }).catch(console.warn);
     });
 
@@ -1118,7 +1203,7 @@ function App() {
         );
 
         try {
-          const path = await downloadModel(spec);
+          const path = await downloadModel(spec, spec.sha256);
           syncDownloadProgress(spec.variant, 100);
           return path;
         } finally {
@@ -1504,6 +1589,10 @@ function App() {
     let rawWhisperText: string | null = null;
     let finalCleanedText: string | null = null;
     let pasteHappened = false;
+    // Set when AI cleanup was skipped because the session is dead. The raw
+    // transcript still pastes (no text lost), but the pill reports "sign in to
+    // enable AI" instead of a normal success toast.
+    let aiAuthFailed = false;
 
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
@@ -1670,6 +1759,22 @@ function App() {
         ? routeDictationContext(activeDictationContext)
         : null;
       const dictationMetadata = buildDictationMetadata(dictationRouting);
+      // Prompt mode overrides the persisted tone style. The wire value stays
+      // "prompt-engineer" — the deployed edge function matches that string.
+      const effectiveStylePreset: CleanupStyleWire = promptModeRef.current
+        ? "prompt-engineer"
+        : cleanupStyleRef.current;
+      // Record the effective style on the saved metadata so feedback analytics
+      // can attribute helpful-rate per style — no schema change, it rides the
+      // existing dictation_prompt_version field (e.g. "context-v1/concise").
+      if (
+        effectiveStylePreset !== "faithful" &&
+        "dictation_prompt_version" in dictationMetadata &&
+        dictationMetadata.dictation_prompt_version
+      ) {
+        dictationMetadata.dictation_prompt_version =
+          `${dictationMetadata.dictation_prompt_version}/${effectiveStylePreset}`;
+      }
       let cleanupReturnedEmpty = false;
 
       // Silent AI cleanup via the backend AI function.
@@ -1683,6 +1788,9 @@ function App() {
             "transcribe_cleanup",
             {
               promptProfile: "stream",
+              // User-chosen tone, or the per-session prompt-engineer override.
+              // Sent unconditionally (independent of context-aware routing).
+              stylePreset: effectiveStylePreset,
               // Capture wire-level breakdown so perf.jsonl can distinguish
               // "server is slow" (ttfb dominates) from "network is slow"
               // (dns/tcp/tls dominate) for the ai-cleanup stage.
@@ -1720,11 +1828,24 @@ function App() {
           }
         } catch (aiErr) {
           timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
-          // Silently fall back to raw transcript — user never sees this
-          console.warn(
-            "[ai] silent cleanup failed, using raw transcript:",
-            aiErr,
-          );
+          if (isAuthSessionError(aiErr)) {
+            // Dead session: don't fail silently — the raw transcript still
+            // pastes, but flag it so the pill prompts re-auth and the main
+            // window is raised to the sign-in screen. promptReauth returns true
+            // when the session actually recovered (a transient blip), in which
+            // case we leave the normal success toast alone.
+            const recovered = await promptReauth();
+            aiAuthFailed = !recovered;
+            if (!recovered) {
+              console.warn("[ai] cleanup skipped — session invalid, prompting re-auth");
+            }
+          } else {
+            // Other failures: fall back to raw transcript silently.
+            console.warn(
+              "[ai] silent cleanup failed, using raw transcript:",
+              aiErr,
+            );
+          }
         }
       }
 
@@ -1858,13 +1979,19 @@ function App() {
       setIsProcessing(false);
       // Success path: show the outcome toast — "Inserted" when auto-paste
       // landed the text in the focused app, "Copied" when only the clipboard
-      // was set. Then collapse the pill back to its resting edge handle.
+      // was set. When the session was dead, the raw transcript still pasted but
+      // AI cleanup was skipped, so report "sign in to enable AI" instead and
+      // dwell a touch longer so it's readable. Then collapse to the edge handle.
       if (!hadError) {
-        const finalPhase = pasteHappened ? "inserted" : "copied";
+        const finalPhase = aiAuthFailed
+          ? "auth"
+          : pasteHappened
+            ? "inserted"
+            : "copied";
         invoke("set_pill_phase", { phase: finalPhase }).catch(console.warn);
         setTimeout(() => {
           invoke("hide_recording_pill").catch(console.warn);
-        }, 1500);
+        }, aiAuthFailed ? 2400 : 1500);
       }
       const totalMs = Math.round(performance.now() - tStart);
       const timingParts = Object.entries(timings)
@@ -1932,6 +2059,89 @@ function App() {
 
   // ── Scribble recording (click to start/stop, saves a Scribble) ───────────
 
+  // Shared core: take decoded 16 kHz mono PCM → transcribe → format → title →
+  // save as a Scribble. Used by both the mic-recorded path and audio-file
+  // import so the two stay in lockstep.
+  const runScribblePipeline = async (
+    audioData: Float32Array,
+    finish: (msg: string | null) => void,
+  ) => {
+    const uid = user?.id;
+    if (!uid) {
+      setStatus("Sign in to save Scribbles.");
+      finish("Sign in to save Scribbles.");
+      return;
+    }
+    if (audioData.length < 1600) {
+      setStatus("That recording was too short. Try again.");
+      finish("Too short. Try again.");
+      return;
+    }
+
+    try {
+      await ensureWhisperModelLoaded("dictation");
+      const result = await invoke<Transcription>("transcribe_audio", {
+        audioData: Array.from(audioData),
+        initialPrompt: buildInitialPrompt(
+          transcriptionLanguage,
+          dictWordsRef.current,
+        ),
+        language: getWhisperLanguage(transcriptionLanguage, "dictation"),
+      });
+
+      const rawText = result.text?.trim() ?? "";
+      if (!rawText) {
+        setStatus("No speech detected.");
+        finish("No speech detected. Try again.");
+        return;
+      }
+
+      let formattedText = rawText;
+      let title = "";
+      if (aiImprovementEnabledRef.current) {
+        setScribbleStatus("polishing");
+        setStatus("polishing");
+        try {
+          const formatted = await aiService.formatScribble(rawText);
+          if (formatted.trim()) {
+            formattedText = formatted.trim();
+          }
+        } catch (aiErr) {
+          console.warn("[scribble] format failed, saving raw transcript:", aiErr);
+        }
+
+        setScribbleStatus("titling");
+        try {
+          title = await aiService.generateScribbleTitle(formattedText);
+        } catch (titleErr) {
+          console.warn("[scribble] title generation failed, using fallback:", titleErr);
+        }
+      }
+
+      setScribbleStatus("saving");
+      setStatus("saving");
+      const { error } = await scribblesService.createScribble({
+        user_id: uid,
+        title: title || buildFallbackScribbleTitle(formattedText),
+        raw_text: rawText,
+        original_formatted_text: formattedText,
+        edited_text: null,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setScribbleRefreshKey((key) => key + 1);
+      setStatus("Scribble saved.");
+      finish("Scribble saved ✓");
+    } catch (e) {
+      console.error("[scribble] failed:", e);
+      setStatus(`Scribble failed: ${e}`);
+      finish(`Failed: ${e}`);
+    }
+  };
+
   const processScribbleAudio = async () => {
     const finish = (msg: string | null) => {
       setIsProcessing(false);
@@ -1998,74 +2208,73 @@ function App() {
       audioContext.close();
     }
 
-    if (audioData.length < 1600) {
-      setStatus("Scribble recording was too short. Try again.");
-      finish("Recording was too short. Try again.");
+    await runScribblePipeline(audioData, finish);
+  };
+
+  // Import an existing audio file as a Scribble — decode → 16 kHz mono →
+  // same transcribe/format/title/save core as a mic recording.
+  const importScribbleFromFile = async (file: File) => {
+    const finish = (msg: string | null) => {
+      setIsProcessing(false);
+      setIsScribbleProcessing(false);
+      isScribbleProcessingRef.current = false;
+      setScribbleStatus(msg);
+      if (msg) {
+        window.setTimeout(() => {
+          setScribbleStatus((current) => (current === msg ? null : current));
+        }, 2500);
+      }
+    };
+
+    if (!user?.id) {
+      setStatus("Sign in to save Scribbles.");
+      finish("Sign in to save Scribbles.");
+      return;
+    }
+    if (
+      isRecordingRef.current ||
+      isScribbleRecordingRef.current ||
+      isScribbleProcessingRef.current
+    ) {
+      return;
+    }
+    const looksLikeAudio =
+      file.type.startsWith("audio/") ||
+      /\.(mp3|m4a|wav|webm|ogg|oga|aac|flac|mp4)$/i.test(file.name);
+    if (!looksLikeAudio) {
+      setStatus("That doesn't look like an audio file.");
+      finish("Unsupported file type.");
       return;
     }
 
+    setIsProcessing(true);
+    setIsScribbleProcessing(true);
+    isScribbleProcessingRef.current = true;
+    setScribbleStatus("transcribing");
+    setStatus(`Importing ${file.name}…`);
+
+    let audioData: Float32Array;
+    const audioContext = new AudioContext({ sampleRate: 16000 });
     try {
-      await ensureWhisperModelLoaded("dictation");
-      const result = await invoke<Transcription>("transcribe_audio", {
-        audioData: Array.from(audioData),
-        initialPrompt: buildInitialPrompt(
-          transcriptionLanguage,
-          dictWordsRef.current,
-        ),
-        language: getWhisperLanguage(transcriptionLanguage, "dictation"),
-      });
-
-      const rawText = result.text?.trim() ?? "";
-      if (!rawText) {
-        setStatus("No speech detected. Try speaking louder or closer.");
-        finish("No speech detected. Try again.");
-        return;
+      const arrayBuffer = await file.arrayBuffer();
+      const decoded = await audioContext.decodeAudioData(arrayBuffer);
+      const numChannels = decoded.numberOfChannels;
+      const length = decoded.length;
+      const mono = new Float32Array(length);
+      for (let ch = 0; ch < numChannels; ch++) {
+        const channel = decoded.getChannelData(ch);
+        for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
       }
-
-      let formattedText = rawText;
-      let title = "";
-      if (aiImprovementEnabledRef.current) {
-        setScribbleStatus("polishing");
-        setStatus("polishing");
-        try {
-          const formatted = await aiService.formatScribble(rawText);
-          if (formatted.trim()) {
-            formattedText = formatted.trim();
-          }
-        } catch (aiErr) {
-          console.warn("[scribble] format failed, saving raw transcript:", aiErr);
-        }
-
-        setScribbleStatus("titling");
-        try {
-          title = await aiService.generateScribbleTitle(formattedText);
-        } catch (titleErr) {
-          console.warn("[scribble] title generation failed, using fallback:", titleErr);
-        }
-      }
-
-      setScribbleStatus("saving");
-      setStatus("saving");
-      const { error } = await scribblesService.createScribble({
-        user_id: user.id,
-        title: title || buildFallbackScribbleTitle(formattedText),
-        raw_text: rawText,
-        original_formatted_text: formattedText,
-        edited_text: null,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      setScribbleRefreshKey((key) => key + 1);
-      setStatus("Scribble saved.");
-      finish("Scribble saved ✓");
+      audioData = mono;
     } catch (e) {
-      console.error("[scribble] failed:", e);
-      setStatus(`Scribble failed: ${e}`);
-      finish(`Failed: ${e}`);
+      setStatus(`Could not read that audio file: ${e}`);
+      finish("Could not read that file.");
+      audioContext.close();
+      return;
     }
+    audioContext.close();
+
+    await runScribblePipeline(audioData, finish);
   };
 
   const startScribbleRecording = async () => {
@@ -2299,6 +2508,8 @@ function App() {
       language: transcriptionLanguageRef.current,
       autoPaste: autoPasteRef.current,
       aiImprovement: enabled,
+      cleanupStyle: cleanupStyleRef.current,
+      promptMode: promptModeRef.current,
     }).catch(console.warn);
   }, []);
 
@@ -2505,6 +2716,17 @@ function App() {
                       raw_text: transcript.text,
                       original_formatted_text: transcript.text,
                       edited_text: null,
+                      // Carry the dictation routing context captured at record
+                      // time onto the saved scribble, matching the Stream
+                      // history path so metadata persists on every save path
+                      // (and the ContextLabel badge renders on the scribble).
+                      dictation_category: transcript.dictation_category ?? null,
+                      dictation_variant: transcript.dictation_variant ?? null,
+                      dictation_app_key: transcript.dictation_app_key ?? null,
+                      dictation_context_source:
+                        transcript.dictation_context_source ?? null,
+                      dictation_prompt_version:
+                        transcript.dictation_prompt_version ?? null,
                     });
                     if (error) throw error;
                     setScribbleRefreshKey((k) => k + 1);
@@ -2575,6 +2797,7 @@ function App() {
                       void startScribbleRecording();
                     }
                   }}
+                  onImportAudio={(file) => void importScribbleFromFile(file)}
                   recordingTime={scribbleRecordingTime}
                 />
               )}
@@ -2582,6 +2805,32 @@ function App() {
               {activeTab === "settings" && (
                 <SettingsTab
                   transcriptionLanguage={transcriptionLanguage}
+                  cleanupStyle={cleanupStyle}
+                  onCleanupStyleChange={(style) => {
+                    setCleanupStyle(style);
+                    cleanupStyleRef.current = style;
+                    saveSetting("cleanupStyle", style);
+                    invoke("pill_push_settings", {
+                      language: transcriptionLanguageRef.current,
+                      autoPaste: autoPasteRef.current,
+                      aiImprovement: aiImprovementEnabledRef.current,
+                      cleanupStyle: style,
+                      promptMode: promptModeRef.current,
+                    }).catch(console.warn);
+                  }}
+                  promptMode={promptMode}
+                  onPromptModeChange={(on) => {
+                    setPromptMode(on);
+                    promptModeRef.current = on;
+                    saveSetting("promptMode", on);
+                    invoke("pill_push_settings", {
+                      language: transcriptionLanguageRef.current,
+                      autoPaste: autoPasteRef.current,
+                      aiImprovement: aiImprovementEnabledRef.current,
+                      cleanupStyle: cleanupStyleRef.current,
+                      promptMode: on,
+                    }).catch(console.warn);
+                  }}
                   onLanguageChange={(lang) => {
                     setTranscriptionLanguage(lang);
                     transcriptionLanguageRef.current = lang;
@@ -2590,6 +2839,8 @@ function App() {
                       language: lang,
                       autoPaste: autoPasteRef.current,
                       aiImprovement: aiImprovementEnabledRef.current,
+                      cleanupStyle: cleanupStyleRef.current,
+                      promptMode: promptModeRef.current,
                     }).catch(console.warn);
                   }}
                   selectedMicId={selectedMicId}

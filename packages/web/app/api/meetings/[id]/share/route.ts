@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/orgRoutes";
 import { getActiveOrg } from "@/lib/server/organization";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
@@ -7,6 +7,11 @@ import {
   mintPublicShareToken,
   type Visibility,
 } from "@/lib/server/shareTokens";
+import {
+  applyRateLimit,
+  getClientIdentifier,
+} from "@/lib/middleware/rate-limit";
+import { RATE_LIMITS } from "@/lib/constants";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -23,10 +28,17 @@ function deriveVisibility(body: ShareBody): Visibility | null {
   return null;
 }
 
-export async function PATCH(request: Request, context: Ctx) {
+export async function PATCH(request: NextRequest, context: Ctx) {
   const auth = await requireAuth();
   if (!auth.ok) return auth.response;
   const { id } = await context.params;
+
+  const rateLimitResult = await applyRateLimit(
+    getClientIdentifier(auth.user.id, request),
+    "meeting-share",
+    RATE_LIMITS.SHARE_LINK
+  );
+  if (rateLimitResult) return rateLimitResult;
 
   let body: ShareBody;
   try {

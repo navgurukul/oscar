@@ -4,14 +4,22 @@ import { aiService } from "../services/ai.service";
 import { ContextLabel } from "./ContextLabel";
 import type { DictationContextSource } from "../types/scribble.types";
 
+export type AIMode = "cleanup" | "summary" | "bullets" | "email";
+
 interface AIPanelProps {
   transcript: string;
   onApply: (text: string) => void;
   appKey?: string | null;
   contextSource?: DictationContextSource | null;
+  /**
+   * External request to run a mode immediately (e.g. a "reshape" prompt clicked
+   * in the reading view). The `nonce` lets the same mode re-trigger on repeat
+   * clicks. Null means no pending request.
+   */
+  request?: { mode: AIMode; nonce: number } | null;
+  /** Fired once a `request` has been picked up, so the parent can clear it. */
+  onRequestConsumed?: () => void;
 }
-
-type AIMode = "cleanup" | "summary" | "bullets" | "email";
 
 const SUGGESTED: { mode: AIMode; label: string }[] = [
   { mode: "cleanup", label: "Clean it up" },
@@ -27,7 +35,7 @@ const MODE_LABEL: Record<AIMode, string> = {
   email: "Email Draft",
 };
 
-export function AIPanel({ transcript, onApply, appKey, contextSource }: AIPanelProps) {
+export function AIPanel({ transcript, onApply, appKey, contextSource, request, onRequestConsumed }: AIPanelProps) {
   const [activeMode, setActiveMode] = useState<AIMode | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [result, setResult] = useState("");
@@ -35,6 +43,7 @@ export function AIPanel({ transcript, onApply, appKey, contextSource }: AIPanelP
   const [error, setError] = useState("");
   const [customPrompt, setCustomPrompt] = useState("");
   const outputRef = useRef<HTMLDivElement>(null);
+  const lastRequestNonce = useRef<number | null>(null);
 
   useEffect(() => {
     if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
@@ -55,6 +64,16 @@ export function AIPanel({ transcript, onApply, appKey, contextSource }: AIPanelP
       setStreaming(false);
     }
   };
+
+  // Honour an external reshape request (mode + nonce) from the reading view.
+  useEffect(() => {
+    if (!request) return;
+    if (lastRequestNonce.current === request.nonce) return;
+    lastRequestNonce.current = request.nonce;
+    void runMode(request.mode);
+    onRequestConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request?.nonce]);
 
   const runCustom = async () => {
     const prompt = customPrompt.trim();

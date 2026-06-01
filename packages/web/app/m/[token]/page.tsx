@@ -86,8 +86,16 @@ function formatHeader(iso: string): string {
 function stripCitationTokens(markdown: string): string {
   return markdown
     .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/\s*\[\[[^\]\n]+\]\]/g, "")
     .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+function cleanBulletText(text: string): string {
+  return text
+    .replace(/^\[[ xX]\]\s+/, "")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -124,8 +132,11 @@ function parseSections(markdown: string): ParsedSections {
       continue;
     }
     const bullet = line.match(/^(?:[-*+]|\d+[.)])\s+(.+)$/);
-    if (bullet && current) {
-      out[current].push(bullet[1].replace(/[*_`]/g, "").trim());
+    const bareTask = !bullet ? line.match(/^\[[ xX]\]\s+(.+)$/) : null;
+    const captured = bullet?.[1] ?? bareTask?.[1] ?? null;
+    if (captured && current) {
+      const cleaned = cleanBulletText(captured);
+      if (cleaned) out[current].push(cleaned);
     }
   }
   out.hasStructure =
@@ -133,10 +144,15 @@ function parseSections(markdown: string): ParsedSections {
   return out;
 }
 
+function displayAttendeeName(raw: string): string {
+  if (!raw) return "";
+  return raw.includes("@") ? raw.split("@")[0]! : raw;
+}
+
 function attendeeList(compact: string): string[] {
   return compact
     .split(",")
-    .map((s) => s.trim())
+    .map((s) => displayAttendeeName(s.trim()))
     .filter(Boolean);
 }
 

@@ -104,11 +104,18 @@ public func sckIsCapturing() -> Bool {
 }
 
 /// Start capturing system audio.
-/// Returns: 0 = success, 1 = already capturing, 2 = not supported,
+/// Returns: 0 = success, 2 = not supported,
 ///          3 = no display / permission denied, 4 = capture start failed
+/// Code 1 (already capturing) is no longer returned: start is idempotent and
+/// tears down any leftover capture first, so a stale session or a raced start
+/// can never strand the caller on a mic-only fallback.
 @_cdecl("sck_start_capture")
 public func sckStartCapture() -> Int32 {
-    guard !isCurrentlyCapturing else { return 1 }
+    // If a previous capture is still marked active (unclean stop, prior crash,
+    // or a raced start), tear it down so we always begin from a clean state.
+    if isCurrentlyCapturing {
+        sckStopCapture()
+    }
 
     #if canImport(ScreenCaptureKit)
     if #available(macOS 13.0, *) {

@@ -61,7 +61,8 @@
     body[data-phase="processing"] .handle,
     body[data-phase="inserted"] .handle,
     body[data-phase="copied"] .handle,
-    body[data-phase="error"] .handle {
+    body[data-phase="error"] .handle,
+    body[data-phase="auth"] .handle {
       opacity: 0;
     }
 
@@ -91,7 +92,8 @@
     body[data-phase="processing"] .hit-zone,
     body[data-phase="inserted"] .hit-zone,
     body[data-phase="copied"] .hit-zone,
-    body[data-phase="error"] .hit-zone {
+    body[data-phase="error"] .hit-zone,
+    body[data-phase="auth"] .hit-zone {
       left: 0;
       bottom: 0;
       transform: none;
@@ -116,7 +118,8 @@
     body[data-phase="processing"] .pill-wrap,
     body[data-phase="inserted"] .pill-wrap,
     body[data-phase="copied"] .pill-wrap,
-    body[data-phase="error"] .pill-wrap {
+    body[data-phase="error"] .pill-wrap,
+    body[data-phase="auth"] .pill-wrap {
       transform: translateX(-50%) translateY(0) scale(1);
       opacity: 1;
       pointer-events: auto;
@@ -174,6 +177,12 @@
     }
     .pill-btn:hover { background: rgba(26, 24, 22, 0.06); }
     .pill-btn.active { background: rgba(184, 98, 61, 0.1); }
+    /* Prompt-mode quick toggle: muted when off, terracotta when on. Doubles as
+       the always-visible "prompt mode is on" indicator (replaces the old text
+       badge that widened the pill). */
+    .pm-btn { color: rgba(26, 24, 22, 0.4); }
+    .pm-btn.on { color: #b8623d; background: rgba(184, 98, 61, 0.14); }
+    .pm-btn.on:hover { background: rgba(184, 98, 61, 0.2); }
 
     /* ─── State bodies ─────────────────────────────────────────────────── */
     /* Idle: 13 small dots */
@@ -278,6 +287,22 @@
       letter-spacing: .02em;
     }
 
+    /* Auth-needed glyph — AI cleanup requires sign-in. Terracotta (actionable
+       prompt) rather than the rose error treatment. */
+    .auth-body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 22px;
+      color: #B8623D;
+    }
+    .auth-body span {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: .02em;
+    }
+
     /* "Click to dictate" body (expanded hover state) */
     .ready-body {
       display: flex;
@@ -331,6 +356,7 @@
     body[data-phase="inserted"]  .pill-body [data-body="idle"]    { display: flex; }
     body[data-phase="copied"]    .pill-body [data-body="idle"]    { display: flex; }
     body[data-phase="error"]     .pill-body [data-body="error"]   { display: flex; }
+    body[data-phase="auth"]      .pill-body [data-body="auth"]    { display: flex; }
 
     /* ─── Inserted toast ───────────────────────────────────────────────── */
     .toast {
@@ -524,6 +550,35 @@
     }
     .lang-item:hover { background: rgba(184, 98, 61, 0.08); }
     .lang-item.sel { background: rgba(184, 98, 61, 0.15); color: #b8623d; font-weight: 500; }
+
+    /* Two-line label (name + quiet sub-text) for toggle rows like Prompt mode */
+    .row-label { display: flex; flex-direction: column; gap: 2px; }
+    .row-label .row-sub {
+      font-size: 10px;
+      font-weight: 400;
+      color: rgba(26, 24, 22, 0.5);
+      letter-spacing: 0;
+    }
+
+    /* Cleanup style sub-menu — mirrors the Language sub-menu pattern */
+    .style-list {
+      background: #faf8f3;
+      border-radius: 8px;
+      padding: 2px;
+      display: none;
+    }
+    .settings-pop[data-page="style"] .style-list { display: block; }
+    .settings-pop[data-page="style"] > :not(.style-list) { display: none; }
+    .style-item {
+      display: flex;
+      align-items: center;
+      padding: 9px 12px;
+      cursor: pointer;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .style-item:hover { background: rgba(184, 98, 61, 0.08); }
+    .style-item.sel { background: rgba(184, 98, 61, 0.15); color: #b8623d; font-weight: 500; }
   </style>
 </head>
 <body data-phase="rest" data-settings-open="false">
@@ -565,6 +620,27 @@
         </button>
       </div>
       <div class="settings-divider"></div>
+      <!-- Cleanup style (persisted) — row opens a sub-page, matching Language -->
+      <div class="lang-row" id="style-row">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M9.2 2.4l2.4 2.4-6.6 6.6-2.9.5.5-2.9 6.6-6.6z" stroke="rgba(26,24,22,.55)" stroke-width="1.3" stroke-linejoin="round" />
+        </svg>
+        <span class="label">Cleanup style</span>
+        <span class="val">
+          <span id="style-label">Faithful</span>
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <path d="M2.5 4.2L5.5 7.2L8.5 4.2" stroke="rgba(26,24,22,.55)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+      </div>
+      <!-- Prompt mode (persisted) -->
+      <div class="settings-row">
+        <span class="row-label">Prompt mode<span class="row-sub">Rewrite speech into a prompt</span></span>
+        <button class="toggle" id="toggle-pe" aria-label="Prompt mode">
+          <span class="knob"></span>
+        </button>
+      </div>
+      <div class="settings-divider"></div>
       <div class="lang-row" id="lang-row">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
           <circle cx="7" cy="7" r="5.5" stroke="rgba(26,24,22,.55)" stroke-width="1.3" />
@@ -593,6 +669,19 @@
         <div class="lang-item" data-lang="hi-en"><span>Hinglish</span></div>
         <div class="lang-item" data-lang="hi"><span>Hindi</span></div>
         <div class="lang-item" data-lang="es"><span>Español</span></div>
+      </div>
+
+      <!-- Cleanup style sub-page -->
+      <div class="style-list">
+        <button class="lang-back" id="style-back">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M6 2L3 5L6 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Back
+        </button>
+        <div class="style-item" data-style="faithful"><span>Faithful</span></div>
+        <div class="style-item" data-style="polished"><span>Polished</span></div>
+        <div class="style-item" data-style="concise"><span>Concise</span></div>
       </div>
     </div>
 
@@ -632,11 +721,24 @@
             </svg>
             <span id="error-text">no input</span>
           </div>
+          <!-- Auth needed — raw text pasted, AI cleanup skipped until re-sign-in -->
+          <div class="auth-body" data-body="auth">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M10 6V4.2A2.7 2.7 0 0 0 4.6 4.2V6" stroke="#B8623D" stroke-width="1.3" stroke-linecap="round" />
+              <rect x="3" y="6" width="8" height="6" rx="1.4" stroke="#B8623D" stroke-width="1.3" />
+            </svg>
+            <span>Sign in to enable AI</span>
+          </div>
         </div>
 
         <div class="pill-divider"></div>
 
         <div class="pill-actions">
+          <button class="pill-btn pm-btn" id="btn-prompt-mode" aria-label="Prompt mode" aria-pressed="false" title="Prompt mode — rewrite speech into a prompt">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1.5L8.1 5.9L12.5 7L8.1 8.1L7 12.5L5.9 8.1L1.5 7L5.9 5.9Z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" />
+            </svg>
+          </button>
           <button class="pill-btn" id="btn-settings" aria-label="Settings">
             <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
               <path d="M2.5 4.2L5.5 7.2L8.5 4.2" stroke="#1a1816" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
@@ -710,6 +812,8 @@
       language: 'hi-en',
       autoPaste: true,
       aiImprovement: true,
+      cleanupStyle: 'faithful',   // persisted tone
+      promptMode: false,          // persisted rewrite mode
     };
 
     const LANG_LABELS = {
@@ -718,6 +822,12 @@
       'hi-en': 'Hinglish',
       'hi': 'Hindi',
       'es': 'Español',
+    };
+
+    const STYLE_LABELS = {
+      faithful: 'Faithful',
+      polished: 'Polished',
+      concise: 'Concise',
     };
 
     function normalizePhase(next) {
@@ -730,6 +840,7 @@
         case 'inserted':
         case 'copied':
         case 'error':
+        case 'auth':
           return next;
         default:
           return phase || 'rest';
@@ -751,7 +862,8 @@
       // non-hover phase.
       if (next !== 'ready') clearTimeout(readyHoldTimer);
       if (next === 'recording' || next === 'processing' ||
-          next === 'inserted' || next === 'copied' || next === 'error') {
+          next === 'inserted' || next === 'copied' || next === 'error' ||
+          next === 'auth') {
         clearTimeout(leaveTimer);
       }
       // Closing pill collapses settings too.
@@ -799,6 +911,28 @@
       document.querySelectorAll('.lang-item').forEach((el) => {
         el.classList.toggle('sel', el.dataset.lang === settings.language);
       });
+      // Prompt mode toggle
+      const peToggle = document.getElementById('toggle-pe');
+      if (peToggle) peToggle.classList.toggle('on', !!settings.promptMode);
+      // Cleanup style: row value label + sub-page selection
+      const styleLabelEl = document.getElementById('style-label');
+      if (styleLabelEl)
+        styleLabelEl.textContent =
+          STYLE_LABELS[settings.cleanupStyle] || settings.cleanupStyle;
+      document.querySelectorAll('.style-item').forEach((el) => {
+        el.classList.toggle('sel', el.dataset.style === settings.cleanupStyle);
+      });
+      updatePromptModeBtn();
+    }
+
+    // Prompt-mode indicator + control: the pill action-row icon (terracotta
+    // when on). Compact and fixed-width, so it never widens the pill the way a
+    // text badge did.
+    function updatePromptModeBtn() {
+      const btn = document.getElementById('btn-prompt-mode');
+      if (!btn) return;
+      btn.classList.toggle('on', !!settings.promptMode);
+      btn.setAttribute('aria-pressed', settings.promptMode ? 'true' : 'false');
     }
 
     /* ─── Context label ("Optimized for X") ────────────────────────────── */
@@ -946,6 +1080,14 @@
       e.stopPropagation();
       setSettingsOpen(!settingsOpen);
     });
+    // Quick prompt-mode toggle right on the pill (next to the caret), so users
+    // can flip it without opening settings. Stays in sync with the popover row.
+    document.getElementById('btn-prompt-mode').addEventListener('click', (e) => {
+      e.stopPropagation();
+      settings.promptMode = !settings.promptMode;
+      renderSettingsUI();
+      emitTauri('pill-settings-update', { promptMode: settings.promptMode });
+    });
 
     /* Settings popover interactions */
     document.getElementById('toggle-auto').addEventListener('click', (e) => {
@@ -959,6 +1101,30 @@
       settings.aiImprovement = !settings.aiImprovement;
       renderSettingsUI();
       emitTauri('pill-settings-update', { aiImprovement: settings.aiImprovement });
+    });
+    document.getElementById('toggle-pe').addEventListener('click', (e) => {
+      e.stopPropagation();
+      settings.promptMode = !settings.promptMode;
+      renderSettingsUI();
+      emitTauri('pill-settings-update', { promptMode: settings.promptMode });
+    });
+    // Cleanup style sub-page (open / back / select) — mirrors Language
+    document.getElementById('style-row').addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.getElementById('settings-pop').setAttribute('data-page', 'style');
+    });
+    document.getElementById('style-back').addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.getElementById('settings-pop').setAttribute('data-page', 'main');
+    });
+    document.querySelectorAll('.style-item').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        settings.cleanupStyle = el.dataset.style;
+        renderSettingsUI();
+        emitTauri('pill-settings-update', { cleanupStyle: settings.cleanupStyle });
+        document.getElementById('settings-pop').setAttribute('data-page', 'main');
+      });
     });
     document.getElementById('lang-row').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1009,6 +1175,8 @@
             if (p.language) settings.language = p.language;
             if (typeof p.autoPaste === 'boolean') settings.autoPaste = p.autoPaste;
             if (typeof p.aiImprovement === 'boolean') settings.aiImprovement = p.aiImprovement;
+            if (p.cleanupStyle) settings.cleanupStyle = p.cleanupStyle;
+            if (typeof p.promptMode === 'boolean') settings.promptMode = p.promptMode;
             renderSettingsUI();
           }),
 
