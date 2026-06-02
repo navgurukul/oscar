@@ -1,0 +1,46 @@
+# git-cliff configuration — generates OSCAR's user-facing release notes from
+# conventional commits.
+#
+# Output is consumed by TWO surfaces from a single source (the GitHub release body):
+#   1. GitHub Releases page         — renders the lines as plain text.
+#   2. updates.json `notes`         — Tauri auto-updater → in-app
+#                                     UpdateReleaseNotesModal.tsx.
+#
+# The in-app modal parses each line as "<TAG>: <text>" where TAG is one of
+# NEW / FIX / FAST / FIXED / CHANGED / IMPROVED / REMOVED (see parseLine() in
+# packages/desktop/src/components/UpdateReleaseNotesModal.tsx). So this template
+# emits FLAT tagged lines — NOT markdown headers — so both surfaces stay happy.
+#
+# Used by .github/workflows/release.yml (create-release job) via:
+#   git cliff --latest --config cliff.toml
+
+[changelog]
+# Body only — no header/footer — so the output drops straight into the modal.
+header = ""
+body = """
+{% for commit in commits %}\
+{{ commit.group }}: {{ commit.message | upper_first }}
+{% endfor %}\
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+# Drop merge commits and anything that isn't a conventional commit.
+filter_unconventional = true
+# Drop commits whose parser sets skip = true (everything but feat/fix/perf/revert).
+filter_commits = true
+# Only consider real version tags (vX.Y.Z) when computing the release range.
+tag_pattern = 'v[0-9]+\.[0-9]+\.[0-9]+'
+sort_commits = "oldest"
+# Map conventional types → the modal's TAG vocabulary. First match wins; the
+# catch-all skips everything else (chore, docs, style, refactor, test, ci,
+# build, and the chore(release) bump commits) so users see only what matters.
+commit_parsers = [
+  { message = "^feat", group = "NEW" },
+  { message = "^fix", group = "FIX" },
+  { message = "^perf", group = "FAST" },
+  { message = "^revert", group = "FIX" },
+  { message = ".*", skip = true },
+]

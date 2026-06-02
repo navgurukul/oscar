@@ -16,6 +16,15 @@ import {
 // model — older builds shipped these by default.
 const LEGACY_FILENAMES = ["ggml-base.bin"];
 
+// Minimum model quality (ordinal from models.rs: tiny=1 … large-v3-turbo=6)
+// that we accept as a substitute for a role's recommendation without kicking
+// off an upgrade download. `small` (3) is the floor: any installed model at or
+// above it is "good enough" so Minutes reuses the per-device shared model
+// instead of pulling a second, larger one. The actual threshold is
+// min(recommendedQuality, FLOOR) so a weak box (recommended base/tiny) still
+// reuses what it has rather than chasing an unrunnable upgrade.
+const REUSE_QUALITY_FLOOR = 3; // "small"
+
 export interface InstalledModel {
   variant: WhisperModelVariant;
   path: string;
@@ -115,6 +124,13 @@ export interface ResolvedModel {
   spec: ModelSpec;
   recommendation: ModelRecommendation;
   fallbackUsed: boolean;
+  /**
+   * True when this resolved model is an acceptable substitute for the role's
+   * recommendation — either it IS the recommendation, or it's an installed
+   * model whose quality meets the reuse floor. Callers use this to decide
+   * whether a `fallbackUsed` model still warrants an upgrade download.
+   */
+  sufficient: boolean;
 }
 
 /// Resolve which model to load for a given role, factoring in user preset,
@@ -143,12 +159,22 @@ export async function resolveModelForRole(
         spec: recommendation.spec,
         recommendation,
         fallbackUsed: false,
+        sufficient: true,
       },
     };
   }
 
   const fallback = await pickInstalledFallback(role);
   if (fallback) {
+    // An installed-but-not-recommended model is a sufficient substitute when
+    // its quality clears min(recommendedQuality, floor). This is what lets
+    // Minutes reuse the shared dictation model instead of downloading a larger
+    // one; an insufficient model (e.g. base when small is needed) still
+    // upgrades.
+    const reuseThreshold = Math.min(
+      recommendation.spec.quality,
+      REUSE_QUALITY_FLOOR,
+    );
     return {
       recommendation,
       resolved: {
@@ -157,6 +183,7 @@ export async function resolveModelForRole(
         spec: fallback.spec,
         recommendation,
         fallbackUsed: true,
+        sufficient: fallback.spec.quality >= reuseThreshold,
       },
     };
   }

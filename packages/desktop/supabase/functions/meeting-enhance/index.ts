@@ -1143,6 +1143,20 @@ async function generateFinalMarkdown(
   meetingType: InferredMeetingType,
 ): Promise<string> {
   const sections = expectedSections.orderedHeadings;
+
+  // Nothing survived transcript cleanup (silence / Whisper hallucinations were
+  // all dropped) and there are no manual notes. Emit an honest "None captured"
+  // skeleton instead of prompting Gemini, which — given only the attendee list
+  // and an "Action items" section scaffold — would fabricate owners and tasks
+  // (e.g. "<Attendee> will share the details with the team"). buildFinalMarkdown
+  // with empty model output fills every section with the fallback bullet.
+  if (
+    request.transcript_segments.length === 0 &&
+    !request.my_notes_markdown.trim()
+  ) {
+    return buildFinalMarkdown(request, expectedSections, "").markdown;
+  }
+
   const transcriptMaterial = await reduceTranscriptBatches(
     geminiApiKey,
     request,
