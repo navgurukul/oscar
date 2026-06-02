@@ -119,7 +119,7 @@ export function MinutesDistillView({ markdown, className }: MinutesDistillViewPr
   return (
     <div className={`grid grid-cols-12 gap-8 ${className ?? ""}`}>
       {parsed.decisions.length > 0 && (
-        <section className="col-span-12 md:col-span-4 pr-2">
+        <section className="col-span-12 min-[1040px]:col-span-4 pr-2">
           <Caps accent>{`DECISIONS · ${parsed.decisions.length}`}</Caps>
           <ol className="mt-4 space-y-4">
             {parsed.decisions.map((d, i) => (
@@ -137,7 +137,7 @@ export function MinutesDistillView({ markdown, className }: MinutesDistillViewPr
       )}
 
       {parsed.actions.length > 0 && (
-        <section className="col-span-12 md:col-span-5 md:border-l md:border-cream-300 md:pl-7">
+        <section className="col-span-12 min-[1040px]:col-span-5 min-[1040px]:border-l min-[1040px]:border-cream-300 min-[1040px]:pl-7">
           <Caps>{`ACTIONS · ${parsed.actions.length}`}</Caps>
           <ul className="mt-4 space-y-3">
             {parsed.actions.map((a, i) => (
@@ -165,7 +165,7 @@ export function MinutesDistillView({ markdown, className }: MinutesDistillViewPr
       )}
 
       {parsed.followups.length > 0 && (
-        <aside className="col-span-12 md:col-span-3 md:border-l md:border-cream-300 md:pl-7">
+        <aside className="col-span-12 min-[1040px]:col-span-3 min-[1040px]:border-l min-[1040px]:border-cream-300 min-[1040px]:pl-7">
           <Caps>FOLLOW-UPS</Caps>
           <ul className="mt-4 space-y-3 text-[12px] leading-relaxed text-ink-soft list-none">
             {parsed.followups.map((f, i) => (
