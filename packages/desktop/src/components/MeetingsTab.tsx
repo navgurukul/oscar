@@ -17,11 +17,12 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "../lib/utils";
+import { markdownPreview, stripEvidenceComments } from "./MarkdownNotesView";
 import {
-  markdownPreview,
-  stripEvidenceComments,
-} from "./MarkdownNotesView";
-import { MinutesDistillView, parseMinutes, type ActionItem } from "./MinutesDistillView";
+  MinutesDistillView,
+  parseMinutes,
+  type ActionItem,
+} from "./MinutesDistillView";
 import { isAuthSessionError } from "../lib/auth-session";
 import type { RoleModelDownloadState } from "../lib/app-types";
 import type {
@@ -42,20 +43,33 @@ import {
 
 const GOOGLE_CALENDAR_LOGO_URL =
   "https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253";
-const FIGTREE_FONT_STYLE = { fontFamily: '"Figtree", -apple-system, sans-serif' } as const;
-const GARAMOND_FONT_STYLE = { fontFamily: '"EB Garamond", Georgia, serif' } as const;
+const FIGTREE_FONT_STYLE = {
+  fontFamily: '"Figtree", -apple-system, sans-serif',
+} as const;
+const GARAMOND_FONT_STYLE = {
+  fontFamily: '"EB Garamond", Georgia, serif',
+} as const;
 const MEETINGS_TAB_CLASS_NAME = "flex flex-1 flex-col overflow-y-auto bg-cream";
 const MEETINGS_CONTAINER_CLASS_NAME = "mx-auto w-full max-w-[1100px]";
-const PARTICIPANT_PILL_CLASS_NAME = "inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-cream-300 bg-cream-200 px-2.5 py-[3px] pl-1 text-xs leading-[1.3] text-ink-soft";
+const PARTICIPANT_PILL_CLASS_NAME =
+  "inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-cream-300 bg-cream-200 px-2.5 py-[3px] pl-1 text-xs leading-[1.3] text-ink-soft";
 const PARTICIPANT_PILL_TEXT_CLASS_NAME = "truncate";
-const PARTICIPANT_PILL_REMOVE_CLASS_NAME = "flex size-4 shrink-0 items-center justify-center rounded-full p-0 text-ink-faint transition-colors hover:bg-cream-300 hover:text-ink";
-const RESULT_TABS_CLASS_NAME = "mt-5 flex items-center gap-7 border-b border-cream-300";
-const RESULT_TAB_CLASS_NAME = "pb-[10px] border-b-[1.5px] border-transparent bg-transparent font-mono text-[10px] tracking-[0.18em] uppercase text-ink-soft transition-colors hover:text-ink";
+const PARTICIPANT_PILL_REMOVE_CLASS_NAME =
+  "flex size-4 shrink-0 items-center justify-center rounded-full p-0 text-ink-faint transition-colors hover:bg-cream-300 hover:text-ink";
+const RESULT_TABS_CLASS_NAME =
+  "mt-5 flex items-center gap-7 border-b border-cream-300";
+const RESULT_TAB_CLASS_NAME =
+  "pb-[10px] border-b-[1.5px] border-transparent bg-transparent font-mono text-[10px] tracking-[0.18em] uppercase text-ink-soft transition-colors hover:text-ink";
 const RESULT_TAB_ACTIVE_CLASS_NAME = "border-b-terracotta text-terracotta";
-const FOOTER_BUTTON_CLASS_NAME = "inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent px-3.5 py-[7px] text-[12px] text-ink-soft transition-colors hover:border-cream-400 hover:bg-cream-50";
-const FOOTER_BUTTON_PRIMARY_CLASS_NAME = "inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-[7px] text-[12px] text-cream transition-colors hover:bg-ink-night";
+const FOOTER_BUTTON_CLASS_NAME =
+  "inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent px-3.5 py-[7px] text-[12px] text-ink-soft transition-colors hover:border-cream-400 hover:bg-cream-50";
+const FOOTER_BUTTON_PRIMARY_CLASS_NAME =
+  "inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-[7px] text-[12px] text-cream transition-colors hover:bg-ink-night";
 
-export type CalendarReconnectResult = "refreshed" | "needs_reconnect" | "retry_later";
+export type CalendarReconnectResult =
+  | "refreshed"
+  | "needs_reconnect"
+  | "retry_later";
 export type MinutesTranscriptionStatus =
   | "idle"
   | "recording"
@@ -396,11 +410,17 @@ function CalendarConnectCard({
           className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border border-slate-200 bg-slate-50"
           aria-hidden="true"
         >
-          <img className="h-[18px] w-[18px] object-contain" src={GOOGLE_CALENDAR_LOGO_URL} alt="" />
+          <img
+            className="h-[18px] w-[18px] object-contain"
+            src={GOOGLE_CALENDAR_LOGO_URL}
+            alt=""
+          />
         </div>
         <div className="flex min-w-0 flex-col gap-0.5 text-left">
           <p className="m-0 text-sm font-semibold text-slate-800">{title}</p>
-          <p className="m-0 text-[0.7625rem] leading-[1.45] text-slate-500">{hint}</p>
+          <p className="m-0 text-[0.7625rem] leading-[1.45] text-slate-500">
+            {hint}
+          </p>
         </div>
       </div>
       <button
@@ -443,7 +463,8 @@ export function MeetingsTab({
   hostName,
   hostEmail,
 }: MeetingsTabProps) {
-  const [meetingTypeHint, setMeetingTypeHint] = useState<MeetingTypeHint>("auto");
+  const [meetingTypeHint, setMeetingTypeHint] =
+    useState<MeetingTypeHint>("auto");
   const [meetingTitle, setMeetingTitle] = useState("");
   const [attendees, setAttendees] = useState<MeetingAttendee[]>([]);
   const [participantInput, setParticipantInput] = useState("");
@@ -455,15 +476,20 @@ export function MeetingsTab({
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [resultTab, setResultTab] = useState<"notes" | "transcript" | "rough">("notes");
-  const [viewingSaved, setViewingSaved] = useState<SavedMeetingRecord | null>(null);
+  const [resultTab, setResultTab] = useState<"notes" | "transcript" | "rough">(
+    "notes",
+  );
+  const [viewingSaved, setViewingSaved] = useState<SavedMeetingRecord | null>(
+    null,
+  );
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState("");
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [showAttendeeEditor, setShowAttendeeEditor] = useState(false);
-  const [calendarError, setCalendarError] =
-    useState<"needs_reconnect" | "fetch_error" | null>(null);
+  const [calendarError, setCalendarError] = useState<
+    "needs_reconnect" | "fetch_error" | null
+  >(null);
   const [calendarErrorMsg, setCalendarErrorMsg] = useState("");
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const lastCalendarFetchRef = useRef<string>("");
@@ -484,7 +510,8 @@ export function MeetingsTab({
 
   useEffect(() => {
     if (phase === "recording" && liveTranscriptScrollRef.current) {
-      liveTranscriptScrollRef.current.scrollTop = liveTranscriptScrollRef.current.scrollHeight;
+      liveTranscriptScrollRef.current.scrollTop =
+        liveTranscriptScrollRef.current.scrollHeight;
     }
   }, [transcript, phase]);
 
@@ -503,7 +530,9 @@ export function MeetingsTab({
   };
 
   const removeAttendee = (index: number) => {
-    setAttendees((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+    setAttendees((prev) =>
+      prev.filter((_, currentIndex) => currentIndex !== index),
+    );
   };
 
   const handleParticipantKeyDown = (
@@ -589,7 +618,9 @@ export function MeetingsTab({
           } else {
             console.warn("[meetings] calendar fetch failed:", invokeError);
             setCalendarError("fetch_error");
-            setCalendarErrorMsg(message.replace(/^Error:\s*/i, "").slice(0, 200));
+            setCalendarErrorMsg(
+              message.replace(/^Error:\s*/i, "").slice(0, 200),
+            );
           }
         })
         .finally(() => setCalendarLoading(false));
@@ -633,9 +664,7 @@ export function MeetingsTab({
 
   const buildNoteRequest = useCallback((): EnhancedMeetingNoteRequest => {
     const title =
-      meetingTitle.trim() ||
-      selectedCalendarEvent?.title ||
-      "Untitled Meeting";
+      meetingTitle.trim() || selectedCalendarEvent?.title || "Untitled Meeting";
     const attendeesCompact = buildAttendeesCompact(attendees);
     const startedAt =
       selectedCalendarEvent?.start_at ||
@@ -684,10 +713,14 @@ export function MeetingsTab({
           transcript_segments:
             saved.transcriptSegments.length > 0
               ? saved.transcriptSegments
-              : buildFallbackTranscriptSegments(saved.transcript, saved.startedAt),
+              : buildFallbackTranscriptSegments(
+                  saved.transcript,
+                  saved.startedAt,
+                ),
           meeting_type_hint: saved.meetingTypeHint,
         });
-        const newMarkdown = await aiService.generateEnhancedMeetingNote(request);
+        const newMarkdown =
+          await aiService.generateEnhancedMeetingNote(request);
         const updated: SavedMeetingRecord = {
           ...saved,
           notesMarkdown: newMarkdown,
@@ -695,9 +728,7 @@ export function MeetingsTab({
         onSaveMeeting(updated);
         setViewingSaved(updated);
       } catch (err) {
-        setRegenerateError(
-          err instanceof Error ? err.message : String(err),
-        );
+        setRegenerateError(err instanceof Error ? err.message : String(err));
       } finally {
         setRegenerating(false);
       }
@@ -717,9 +748,8 @@ export function MeetingsTab({
     try {
       let processed: string;
       try {
-        processed = await aiService.generateEnhancedMeetingNote(
-          buildNoteRequest(),
-        );
+        processed =
+          await aiService.generateEnhancedMeetingNote(buildNoteRequest());
       } catch (firstError) {
         // A long meeting can outlive the access token; by distill time the
         // refresh token may already be rotated/dead. Mirror the dictation
@@ -733,9 +763,8 @@ export function MeetingsTab({
             "Your OSCAR session expired. Sign in again, then distill these minutes.",
           );
         }
-        processed = await aiService.generateEnhancedMeetingNote(
-          buildNoteRequest(),
-        );
+        processed =
+          await aiService.generateEnhancedMeetingNote(buildNoteRequest());
       }
       setResult(processed);
       setPhase("result");
@@ -763,7 +792,13 @@ export function MeetingsTab({
 
   const savedMeetingIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (phase !== "result" || streaming || !result || error || savedMeetingIdRef.current) {
+    if (
+      phase !== "result" ||
+      streaming ||
+      !result ||
+      error ||
+      savedMeetingIdRef.current
+    ) {
       return;
     }
 
@@ -779,10 +814,7 @@ export function MeetingsTab({
 
     onSaveMeeting({
       id: meetingId,
-      startedAt:
-        selectedCalendarEvent?.start_at ||
-        meetingStartedAt ||
-        now,
+      startedAt: selectedCalendarEvent?.start_at || meetingStartedAt || now,
       meetingTitle: request.meeting_title,
       meetingLocalDatetime: request.meeting_local_datetime,
       attendeesCompact: request.attendees_compact,
@@ -852,12 +884,16 @@ export function MeetingsTab({
       .map((attendee) => attendee.email.trim())
       .filter(Boolean)
       .join(",");
-    const subject = encodeURIComponent(`Meeting Notes: ${subjectTitle || "Meeting"}`);
+    const subject = encodeURIComponent(
+      `Meeting Notes: ${subjectTitle || "Meeting"}`,
+    );
     const body = encodeURIComponent(
       `Hi,\n\nPlease find the meeting notes below.\n\n---\n\n${stripEvidenceComments(markdown)}\n\n---\n\nGenerated by OSCAR`,
     );
     await openUrl(
-      emails ? `mailto:${emails}?subject=${subject}&body=${body}` : `mailto:?subject=${subject}&body=${body}`,
+      emails
+        ? `mailto:${emails}?subject=${subject}&body=${body}`
+        : `mailto:?subject=${subject}&body=${body}`,
     );
   };
 
@@ -898,10 +934,14 @@ export function MeetingsTab({
   };
 
   const currentRequest = buildNoteRequest();
-  const hasEmailableParticipants = attendees.some((attendee) => Boolean(attendee.email.trim()));
+  const hasEmailableParticipants = attendees.some((attendee) =>
+    Boolean(attendee.email.trim()),
+  );
   const nextCalendarEvents = calendarEvents
     .filter((event) => getEventTimestamp(event.end_at) >= currentTime)
-    .sort((a, b) => getEventTimestamp(a.start_at) - getEventTimestamp(b.start_at))
+    .sort(
+      (a, b) => getEventTimestamp(a.start_at) - getEventTimestamp(b.start_at),
+    )
     .slice(0, 5);
 
   const systemAudioNotice = systemAudioWarning ? (
@@ -1012,7 +1052,9 @@ export function MeetingsTab({
                 then <em className="italic text-terracotta">decided</em>.
               </h1>
               <p className="mt-5 max-w-md text-[14.5px] leading-relaxed text-ink-soft">
-                Record a meeting. Keep your rough notes. Oscar turns both into a clean structured summary — decisions, actions, follow-ups, with the transcript right behind it.
+                Record a meeting. Keep your rough notes. Oscar turns both into a
+                clean structured summary — decisions, actions, follow-ups, with
+                the transcript right behind it.
               </p>
 
               {systemAudioNotice}
@@ -1035,7 +1077,8 @@ export function MeetingsTab({
                     Connect Google Calendar
                   </div>
                   <div className="mt-0.5 text-[12.5px] text-ink-soft">
-                    Your upcoming meetings show up here. One click to start recording — titles and attendees come along.
+                    Your upcoming meetings show up here. One click to start
+                    recording — titles and attendees come along.
                   </div>
                 </div>
                 <button
@@ -1079,10 +1122,7 @@ export function MeetingsTab({
                     d: "Decisions, actions with owners, follow-ups. Copy clean, email the room, or paste into Notion.",
                   },
                 ].map((s) => (
-                  <div
-                    key={s.n}
-                    className="border-t border-cream-400 pt-3.5"
-                  >
+                  <div key={s.n} className="border-t border-cream-400 pt-3.5">
                     <span className="font-mono text-[11px] tracking-[0.16em] text-terracotta">
                       {s.n}
                     </span>
@@ -1107,7 +1147,11 @@ export function MeetingsTab({
     const totalListened = savedMeetings.reduce((acc, m) => {
       const start = Date.parse(m.startedAt);
       const created = Date.parse(m.createdAt);
-      if (Number.isFinite(start) && Number.isFinite(created) && created > start) {
+      if (
+        Number.isFinite(start) &&
+        Number.isFinite(created) &&
+        created > start
+      ) {
         return acc + (created - start);
       }
       return acc;
@@ -1145,7 +1189,8 @@ export function MeetingsTab({
                       "Untitled meeting"}
                   </div>
                   <div className="font-mono text-[11px] text-ink-faint">
-                    {formatTime(recordingTime)} · still recording in the background
+                    {formatTime(recordingTime)} · still recording in the
+                    background
                   </div>
                 </div>
                 <button
@@ -1160,7 +1205,8 @@ export function MeetingsTab({
                   onClick={handleStopRecording}
                   type="button"
                 >
-                  <span className="inline-block h-2 w-2 bg-cream" /> Stop &amp; distill
+                  <span className="inline-block h-2 w-2 bg-cream" /> Stop &amp;
+                  distill
                 </button>
               </div>
             </div>
@@ -1435,7 +1481,10 @@ export function MeetingsTab({
     const savedParsed = parseMinutes(viewingSaved.notesMarkdown);
     const savedTurnCount =
       viewingSaved.transcriptSegments.length > 0
-        ? groupSegmentsIntoTurns(viewingSaved.transcriptSegments, savedSpeakerLabels).length
+        ? groupSegmentsIntoTurns(
+            viewingSaved.transcriptSegments,
+            savedSpeakerLabels,
+          ).length
         : 0;
     const savedDateLabel = viewingSaved.meetingLocalDatetime;
 
@@ -1491,7 +1540,9 @@ export function MeetingsTab({
               </div>
             )}
 
-            {systemAudioNotice && <div className="mt-3">{systemAudioNotice}</div>}
+            {systemAudioNotice && (
+              <div className="mt-3">{systemAudioNotice}</div>
+            )}
 
             <div className={RESULT_TABS_CLASS_NAME}>
               <button
@@ -1651,7 +1702,12 @@ export function MeetingsTab({
 
     return (
       <div className="relative flex flex-1 flex-col overflow-hidden bg-cream">
-        <div className={cn(MEETINGS_CONTAINER_CLASS_NAME, "flex flex-1 flex-col overflow-hidden")}>
+        <div
+          className={cn(
+            MEETINGS_CONTAINER_CLASS_NAME,
+            "flex flex-1 flex-col overflow-hidden",
+          )}
+        >
           {/* header */}
           <div className="px-8 pt-6 pb-4 border-b border-cream-300">
             <div className="flex items-center gap-2.5">
@@ -1752,119 +1808,125 @@ export function MeetingsTab({
           {recordingGate ? (
             recordingGate
           ) : (
-          <div className="grid flex-1 grid-cols-12 overflow-hidden">
-            <div className="col-span-6 overflow-auto px-8 py-6 border-r border-cream-300">
-              <V2SectionCap>YOUR ROUGH NOTES · LIVE</V2SectionCap>
-              <textarea
-                className="mt-4 w-full resize-none border-0 bg-transparent p-0 font-serif text-[16px] leading-[1.55] text-ink outline-none placeholder:text-ink-faint min-h-[400px]"
-                style={GARAMOND_FONT_STYLE}
-                placeholder="Type your shorthand. Oscar will reconcile both sides into the minutes."
-                value={manualNotes}
-                onChange={(event) => setManualNotes(event.target.value)}
-              />
-              <p className="mt-3 font-mono text-[11px] text-ink-faint">
-                Type to keep your own shorthand. Oscar will reconcile both sides into the minutes.
-              </p>
-            </div>
-            <div className="col-span-6 overflow-auto bg-cream-200 px-7 py-6">
-              <V2SectionCap
-                accent
-                right={
-                  <span className="font-mono text-[10px] tracking-[0.16em] text-terracotta">
-                    {transcriptSegments.length > 0
-                      ? `${
-                          new Set(
-                            transcriptSegments.map((s) => s.speaker?.source ?? "?"),
-                          ).size
-                        } SPEAKER${
-                          new Set(
-                            transcriptSegments.map((s) => s.speaker?.source ?? "?"),
-                          ).size === 1
-                            ? ""
-                            : "S"
-                        } DETECTED`
-                      : isRecording
-                        ? "LISTENING…"
-                        : ""}
-                  </span>
-                }
-              >
-                LIVE TRANSCRIPT · ORACLE WHISPER
-              </V2SectionCap>
-              <div ref={liveTranscriptScrollRef} className="mt-4 space-y-3.5">
-                {transcriptSegments.length > 0 || transcript.trim() ? (
-                  <LiveTranscriptTurns
-                    segments={transcriptSegments}
-                    fallbackText={transcript}
-                    labels={liveSpeakerLabels}
-                    isLive={isRecording}
-                  />
-                ) : (
-                  <p className="font-serif italic text-ink-faint" style={GARAMOND_FONT_STYLE}>
-                    {isRecording
-                      ? "Listening…"
-                      : "Hit record to start capturing the conversation."}
-                  </p>
-                )}
+            <div className="grid flex-1 grid-cols-12 overflow-hidden">
+              <div className="col-span-6 overflow-auto px-8 py-6 border-r border-cream-300">
+                <V2SectionCap>YOUR ROUGH NOTES · LIVE</V2SectionCap>
+                <textarea
+                  className="mt-4 w-full resize-none border-0 bg-transparent p-0 font-serif text-[16px] leading-[1.55] text-ink outline-none placeholder:text-ink-faint min-h-[400px]"
+                  style={GARAMOND_FONT_STYLE}
+                  placeholder="Type your shorthand. Oscar will reconcile both sides into the minutes."
+                  value={manualNotes}
+                  onChange={(event) => setManualNotes(event.target.value)}
+                />
+              </div>
+              <div className="col-span-6 overflow-auto bg-cream-200 px-7 py-6">
+                <V2SectionCap
+                  accent
+                  right={
+                    <span className="font-mono text-[10px] tracking-[0.16em] text-terracotta">
+                      {transcriptSegments.length > 0
+                        ? `${
+                            new Set(
+                              transcriptSegments.map(
+                                (s) => s.speaker?.source ?? "?",
+                              ),
+                            ).size
+                          } SPEAKER${
+                            new Set(
+                              transcriptSegments.map(
+                                (s) => s.speaker?.source ?? "?",
+                              ),
+                            ).size === 1
+                              ? ""
+                              : "S"
+                          } DETECTED`
+                        : isRecording
+                          ? "LISTENING…"
+                          : ""}
+                    </span>
+                  }
+                >
+                  LIVE TRANSCRIPT · ORACLE WHISPER
+                </V2SectionCap>
+                <div ref={liveTranscriptScrollRef} className="mt-4 space-y-3.5">
+                  {transcriptSegments.length > 0 || transcript.trim() ? (
+                    <LiveTranscriptTurns
+                      segments={transcriptSegments}
+                      fallbackText={transcript}
+                      labels={liveSpeakerLabels}
+                      isLive={isRecording}
+                    />
+                  ) : (
+                    <p
+                      className="font-serif italic text-ink-faint"
+                      style={GARAMOND_FONT_STYLE}
+                    >
+                      {isRecording
+                        ? "Listening…"
+                        : "Hit record to start capturing the conversation."}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
           )}
         </div>
 
         {/* floating record pill — hidden while the prepare/download gate owns the surface */}
         {!recordingGate && (
-        <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-center pb-6">
-          <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-ink py-2 pl-[18px] pr-2 text-cream shadow-[0_12px_32px_rgba(15,13,10,0.22)]">
-            {/* waveform */}
-            <div className="flex items-center gap-[2px] h-4">
-              {Array.from({ length: 18 }).map((_, i) => {
-                const base = 3 + Math.abs(Math.sin(i * 0.7 + 1.2)) * 12;
-                const h = isRecording ? base : base * 0.4;
-                return (
-                  <span
-                    key={i}
-                    className="rounded-[1px] bg-terracotta"
-                    style={{
-                      width: 2,
-                      height: h,
-                      opacity: isRecording ? 0.6 + (i / 18) * 0.4 : 0.3,
-                      transition: "height 200ms ease",
-                    }}
-                  />
-                );
-              })}
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-center pb-6">
+            <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-ink py-2 pl-[18px] pr-2 text-cream shadow-[0_12px_32px_rgba(15,13,10,0.22)]">
+              {/* waveform */}
+              <div className="flex items-center gap-[2px] h-4">
+                {Array.from({ length: 18 }).map((_, i) => {
+                  const base = 3 + Math.abs(Math.sin(i * 0.7 + 1.2)) * 12;
+                  const h = isRecording ? base : base * 0.4;
+                  return (
+                    <span
+                      key={i}
+                      className="rounded-[1px] bg-terracotta"
+                      style={{
+                        width: 2,
+                        height: h,
+                        opacity: isRecording ? 0.6 + (i / 18) * 0.4 : 0.3,
+                        transition: "height 200ms ease",
+                      }}
+                    />
+                  );
+                })}
+              </div>
+              <span className="font-mono text-[12px] text-cream">
+                {formatTime(recordingTime)}
+              </span>
+              {isRecording ? (
+                <button
+                  className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream transition-colors hover:bg-terracotta-600"
+                  onClick={handleStopRecording}
+                  type="button"
+                >
+                  <span className="inline-block h-2 w-2 bg-cream" /> Stop &
+                  distill
+                </button>
+              ) : isPreparing ? (
+                <button
+                  className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream opacity-70 cursor-default"
+                  disabled
+                  type="button"
+                >
+                  <Loader2 size={11} className="animate-spin" />{" "}
+                  Preparing&hellip;
+                </button>
+              ) : (
+                <button
+                  className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream transition-colors hover:bg-terracotta-600"
+                  onClick={onStartRecording}
+                  type="button"
+                >
+                  <Mic size={11} /> Start recording
+                </button>
+              )}
             </div>
-            <span className="font-mono text-[12px] text-cream">
-              {formatTime(recordingTime)}
-            </span>
-            {isRecording ? (
-              <button
-                className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream transition-colors hover:bg-terracotta-600"
-                onClick={handleStopRecording}
-                type="button"
-              >
-                <span className="inline-block h-2 w-2 bg-cream" /> Stop & distill
-              </button>
-            ) : isPreparing ? (
-              <button
-                className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream opacity-70 cursor-default"
-                disabled
-                type="button"
-              >
-                <Loader2 size={11} className="animate-spin" /> Preparing&hellip;
-              </button>
-            ) : (
-              <button
-                className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream transition-colors hover:bg-terracotta-600"
-                onClick={onStartRecording}
-                type="button"
-              >
-                <Mic size={11} /> Start recording
-              </button>
-            )}
           </div>
-        </div>
         )}
       </div>
     );
@@ -1883,11 +1945,8 @@ export function MeetingsTab({
       transcriptSegments.map((s) => s.speaker?.source ?? "?"),
     ).size;
     const speakerNames =
-      attendees
-        .map(attendeeLabel)
-        .filter(Boolean)
-        .slice(0, 5)
-        .join(", ") || "—";
+      attendees.map(attendeeLabel).filter(Boolean).slice(0, 5).join(", ") ||
+      "—";
     const roughLineCount = manualNotes
       .split(/\r?\n/)
       .filter((l) => l.trim()).length;
@@ -1895,26 +1954,20 @@ export function MeetingsTab({
     type StepState = "done" | "doing" | "pending";
     const steps: Array<{ state: StepState; label: string; meta: string }> = [
       {
-        state: segDone || (!transcribing && transcriptSegments.length > 0)
-          ? "done"
-          : transcribing
-            ? "doing"
-            : "pending",
+        state:
+          segDone || (!transcribing && transcriptSegments.length > 0)
+            ? "done"
+            : transcribing
+              ? "doing"
+              : "pending",
         label:
           segTotal > 0
             ? `Transcribed ${Math.min(minutesSegmentsCompleted, segTotal)} of ${segTotal} segments`
             : "Transcribing audio",
-        meta: recordingTime
-          ? `${formatTime(recordingTime)} of audio`
-          : "",
+        meta: recordingTime ? `${formatTime(recordingTime)} of audio` : "",
       },
       {
-        state:
-          distinctSpeakers > 0
-            ? segDone
-              ? "done"
-              : "doing"
-            : "pending",
+        state: distinctSpeakers > 0 ? (segDone ? "done" : "doing") : "pending",
         label: distinctSpeakers
           ? `Resolved ${distinctSpeakers} speaker${distinctSpeakers === 1 ? "" : "s"}`
           : "Resolving speakers",
@@ -1929,7 +1982,9 @@ export function MeetingsTab({
         label: manualNotes.trim()
           ? "Reconciled with your rough notes"
           : "No rough notes — using transcript only",
-        meta: manualNotes.trim() ? `${roughLineCount} line${roughLineCount === 1 ? "" : "s"} · merged` : "",
+        meta: manualNotes.trim()
+          ? `${roughLineCount} line${roughLineCount === 1 ? "" : "s"} · merged`
+          : "",
       },
       {
         state: result ? "done" : streaming ? "doing" : "pending",
@@ -1956,7 +2011,9 @@ export function MeetingsTab({
         <div className={MEETINGS_CONTAINER_CLASS_NAME}>
           <main className="flex min-h-full items-center justify-center px-9 py-12">
             <div className="w-[540px]">
-              <V2Caps accent>JUST FINISHED · LISTENING TO {transcribedDuration} OF YOU</V2Caps>
+              <V2Caps accent>
+                JUST FINISHED · LISTENING TO {transcribedDuration} OF YOU
+              </V2Caps>
               <h1
                 className="mt-3 font-serif text-[44px] font-medium tracking-[-0.02em] leading-none text-ink"
                 style={GARAMOND_FONT_STYLE}
@@ -1966,7 +2023,9 @@ export function MeetingsTab({
                 Oscar <em className="italic text-terracotta">distills</em>.
               </h1>
               <p className="mt-5 text-[14px] leading-relaxed text-ink-soft">
-                Your rough notes are safe. The transcript is saved. You can close this window and come back — the meeting will be in your library when it&rsquo;s done.
+                Your rough notes are safe. The transcript is saved. You can
+                close this window and come back — the meeting will be in your
+                library when it&rsquo;s done.
               </p>
 
               {error && (
@@ -1986,7 +2045,11 @@ export function MeetingsTab({
                   >
                     <div className="mt-0.5 flex w-4 shrink-0 items-center justify-center">
                       {s.state === "done" && (
-                        <Check size={13} className="text-ink-soft" strokeWidth={1.6} />
+                        <Check
+                          size={13}
+                          className="text-ink-soft"
+                          strokeWidth={1.6}
+                        />
                       )}
                       {s.state === "doing" && (
                         <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-terracotta" />
@@ -2142,9 +2205,7 @@ export function MeetingsTab({
                 </span>
               </div>
             )}
-            {result && (
-              <MinutesDistillView markdown={result} />
-            )}
+            {result && <MinutesDistillView markdown={result} />}
           </section>
         )}
 
@@ -2399,15 +2460,12 @@ function TranscriptTurnsRich({
       {turns.map((turn, index) => {
         const elapsed = (() => {
           const start = Date.parse(turn.startTime);
-          if (!Number.isFinite(start) || !Number.isFinite(baseTime)) return "00:00";
+          if (!Number.isFinite(start) || !Number.isFinite(baseTime))
+            return "00:00";
           const diff = Math.max(0, Math.floor((start - baseTime) / 1000));
           return formatTime(diff);
         })();
-        const tag = turnAnnotation(
-          turn,
-          annotatedDecisions,
-          annotatedActions,
-        );
+        const tag = turnAnnotation(turn, annotatedDecisions, annotatedActions);
         return (
           <div
             key={`${turn.startTime}-${index}`}
