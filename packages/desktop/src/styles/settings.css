@@ -844,7 +844,7 @@
 }
 
 .st-row-status--installed {
-  color: #0f766e;
+  color: var(--terra-600, #a25234);
 }
 
 .st-row-status--downloading {

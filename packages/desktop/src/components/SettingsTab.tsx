@@ -357,11 +357,7 @@ export function SettingsTab({
     }
 
     if (model.activeVariant) {
-      return (
-        <div className="st-row-status st-row-status--installed">
-          Ready
-        </div>
-      );
+      return null;
     }
 
     if (model.recommendation) {
