@@ -151,11 +151,15 @@ function EmptyState({
 
       {/* Scribble starts with a click — the audio pen. Not the dictation
           hotkey (Ctrl+Space is for streaming into other apps). */}
+      {/* Single control on the empty screen: this button IS the audio pen —
+          it toggles start → stop in place. The floating record control is
+          suppressed here (see ScribbleTab) so there's never a double control. */}
       <div className="mt-10 flex flex-col items-center gap-3.5">
         <button
           type="button"
           onClick={onStart}
-          disabled={isProcessing || isRecording}
+          disabled={isProcessing}
+          title={isRecording ? "Stop recording" : undefined}
           className="inline-flex items-center gap-3 rounded-full pl-3 pr-6 py-2.5 bg-ink text-cream border-none cursor-pointer shadow-lg transition-opacity hover:opacity-90 disabled:cursor-wait"
         >
           <span
@@ -171,20 +175,31 @@ function EmptyState({
             )}
           </span>
           <span className="text-[15px] font-medium">
-            {isRecording ? "Listening…" : isProcessing ? "Distilling…" : "Start a Scribble"}
+            {isRecording ? "Stop recording" : isProcessing ? "Distilling…" : "Start a Scribble"}
           </span>
         </button>
-        <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-ink-faint">
-          Click to record · your voice stays on this Mac
-        </p>
-        <button
-          type="button"
-          onClick={onPickFile}
-          disabled={isRecording || isProcessing}
-          className="mt-1 inline-flex items-center gap-1.5 text-[12px] text-ink-soft bg-transparent border-none cursor-pointer hover:text-ink transition-colors disabled:opacity-50 disabled:cursor-default"
-        >
-          <Upload size={12} /> or import an audio file
-        </button>
+        {isRecording ? (
+          <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-terracotta">
+            ● Recording on this Mac · click to stop
+          </p>
+        ) : isProcessing ? (
+          <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-ink-faint">
+            Oscar is distilling your Scribble…
+          </p>
+        ) : (
+          <>
+            <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-ink-faint">
+              Click to record · your voice stays on this Mac
+            </p>
+            <button
+              type="button"
+              onClick={onPickFile}
+              className="mt-1 inline-flex items-center gap-1.5 text-[12px] text-ink-soft bg-transparent border-none cursor-pointer hover:text-ink transition-colors"
+            >
+              <Upload size={12} /> or import an audio file
+            </button>
+          </>
+        )}
       </div>
 
       <div
@@ -1479,10 +1494,10 @@ export function ScribbleTab({
         }}
       />
 
-      {/* Floating recording control — live timer / stop / status. Only shown
-          while a capture is in flight; starting one is the "New Scribble"
-          button (the audio pen), never a persistent floating chrome element. */}
-      {(isRecording || isProcessing || statusMessage) && (
+      {/* Floating recording control — live timer / stop / status. Shown only
+          for the populated three-pane while a capture is in flight; on the
+          empty screen the hero button is the single control, so suppress it. */}
+      {!isEmpty && (isRecording || isProcessing || statusMessage) && (
       <div
         className="fixed bottom-8 z-40 flex justify-center pointer-events-none"
         style={{ left: fabLeft, right: showAI ? 340 : 0 }}
