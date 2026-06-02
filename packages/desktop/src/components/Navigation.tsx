@@ -1,7 +1,21 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Crown, Sparkles, Cloud, Check, Download, RefreshCw, Loader2, AlertCircle } from "lucide-react";
+import {
+  Crown,
+  Sparkles,
+  Cloud,
+  Check,
+  Download,
+  RefreshCw,
+  Loader2,
+  AlertCircle,
+  Home,
+  Mic,
+  FileText,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
 import { getInitials } from "../lib/utils";
 
 const WEB_APP_URL =
@@ -89,11 +103,11 @@ export function Navigation({
   onInstallUpdate,
   folders = [],
 }: NavigationProps) {
-  const workspaceItems: { id: TabType; label: string }[] = [
-    { id: "home", label: "Today" },
-    { id: "scribble", label: "Scribbles" },
-    { id: "meetings", label: "Minutes" },
-    { id: "settings", label: "Settings" },
+  const workspaceItems: { id: TabType; label: string; Icon: LucideIcon }[] = [
+    { id: "home", label: "Today", Icon: Home },
+    { id: "scribble", label: "Scribbles", Icon: Mic },
+    { id: "meetings", label: "Minutes", Icon: FileText },
+    { id: "settings", label: "Settings", Icon: Settings },
   ];
 
   const handleUpgrade = () => {
@@ -109,6 +123,78 @@ export function Navigation({
 
   const displayName = userName?.trim() || userEmail?.split("@")[0] || "Signed in";
   const visibleFolders = folders.slice(0, 6);
+
+  // Below the 1080px breakpoint, collapse the 240px sidebar to a 64px icon rail
+  // (the design's V2DeskRail) so the content panes keep their width down to the
+  // enforced 960px window floor. Full sidebar returns at wider widths.
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const update = () => setCompact(window.innerWidth < 1080);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  if (compact) {
+    return (
+      <nav className="w-16 bg-cream flex flex-col items-center flex-shrink-0 border-r border-cream-300 pt-5 pb-3.5">
+        <div
+          data-tauri-drag-region
+          className="cursor-default"
+          onMouseDown={(e) => {
+            if (e.button === 0) getCurrentWindow().startDragging();
+          }}
+        >
+          <img
+            src="/oscar-light-logo.svg"
+            alt="Oscar"
+            width="22"
+            height="22"
+            className="object-contain pointer-events-none"
+          />
+        </div>
+        <div className="mt-5 flex flex-col items-center gap-1">
+          {workspaceItems.map(({ id, label, Icon }) => {
+            const on = activeTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onTabChange(id)}
+                title={label}
+                className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer py-1"
+                style={{ width: 56 }}
+              >
+                <span
+                  className={`inline-flex items-center justify-center rounded-[10px] transition-colors ${
+                    on ? "bg-ink text-cream" : "text-ink-soft hover:text-ink"
+                  }`}
+                  style={{ height: 34, width: 38 }}
+                >
+                  <Icon size={17} strokeWidth={1.7} />
+                </span>
+                <span
+                  className={`font-mono text-[8.5px] tracking-[0.04em] uppercase ${
+                    on ? "text-ink font-semibold" : "text-ink-faint"
+                  }`}
+                >
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div
+          className="mt-auto"
+          title={`${displayName} · ${isProUser ? "Pro" : "Free"}`}
+        >
+          <div className="h-[30px] w-[30px] rounded-full bg-terracotta text-cream font-serif text-[12px] font-medium uppercase flex items-center justify-center">
+            {getInitials(userEmail)}
+          </div>
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <nav className="w-60 bg-cream flex flex-col flex-shrink-0 border-r border-cream-300">
