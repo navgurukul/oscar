@@ -701,8 +701,10 @@ export function MeetingsTab({
   );
 
   const processTranscript = useCallback(async () => {
-    if (!hasTranscriptInput && !manualNotes.trim()) return;
-
+    // Note: no early-return for the empty case. generateEnhancedMeetingNote
+    // resolves a no-speech / no-notes meeting to an honest empty note, so we
+    // still transition to the result screen rather than leaving the
+    // "distilling…" screen spinning forever.
     setStreaming(true);
     setResult("");
     setError("");
@@ -745,21 +747,14 @@ export function MeetingsTab({
   }, [buildNoteRequest, hasTranscriptInput, manualNotes, onAuthError]);
 
   useEffect(() => {
-    if (
-      phase === "processing" &&
-      minutesTranscriptionStatus === "notes" &&
-      (hasTranscriptInput || manualNotes.trim())
-    ) {
+    // Fire once finalization completes — even when nothing usable was
+    // captured. processTranscript() resolves the empty case to an honest empty
+    // note, so a silent meeting reaches the result screen instead of leaving
+    // the "distilling…" screen spinning indefinitely.
+    if (phase === "processing" && minutesTranscriptionStatus === "notes") {
       void processTranscript();
     }
-  }, [
-    manualNotes,
-    minutesTranscriptionStatus,
-    phase,
-    processTranscript,
-    hasTranscriptInput,
-    transcriptSegments.length,
-  ]);
+  }, [minutesTranscriptionStatus, phase, processTranscript]);
 
   const savedMeetingIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -810,6 +805,10 @@ export function MeetingsTab({
   ]);
 
   const startFromEvent = (event: CalendarEvent) => {
+    // Clear any prior recorder state (transcript, segments, and the elapsed
+    // timer) before showing the fresh recording screen — otherwise the pill
+    // would surface the previous meeting's time/segments until the next start.
+    onClearTranscript();
     setMeetingTitle(event.title);
     setAttendees(event.attendees.filter((attendee) => attendeeLabel(attendee)));
     setParticipantInput("");
@@ -940,8 +939,13 @@ export function MeetingsTab({
       );
     }
 
-    if (isPreparing) {
-      const downloading = modelDownloadState === "downloading";
+    // Only take over the whole surface for a genuine model *download* (a
+    // multi-second, once-per-device operation worth a progress screen). A warm
+    // prepare (model already on disk — the common case now that we pre-download
+    // on tab open) finishes sub-second; swapping the two-pane out for this gate
+    // there just produces a jarring transient flash. That brief warm-up is
+    // surfaced in the record pill ("Preparing…") instead.
+    if (isPreparing && modelDownloadState === "downloading") {
       const pct = Math.max(0, Math.min(100, Math.round(modelDownloadProgress)));
       return (
         <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
@@ -956,25 +960,18 @@ export function MeetingsTab({
             This downloads once per device, then it&rsquo;s instant. Recording
             starts automatically the moment it&rsquo;s ready.
           </p>
-          {downloading ? (
-            <div className="mt-7 w-full max-w-[360px]">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-cream-300">
-                <div
-                  className="h-full rounded-full bg-terracotta transition-[width] duration-300 ease-out"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <div className="mt-2.5 flex items-center justify-center gap-1.5 font-mono text-[11px] text-ink-soft">
-                <Loader2 size={12} className="animate-spin" />
-                Downloading model · {pct}%
-              </div>
+          <div className="mt-7 w-full max-w-[360px]">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-cream-300">
+              <div
+                className="h-full rounded-full bg-terracotta transition-[width] duration-300 ease-out"
+                style={{ width: `${pct}%` }}
+              />
             </div>
-          ) : (
-            <div className="mt-7 flex items-center gap-2 font-mono text-[11px] text-ink-soft">
-              <Loader2 size={13} className="animate-spin" />
-              Preparing the transcription engine&hellip;
+            <div className="mt-2.5 flex items-center justify-center gap-1.5 font-mono text-[11px] text-ink-soft">
+              <Loader2 size={12} className="animate-spin" />
+              Downloading model · {pct}%
             </div>
-          )}
+          </div>
         </div>
       );
     }
@@ -1793,6 +1790,14 @@ export function MeetingsTab({
                 type="button"
               >
                 <span className="inline-block h-2 w-2 bg-cream" /> Stop & distill
+              </button>
+            ) : isPreparing ? (
+              <button
+                className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream opacity-70 cursor-default"
+                disabled
+                type="button"
+              >
+                <Loader2 size={11} className="animate-spin" /> Preparing&hellip;
               </button>
             ) : (
               <button

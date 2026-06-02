@@ -89,6 +89,62 @@ const {
   FALLBACK_SOURCE_CHARS: MEETING_FALLBACK_SOURCE_CHARS,
 } = MEETING_CONFIG;
 
+// Common Whisper hallucinations emitted on silence / background noise. The
+// authoritative, fuller set (substring patterns, CJK detection, repetition
+// loops) lives server-side in supabase/functions/meeting-enhance. This is a
+// deliberately small client-side subset so we can short-circuit distillation
+// for a silent meeting *before* the request reaches the server — otherwise the
+// model invents action items from the attendee list (e.g. "<Attendee> will
+// share the details with the team"). Keep in sync with HALLUCINATION_EXACT_PHRASES.
+const MEETING_NOISE_PHRASES: ReadonlySet<string> = new Set([
+  "thank you",
+  "thank you.",
+  "thanks for watching",
+  "thanks for watching.",
+  "thanks for watching!",
+  "you",
+  "bye",
+  "bye.",
+  "bye!",
+  "...",
+  "subscribe",
+  "please subscribe",
+  "please subscribe.",
+]);
+
+// True when at least one transcript segment carries real speech — i.e. content
+// that survives stripping the known Whisper noise phrases. A silent meeting
+// whose only "turn" is a hallucination returns false.
+function meetingTranscriptHasSpeech(
+  segments: MeetingTranscriptSegment[],
+): boolean {
+  for (const segment of segments) {
+    const text = segment.text.trim().toLowerCase();
+    if (!text) continue;
+    if (MEETING_NOISE_PHRASES.has(text)) continue;
+    // Require some real alphanumeric content (drops pure punctuation/symbols).
+    if (/[a-z0-9]/i.test(text.replace(/[^a-z0-9]+/gi, ""))) return true;
+  }
+  return false;
+}
+
+// Honest, non-fabricated note for a meeting that captured no usable speech and
+// has no manual notes. Header only — no AI call, no invented action items.
+function buildEmptyMeetingMarkdown(
+  request: EnhancedMeetingNoteRequest,
+): string {
+  return [
+    `## ${request.meeting_title.trim() || "Untitled Meeting"}`,
+    request.meeting_local_datetime.trim(),
+    request.attendees_compact.trim(),
+    "",
+    "_No speech was captured for this meeting. Re-record, or add your own notes and regenerate._",
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .trimEnd();
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -535,7 +591,17 @@ async function invokeMeetingEnhance(
     throw new Error("Enhanced note generation returned an empty response.");
   }
 
-  if (request.transcript_segments.length > 0 && !hasSubstantiveBullets(markdown)) {
+  // A structured note whose sections are all "None captured" is a valid empty
+  // result for a silent meeting, not a failure — show it as-is. Only treat the
+  // response as unusable (→ recoverable fallback) when it has neither
+  // substantive bullets nor section structure, which would signal a genuinely
+  // broken generation rather than an intentionally empty one.
+  const hasSectionStructure = /^#{2,3}\s+/m.test(markdown);
+  if (
+    request.transcript_segments.length > 0 &&
+    !hasSubstantiveBullets(markdown) &&
+    !hasSectionStructure
+  ) {
     throw new Error(NO_USABLE_MEETING_NOTES_ERROR);
   }
 
@@ -712,6 +778,19 @@ export const aiService = {
   async generateEnhancedMeetingNote(
     request: EnhancedMeetingNoteRequest,
   ): Promise<string> {
+    // Guard the silent/empty-meeting case up front: when no segment carries
+    // real speech and there are no manual notes, skip the server entirely and
+    // return an honest empty note. Without this, a meeting whose only "turn" is
+    // a Whisper hallucination would be distilled into fabricated action items
+    // attributed to attendees. Defends in the app even before the matching
+    // server-side guard is deployed.
+    if (
+      !meetingTranscriptHasSpeech(request.transcript_segments) &&
+      !request.my_notes_markdown?.trim()
+    ) {
+      return buildEmptyMeetingMarkdown(request);
+    }
+
     const accessToken = await getSessionAccessToken();
     const transcriptQuery = request.transcript_segments.map((s) => s.text).join(" ").slice(0, 5000);
     const orgContext = await orgContextService.getBlock({

@@ -651,6 +651,11 @@ export function useMinutesRecorder({
     setTranscript("");
     setTranscriptSegments([]);
     setStartedAt("");
+    // Reset the elapsed timer too — otherwise a fresh meeting setup ("New
+    // meeting" / Back / start-from-event) keeps showing the *previous*
+    // meeting's recording time in the record pill until the next start, since
+    // recordingTime only otherwise zeroes inside startRecording().
+    setRecordingTime(0);
     setSegmentQueue(0);
     setSegmentsCompleted(0);
     setSegmentsTotal(0);
