@@ -34,8 +34,11 @@
     "windows": [
       {
         "title": "OSCAR",
-        "width": 900,
-        "height": 700
+        "width": 1100,
+        "height": 760,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true
       }
     ],
     "security": {
