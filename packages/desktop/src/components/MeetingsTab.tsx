@@ -22,6 +22,8 @@ import {
   stripEvidenceComments,
 } from "./MarkdownNotesView";
 import { MinutesDistillView, parseMinutes, type ActionItem } from "./MinutesDistillView";
+import { isAuthSessionError } from "../lib/auth-session";
+import type { RoleModelDownloadState } from "../lib/app-types";
 import type {
   EnhancedMeetingNoteRequest,
   MeetingAttendee,
@@ -76,6 +78,19 @@ interface CalendarEvent {
 
 interface MeetingsTabProps {
   isRecording: boolean;
+  /** True while the recorder is preparing (model download/load, system audio). */
+  isPreparing?: boolean;
+  /** Whisper "minutes" model download lifecycle, for the prepare-button label. */
+  modelDownloadState?: RoleModelDownloadState;
+  /** Download progress 0-100, shown while modelDownloadState === "downloading". */
+  modelDownloadProgress?: number;
+  /** Model download/prepare error message, surfaced when a start attempt fails. */
+  modelDownloadError?: string | null;
+  /**
+   * Recover a dead/expired OSCAR session. Returns true if the session was
+   * revalidated (caller may retry), false if re-auth is required.
+   */
+  onAuthError?: () => Promise<boolean>;
   onStartRecording: () => void;
   onStopRecording: () => void;
   recordingTime: number;
@@ -401,6 +416,11 @@ function CalendarConnectCard({
 
 export function MeetingsTab({
   isRecording,
+  isPreparing = false,
+  modelDownloadState = "idle",
+  modelDownloadProgress = 0,
+  modelDownloadError = null,
+  onAuthError,
   onStartRecording,
   onStopRecording,
   recordingTime,
@@ -688,9 +708,28 @@ export function MeetingsTab({
     setError("");
 
     try {
-      const processed = await aiService.generateEnhancedMeetingNote(
-        buildNoteRequest(),
-      );
+      let processed: string;
+      try {
+        processed = await aiService.generateEnhancedMeetingNote(
+          buildNoteRequest(),
+        );
+      } catch (firstError) {
+        // A long meeting can outlive the access token; by distill time the
+        // refresh token may already be rotated/dead. Mirror the dictation
+        // path: try to recover the session once, then retry. If the session
+        // can't be revalidated, onAuthError raises the sign-in screen and we
+        // surface an actionable message instead of the raw auth error.
+        if (!isAuthSessionError(firstError)) throw firstError;
+        const recovered = (await onAuthError?.()) ?? false;
+        if (!recovered) {
+          throw new Error(
+            "Your OSCAR session expired. Sign in again, then distill these minutes.",
+          );
+        }
+        processed = await aiService.generateEnhancedMeetingNote(
+          buildNoteRequest(),
+        );
+      }
       setResult(processed);
       setPhase("result");
     } catch (processingError) {
@@ -703,7 +742,7 @@ export function MeetingsTab({
     } finally {
       setStreaming(false);
     }
-  }, [buildNoteRequest, hasTranscriptInput, manualNotes]);
+  }, [buildNoteRequest, hasTranscriptInput, manualNotes, onAuthError]);
 
   useEffect(() => {
     if (
@@ -860,6 +899,88 @@ export function MeetingsTab({
       {systemAudioWarning}
     </div>
   ) : null;
+
+  // Full-surface gate for the recording screen while the (one-time, per-device)
+  // transcription model is still being prepared/downloaded, or after a prepare
+  // failure. Recording starts automatically once the model is ready, so the
+  // happy path simply waits here; the error branch closes the silent-no-op hole
+  // where startRecording bails but the phase stays "recording".
+  const renderRecordingGate = () => {
+    if (!isRecording && !isPreparing && modelDownloadState === "error") {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
+          <V2Caps accent>MINUTES · ENGINE UNAVAILABLE</V2Caps>
+          <h2
+            className="mt-3 max-w-[460px] font-serif text-[28px] font-medium leading-[1.15] text-ink"
+            style={GARAMOND_FONT_STYLE}
+          >
+            Couldn&rsquo;t start the transcription model.
+          </h2>
+          <p className="mt-3 max-w-[440px] text-[14px] leading-relaxed text-ink-soft">
+            {modelDownloadError ||
+              "Check your connection and try again — the download resumes where it left off."}
+          </p>
+          <div className="mt-6 flex items-center gap-3">
+            <button
+              className={FOOTER_BUTTON_PRIMARY_CLASS_NAME}
+              onClick={onStartRecording}
+              type="button"
+            >
+              <RefreshCw size={13} /> Retry
+            </button>
+            <button
+              className={FOOTER_BUTTON_CLASS_NAME}
+              onClick={handleBack}
+              type="button"
+            >
+              Back to Minutes
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (isPreparing) {
+      const downloading = modelDownloadState === "downloading";
+      const pct = Math.max(0, Math.min(100, Math.round(modelDownloadProgress)));
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center">
+          <V2Caps accent>MINUTES · PREPARING ENGINE</V2Caps>
+          <h2
+            className="mt-3 max-w-[480px] font-serif text-[28px] font-medium leading-[1.15] text-ink"
+            style={GARAMOND_FONT_STYLE}
+          >
+            Getting the transcription model ready
+          </h2>
+          <p className="mt-3 max-w-[460px] text-[14px] leading-relaxed text-ink-soft">
+            This downloads once per device, then it&rsquo;s instant. Recording
+            starts automatically the moment it&rsquo;s ready.
+          </p>
+          {downloading ? (
+            <div className="mt-7 w-full max-w-[360px]">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-cream-300">
+                <div
+                  className="h-full rounded-full bg-terracotta transition-[width] duration-300 ease-out"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div className="mt-2.5 flex items-center justify-center gap-1.5 font-mono text-[11px] text-ink-soft">
+                <Loader2 size={12} className="animate-spin" />
+                Downloading model · {pct}%
+              </div>
+            </div>
+          ) : (
+            <div className="mt-7 flex items-center gap-2 font-mono text-[11px] text-ink-soft">
+              <Loader2 size={13} className="animate-spin" />
+              Preparing the transcription engine&hellip;
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
 
   if (phase === "select") {
     const showEmptyState =
@@ -1474,6 +1595,7 @@ export function MeetingsTab({
     const meetingTypeLabel =
       MEETING_TYPE_OPTIONS.find((option) => option.value === meetingTypeHint)
         ?.label ?? "Auto";
+    const recordingGate = renderRecordingGate();
 
     return (
       <div className="relative flex flex-1 flex-col overflow-hidden bg-cream">
@@ -1573,7 +1695,11 @@ export function MeetingsTab({
             <div className="px-8 pt-3">{systemAudioNotice}</div>
           )}
 
-          {/* two-pane: notes | live transcript */}
+          {/* two-pane: notes | live transcript — replaced by the prepare /
+              download gate while the model isn't ready yet */}
+          {recordingGate ? (
+            recordingGate
+          ) : (
           <div className="grid flex-1 grid-cols-12 overflow-hidden">
             <div className="col-span-6 overflow-auto px-8 py-6 border-r border-cream-300">
               <V2SectionCap>YOUR ROUGH NOTES · LIVE</V2SectionCap>
@@ -1631,9 +1757,11 @@ export function MeetingsTab({
               </div>
             </div>
           </div>
+          )}
         </div>
 
-        {/* floating record pill */}
+        {/* floating record pill — hidden while the prepare/download gate owns the surface */}
+        {!recordingGate && (
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-center pb-6">
           <div className="pointer-events-auto inline-flex items-center gap-3 rounded-full bg-ink py-2 pl-[18px] pr-2 text-cream shadow-[0_12px_32px_rgba(15,13,10,0.22)]">
             {/* waveform */}
@@ -1677,6 +1805,7 @@ export function MeetingsTab({
             )}
           </div>
         </div>
+        )}
       </div>
     );
   }

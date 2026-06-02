@@ -367,6 +367,7 @@ function App() {
   const {
     isRecording: isMeetingRecording,
     isRecordingRef: isMeetingRecordingRef,
+    isPreparing: isMeetingPreparing,
     recordingTime: meetingRecordingTime,
     transcript: meetingTranscript,
     transcriptSegments: meetingTranscriptSegments,
@@ -1264,8 +1265,15 @@ function App() {
       });
 
       let path = resolved?.path ?? null;
+      // Download only when nothing usable is on disk, or when an installed
+      // fallback isn't an acceptable substitute. A *sufficient* fallback (the
+      // shared per-device model) is reused without an upgrade download — except
+      // under the "best" preset, where the larger model is an explicit opt-in.
       const shouldDownloadRecommended =
-        options.autoDownload !== false && (!path || resolved?.fallbackUsed);
+        options.autoDownload !== false &&
+        (!path ||
+          (Boolean(resolved?.fallbackUsed) &&
+            (preset === "best" || !resolved?.sufficient)));
 
       if (shouldDownloadRecommended) {
         updateRoleModel(role, {
@@ -2536,6 +2544,30 @@ function App() {
     );
   }, [activeTab, setupComplete]);
 
+  // Pre-download the Minutes Whisper model the moment the user opens the
+  // Minutes tab — using the gap while they pick meeting type / attendees,
+  // long before they hit record. Without this, the (large) model download
+  // lands entirely on the first "Start recording" click and reads as a hang.
+  //
+  // This is cheap when the model is already on disk (resolveModelForRole
+  // short-circuits, no network). When a download IS needed, it's deduped via
+  // modelDownloadPromisesRef: a later record-time ensureWhisperModelLoaded
+  // joins THIS same in-flight download rather than starting a second one. The
+  // once-per-session guard avoids re-kicking it on every tab revisit.
+  const minutesPredownloadStartedRef = useRef(false);
+  useEffect(() => {
+    if (!setupComplete) return;
+    if (activeTab !== "meetings") return;
+    if (minutesPredownloadStartedRef.current) return;
+    minutesPredownloadStartedRef.current = true;
+    void prepareWhisperModel("minutes", {
+      load: false,
+      autoDownload: true,
+    }).catch((err) =>
+      console.warn("[whisper] minutes model pre-download failed:", err),
+    );
+  }, [activeTab, setupComplete, prepareWhisperModel]);
+
   // ── Subscription state ─────────────────────────────────────────────────────
   const [isProUser, setIsProUser] = useState(false);
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
@@ -2742,6 +2774,11 @@ function App() {
               {activeTab === "meetings" && user && (
                 <MeetingsTab
                   isRecording={isMeetingRecording}
+                  isPreparing={isMeetingPreparing}
+                  modelDownloadState={meetingModel.downloadState}
+                  modelDownloadProgress={meetingModel.progress}
+                  modelDownloadError={meetingModel.error}
+                  onAuthError={promptReauth}
                   onStartRecording={startMeetingRecording}
                   onStopRecording={stopMeetingRecording}
                   recordingTime={meetingRecordingTime}

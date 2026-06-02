@@ -160,13 +160,16 @@ pub fn recommend(
                 &[LargeV3TurboQ5, Small]
             }
         }
+        // Auto mirrors Dictation/Auto exactly so a single per-device model
+        // serves both roles: the setup-time dictation download is reused for
+        // meetings with no second download. Capped at q5_0 (the full
+        // large-v3-turbo HD remains available via the Best preset). Keep this
+        // arm identical to (Dictation, Auto) above.
         (WhisperRole::Minutes, ModelPreset::Auto) => {
-            if gpu && ram >= 16 {
-                &[LargeV3Turbo, LargeV3TurboQ5, Small]
-            } else if gpu && ram >= 8 {
-                &[LargeV3TurboQ5, Small]
+            if gpu && ram >= 8 {
+                &[LargeV3TurboQ5, Small, Base]
             } else if ram >= 16 && cores >= 8 {
-                &[LargeV3TurboQ5, Small]
+                &[Small, Base]
             } else if ram >= 8 && cores >= 4 {
                 &[Small, Base]
             } else {
@@ -280,9 +283,34 @@ mod tests {
 
     #[test]
     fn auto_minutes_gpu_high_ram() {
+        // Auto caps at q5_0 (not full turbo HD) so meetings reuse the shared
+        // per-device model; the 1.62 GB HD model is opt-in via Best.
         let p = profile(16, 8, GpuBackend::Metal);
         let r = recommend(WhisperRole::Minutes, ModelPreset::Auto, &p);
-        assert_eq!(r.spec.variant, WhisperModelVariant::LargeV3Turbo);
+        assert_eq!(r.spec.variant, WhisperModelVariant::LargeV3TurboQ5);
+    }
+
+    #[test]
+    fn auto_minutes_matches_dictation_per_tier() {
+        // Core invariant of the shared-model design: in Auto, both roles pick
+        // the identical variant on every hardware tier, so the setup-time
+        // dictation download is reused for meetings with no second download.
+        let tiers = [
+            profile(16, 8, GpuBackend::Metal),
+            profile(8, 4, GpuBackend::Metal),
+            profile(16, 8, GpuBackend::None),
+            profile(8, 4, GpuBackend::None),
+            profile(4, 2, GpuBackend::None),
+        ];
+        for p in tiers {
+            let dictation = recommend(WhisperRole::Dictation, ModelPreset::Auto, &p);
+            let minutes = recommend(WhisperRole::Minutes, ModelPreset::Auto, &p);
+            assert_eq!(
+                dictation.spec.variant, minutes.spec.variant,
+                "Auto variant diverged on {:?}",
+                p
+            );
+        }
     }
 
     #[test]

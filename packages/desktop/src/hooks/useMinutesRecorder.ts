@@ -64,6 +64,12 @@ export function useMinutesRecorder({
   systemAudioSupported,
 }: UseMinutesRecorderOptions) {
   const [isRecording, setIsRecording] = useState(false);
+  // True while startRecording() is mid-flight: model download/load, voice-engine
+  // warm, and system-audio capture start can take many seconds before
+  // `isRecording` flips. The Minutes UI reads this to show a "Preparing…"
+  // button instead of an unresponsive "Start recording" that silently swallows
+  // re-clicks (the startingRef guard below).
+  const [isPreparing, setIsPreparing] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [transcript, setTranscript] = useState("");
   const [transcriptSegments, setTranscriptSegments] = useState<
@@ -514,6 +520,7 @@ export function useMinutesRecorder({
     if (startingRef.current || isRecordingRef.current) return;
     if (!canStartRecordingRef.current()) return;
     startingRef.current = true;
+    setIsPreparing(true);
 
     try {
       setSystemAudioWarning("");
@@ -602,6 +609,7 @@ export function useMinutesRecorder({
       startSegmentRecorder(sessionId);
     } finally {
       startingRef.current = false;
+      setIsPreparing(false);
     }
   };
 
@@ -682,6 +690,7 @@ export function useMinutesRecorder({
   return {
     isRecording,
     isRecordingRef,
+    isPreparing,
     recordingTime,
     transcript,
     transcriptSegments,

@@ -610,7 +610,7 @@ export function SettingsTab({
             <SettingsSection caps="VOICE MODELS">
               {renderModelRow(
                 "Dictation",
-                "For Scribbles, Stream, and Ctrl+Space.",
+                "For Scribbles and Stream.",
                 dictationModel,
               )}
               <div className="st-divider" />
