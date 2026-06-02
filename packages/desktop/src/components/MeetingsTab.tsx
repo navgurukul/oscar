@@ -609,6 +609,11 @@ export function MeetingsTab({
   const hasTranscriptInput =
     transcriptSegments.length > 0 || transcript.trim().length > 0;
 
+  // A live meeting session — actively recording, or the brief warm-up before
+  // it. Keeps the meeting resumable from the Minutes list instead of being
+  // ended when the user navigates away from the recording screen.
+  const activeSession = isRecording || isPreparing;
+
   const attachContextPack = useCallback(
     (request: EnhancedMeetingNoteRequest): EnhancedMeetingNoteRequest => {
       try {
@@ -879,8 +884,14 @@ export function MeetingsTab({
   };
 
   const handleBack = () => {
-    if (isRecording) {
-      onStopRecording();
+    // Leaving the recording screen must NOT end the meeting. While a session is
+    // live (recording, or the brief warm-up before it), keep both the recorder
+    // and the draft (title / attendees / rough notes) alive and just drop back
+    // to the Minutes list — the resume banner there returns to the meeting.
+    // Only clear the draft when nothing is in flight (idle / finished / error).
+    if (isRecording || isPreparing) {
+      setPhase("select");
+      return;
     }
     resetDraftState();
     setPhase("select");
@@ -981,6 +992,7 @@ export function MeetingsTab({
 
   if (phase === "select") {
     const showEmptyState =
+      !activeSession &&
       savedMeetings.length === 0 &&
       nextCalendarEvents.length === 0 &&
       !googleCalendarToken;
@@ -1112,6 +1124,47 @@ export function MeetingsTab({
     return (
       <div className={MEETINGS_TAB_CLASS_NAME}>
         <div className={MEETINGS_CONTAINER_CLASS_NAME}>
+          {/* Resume banner — a live recording keeps running in the background
+              when you leave the recording screen; this is the way back to it. */}
+          {activeSession && (
+            <div className="px-9 pt-6">
+              <div className="flex items-center gap-4 rounded-2xl border border-terracotta-100 bg-terracotta-50 px-5 py-3.5">
+                <span className="inline-flex shrink-0 items-center gap-2">
+                  <span className="inline-block h-[7px] w-[7px] rounded-full bg-terracotta animate-pulse" />
+                  <span className="font-mono text-[11px] tracking-[0.16em] text-terracotta">
+                    {isRecording ? "RECORDING" : "PREPARING"}
+                  </span>
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div
+                    className="truncate font-serif text-[16px] font-medium text-ink"
+                    style={GARAMOND_FONT_STYLE}
+                  >
+                    {meetingTitle.trim() ||
+                      selectedCalendarEvent?.title ||
+                      "Untitled meeting"}
+                  </div>
+                  <div className="font-mono text-[11px] text-ink-faint">
+                    {formatTime(recordingTime)} · still recording in the background
+                  </div>
+                </div>
+                <button
+                  className="shrink-0 rounded-full bg-ink px-4 py-[7px] text-[12px] font-medium text-cream transition-colors hover:bg-ink-night"
+                  onClick={() => setPhase("recording")}
+                  type="button"
+                >
+                  Resume
+                </button>
+                <button
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-terracotta px-4 py-[7px] text-[12px] font-medium text-cream transition-colors hover:bg-terracotta-600"
+                  onClick={handleStopRecording}
+                  type="button"
+                >
+                  <span className="inline-block h-2 w-2 bg-cream" /> Stop &amp; distill
+                </button>
+              </div>
+            </div>
+          )}
           {/* hero */}
           <div className="px-9 pt-8 pb-7 border-b border-cream-300">
             <V2Caps>
@@ -1125,18 +1178,20 @@ export function MeetingsTab({
                 What was <em className="italic text-terracotta">decided</em>.
               </h1>
               <div className="mb-1.5 flex items-center gap-2">
-                <button
-                  className="inline-flex items-center gap-2 rounded-full bg-ink px-3.5 py-[7px] text-[12px] text-cream transition-colors hover:bg-ink-night"
-                  onClick={() => {
-                    resetDraftState();
-                    setShowAttendeeEditor(true);
-                    setPhase("recording");
-                  }}
-                  type="button"
-                >
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-terracotta" />
-                  New meeting
-                </button>
+                {!activeSession && (
+                  <button
+                    className="inline-flex items-center gap-2 rounded-full bg-ink px-3.5 py-[7px] text-[12px] text-cream transition-colors hover:bg-ink-night"
+                    onClick={() => {
+                      resetDraftState();
+                      setShowAttendeeEditor(true);
+                      setPhase("recording");
+                    }}
+                    type="button"
+                  >
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-terracotta" />
+                    New meeting
+                  </button>
+                )}
               </div>
             </div>
           </div>

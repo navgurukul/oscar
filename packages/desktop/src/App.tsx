@@ -2771,7 +2771,12 @@ function App() {
                 />
               )}
 
-              {activeTab === "meetings" && user && (
+              {/* Kept mounted (hidden when inactive) rather than conditionally
+                  rendered, so switching tabs mid-meeting never tears down the
+                  recording draft/phase — the session keeps running and the user
+                  returns to exactly where they left off. */}
+              {user && (
+                <div className={activeTab === "meetings" ? "flex flex-1 flex-col min-h-0" : "hidden"}>
                 <MeetingsTab
                   isRecording={isMeetingRecording}
                   isPreparing={isMeetingPreparing}
@@ -2817,6 +2822,7 @@ function App() {
                   minutesSegmentsCompleted={minutesSegmentsCompleted}
                   minutesSegmentsTotal={minutesSegmentsTotal}
                 />
+                </div>
               )}
 
               {activeTab === "scribble" && user && (
