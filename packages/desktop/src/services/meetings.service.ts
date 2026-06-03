@@ -123,8 +123,16 @@ export const meetingsService = {
   async saveMeeting(
     meeting: SavedMeetingRecord,
     userId: string,
-  ): Promise<{ error: Error | null }> {
-    const { error } = await supabase.from("meetings").upsert(
+  ): Promise<{
+    data: {
+      visibility: "private" | "org" | "public";
+      publicShareToken: string | null;
+    } | null;
+    error: Error | null;
+  }> {
+    const { data, error } = await supabase
+      .from("meetings")
+      .upsert(
       {
         id: meeting.id,
         user_id: userId,
@@ -141,7 +149,9 @@ export const meetingsService = {
         notes_markdown: meeting.notesMarkdown,
       },
       { onConflict: "id" },
-    );
+    )
+      .select("id, visibility, public_share_token")
+      .maybeSingle();
 
     if (isMissingEnhancedMeetingColumn(error as Error | null)) {
       const { error: legacyError } = await supabase.from("meetings").upsert(
@@ -160,10 +170,22 @@ export const meetingsService = {
         },
         { onConflict: "id" },
       );
-      return { error: legacyError as Error | null };
+      return { data: null, error: legacyError as Error | null };
     }
 
-    return { error: error as Error | null };
+    const row = data as
+      | { visibility?: string | null; public_share_token?: string | null }
+      | null;
+    return {
+      data: row
+        ? {
+            visibility:
+              (row.visibility as "private" | "org" | "public") ?? "private",
+            publicShareToken: row.public_share_token ?? null,
+          }
+        : null,
+      error: error as Error | null,
+    };
   },
 
   async deleteMeeting(id: string): Promise<{ error: Error | null }> {

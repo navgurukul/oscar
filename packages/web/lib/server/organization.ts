@@ -248,7 +248,9 @@ export async function createOrganization(
 
 export async function updateOrganization(
   organizationId: string,
-  patch: Partial<Pick<Organization, "name" | "slug" | "logo_url">>
+  patch: Partial<
+    Pick<Organization, "name" | "slug" | "logo_url" | "auto_publish_minutes">
+  >
 ): Promise<Organization | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase

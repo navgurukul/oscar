@@ -40,7 +40,12 @@ export const organizationService = {
     return api(`/api/org`, { method: "POST", body: JSON.stringify(input) });
   },
 
-  async update(id: string, patch: Partial<Pick<Organization, "name" | "slug" | "logo_url">>): Promise<Organization> {
+  async update(
+    id: string,
+    patch: Partial<
+      Pick<Organization, "name" | "slug" | "logo_url" | "auto_publish_minutes">
+    >
+  ): Promise<Organization> {
     return api(`/api/org/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
   },
 

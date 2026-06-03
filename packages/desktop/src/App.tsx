@@ -2807,7 +2807,31 @@ function App() {
                     const updated = [meeting, ...savedMeetings.filter((m) => m.id !== meeting.id)];
                     setSavedMeetings(updated);
                     saveSetting("savedMeetings", updated);
-                    if (user) meetingsService.saveMeeting(meeting, user.id).catch((e) => console.warn("[minutes] save failed:", e));
+                    if (user) {
+                      meetingsService
+                        .saveMeeting(meeting, user.id)
+                        .then(({ data }) => {
+                          // When the workspace has auto-publish on, the DB trigger
+                          // mints a public share token at insert. Merge it back so
+                          // the Minutes UI can surface the live /m/{token} link.
+                          if (!data) return;
+                          setSavedMeetings((prev) => {
+                            const merged = prev.map((m) =>
+                              m.id === meeting.id
+                                ? {
+                                    ...m,
+                                    visibility: data.visibility,
+                                    publicShareToken: data.publicShareToken,
+                                    sharedWithOrg: data.visibility !== "private",
+                                  }
+                                : m,
+                            );
+                            saveSetting("savedMeetings", merged);
+                            return merged;
+                          });
+                        })
+                        .catch((e) => console.warn("[minutes] save failed:", e));
+                    }
                   }}
                   onDeleteMeeting={(id) => {
                     const updated = savedMeetings.filter((m) => m.id !== id);

@@ -14,6 +14,7 @@ import {
   X,
   Trash2,
   RefreshCw,
+  Link2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "../lib/utils";
@@ -40,6 +41,7 @@ import {
   type SpeakerLabels,
   type TranscriptTurn,
 } from "../lib/transcript-utils";
+import { WEB_APP_URL } from "../lib/web-app-url";
 
 const GOOGLE_CALENDAR_LOGO_URL =
   "https://cdn.brandfetch.io/id6O2oGzv-/theme/dark/idMX2_OMSc.svg?c=1bxid64Mup7aczewSAYMX&t=1755572706253";
@@ -65,6 +67,56 @@ const FOOTER_BUTTON_CLASS_NAME =
   "inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent px-3.5 py-[7px] text-[12px] text-ink-soft transition-colors hover:border-cream-400 hover:bg-cream-50";
 const FOOTER_BUTTON_PRIMARY_CLASS_NAME =
   "inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-[7px] text-[12px] text-cream transition-colors hover:bg-ink-night";
+
+// Live public-link row, shown under a meeting's notes when the workspace has
+// auto-publish on (so the row carries the same /m/{token} link the summary
+// surfaces on web). Renders nothing for private meetings.
+function MinutesShareLink({ meeting }: { meeting: SavedMeetingRecord }) {
+  const [copied, setCopied] = useState(false);
+  if (meeting.visibility !== "public" || !meeting.publicShareToken) return null;
+  const url = `${WEB_APP_URL}/m/${meeting.publicShareToken}`;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+  return (
+    <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cream-300 bg-cream-200 px-4 py-3">
+      <div className="min-w-0">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-terracotta">
+          Public link · anyone can read
+        </span>
+        <p
+          className="mt-0.5 truncate text-[12px] text-ink-soft"
+          style={{ maxWidth: 520 }}
+        >
+          {url}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void copy()}
+          className={FOOTER_BUTTON_CLASS_NAME}
+        >
+          {copied ? <Check size={11} /> : <Link2 size={11} />}
+          {copied ? "Copied" : "Copy link"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void openUrl(url)}
+          className={FOOTER_BUTTON_CLASS_NAME}
+        >
+          Open
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export type CalendarReconnectResult =
   | "refreshed"
@@ -1583,6 +1635,7 @@ export function MeetingsTab({
           {resultTab === "notes" && (
             <section className="px-9 pt-7 pb-6">
               <MinutesDistillView markdown={viewingSaved.notesMarkdown} />
+              <MinutesShareLink meeting={viewingSaved} />
             </section>
           )}
 
@@ -2206,6 +2259,13 @@ export function MeetingsTab({
               </div>
             )}
             {result && <MinutesDistillView markdown={result} />}
+            {result &&
+              (() => {
+                const saved = savedMeetings.find(
+                  (m) => m.id === savedMeetingIdRef.current,
+                );
+                return saved ? <MinutesShareLink meeting={saved} /> : null;
+              })()}
           </section>
         )}
 
