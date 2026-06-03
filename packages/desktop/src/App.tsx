@@ -1799,6 +1799,11 @@ function App() {
               // User-chosen tone, or the per-session prompt-engineer override.
               // Sent unconditionally (independent of context-aware routing).
               stylePreset: effectiveStylePreset,
+              // User-selected language code. Mercury 2 uses this to preserve
+              // Devanagari for "hi", apply Hinglish spelling rules for "hi-en",
+              // or do standard English cleanup for "en". Missing/auto = let
+              // the cleanup detect from text content.
+              language: transcriptionLanguageRef.current,
               // Capture wire-level breakdown so perf.jsonl can distinguish
               // "server is slow" (ttfb dominates) from "network is slow"
               // (dns/tcp/tls dominate) for the ai-cleanup stage.
