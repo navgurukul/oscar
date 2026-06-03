@@ -2962,6 +2962,7 @@ function App() {
                   dictationModel={dictationModel}
                   meetingModel={meetingModel}
                   onModelPresetChange={handleModelPresetChange}
+                  appVersion={appVersion}
                 />
               )}
             </div>
