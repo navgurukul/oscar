@@ -43,11 +43,59 @@ use crate::state::{set_pending_deep_link, AppState, HotkeyState};
 #[cfg(target_os = "linux")]
 use crate::state::LINUX_TRAY;
 
-fn focus_main_window(app_handle: &tauri::AppHandle) {
+/// Bring the main window to the foreground, recreating it first if it no longer
+/// exists.
+///
+/// On Windows/Linux the always-on recording pill is a second webview window, so
+/// closing the main window (the X button) does NOT exit the process — Tauri
+/// only fires `ExitRequested` once *every* window is gone. The pill is built
+/// with `skip_taskbar(true)` and Windows has no tray, so after the main window
+/// is destroyed the app keeps running with no taskbar entry and no visible UI.
+/// A subsequent launch is then swallowed by the single-instance plugin, whose
+/// callback lands here; the old code only did `get_webview_window("main")`
+/// (`None` after the close) and so did nothing — clicking the desktop icon
+/// appeared to be a no-op. Rebuilding the window from its startup config
+/// restores the app on relaunch and on deep-link.
+pub(crate) fn restore_main_window(app_handle: &tauri::AppHandle) {
     if let Some(main_window) = app_handle.get_webview_window("main") {
         let _ = main_window.unminimize();
         let _ = main_window.show();
         let _ = main_window.set_focus();
+        return;
+    }
+
+    log::info!("[restore] main window missing — recreating from startup config");
+    let Some(window_config) = app_handle
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "main")
+        .cloned()
+    else {
+        log::warn!("[restore] no 'main' window in config — cannot recreate");
+        return;
+    };
+
+    match tauri::WebviewWindowBuilder::from_config(app_handle, &window_config)
+        .and_then(|builder| builder.build())
+    {
+        Ok(main_window) => {
+            // Mirror the per-window wiring setup() applies to the startup main
+            // window so the recreated one behaves identically.
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::TitleBarStyle;
+                let _ = main_window.set_title_bar_style(TitleBarStyle::Overlay);
+            }
+            #[cfg(target_os = "windows")]
+            {
+                mic_permission::install(&main_window);
+            }
+            let _ = main_window.set_focus();
+            log::info!("[restore] main window recreated");
+        }
+        Err(e) => log::error!("[restore] failed to recreate main window: {}", e),
     }
 }
 
@@ -66,7 +114,7 @@ fn redact_url(url: &str) -> String {
 fn forward_deep_link(app_handle: &tauri::AppHandle, url: String) {
     log::info!("[deep-link] received: {}", redact_url(&url));
     set_pending_deep_link(url.clone());
-    focus_main_window(app_handle);
+    restore_main_window(app_handle);
     OscarEvent::DeepLink(url).dispatch(app_handle);
 }
 
@@ -105,7 +153,7 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             let safe_argv: Vec<String> = argv.iter().map(|a| redact_url(a)).collect();
             log::info!("[single-instance] additional launch: {:?}", safe_argv);
-            focus_main_window(app);
+            restore_main_window(app);
         }));
     }
 
@@ -302,11 +350,27 @@ pub fn run() {
             log::info!("[setup] ✓ Setup complete — app ready");
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .unwrap_or_else(|e| {
             log::error!("========================================");
-            log::error!("FATAL: Tauri application crashed: {}", e);
+            log::error!("FATAL: Tauri application failed to start: {}", e);
             log::error!("========================================");
-            panic!("error while running tauri application: {}", e);
+            panic!("error while building tauri application: {}", e);
+        })
+        .run(|app_handle, event| {
+            // macOS: clicking the Dock icon of the still-running app emits
+            // Reopen instead of launching a new process, so the single-instance
+            // path never fires here. The pill keeps the process alive after the
+            // main window is closed, so restore/recreate it on activation.
+            // `has_visible_windows` can be true even with the main window closed
+            // (the pill counts as visible), so ignore it and let
+            // restore_main_window decide whether to focus or rebuild.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                log::info!("[reopen] dock activation — restoring main window");
+                restore_main_window(app_handle);
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app_handle, event);
         });
 }
