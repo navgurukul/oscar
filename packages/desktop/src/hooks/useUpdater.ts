@@ -1,7 +1,6 @@
-import { useState, useCallback, useRef } from "react";
-import { check, type Update } from "@tauri-apps/plugin-updater";
+import { useState, useCallback } from "react";
+import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { invoke } from "@tauri-apps/api/core";
 
 interface UpdateInfo {
   version: string;
@@ -31,17 +30,11 @@ export function useUpdater() {
     updateInfo: null,
   });
 
-  // The pending Update is created by check() and reused by download() and
-  // install() — the downloaded bytes live on this object, so the same instance
-  // must survive between the "Update" and "Restart" clicks.
-  const updateRef = useRef<Update | null>(null);
-
   const checkForUpdates = useCallback(async () => {
     setState((prev) => ({ ...prev, checking: true, error: null }));
 
     try {
       const update = await check();
-      updateRef.current = update;
 
       if (update) {
         setState((prev) => ({
@@ -74,19 +67,11 @@ export function useUpdater() {
     }
   }, []);
 
-  // Download only. The install is deferred to installAndRelaunch so we can tear
-  // down auxiliary windows first (see below). On Windows, downloadAndInstall()
-  // used to call std::process::exit(0) mid-flow before we could clean up, which
-  // left the NSIS /UPDATE installer unable to replace the locked oscar.exe.
   const downloadAndInstall = useCallback(async () => {
     setState((prev) => ({ ...prev, downloading: true, downloadProgress: 0 }));
 
     try {
-      let update = updateRef.current;
-      if (!update) {
-        update = await check();
-        updateRef.current = update;
-      }
+      const update = await check();
 
       if (!update) {
         throw new Error("No update available");
@@ -95,7 +80,7 @@ export function useUpdater() {
       let downloaded = 0;
       let contentLength = 0;
 
-      await update.download((event) => {
+      await update.downloadAndInstall((event) => {
         switch (event.event) {
           case "Started":
             contentLength = event.data.contentLength ?? 0;
@@ -126,31 +111,6 @@ export function useUpdater() {
 
   const installAndRelaunch = useCallback(async () => {
     try {
-      // Stop the pill's cursor-hover poller before installing. The poller
-      // touches the always-on recording-pill window every ~45ms; if it's still
-      // running when the NSIS /UPDATE installer (and the plugin's
-      // cleanup_before_exit) tears the window down, the destroy deadlocks and
-      // the whole update hangs — the "Restart" button appears to do nothing.
-      // Stop it, wait one poll cycle so the thread exits, then install.
-      // (A previous attempt destroyed the window from here directly and hit the
-      // same deadlock; stopping the poller first is the actual fix.)
-      try {
-        await invoke("stop_pill_hover");
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      } catch {
-        // Best-effort — proceed with the install regardless.
-      }
-
-      const update = updateRef.current;
-      if (update) {
-        // Windows: extracts + runs the NSIS /UPDATE installer, then exits this
-        // process so the installer can replace files and relaunch the new build.
-        // macOS/Linux: swaps the bundle in place and returns here.
-        await update.install();
-      }
-
-      // macOS/Linux need an explicit relaunch into the new version. On Windows
-      // this is unreachable — install() already exited the process.
       await relaunch();
     } catch (error) {
       setState((prev) => ({
