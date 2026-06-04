@@ -42,6 +42,11 @@ interface AIProcessRequest {
   // Workspace context (active-org vocabulary + reference docs) packaged by
   // orgContextService. Appended to the Mercury system prompt when present.
   orgContextBlock?: string;
+  // User-selected transcription language code (e.g. "hi", "hi-en", "en", "auto").
+  // Tells Mercury 2 cleanup to preserve Devanagari for "hi", apply Hinglish
+  // spelling rules for "hi-en", or standard English cleanup for "en".
+  // Missing/empty = edge function auto-detects from text content.
+  language?: string;
 }
 
 /**
@@ -706,6 +711,12 @@ export const aiService = {
       promptProfile?: AIProcessPromptProfile;
       stylePreset?: CleanupStyleWire;
       /**
+       * User-selected transcription language code. Forwarded to Mercury 2
+       * cleanup so it preserves the input script (Devanagari for "hi") and
+       * applies the right spelling rules (consistent Roman for "hi-en").
+       */
+      language?: string;
+      /**
        * Optional callback invoked once with per-call wire timing. Used by the
        * dictation perf instrumentation to record DNS/TCP/TLS/TTFB/download
        * breakdown into `perf.jsonl`. Errors thrown inside the callback are
@@ -737,6 +748,7 @@ export const aiService = {
         promptProfile: options?.promptProfile,
         stylePreset: options?.stylePreset,
         orgContextBlock: orgContext.block || undefined,
+        language: options?.language,
       },
       options?.onTiming,
     );
