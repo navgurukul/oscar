@@ -20,9 +20,21 @@
 //! bottom-edge hot zone we hop to the main thread and drive the pill phase
 //! directly.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager};
+
+/// Set to false to make the poller thread exit. Must be called before the pill
+/// window is torn down (e.g. before an updater install): the poller touches the
+/// pill window every `POLL_INTERVAL`, and destroying the window while a poll is
+/// in flight deadlocks the app. Stop the poller, wait one poll cycle, then tear
+/// down.
+static POLLER_RUNNING: AtomicBool = AtomicBool::new(true);
+
+pub(crate) fn stop() {
+    POLLER_RUNNING.store(false, Ordering::SeqCst);
+}
 
 const POLL_INTERVAL: Duration = Duration::from_millis(45);
 const LEAVE_DEBOUNCE: Duration = Duration::from_millis(220);
@@ -45,6 +57,10 @@ pub(crate) fn start(app: AppHandle) {
 
         loop {
             std::thread::sleep(POLL_INTERVAL);
+
+            if !POLLER_RUNNING.load(Ordering::SeqCst) {
+                return;
+            }
 
             let Ok(cursor) = app.cursor_position() else { continue };
             let Ok(Some(monitor)) = app.primary_monitor() else { continue };

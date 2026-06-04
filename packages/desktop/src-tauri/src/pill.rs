@@ -361,6 +361,18 @@ pub fn get_pill_phase() -> String {
     current_pill_phase().to_string()
 }
 
+/// Stop the pill cursor-hover poller ahead of an updater install. The poller
+/// touches the pill window every ~45ms; if it is still running when the NSIS
+/// `/UPDATE` installer (or the plugin's `cleanup_before_exit`) tears the window
+/// down, the destroy deadlocks and the app hangs — the "Restart" button appears
+/// to do nothing. The frontend calls this, waits one poll cycle, then installs.
+/// No-op on Linux (no pill window / no poller there).
+#[tauri::command]
+pub fn stop_pill_hover() {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    crate::pill_hover::stop();
+}
+
 /// User clicked the pill to start recording. Mirrors the hotkey-press path so
 /// the existing `hotkey-recording-start` handler in the frontend fires with
 /// the correct frontmost-app context captured BEFORE Oscar's pill takes focus.

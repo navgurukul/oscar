@@ -1,10 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import {
-  getAllWebviewWindows,
-  getCurrentWebviewWindow,
-} from "@tauri-apps/api/webviewWindow";
+import { invoke } from "@tauri-apps/api/core";
 
 interface UpdateInfo {
   version: string;
@@ -129,20 +126,17 @@ export function useUpdater() {
 
   const installAndRelaunch = useCallback(async () => {
     try {
-      // Close every window except the one we're running in (the always-on
-      // recording pill, primarily). Each Tauri window owns a WebView2 process
-      // that holds handles inside the install dir; if they're still alive when
-      // the NSIS /UPDATE installer runs, it can't overwrite oscar.exe and
-      // silently keeps the old version. Destroying them first releases the
-      // handles so the swap succeeds.
+      // Stop the pill's cursor-hover poller before installing. The poller
+      // touches the always-on recording-pill window every ~45ms; if it's still
+      // running when the NSIS /UPDATE installer (and the plugin's
+      // cleanup_before_exit) tears the window down, the destroy deadlocks and
+      // the whole update hangs — the "Restart" button appears to do nothing.
+      // Stop it, wait one poll cycle so the thread exits, then install.
+      // (A previous attempt destroyed the window from here directly and hit the
+      // same deadlock; stopping the poller first is the actual fix.)
       try {
-        const current = getCurrentWebviewWindow();
-        const windows = await getAllWebviewWindows();
-        await Promise.all(
-          windows
-            .filter((w) => w.label !== current.label)
-            .map((w) => w.destroy().catch(() => {})),
-        );
+        await invoke("stop_pill_hover");
+        await new Promise((resolve) => setTimeout(resolve, 250));
       } catch {
         // Best-effort — proceed with the install regardless.
       }
