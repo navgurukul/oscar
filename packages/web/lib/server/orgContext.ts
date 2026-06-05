@@ -371,11 +371,169 @@ function textContainsWord(text: string, term: string): boolean {
   return regex.test(text);
 }
 
+// ── Per-user org metadata cache ──────────────────────────────────────────────
+// Active org + people/terms/vocabulary change rarely, but every
+// format/transform/publish request re-fetched them (1 getActiveOrg + 4 Supabase
+// queries) on the hot path before the LLM could start. Cache the resolved
+// bundle in-memory, keyed by userId, for a short TTL.
+//
+// Staleness window: edits to org/user vocabulary, people aliases, terms, or a
+// switch of the active org take up to ORG_META_TTL_MS to surface in formatting.
+// This is an accepted trade-off (a ~60s stale window is allowed). Query-
+// dependent work (alias matching, embeddings) is NOT cached — see compile().
+//
+// Cold starts / serverless: an empty Map just means a cache miss → one fresh
+// fetch. No persistence required; the cache only ever accelerates correctness,
+// it never gates it.
+export interface OrgMetadata {
+  orgId: string;
+  orgName: string;
+  people: PeopleAliasRow[];
+  terms: TermRow[];
+}
+
+const ORG_META_TTL_MS = 45_000;
+const orgMetaCache = new Map<
+  string,
+  { promise: Promise<OrgMetadata | null>; expiresAt: number }
+>();
+
+// Evict expired entries so a long-lived warm instance doesn't accumulate one
+// entry per user forever. Mirrors the fallback-store cleanup in rate-limit.ts.
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of Array.from(orgMetaCache.entries())) {
+    if (entry.expiresAt <= now) orgMetaCache.delete(key);
+  }
+}, 5 * 60 * 1000);
+
+async function fetchOrgMetadata(userId: string): Promise<OrgMetadata | null> {
+  const active = await getActiveOrg(userId);
+  if (!active) return null;
+
+  const orgId = active.organization.id;
+  const orgName = active.organization.name;
+  const supabase = getSupabaseAdmin();
+
+  const [peopleResult, termsResult, orgVocabularyResult, userVocabularyResult] =
+    await Promise.all([
+      supabase.from("org_people_aliases").select("*").eq("organization_id", orgId),
+      supabase.from("org_terms").select("*").eq("organization_id", orgId),
+      supabase
+        .from("user_vocabulary")
+        .select("term, pronunciation, context")
+        .eq("organization_id", orgId),
+      supabase
+        .from("user_vocabulary")
+        .select("term, pronunciation, context")
+        .eq("user_id", userId)
+        .is("organization_id", null),
+    ]);
+
+  if (peopleResult.error) {
+    console.warn("[orgContext] org_people_aliases unavailable:", peopleResult.error);
+  }
+  if (termsResult.error) {
+    console.warn("[orgContext] org_terms unavailable:", termsResult.error);
+  }
+  if (orgVocabularyResult.error) {
+    console.warn("[orgContext] org vocabulary unavailable:", orgVocabularyResult.error);
+  }
+  if (userVocabularyResult.error) {
+    console.warn("[orgContext] user vocabulary unavailable:", userVocabularyResult.error);
+  }
+
+  const people: PeopleAliasRow[] = peopleResult.data || [];
+  const terms: TermRow[] = mergeTerms([
+    ...(termsResult.data || []),
+    ...vocabularyRowsToTerms(orgVocabularyResult.data || []),
+    ...vocabularyRowsToTerms(userVocabularyResult.data || []),
+  ]);
+
+  return { orgId, orgName, people, terms };
+}
+
+/**
+ * Resolve the active org plus its people/terms/vocabulary for a user, served
+ * from a short-TTL in-memory cache. Concurrent callers within the window share
+ * one in-flight fetch (the promise is cached, not just the value). Failed
+ * fetches are never cached. Returns null when the user has no active org.
+ */
+export function getOrgMetadata(userId: string): Promise<OrgMetadata | null> {
+  const now = Date.now();
+  const cached = orgMetaCache.get(userId);
+  if (cached && cached.expiresAt > now) return cached.promise;
+
+  const promise = fetchOrgMetadata(userId).catch((err) => {
+    orgMetaCache.delete(userId); // never cache a failed fetch
+    throw err;
+  });
+  orgMetaCache.set(userId, { promise, expiresAt: now + ORG_META_TTL_MS });
+  return promise;
+}
+
+// ── Best-effort reference-document retrieval ─────────────────────────────────
+// embedText() is a Gemini round-trip and match_document_chunks is a pgvector
+// RPC; both are query-dependent so they can't be cached across recordings.
+// Rather than gate them behind a kill-switch flag (which would drop reference-
+// doc context for *every* request whenever it's off), we bound them with a
+// tight timeout: a slow embeddings call can no longer stall formatting. In the
+// common (fast) case doc context still reaches the formatter; only on a slow
+// request do we skip the pgvector matches for that one recording and fall back
+// to the recency heuristic below. Vocabulary/people matching is unaffected
+// (it runs locally on the cached metadata). isEmbeddingsEnabled() (API-key
+// presence) remains the coarse off-switch if the feature must be disabled
+// outright.
+const EMBEDDING_RETRIEVAL_TIMEOUT_MS = 1500;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(fallback);
+    }, ms);
+    const finish = (value: T) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    promise.then(finish, () => finish(fallback));
+  });
+}
+
+async function retrieveMatchedChunks(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  orgId: string,
+  query: string
+): Promise<ChunkRow[]> {
+  try {
+    const queryEmbedding = await embedText(query);
+    const { data: chunks, error } = await supabase.rpc("match_document_chunks", {
+      p_query_embedding: `[${queryEmbedding.join(",")}]`,
+      p_organization_id: orgId,
+      p_match_count: 10,
+      p_min_score: 0.55,
+    });
+    if (!error && chunks) return chunks;
+    if (error) console.warn("[orgContext] match_document_chunks RPC failed:", error);
+  } catch (err) {
+    console.warn("[orgContext] embedding/similarity search failed:", err);
+  }
+  return [];
+}
+
 export const ContextCompiler = {
   async compile(params: {
     userId: string;
     rawTranscript: string;
     profile: "stream" | "scribble" | "minutes";
+    // Optional pre-resolved metadata. When the caller (eg. buildOrgContext) has
+    // already fetched the cached org bundle, pass it here to avoid a duplicate
+    // getOrgMetadata() lookup. Omit to let compile resolve it (cached) itself.
+    metadata?: OrgMetadata | null;
   }): Promise<{
     block: string;
     organizationId: string | null;
@@ -384,8 +542,9 @@ export const ContextCompiler = {
     matchedTerms: TermRow[];
     matchedChunks: ChunkRow[];
   }> {
-    const active = await getActiveOrg(params.userId);
-    if (!active) {
+    const metadata =
+      params.metadata !== undefined ? params.metadata : await getOrgMetadata(params.userId);
+    if (!metadata) {
       return {
         block: "",
         organizationId: null,
@@ -396,44 +555,11 @@ export const ContextCompiler = {
       };
     }
 
-    const orgId = active.organization.id;
-    const orgName = active.organization.name;
+    // people/terms come from the short-TTL cache; matching against `query`
+    // below stays per-request (it's query-dependent, not cacheable).
+    const { orgId, orgName, people, terms } = metadata;
     const supabase = getSupabaseAdmin();
     const query = params.rawTranscript || "";
-
-    const [peopleResult, termsResult, orgVocabularyResult, userVocabularyResult] = await Promise.all([
-      supabase.from("org_people_aliases").select("*").eq("organization_id", orgId),
-      supabase.from("org_terms").select("*").eq("organization_id", orgId),
-      supabase
-        .from("user_vocabulary")
-        .select("term, pronunciation, context")
-        .eq("organization_id", orgId),
-      supabase
-        .from("user_vocabulary")
-        .select("term, pronunciation, context")
-        .eq("user_id", params.userId)
-        .is("organization_id", null),
-    ]);
-
-    if (peopleResult.error) {
-      console.warn("[orgContext] org_people_aliases unavailable:", peopleResult.error);
-    }
-    if (termsResult.error) {
-      console.warn("[orgContext] org_terms unavailable:", termsResult.error);
-    }
-    if (orgVocabularyResult.error) {
-      console.warn("[orgContext] org vocabulary unavailable:", orgVocabularyResult.error);
-    }
-    if (userVocabularyResult.error) {
-      console.warn("[orgContext] user vocabulary unavailable:", userVocabularyResult.error);
-    }
-
-    const people: PeopleAliasRow[] = peopleResult.data || [];
-    const terms: TermRow[] = mergeTerms([
-      ...(termsResult.data || []),
-      ...vocabularyRowsToTerms(orgVocabularyResult.data || []),
-      ...vocabularyRowsToTerms(userVocabularyResult.data || []),
-    ]);
 
     const matchedPeople: PeopleAliasRow[] = [];
     const matchedTerms: TermRow[] = [];
@@ -480,22 +606,14 @@ export const ContextCompiler = {
 
     let matchedChunks: ChunkRow[] = [];
     if (query.trim() && isEmbeddingsEnabled()) {
-      try {
-        const queryEmbedding = await embedText(query);
-        const { data: chunks, error } = await supabase.rpc("match_document_chunks", {
-          p_query_embedding: `[${queryEmbedding.join(",")}]`,
-          p_organization_id: orgId,
-          p_match_count: 10,
-          p_min_score: 0.55,
-        });
-        if (!error && chunks) {
-          matchedChunks = chunks;
-        } else if (error) {
-          console.warn("[orgContext] match_document_chunks RPC failed:", error);
-        }
-      } catch (err) {
-        console.warn("[orgContext] embedding/similarity search failed:", err);
-      }
+      // Best-effort: bounded so a slow embed/RPC can't stall formatting. On
+      // timeout we fall through with [] and let the recency heuristic below
+      // supply doc context for this one request.
+      matchedChunks = await withTimeout(
+        retrieveMatchedChunks(supabase, orgId, query),
+        EMBEDDING_RETRIEVAL_TIMEOUT_MS,
+        []
+      );
     }
 
     if (params.profile === "stream" || matchedChunks.length === 0) {
@@ -543,10 +661,10 @@ export async function buildOrgContext(
   userId: string,
   options: BuildOrgContextOptions = {}
 ): Promise<OrgContextResult> {
-  const active = await getActiveOrg(userId);
-  if (!active) return empty;
+  const metadata = await getOrgMetadata(userId);
+  if (!metadata) return empty;
 
-  const orgId = active.organization.id;
+  const orgId = metadata.orgId;
   const query = options.queryText || "";
 
   let profile: "stream" | "scribble" | "minutes" = "scribble";
@@ -558,6 +676,7 @@ export async function buildOrgContext(
     userId,
     rawTranscript: query,
     profile,
+    metadata, // reuse the cached bundle — no extra getActiveOrg / vocab queries
   });
 
   return {
