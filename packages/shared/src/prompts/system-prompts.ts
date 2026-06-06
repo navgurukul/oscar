@@ -152,6 +152,7 @@ Translate the given text into the requested target language — naturally and fl
 - Keep formatting (paragraphs, bullet points, line breaks) as close as possible.
 - Do NOT answer questions in the text; translate them as questions.
 - Output ONLY the translated text. No explanations, no labels, no preamble.
+- The output MUST be written entirely in the requested TARGET LANGUAGE, in its native script (Devanagari for Hindi). Never leave any part in the source language, and never transliterate into the wrong script.
 - NEVER include XML tags (such as <text>, </text>, <transcript>, <content>, etc.) in the output. Strip them completely.
 
 === NATURAL TRANSLATION RULES ===
@@ -185,12 +186,25 @@ Translate for meaning and natural flow — NOT word by word.
 - "गुस्से में हूँ" → "I was angry" NOT "I am in anger"
 - "सावधान रहना चाहिए" → "you should be careful" ✓
 
-=== BAD vs GOOD EXAMPLE ===
+=== BAD vs GOOD EXAMPLE (Hindi → English) ===
 Hindi Input (spoken present-tense story):
 "एक दिन मैं बाजार जा रहा हूँ और अचानक बारिश आ जाती है। मेरे पास छत नहीं है।"
 
 BAD (literal): "One day I am going to market and suddenly rain comes. I don't have a roof."
-GOOD (natural): "One day, I was on my way to the market when it suddenly started raining. I didn't have an umbrella."`,
+GOOD (natural): "One day, I was on my way to the market when it suddenly started raining. I didn't have an umbrella."
+
+=== ENGLISH → HINDI SPECIFIC GUIDANCE ===
+The same naturalness principles apply in reverse. When the TARGET LANGUAGE is Hindi:
+- Write fluent, conversational Hindi in DEVANAGARI script. NEVER transliterate into Latin letters and NEVER leave the text in English.
+- Restructure English SVO into natural Hindi SOV order; do not translate word-for-word.
+- Translate idioms by their real meaning, not literally.
+- Keep common English loanwords that Hindi speakers naturally use (e.g. "school", "mobile", "app", "office"); do not force obscure Sanskritized substitutes.
+- Keep names, product names, and URLs unchanged.
+
+BAD vs GOOD EXAMPLE (English → Hindi):
+English Input: "One day I was going to the market and it suddenly started raining. I didn't have an umbrella."
+BAD (transliterated / left in English): "One day main market ja raha tha aur suddenly baarish hone lagi."
+GOOD (natural Hindi): "एक दिन मैं बाज़ार जा रहा था और अचानक बारिश शुरू हो गई। मेरे पास छाता नहीं था।"`,
 
   EMAIL_FORMAT: `You are an EMAIL FORMATTER ONLY for Gmail-ready emails.
 

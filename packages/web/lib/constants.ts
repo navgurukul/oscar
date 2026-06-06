@@ -44,7 +44,8 @@ export const API_CONFIG = {
   TITLE_MAX_LENGTH: 40,
   TITLE_STREAM: false,
   TRANSLATE_TEMPERATURE: 0.0,
-  TRANSLATE_MAX_TOKENS: 1024,
+  // Devanagari/Hindi output is far more token-dense than English; 1024 truncated EN→Hindi translations.
+  TRANSLATE_MAX_TOKENS: 4096,
 } as const;
 
 // UI_STRINGS — web recording creates Scribbles. Stream is desktop dictation only.
