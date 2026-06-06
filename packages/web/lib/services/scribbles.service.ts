@@ -34,10 +34,11 @@ export const scribblesService = {
     // INSERT's RETURNING representation comes back empty (see below).
     const id = scribble.id ?? crypto.randomUUID();
 
-    // Use .select() (array form) instead of .select().single(): under some
-    // deployed RLS configurations an INSERT commits the row but its RETURNING
-    // SELECT is suppressed, which makes .single() throw PGRST116. That turned a
-    // committed save into a user-facing "Save failed" (apparent data loss).
+    // Use .select() (array form) instead of .select().single(): if an INSERT
+    // ever commits but its RETURNING representation comes back empty (a
+    // transient read-after-write/visibility edge), .single() would throw
+    // PGRST116 and turn a committed save into a false "Save failed". Recover by
+    // re-reading the row by id rather than reporting data loss.
     const { data, error } = await supabase
       .from("scribbles")
       .insert({ ...scribble, id })
@@ -103,7 +104,10 @@ export const scribblesService = {
       .select("*")
       .eq("id", id)
       .is("deleted_at", null)
-      .single();
+      // maybeSingle(): a missing/soft-deleted row returns {data:null,error:null}
+      // instead of throwing PGRST116, so callers can tell "not found" from a
+      // real error rather than surfacing a misleading crash.
+      .maybeSingle();
 
     return { data, error: error as Error | null };
   },
