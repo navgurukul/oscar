@@ -97,13 +97,10 @@ fn handle_menu_event(app: &tauri::AppHandle, event: MenuEvent) {
 }
 
 fn open_main_window(app: &tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.show();
-        let _ = w.set_focus();
-        log::info!("[mac-tray] Open Oscar — main window focused");
-    } else {
-        log::warn!("[mac-tray] Open Oscar — main window not found");
-    }
+    // Recreates the window if the user closed it (the pill keeps the process
+    // alive, so the main window may be gone while the tray lives on).
+    crate::restore_main_window(app);
+    log::info!("[mac-tray] Open Oscar — main window restored");
 }
 
 /// Mirror the hotkey-press path: flip the recording AtomicBool and emit

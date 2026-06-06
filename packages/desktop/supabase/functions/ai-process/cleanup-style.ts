@@ -46,3 +46,82 @@ export function getStreamStyleInstruction(
   if (!stylePreset) return undefined;
   return STREAM_STYLE_INSTRUCTIONS[stylePreset];
 }
+
+// ── Language directive ───────────────────────────────────────────────────────
+//
+// The desktop client forwards the user's selected transcription language so the
+// cleanup keeps the right SCRIPT and spelling rules instead of silently
+// normalising everything toward English. Three codes need explicit handling
+// because they are about script, not just language:
+//   • hi-en (Hinglish, the desktop default) — Hindi spoken in Roman script,
+//     code-mixed with English. Must stay Roman; converting to Devanagari ruins
+//     it.
+//   • hi — Hindi in Devanagari. Must not be romanised or translated.
+//   • en — English.
+// Every other supported language gets a generic "keep it in <Language>" line.
+// "auto" / empty / unknown add nothing, so the system prompt's "preserve the
+// user's original language" rule stands.
+
+export const STREAM_LANGUAGE_INSTRUCTIONS: Record<string, string> = {
+  "hi-en":
+    "Language: the dictation is Hinglish — Hindi spoken in Roman/Latin script, mixed with English. Keep the output in Roman script; do NOT convert Hindi words to Devanagari. Preserve the Hindi-English code-mixing and use conventional, consistent Roman spellings for Hindi words. Do not translate it into pure English or pure Hindi.",
+  hi:
+    "Language: the dictation is in Hindi. Keep the output in Hindi using Devanagari script. Do not transliterate it to Roman/Latin script and do not translate it to English.",
+  en: "Language: the dictation is in English. Keep the cleaned text in English.",
+};
+
+// Code → English name for the remaining supported languages. Mirrors the
+// LANGUAGES list in the desktop SettingsTab; codes missing here degrade
+// gracefully to no directive.
+export const STREAM_LANGUAGE_LABELS: Record<string, string> = {
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  zh: "Chinese",
+  ja: "Japanese",
+  ar: "Arabic",
+  pt: "Portuguese",
+  ru: "Russian",
+  ko: "Korean",
+  it: "Italian",
+  nl: "Dutch",
+  pl: "Polish",
+  tr: "Turkish",
+  vi: "Vietnamese",
+  id: "Indonesian",
+  uk: "Ukrainian",
+  sv: "Swedish",
+  cs: "Czech",
+  el: "Greek",
+  fi: "Finnish",
+  ro: "Romanian",
+  hu: "Hungarian",
+  he: "Hebrew",
+  ur: "Urdu",
+  bn: "Bengali",
+  ta: "Tamil",
+  te: "Telugu",
+  ms: "Malay",
+  th: "Thai",
+  da: "Danish",
+};
+
+/** Language instruction line for the USER prompt, or undefined when no explicit
+ *  constraint applies ("auto", empty, or an unrecognised code) — in which case
+ *  the system prompt's "preserve the user's original language" rule stands. */
+export function getStreamLanguageInstruction(
+  language?: string | null,
+): string | undefined {
+  const code = (language ?? "").trim().toLowerCase();
+  if (!code || code === "auto") return undefined;
+
+  const special = STREAM_LANGUAGE_INSTRUCTIONS[code];
+  if (special) return special;
+
+  const label = STREAM_LANGUAGE_LABELS[code];
+  if (label) {
+    return `Language: the dictation is in ${label}. Keep the cleaned text in ${label} using its native script. Do not translate it to another language.`;
+  }
+
+  return undefined;
+}

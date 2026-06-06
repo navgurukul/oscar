@@ -7,11 +7,10 @@ import {
   getClientIdentifier,
 } from "@/lib/middleware/rate-limit";
 import {
-  generateText,
-  getGeminiApiKey,
   parseJsonBody,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
+import { getMercuryApiKey, mercuryGenerateText } from "@/lib/server/mercury";
 
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -33,7 +32,7 @@ export async function POST(req: NextRequest) {
 
   let apiKey: string;
   try {
-    apiKey = getGeminiApiKey();
+    apiKey = getMercuryApiKey();
   } catch {
     return NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 });
   }
@@ -62,7 +61,7 @@ export async function POST(req: NextRequest) {
   const languageLabel = targetLanguage === "hi" ? "Hindi" : "English";
 
   try {
-    const translatedText = await generateText({
+    const translatedText = await mercuryGenerateText({
       apiKey,
       messages: [
         { role: "system", content: SYSTEM_PROMPTS.TRANSLATE },

@@ -386,7 +386,18 @@ export default async function PublicMeetingPage({ params }: PageParams) {
         className="px-6 md:px-14 py-10 flex items-center justify-between flex-wrap gap-4"
         style={{ borderTop: `1px solid ${v2.rule}` }}
       >
-        <V2Caps>SHARED FROM OSCAR</V2Caps>
+        <div className="flex items-center gap-3 flex-wrap">
+          <V2Caps>SHARED FROM OSCAR</V2Caps>
+          <V2Mono style={{ fontSize: 11, color: v2.inkFaint }}>{shareUrl}</V2Mono>
+          <CopyShareLinkButton
+            url={shareUrl}
+            outerStyle={{
+              border: `1px solid ${v2.rule}`,
+              color: v2.inkSoft,
+              background: "transparent",
+            }}
+          />
+        </div>
         <V2Mono style={{ fontSize: 11, color: v2.accent, letterSpacing: "0.16em" }}>
           oscar.ai →
         </V2Mono>

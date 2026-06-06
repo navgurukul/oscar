@@ -12,6 +12,7 @@ import {
   v2,
   v2Serif,
   v2Mono,
+  V2Caps,
   V2Mono,
   V2Avatar,
 } from "@/components/v2/V2Primitives";
@@ -133,10 +134,13 @@ export default function AuditLogPage() {
   if (active && active.role !== "owner" && active.role !== "admin") {
     return (
       <main
-        className="min-h-screen flex items-center justify-center px-4"
+        className="min-h-screen flex flex-col items-center justify-center gap-5 px-4 text-center"
         style={{ background: v2.cream, color: v2.ink }}
       >
         <p style={{ color: v2.inkSoft }}>Only owners or admins can view the audit log.</p>
+        <Link href={ROUTES.ORG_SETTINGS} className="inline-block hover:opacity-80">
+          <V2Caps>← BACK TO ORG SETTINGS</V2Caps>
+        </Link>
       </main>
     );
   }

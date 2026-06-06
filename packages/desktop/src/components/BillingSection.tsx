@@ -1,11 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import {
-  Check,
-  Loader2,
-  Crown,
-  Calendar,
-  CreditCard,
-} from "lucide-react";
+import { Loader2, Crown, ChevronRight } from "lucide-react";
 import { supabase } from "../supabase";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -15,7 +9,7 @@ import {
   type SubscriptionStatus,
   type SubscriptionTier,
 } from "@oscar/shared/constants";
-import { SettingsSection } from "./SettingsTab";
+import { Group } from "./SettingsTab";
 
 interface BillingSectionProps {
   userId: string;
@@ -37,6 +31,8 @@ const WEB_APP_URL =
 const PRICING_URL = `${WEB_APP_URL}/pricing`;
 const SETTINGS_URL = `${WEB_APP_URL}/settings`;
 
+const RULE = "#e5e0d6"; // cream-300
+
 function formatDate(dateString: string | null) {
   if (!dateString) return "N/A";
   return new Date(dateString).toLocaleDateString("en-IN", {
@@ -49,6 +45,71 @@ function formatDate(dateString: string | null) {
 function openExternal(url: string) {
   void openUrl(url).catch((e) =>
     console.error("Failed to open external link:", e),
+  );
+}
+
+/** Usage meter — label + used/total + a bar that warns near the cap. */
+function Meter({
+  label,
+  used,
+  total,
+  unit,
+  last = false,
+}: {
+  label: string;
+  used: number;
+  total: number;
+  unit?: string;
+  last?: boolean;
+}) {
+  const pct = total ? Math.min(100, Math.round((used / total) * 100)) : 0;
+  const near = pct >= 80;
+  return (
+    <div className="py-3.5" style={{ borderBottom: last ? "none" : `1px solid ${RULE}` }}>
+      <div className="flex items-baseline justify-between">
+        <span className="text-[13.5px] text-ink">{label}</span>
+        <span
+          className={`font-mono text-[11.5px] ${near ? "text-terracotta" : "text-ink-soft"}`}
+        >
+          {used} / {total}
+          {unit ? ` ${unit}` : ""}
+        </span>
+      </div>
+      <div
+        className="mt-2 rounded-full overflow-hidden"
+        style={{ height: 6, background: "#d8d2c4" }}
+      >
+        <div
+          className="rounded-full h-full"
+          style={{ width: `${pct}%`, background: near ? "#b8623d" : "#5a5852" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** A "manage on the web" hairline row — desktop defers payment + invoices to web. */
+function WebLinkRow({
+  label,
+  onClick,
+  last = false,
+}: {
+  label: string;
+  onClick: () => void;
+  last?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center justify-between w-full py-3.5 bg-transparent border-0 cursor-pointer text-left group"
+      style={{ borderBottom: last ? "none" : `1px solid ${RULE}` }}
+    >
+      <span className="text-[13.5px] text-ink group-hover:text-terracotta transition-colors">
+        {label}
+      </span>
+      <ChevronRight size={13} className="text-ink-faint" />
+    </button>
   );
 }
 
@@ -129,11 +190,6 @@ export function BillingSection({ userId }: BillingSectionProps) {
     }
   }, []);
 
-  const pct = (current: number, limit: number | null) => {
-    if (!limit) return 0;
-    return Math.min((current / limit) * 100, 100);
-  };
-
   const entitlement = getSubscriptionEntitlement({
     tier: subscription.tier,
     status: subscription.status,
@@ -141,211 +197,186 @@ export function BillingSection({ userId }: BillingSectionProps) {
   });
   const isProUser = entitlement.isPro;
   const isCancelling = entitlement.isCancelling;
+  const isAnnual = subscription.billingCycle === "yearly";
+  const monthLabel = new Date()
+    .toLocaleDateString("en-US", { month: "long" })
+    .toUpperCase();
 
   if (isLoading) {
     return (
-      <div className="billing-compact billing-compact--loading">
-        <Loader2 size={24} className="spin" />
+      <div className="flex justify-center py-12 text-ink-faint">
+        <Loader2 size={22} className="animate-spin" />
       </div>
     );
   }
 
-  return (
-    <div className="billing-compact">
-      {/* CURRENT PLAN — V2WebSettingsBilling:293 */}
-      <SettingsSection caps="CURRENT PLAN" topBorder={false}>
-        <div className="rounded-lg p-7 bg-cream-200 border border-cream-300">
+  /* ── PRO ── */
+  if (isProUser) {
+    return (
+      <div>
+        {/* Current plan card */}
+        <div className="rounded-lg p-6 bg-cream-200 border border-cream-300">
           <div className="flex items-start justify-between gap-6 flex-wrap">
             <div className="min-w-0">
               <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
-                {isProUser ? "PRO · ACTIVE" : "FREE TIER"}
+                PRO · {isAnnual ? "ANNUAL" : "MONTHLY"}
               </span>
               <div className="mt-2 flex items-baseline gap-3 flex-wrap">
                 <span
                   className="font-serif font-medium text-ink"
                   style={{ fontSize: 40, letterSpacing: "-0.025em", lineHeight: 1 }}
                 >
-                  {isProUser
-                    ? `₹${
-                        subscription.billingCycle === "monthly"
-                          ? PRICING.MONTHLY
-                          : PRICING.YEARLY
-                      }`
-                    : "₹0"}
+                  ₹{isAnnual ? PRICING.YEARLY : PRICING.MONTHLY}
                 </span>
-                <span className="text-[13px] text-ink-soft">
-                  {isProUser
-                    ? `per ${subscription.billingCycle === "monthly" ? "month" : "year"}`
-                    : "no payment required"}
+                <span className="text-[12.5px] text-ink-soft">
+                  per {isAnnual ? "year · billed annually" : "month"}
                 </span>
               </div>
-              {isProUser && subscription.currentPeriodEnd && (
-                <p className="mt-2 text-[13px] text-ink-soft">
+              {subscription.currentPeriodEnd && (
+                <p className="mt-2.5 text-[12.5px] text-ink-soft">
                   {isCancelling ? "Access until " : "Renews "}
                   {formatDate(subscription.currentPeriodEnd)}
-                  {subscription.billingCycle === "yearly" && !isCancelling && " · saving 20% vs monthly"}
+                  {isAnnual && !isCancelling && " · saving 20% vs monthly"}
                 </p>
               )}
             </div>
-            <div className="shrink-0">
-              {isProUser ? (
-                <button
-                  className="text-[12px] rounded-full px-4 py-2 border border-cream-300 text-ink-soft bg-transparent cursor-pointer hover:text-ink transition-colors"
-                  onClick={() => openExternal(SETTINGS_URL)}
-                >
-                  Manage plan
-                </button>
-              ) : (
-                <button
-                  className="inline-flex items-center gap-1.5 text-[12px] rounded-full px-4 py-2 bg-ink text-cream border-none cursor-pointer transition-opacity hover:opacity-90 disabled:opacity-50"
-                  onClick={handleUpgrade}
-                  disabled={isUpgrading}
-                >
-                  {isUpgrading ? (
-                    <Loader2 size={12} className="spin" />
-                  ) : (
-                    <Crown size={12} />
-                  )}
-                  {isUpgrading ? "Loading…" : "Upgrade to Pro"}
-                </button>
-              )}
-            </div>
-          </div>
-          {isProUser && (
-            <div className="mt-6 pt-5 border-t border-cream-300 grid grid-cols-2 gap-6">
-              <div>
-                <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint inline-flex items-center gap-1.5">
-                  <CreditCard size={10} /> BILLING CYCLE
-                </span>
-                <div className="mt-1 text-[14px] text-ink">
-                  {subscription.billingCycle === "monthly"
-                    ? "Monthly"
-                    : subscription.billingCycle === "yearly"
-                      ? "Yearly"
-                      : "—"}
-                </div>
-              </div>
-              <div>
-                <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint inline-flex items-center gap-1.5">
-                  <Calendar size={10} /> {isCancelling ? "ACCESS UNTIL" : "NEXT BILLING"}
-                </span>
-                <div className="mt-1 text-[14px] text-ink">
-                  {formatDate(subscription.currentPeriodEnd)}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </SettingsSection>
-
-      {/* USAGE — V2WebSettingsBilling-style */}
-      <SettingsSection caps={`USAGE · ${new Date().toLocaleDateString("en-US", { month: "long" }).toUpperCase()}`}>
-        <div className="billing-usage-grid">
-        <div className="billing-usage-card">
-          <span className="billing-usage-card-label">
-            Recordings this month
-          </span>
-          <span className="billing-usage-card-val">
-            {subscription.recordingsLimit === null ? (
-              <span className="billing-unlimited-inline">Unlimited</span>
-            ) : (
-              <>
-                {subscription.recordingsThisMonth}
-                <span className="billing-usage-card-limit">
-                  {" / "}
-                  {subscription.recordingsLimit}
-                </span>
-              </>
-            )}
-          </span>
-          {subscription.recordingsLimit !== null && (
-            <div className="billing-usage-card-bar">
-              <div
-                className={`billing-usage-card-fill${
-                  pct(
-                    subscription.recordingsThisMonth,
-                    subscription.recordingsLimit,
-                  ) > 80
-                    ? " warning"
-                    : ""
-                }`}
-                style={{
-                  width: `${pct(subscription.recordingsThisMonth, subscription.recordingsLimit)}%`,
-                }}
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="billing-usage-card">
-          <span className="billing-usage-card-label">Vocabulary entries</span>
-          <span className="billing-usage-card-val">
-            {subscription.vocabularyLimit === null ? (
-              <span className="billing-unlimited-inline">Unlimited</span>
-            ) : (
-              <>
-                {subscription.vocabularyCount}
-                <span className="billing-usage-card-limit">
-                  {" / "}
-                  {subscription.vocabularyLimit}
-                </span>
-              </>
-            )}
-          </span>
-          {subscription.vocabularyLimit !== null && (
-            <div className="billing-usage-card-bar">
-              <div
-                className={`billing-usage-card-fill${
-                  pct(
-                    subscription.vocabularyCount,
-                    subscription.vocabularyLimit,
-                  ) > 80
-                    ? " warning"
-                    : ""
-                }`}
-                style={{
-                  width: `${pct(subscription.vocabularyCount, subscription.vocabularyLimit)}%`,
-                }}
-              />
-            </div>
-          )}
-        </div>
-        </div>
-      </SettingsSection>
-
-      {/* PRO BENEFITS (free users) — V2OverlayUpgrade pattern */}
-      {!isProUser && (
-        <SettingsSection caps="WHY UPGRADE">
-          <div className="rounded-lg p-6 bg-cream-200 border border-cream-300">
-            <ul className="space-y-2.5 text-[13px] text-ink list-none">
-              {[
-                "Unlimited recordings every month",
-                "Unlimited vocabulary entries",
-                "Priority AI processing",
-                "Priority customer support",
-                "Early access to new features",
-              ].map((line) => (
-                <li key={line} className="flex items-start gap-2.5">
-                  <Check size={13} className="text-terracotta shrink-0 mt-0.5" />
-                  <span>{line}</span>
-                </li>
-              ))}
-            </ul>
             <button
-              className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-ink text-cream px-4 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-opacity hover:opacity-90 disabled:opacity-50"
-              onClick={handleUpgrade}
-              disabled={isUpgrading}
+              type="button"
+              className="shrink-0 text-[12px] rounded-full px-4 py-2 border border-cream-300 text-ink-soft bg-transparent cursor-pointer hover:text-ink transition-colors"
+              onClick={() => openExternal(SETTINGS_URL)}
             >
-              {isUpgrading ? (
-                <Loader2 size={13} className="spin" />
-              ) : (
-                <Crown size={13} />
-              )}
-              Upgrade — Starting at ₹{PRICING.MONTHLY}/month
+              Manage plan
             </button>
           </div>
-        </SettingsSection>
-      )}
+        </div>
+
+        {/* Usage */}
+        <Group title={`USAGE · ${monthLabel}`}>
+          {subscription.recordingsLimit === null ? (
+            <div className="flex items-center justify-between py-3.5" style={{ borderBottom: `1px solid ${RULE}` }}>
+              <span className="text-[13.5px] text-ink">Recordings this month</span>
+              <span className="font-mono text-[11.5px] text-terracotta">UNLIMITED</span>
+            </div>
+          ) : (
+            <Meter
+              label="Recordings this month"
+              used={subscription.recordingsThisMonth}
+              total={subscription.recordingsLimit}
+            />
+          )}
+          {subscription.vocabularyLimit === null ? (
+            <div className="flex items-center justify-between py-3.5">
+              <span className="text-[13.5px] text-ink">Vocabulary entries</span>
+              <span className="font-mono text-[11.5px] text-terracotta">UNLIMITED</span>
+            </div>
+          ) : (
+            <Meter
+              label="Vocabulary entries"
+              used={subscription.vocabularyCount}
+              total={subscription.vocabularyLimit}
+              last
+            />
+          )}
+        </Group>
+
+        {/* Payment + invoices live on the web */}
+        <Group title="PAYMENT">
+          <WebLinkRow
+            label="Manage payment method"
+            onClick={() => openExternal(SETTINGS_URL)}
+            last
+          />
+        </Group>
+        <Group title="INVOICES">
+          <WebLinkRow
+            label="View invoices & receipts"
+            onClick={() => openExternal(SETTINGS_URL)}
+            last
+          />
+        </Group>
+
+        <div className="mt-8">
+          <button
+            type="button"
+            onClick={() => openExternal(SETTINGS_URL)}
+            className="text-[12px] text-ink-faint bg-transparent border-none cursor-pointer hover:text-ink transition-colors"
+          >
+            Cancel subscription
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── FREE ── */
+  return (
+    <div>
+      <Group title="THIS MONTH" first>
+        <Meter
+          label="Recordings"
+          used={subscription.recordingsThisMonth}
+          total={subscription.recordingsLimit ?? SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS}
+        />
+        <Meter
+          label="Vocabulary entries"
+          used={subscription.vocabularyCount}
+          total={subscription.vocabularyLimit ?? SUBSCRIPTION_CONFIG.FREE_MAX_VOCABULARY}
+          last
+        />
+      </Group>
+
+      {/* Upsell — dark ink card */}
+      <div className="mt-7 rounded-lg p-6 bg-ink text-cream">
+        <div className="flex items-start justify-between gap-6 flex-wrap">
+          <div className="min-w-0">
+            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+              OSCAR · PRO
+            </span>
+            <div className="mt-2 flex items-baseline gap-3 flex-wrap">
+              <span
+                className="font-serif font-medium text-cream"
+                style={{ fontSize: 40, letterSpacing: "-0.025em", lineHeight: 1 }}
+              >
+                ₹{PRICING.MONTHLY}
+              </span>
+              <span className="text-[12.5px]" style={{ color: "#cfc9bd" }}>
+                per month · save 20% annually
+              </span>
+            </div>
+            <p
+              className="mt-3 text-[13px] leading-relaxed"
+              style={{ color: "#cfc9bd", maxWidth: 340 }}
+            >
+              Unlimited recordings and Scribbles, Minutes, every device,
+              context-aware dictation, vocabulary &amp; folders.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 inline-flex items-center gap-1.5 text-[13px] rounded-full px-5 py-2.5 font-medium bg-terracotta text-cream border-none cursor-pointer transition-opacity hover:opacity-90 disabled:opacity-50"
+            onClick={handleUpgrade}
+            disabled={isUpgrading}
+          >
+            {isUpgrading ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Crown size={13} />
+            )}
+            Upgrade to Pro
+          </button>
+        </div>
+      </div>
+
+      <Group title="PAYMENT">
+        <p className="py-4 text-[13px] italic text-ink-faint">
+          No payment method on file. You’ll add one when you upgrade.
+        </p>
+      </Group>
+      <Group title="INVOICES">
+        <p className="py-4 text-[13px] italic text-ink-faint">
+          No invoices yet.
+        </p>
+      </Group>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, type GenerationConfig } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
@@ -226,7 +226,23 @@ export async function generateText({
 }): Promise<string> {
   const geminiModel = buildModel(apiKey, messages, model, timeoutMs);
   const contents = buildContents(messages);
-  const generationConfig = { temperature, topP, maxOutputTokens: maxTokens };
+  // gemini-2.5-flash reasons by default and spends those thinking tokens from
+  // the same maxOutputTokens budget. A tight cap (e.g. the short title budget)
+  // can be consumed entirely by thinking, leaving an empty answer that trips
+  // the `if (!text) throw` below and 500s the route. Pin thinkingBudget=0 to
+  // disable reasoning so the whole budget reaches the answer — same fix the
+  // meeting-enhance edge function applies. The installed
+  // @google/generative-ai@0.24.1 has no thinkingConfig in its types but
+  // forwards unknown generationConfig fields to the REST API verbatim, hence
+  // the widened type.
+  const generationConfig: GenerationConfig & {
+    thinkingConfig?: { thinkingBudget: number };
+  } = {
+    temperature,
+    topP,
+    maxOutputTokens: maxTokens,
+    thinkingConfig: { thinkingBudget: 0 },
+  };
 
   let lastError: Error | null = null;
   for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {

@@ -15,7 +15,12 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let body: { name?: string; slug?: string; logo_url?: string | null };
+  let body: {
+    name?: string;
+    slug?: string;
+    logo_url?: string | null;
+    auto_publish_minutes?: boolean;
+  };
   try {
     body = await request.json();
   } catch {
@@ -29,6 +34,9 @@ export async function PATCH(
     if (slug) patch.slug = slug;
   }
   if (body.logo_url !== undefined) patch.logo_url = body.logo_url;
+  if (typeof body.auto_publish_minutes === "boolean") {
+    patch.auto_publish_minutes = body.auto_publish_minutes;
+  }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "No valid fields" }, { status: 400 });

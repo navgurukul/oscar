@@ -348,7 +348,7 @@
 }
 .gen-toggle {
   position: relative;
-  width: 38px;
+  width: 40px;
   height: 22px;
   background: #d8d2c4;
   border: none;
@@ -358,23 +358,23 @@
   transition: background 0.2s;
   flex-shrink: 0;
 }
-.gen-toggle.on { background: #a25234; }
+.gen-toggle.on { background: var(--terra-500, #b8623d); }
 .gen-toggle:focus-visible {
   outline: 2px solid rgba(184, 98, 61, 0.3);
   outline-offset: 2px;
 }
 .gen-toggle-thumb {
   position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
   background: var(--cream);
   border-radius: 50%;
   transition: transform 0.2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
 }
-.gen-toggle.on .gen-toggle-thumb { transform: translateX(16px); }
+.gen-toggle.on .gen-toggle-thumb { transform: translateX(18px); }
 
 /* Search bar */
 .gen-lang-body { transition: opacity 0.15s; }
@@ -474,6 +474,56 @@
   margin-top: 4px;
 }
 .st-select:focus { border-color: #8b8780; }
+
+/* ── DS controls (oscar-v2-desk-settings) ── */
+
+/* Compact select that sits on the right of a Row (voice models). */
+.ds-select {
+  appearance: auto;
+  border: 1px solid var(--cream-300, #e5e0d6);
+  border-radius: 8px;
+  background: var(--cream, #f7f4ee);
+  color: var(--ink, #1a1816);
+  font-family: var(--font-sans, 'Figtree', sans-serif);
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+  cursor: pointer;
+  outline: none;
+  max-width: 200px;
+}
+.ds-select:focus { border-color: var(--ink-faint, #8b8780); }
+.ds-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Value + chevron that opens a native picker (microphone). The real <select>
+   is laid transparently on top so the OS dropdown stays accessible. */
+.ds-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  max-width: 240px;
+}
+.ds-picker-value {
+  font-size: 13px;
+  color: var(--ink, #1a1816);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.ds-picker select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+}
 
 .st-card-hint {
   font-size: 0.75rem;
@@ -844,7 +894,7 @@
 }
 
 .st-row-status--installed {
-  color: #0f766e;
+  color: var(--terra-600, #a25234);
 }
 
 .st-row-status--downloading {

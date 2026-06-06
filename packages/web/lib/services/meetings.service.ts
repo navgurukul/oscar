@@ -28,6 +28,12 @@ interface DBMeeting {
   participants?: string[] | null;
   notes?: string;
   template_id?: string;
+  // Sharing (Phase 2 org + Phase 6 public link)
+  visibility?: "private" | "org" | "public";
+  public_share_token?: string | null;
+  shared_with_org?: boolean;
+  organization_id?: string | null;
+  shared_at?: string | null;
 }
 
 function attendeeLabel(attendee: MeetingAttendee): string {
@@ -96,6 +102,12 @@ function toSaved(row: DBMeeting): SavedMeetingRecord {
     myNotesMarkdown: row.my_notes_markdown ?? "",
     notesMarkdown: row.notes_markdown ?? row.notes ?? "",
     createdAt: row.created_at,
+    visibility: row.visibility ?? (row.shared_with_org ? "org" : "private"),
+    publicShareToken: row.public_share_token ?? null,
+    sharedWithOrg: row.shared_with_org ?? false,
+    organizationId: row.organization_id ?? null,
+    sharedAt: row.shared_at ?? null,
+    userId: row.user_id ?? null,
   };
 }
 

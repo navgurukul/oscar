@@ -1799,6 +1799,11 @@ function App() {
               // User-chosen tone, or the per-session prompt-engineer override.
               // Sent unconditionally (independent of context-aware routing).
               stylePreset: effectiveStylePreset,
+              // User-selected language code. Mercury 2 uses this to preserve
+              // Devanagari for "hi", apply Hinglish spelling rules for "hi-en",
+              // or do standard English cleanup for "en". Missing/auto = let
+              // the cleanup detect from text content.
+              language: transcriptionLanguageRef.current,
               // Capture wire-level breakdown so perf.jsonl can distinguish
               // "server is slow" (ttfb dominates) from "network is slow"
               // (dns/tcp/tls dominate) for the ai-cleanup stage.
@@ -2807,7 +2812,31 @@ function App() {
                     const updated = [meeting, ...savedMeetings.filter((m) => m.id !== meeting.id)];
                     setSavedMeetings(updated);
                     saveSetting("savedMeetings", updated);
-                    if (user) meetingsService.saveMeeting(meeting, user.id).catch((e) => console.warn("[minutes] save failed:", e));
+                    if (user) {
+                      meetingsService
+                        .saveMeeting(meeting, user.id)
+                        .then(({ data }) => {
+                          // When the workspace has auto-publish on, the DB trigger
+                          // mints a public share token at insert. Merge it back so
+                          // the Minutes UI can surface the live /m/{token} link.
+                          if (!data) return;
+                          setSavedMeetings((prev) => {
+                            const merged = prev.map((m) =>
+                              m.id === meeting.id
+                                ? {
+                                    ...m,
+                                    visibility: data.visibility,
+                                    publicShareToken: data.publicShareToken,
+                                    sharedWithOrg: data.visibility !== "private",
+                                  }
+                                : m,
+                            );
+                            saveSetting("savedMeetings", merged);
+                            return merged;
+                          });
+                        })
+                        .catch((e) => console.warn("[minutes] save failed:", e));
+                    }
                   }}
                   onDeleteMeeting={(id) => {
                     const updated = savedMeetings.filter((m) => m.id !== id);
@@ -2962,6 +2991,7 @@ function App() {
                   dictationModel={dictationModel}
                   meetingModel={meetingModel}
                   onModelPresetChange={handleModelPresetChange}
+                  appVersion={appVersion}
                 />
               )}
             </div>

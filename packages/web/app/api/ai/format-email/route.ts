@@ -8,12 +8,11 @@ import {
 } from "@/lib/middleware/rate-limit";
 import {
   createPlainTextStreamResponse,
-  getGeminiApiKey,
   getOptionalTrimmedString,
   parseJsonBody,
-  startGeminiStream,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
+import { getMercuryApiKey, startMercuryStream } from "@/lib/server/mercury";
 
 const REQUEST_TIMEOUT_MS = 12000;
 
@@ -30,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   let apiKey: string;
   try {
-    apiKey = getGeminiApiKey();
+    apiKey = getMercuryApiKey();
   } catch {
     return NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 });
   }
@@ -49,7 +48,7 @@ export async function POST(req: NextRequest) {
       getOptionalTrimmedString(bodyResult.data.title) ?? ""
     );
 
-    const pending = startGeminiStream({
+    const pending = startMercuryStream({
       apiKey,
       messages: [
         {

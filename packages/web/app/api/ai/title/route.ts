@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { API_CONFIG, ERROR_MESSAGES, RATE_LIMITS } from "@/lib/constants";
 import { SYSTEM_PROMPTS, USER_PROMPTS } from "@/lib/prompts";
-import { buildOrgContext } from "@/lib/server/orgContext";
 import {
   applyRateLimit,
   getClientIdentifier,
@@ -10,11 +9,10 @@ import {
   applyCors,
   authenticateRequest,
   corsPreflightResponse,
-  generateText,
-  getGeminiApiKey,
   parseJsonBody,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
+import { getMercuryApiKey, mercuryGenerateText } from "@/lib/server/mercury";
 
 const REQUEST_TIMEOUT_MS = 12000;
 
@@ -33,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   let apiKey: string;
   try {
-    apiKey = getGeminiApiKey();
+    apiKey = getMercuryApiKey();
   } catch {
     return applyCors(
       NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 })
@@ -49,21 +47,16 @@ export async function POST(req: NextRequest) {
   });
   if (!inputResult.success) return applyCors(inputResult.response);
 
-  let systemPrompt: string = SYSTEM_PROMPTS.TITLE;
-  const orgCtx = await buildOrgContext(user.id, { includeDocs: false });
-  if (orgCtx.vocabulary.length > 0) {
-    const vocabLine = orgCtx.vocabulary
-      .slice(0, 30)
-      .map((v) => v.term)
-      .join(", ");
-    systemPrompt = `${SYSTEM_PROMPTS.TITLE}\n\nPrefer these exact spellings when applicable: ${vocabLine}.`;
-  }
-
+  // NOTE: org-context lookup was removed here. buildOrgContext() was called
+  // with no queryText, so vocabulary matching never ran and it always returned
+  // an empty list — the spelling-hint branch below was dead, yet it cost ~7
+  // Supabase round-trips on the (serial) title path. Titles don't need org
+  // vocabulary; drop the call entirely.
   try {
-    const title = await generateText({
+    const title = await mercuryGenerateText({
       apiKey,
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: SYSTEM_PROMPTS.TITLE },
         { role: "user", content: `${USER_PROMPTS.TITLE_TEMPLATE}${inputResult.wrappedText}` },
       ],
       temperature: API_CONFIG.TITLE_TEMPERATURE,

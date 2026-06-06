@@ -45,6 +45,7 @@ function RecordingPageInner() {
   const {
     isInitializing,
     isRequestingPermission,
+    isReady,
     isRecording,
     isProcessing,
     isPermissionDenied,
@@ -59,6 +60,7 @@ function RecordingPageInner() {
   const { formatText, cancelFormatting } = useAIFormatting();
 
   const [processingStep, setProcessingStep] = useState(0);
+  const [streamedText, setStreamedText] = useState("");
   const [showProcessing, setShowProcessing] = useState(false);
   const [isRetryingPermission, setIsRetryingPermission] = useState(false);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
@@ -79,26 +81,32 @@ function RecordingPageInner() {
     };
   }, [cancelFormatting]);
 
+  // Resume into "Continue Recording" only once the STT engine is actually ready.
+  // Gating on isReady is critical: the hook's initial state is IDLE, which
+  // passed the old negative checks, so this used to fire before sttService
+  // existed and raced a fixed 800ms timer against mic-permission + model init.
+  // When init ran long (the common case) the seeded startRecording() hit its
+  // "no service yet" guard and silently no-opped — recording never resumed.
   useEffect(() => {
-    if (
-      !isInitializing &&
-      !isRequestingPermission &&
-      !isRecording &&
-      !isPermissionDenied
-    ) {
-      const shouldContinue = storageService.getContinueMode();
-      if (shouldContinue) {
-        const rawText = storageService.getRawText();
-        if (rawText) {
-          toast({ title: "Resuming Recording", description: "Preparing to add to your Scribble…" });
-          storageService.clearContinueMode();
-          setTimeout(() => startRecording(rawText), 800);
-        } else {
-          storageService.clearContinueMode();
-        }
-      }
+    if (!storageService.getContinueMode()) return;
+
+    // Permission denied / no engine coming: drop the pending resume so it can't
+    // fire unexpectedly on a later recording in the same tab.
+    if (isPermissionDenied) {
+      storageService.clearContinueMode();
+      return;
     }
-  }, [isInitializing, isRequestingPermission, isRecording, isPermissionDenied, startRecording, toast]);
+    if (!isReady) return;
+
+    // Consume the flag first so the resume happens exactly once, even under
+    // StrictMode double-invoke or dependency-driven re-runs.
+    storageService.clearContinueMode();
+    const rawText = storageService.getRawText();
+    if (!rawText) return;
+
+    toast({ title: "Resuming Recording", description: "Preparing to add to your Scribble…" });
+    void startRecording(rawText);
+  }, [isReady, isPermissionDenied, startRecording, toast]);
 
   const clearStepInterval = useCallback(() => {
     if (stepIntervalRef.current) {
@@ -187,7 +195,19 @@ function RecordingPageInner() {
         return;
       }
 
-      const result = await formatText(transcript);
+      // Run formatting and title generation concurrently. The title only needs
+      // the text, not the *formatted* version, so it can work off the raw
+      // transcript in parallel instead of waiting a full second Gemini round-trip
+      // after formatting finishes. Format streams its output to the screen via
+      // onChunk so the user sees text appear at time-to-first-token rather than
+      // staring at a placeholder until the whole response lands.
+      setStreamedText("");
+      const [result, titleResult] = await Promise.all([
+        formatText(transcript, (chunk) => {
+          if (isMountedRef.current) setStreamedText(chunk);
+        }),
+        aiService.generateTitle(transcript, abortControllerRef.current?.signal),
+      ]);
       if (!isMountedRef.current || abortControllerRef.current?.signal.aborted) {
         clearStepInterval();
         isProcessingRef.current = false;
@@ -199,21 +219,10 @@ function RecordingPageInner() {
         if (result.fallback) {
           toast({ title: "Basic formatting", description: ERROR_MESSAGES.FORMATTING_FALLBACK });
         }
-        const titleResult = await aiService.generateTitle(
-          result.formattedText,
-          abortControllerRef.current?.signal
-        );
-        if (!isMountedRef.current || abortControllerRef.current?.signal.aborted) {
-          isProcessingRef.current = false;
-          return;
-        }
         const generatedTitle = titleResult.success ? titleResult.title : "Untitled Scribble";
         storageService.saveScribble(result.formattedText, transcript, generatedTitle);
         if (user) await incrementUsage();
-        if (isMountedRef.current) {
-          await new Promise((r) => setTimeout(r, RECORDING_CONFIG.COMPLETION_DELAY_MS));
-          if (isMountedRef.current) router.push(ROUTES.RESULTS);
-        }
+        if (isMountedRef.current) router.push(ROUTES.RESULTS);
       } else {
         if (isMountedRef.current) {
           setShowProcessing(false);
@@ -310,49 +319,69 @@ function RecordingPageInner() {
               what you said.
             </h1>
 
-            <div className="mt-14 mx-auto text-left" style={{ maxWidth: 460 }}>
-              {PROCESSING_STEPS.map((label, i) => {
-                const state = i < processingStep ? "done" : i === processingStep ? "active" : "pending";
-                return (
-                  <div key={i} className="flex items-center gap-4 py-2">
-                    <span
-                      className="inline-flex items-center justify-center"
-                      style={{ width: 18, height: 18 }}
-                    >
-                      {state === "done" && (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                          <path
-                            d="M5 12l5 5L20 7"
-                            stroke={v2.accent}
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      )}
-                      {state === "active" && (
+            {streamedText ? (
+              <div
+                className="mt-12 mx-auto text-left"
+                style={{ maxWidth: 560, maxHeight: 300, overflowY: "auto" }}
+              >
+                <p
+                  style={{
+                    whiteSpace: "pre-wrap",
+                    fontSize: 16,
+                    lineHeight: 1.65,
+                    color: v2.ink,
+                  }}
+                >
+                  {streamedText}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="mt-14 mx-auto text-left" style={{ maxWidth: 460 }}>
+                  {PROCESSING_STEPS.map((label, i) => {
+                    const state = i < processingStep ? "done" : i === processingStep ? "active" : "pending";
+                    return (
+                      <div key={i} className="flex items-center gap-4 py-2">
                         <span
-                          className="rounded-full animate-pulse"
-                          style={{ height: 10, width: 10, background: v2.accent }}
-                        />
-                      )}
-                      {state === "pending" && (
-                        <span
-                          className="rounded-full"
-                          style={{ height: 7, width: 7, background: v2.ruleHard }}
-                        />
-                      )}
-                    </span>
-                    <V2Mono style={{ fontSize: 13, color: state === "pending" ? v2.inkFaint : v2.ink }}>
-                      {label}
-                    </V2Mono>
-                  </div>
-                );
-              })}
-            </div>
+                          className="inline-flex items-center justify-center"
+                          style={{ width: 18, height: 18 }}
+                        >
+                          {state === "done" && (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                              <path
+                                d="M5 12l5 5L20 7"
+                                stroke={v2.accent}
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                          )}
+                          {state === "active" && (
+                            <span
+                              className="rounded-full animate-pulse"
+                              style={{ height: 10, width: 10, background: v2.accent }}
+                            />
+                          )}
+                          {state === "pending" && (
+                            <span
+                              className="rounded-full"
+                              style={{ height: 7, width: 7, background: v2.ruleHard }}
+                            />
+                          )}
+                        </span>
+                        <V2Mono style={{ fontSize: 13, color: state === "pending" ? v2.inkFaint : v2.ink }}>
+                          {label}
+                        </V2Mono>
+                      </div>
+                    );
+                  })}
+                </div>
 
-            <p className="mt-12 mx-auto text-[13px]" style={{ color: v2.inkSoft, maxWidth: 360 }}>
-              Oscar takes a moment to clean and format. You&rsquo;ll see the result next.
-            </p>
+                <p className="mt-12 mx-auto text-[13px]" style={{ color: v2.inkSoft, maxWidth: 360 }}>
+                  Oscar takes a moment to clean and format. You&rsquo;ll see the result next.
+                </p>
+              </>
+            )}
           </div>
         </div>
       </main>

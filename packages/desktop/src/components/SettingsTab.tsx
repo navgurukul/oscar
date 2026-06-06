@@ -6,10 +6,11 @@ import {
   ExternalLink,
   LogOut,
   Trash2,
-  Lock,
   Mail,
   FolderOpen,
-  Plus,
+  ChevronRight,
+  AlertTriangle,
+  Check,
 } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { BillingSection } from "./BillingSection";
@@ -32,7 +33,7 @@ import type { DBScribble } from "../types/scribble.types";
 /* ── Types ── */
 
 /** Accepts legacy tab names from callers */
-type SettingsSection =
+type SettingsSectionId =
   | "billing"
   | "vocabulary"
   | "general"
@@ -40,7 +41,7 @@ type SettingsSection =
   | "folders"
   | "privacy";
 
-/** Internal active tab — matches V2DesktopSettings six-tab IA. */
+/** Internal active tab — matches V2DeskSettingsShell six-tab IA. */
 type ActiveTab =
   | "general"
   | "account"
@@ -49,7 +50,7 @@ type ActiveTab =
   | "billing"
   | "privacy";
 
-function resolveTab(section?: SettingsSection): ActiveTab {
+function resolveTab(section?: SettingsSectionId): ActiveTab {
   if (section === "billing") return "billing";
   if (section === "privacy") return "privacy";
   if (section === "account") return "account";
@@ -106,89 +107,104 @@ interface MicDevice {
   label: string;
 }
 
-/** Editorial hairline row — col-span-4 label+desc · col-span-8 control/value.
- *  Matches V2DesktopSettings:741 row geometry. */
-function SettingRow({
-  label,
-  description,
-  children,
-  align = "baseline",
-}: {
-  label: string;
-  description?: string;
-  children: React.ReactNode;
-  align?: "baseline" | "center";
-}) {
-  return (
-    <div
-      className={`grid grid-cols-12 gap-5 py-4 border-b border-cream-300 ${
-        align === "center" ? "items-center" : "items-baseline"
-      }`}
-    >
-      <div className="col-span-4 min-w-0">
-        <div className="text-[14px] font-medium text-ink leading-tight">{label}</div>
-        {description && (
-          <div className="mt-0.5 text-[12px] leading-relaxed text-ink-soft">
-            {description}
-          </div>
-        )}
-      </div>
-      <div className="col-span-8 min-w-0">{children}</div>
-    </div>
-  );
+function openExternalPage(url: string) {
+  void openUrl(url).catch((error) => {
+    console.error("Failed to open external link:", error);
+  });
 }
 
-/** Mono value — terracotta when "on/active", ink-faint when "off/neutral". */
-function MonoValue({
-  value,
-  on,
+/* ═══════════════════════════════════════════════════════════════════════════
+   Design-system primitives — port of oscar-v2-desk-settings.jsx (DS*).
+   Cream/ink/terracotta Tailwind tokens map 1:1 onto the mock's v2 palette:
+   cream-200 = #efeae0 (cream2), cream-300 = #e5e0d6 (rule),
+   cream-400 = #d8d2c4 (ruleHard), terracotta = #b8623d (accent).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const RULE = "#e5e0d6"; // cream-300
+
+/** Mono micro-caps label. */
+function Caps({
+  children,
+  accent = false,
+  className = "",
 }: {
-  value: string;
-  on?: boolean;
+  children: React.ReactNode;
+  accent?: boolean;
+  className?: string;
 }) {
   return (
     <span
-      className={`font-mono text-[12px] tracking-[0.04em] ${
-        on === false ? "text-ink-faint" : "text-terracotta"
-      }`}
+      className={`font-mono text-[10px] tracking-[0.18em] uppercase ${
+        accent ? "text-terracotta" : "text-ink-faint"
+      } ${className}`}
     >
-      {value}
+      {children}
     </span>
   );
 }
 
-/** 3/9 caps section — V2WebSettings:376 pattern (col-span-3 caps · col-span-9 body). */
-export function SettingsSection({
-  caps,
-  capsAccent = false,
+/** Caps section header with a hard rule, then full-width rows below.
+ *  Replaces the old 3/9 grid `SettingsSection`. Exported for BillingSection. */
+export function Group({
+  title,
+  accent = false,
+  first = false,
   children,
-  topBorder = true,
 }: {
-  caps: string;
-  capsAccent?: boolean;
+  title: string;
+  accent?: boolean;
+  first?: boolean;
   children: React.ReactNode;
-  topBorder?: boolean;
 }) {
   return (
-    <section
-      className={`mt-12 grid grid-cols-12 gap-10 ${
-        topBorder ? "border-t border-cream-300 pt-8" : ""
-      }`}
-    >
-      <div className="col-span-3">
-        <span
-          className={`font-mono text-[10px] tracking-[0.18em] uppercase ${
-            capsAccent ? "text-terracotta" : "text-ink-faint"
-          }`}
-        >
-          {caps}
-        </span>
+    <section style={{ marginTop: first ? 0 : 30 }}>
+      <div className="pb-2 border-b border-cream-400">
+        <Caps accent={accent}>{title}</Caps>
       </div>
-      <div className="col-span-9 min-w-0">{children}</div>
+      <div className="mt-1">{children}</div>
     </section>
   );
 }
 
+/** Label + description on the left, a control on the right, hairline divider. */
+function Row({
+  label,
+  desc,
+  children,
+  last = false,
+}: {
+  label?: React.ReactNode;
+  desc?: React.ReactNode;
+  children: React.ReactNode;
+  last?: boolean;
+}) {
+  return (
+    <div
+      className="flex items-start justify-between gap-6 py-4"
+      style={{ borderBottom: last ? "none" : `1px solid ${RULE}` }}
+    >
+      {(label || desc) && (
+        <div className="min-w-0" style={{ maxWidth: 340 }}>
+          {label && (
+            <div className="text-[14px] font-medium text-ink leading-tight">
+              {label}
+            </div>
+          )}
+          {desc && (
+            <div className="mt-0.5 text-[12px] leading-relaxed text-ink-soft">
+              {desc}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="shrink-0 flex items-center" style={{ minHeight: 24 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** 40×22 pill toggle. */
 function Toggle({
   checked,
   onChange,
@@ -215,10 +231,164 @@ function Toggle({
   );
 }
 
-function openExternalPage(url: string) {
-  void openUrl(url).catch((error) => {
-    console.error("Failed to open external link:", error);
-  });
+/** Pill segmented control — selected option fills ink. */
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className="inline-flex items-center rounded-full p-0.5 bg-cream-200 border border-cream-300"
+    >
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o.value)}
+            className={`rounded-full px-3 py-1 text-[12px] border-none cursor-pointer transition-colors ${
+              on
+                ? "bg-ink text-cream font-medium"
+                : "bg-transparent text-ink-soft hover:text-ink"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Keyboard chips, e.g. ⌘ + Space. */
+function Kbd({ keys }: { keys: string[] }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {keys.map((k, i) => (
+        <span
+          key={i}
+          className="inline-flex items-center rounded border border-cream-400 bg-cream px-[7px] py-0.5"
+        >
+          <span className="font-mono text-[11px] tracking-[0.04em] text-ink">
+            {k}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** Mono value — terracotta when "on/active", ink-faint when "off/neutral". */
+function MonoValue({ value, on }: { value: string; on?: boolean }) {
+  return (
+    <span
+      className={`font-mono text-[12px] tracking-[0.04em] ${
+        on === false ? "text-ink-faint" : "text-terracotta"
+      }`}
+    >
+      {value}
+    </span>
+  );
+}
+
+/** Dashed empty panel — icon disc, serif line, body, optional CTA. */
+export function EmptyPanel({
+  icon,
+  title,
+  body,
+  cta,
+  onCta,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  cta?: string;
+  onCta?: () => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg px-7 py-10 text-center border border-dashed border-cream-400 bg-cream-200">
+      <div
+        className="mx-auto inline-flex items-center justify-center rounded-full border border-cream-400 bg-cream text-ink-faint"
+        style={{ height: 40, width: 40 }}
+      >
+        {icon}
+      </div>
+      <h3
+        className="mt-4 font-serif font-medium text-ink"
+        style={{ fontSize: 21, letterSpacing: "-0.01em" }}
+      >
+        {title}
+      </h3>
+      <p
+        className="mt-2 mx-auto text-[13px] leading-relaxed text-ink-soft"
+        style={{ maxWidth: 360 }}
+      >
+        {body}
+      </p>
+      {cta && (
+        <button
+          type="button"
+          onClick={onCta}
+          className="mt-5 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[13px] font-medium bg-ink text-cream border-none cursor-pointer transition-opacity hover:opacity-90"
+        >
+          {cta}
+        </button>
+      )}
+      {children}
+    </div>
+  );
+}
+
+/** Terracotta attention banner — used for the mic-permission prompt. */
+function Banner({
+  title,
+  body,
+  cta,
+  onCta,
+}: {
+  title: string;
+  body: string;
+  cta?: string;
+  onCta?: () => void;
+}) {
+  return (
+    <div className="rounded-lg px-5 py-4 flex items-start gap-4 bg-terracotta-100 border border-terracotta">
+      <AlertTriangle
+        size={18}
+        className="text-terracotta shrink-0 mt-px"
+        strokeWidth={1.8}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-[13.5px] font-semibold text-ink">{title}</div>
+        <p className="mt-0.5 text-[12.5px] leading-relaxed" style={{ color: "#6b3a2a" }}>
+          {body}
+        </p>
+      </div>
+      {cta && (
+        <button
+          type="button"
+          onClick={onCta}
+          className="shrink-0 inline-flex items-center rounded-full px-4 py-2 text-[12px] font-medium bg-ink text-cream border-none cursor-pointer transition-opacity hover:opacity-90"
+        >
+          {cta}
+        </button>
+      )}
+    </div>
+  );
 }
 
 /* ── Nav ── */
@@ -228,11 +398,11 @@ const NAV_ITEMS: {
   label: string;
   sub: string;
 }[] = [
-  { id: "general", label: "General", sub: "Behavior" },
-  { id: "account", label: "Account", sub: "You" },
+  { id: "general", label: "General", sub: "Hotkey · dictation · models" },
+  { id: "account", label: "Account", sub: "You · sessions" },
   { id: "vocabulary", label: "Vocabulary", sub: "Words Oscar knows" },
-  { id: "folders", label: "Folders", sub: "Group what you said" },
-  { id: "billing", label: "Plans & billing", sub: "Subscription" },
+  { id: "folders", label: "Folders", sub: "How you group things" },
+  { id: "billing", label: "Plans & billing", sub: "Plan · usage" },
   { id: "privacy", label: "Data & privacy", sub: "Export · delete" },
 ];
 
@@ -256,13 +426,14 @@ interface SettingsTabProps {
   contextAwareDictationEnabled: boolean;
   onContextAwareDictationChange: (enabled: boolean) => void;
   contextAwarePlatform: string;
-  initialSection?: SettingsSection;
+  initialSection?: SettingsSectionId;
   systemAudioSupported?: boolean;
   systemAudioEnabled?: boolean;
   onSystemAudioToggle?: (enabled: boolean) => void;
   dictationModel: RoleModelState;
   meetingModel: RoleModelState;
   onModelPresetChange: (role: WhisperModelRole, preset: ModelPreset) => void;
+  appVersion?: string | null;
 }
 
 /* ── Component ── */
@@ -292,6 +463,7 @@ export function SettingsTab({
   dictationModel,
   meetingModel,
   onModelPresetChange,
+  appVersion,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>(
     resolveTab(initialSection),
@@ -299,6 +471,9 @@ export function SettingsTab({
   const [clearConfirm, setClearConfirm] = useState(false);
   const [langSearch, setLangSearch] = useState("");
   const [micDevices, setMicDevices] = useState<MicDevice[]>([]);
+  const [micPermission, setMicPermission] = useState<
+    "granted" | "denied" | "unknown"
+  >("unknown");
 
   const autoDetect = transcriptionLanguage === "auto";
 
@@ -306,21 +481,26 @@ export function SettingsTab({
     if (initialSection) setActiveTab(resolveTab(initialSection));
   }, [initialSection]);
 
-  // Enumerate mic devices when General tab opens
+  // Enumerate mic devices when General tab opens. A device that reports an
+  // empty label means the page has no mic permission yet — surface the banner.
   useEffect(() => {
     if (activeTab !== "general") return;
     navigator.mediaDevices
       .enumerateDevices()
       .then((devices) => {
-        const mics = devices
-          .filter((d) => d.kind === "audioinput")
-          .map((d, i) => ({
-            deviceId: d.deviceId,
-            label: d.label || `Microphone ${i + 1}`,
-          }));
+        const inputs = devices.filter((d) => d.kind === "audioinput");
+        const mics = inputs.map((d, i) => ({
+          deviceId: d.deviceId,
+          label: d.label || `Microphone ${i + 1}`,
+        }));
         setMicDevices(mics);
+        setMicPermission(
+          inputs.length > 0 && inputs.some((d) => d.label)
+            ? "granted"
+            : "denied",
+        );
       })
-      .catch(() => {});
+      .catch(() => setMicPermission("denied"));
   }, [activeTab]);
 
   const filteredLangs = LANGUAGES.filter(
@@ -329,49 +509,69 @@ export function SettingsTab({
       l.native.toLowerCase().includes(langSearch.toLowerCase()),
   );
 
+  const currentMicLabel =
+    micDevices.find((d) => d.deviceId === selectedMicId)?.label ??
+    "System default";
+  const currentLangName =
+    LANGUAGES.find((l) => l.code === transcriptionLanguage)?.name ??
+    transcriptionLanguage;
+
   const contextAwareSupported = isContextAwarePlatform(contextAwarePlatform);
   const contextAwareDisabled = !aiImprovementEnabled || !contextAwareSupported;
+  const contextAwareOn =
+    contextAwareSupported && contextAwareDictationEnabled && aiImprovementEnabled;
   const contextAwareDescription = !contextAwareSupported
-    ? "Available on macOS and Windows"
+    ? "Available on macOS and Windows."
     : aiImprovementEnabled
-      ? "Adapt cleanup style to active app"
-      : "Requires AI Cleanup";
+      ? "Adapt the output to Slack, Notion, Cursor, Gmail."
+      : "Requires Auto-cleanup.";
 
-  const renderModelStatus = (model: RoleModelState) => {
+  const requestMicAccess = () => {
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        stream.getTracks().forEach((t) => t.stop());
+        setMicPermission("granted");
+        return navigator.mediaDevices.enumerateDevices();
+      })
+      .then((devices) => {
+        if (!devices) return;
+        const mics = devices
+          .filter((d) => d.kind === "audioinput")
+          .map((d, i) => ({
+            deviceId: d.deviceId,
+            label: d.label || `Microphone ${i + 1}`,
+          }));
+        setMicDevices(mics);
+      })
+      .catch(() => setMicPermission("denied"));
+  };
+
+  const modelStatus = (model: RoleModelState): React.ReactNode => {
     if (model.downloadState === "downloading") {
       return (
-        <div className="st-row-status st-row-status--downloading">
-          <Loader2 size={12} className="animate-spin" />
+        <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-terracotta">
+          <Loader2 size={11} className="animate-spin" />
           Downloading {Math.round(model.progress)}%
-        </div>
+        </span>
       );
     }
-
     if (model.downloadState === "checking") {
       return (
-        <div className="st-row-status st-row-status--downloading">
-          <Loader2 size={12} className="animate-spin" />
+        <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-terracotta">
+          <Loader2 size={11} className="animate-spin" />
           Preparing
-        </div>
+        </span>
       );
     }
-
-    if (model.activeVariant) {
-      return (
-        <div className="st-row-status st-row-status--installed">
-          Ready
-        </div>
-      );
-    }
-
+    if (model.activeVariant) return null;
     if (model.recommendation) {
       return (
-        <div className="st-row-status">
+        <span className="font-mono text-[11px] text-ink-faint">
           Will download · {formatModelSize(model.recommendation.spec.sizeBytes)}
-        </div>
+        </span>
       );
     }
-
     return null;
   };
 
@@ -379,38 +579,46 @@ export function SettingsTab({
     label: string,
     description: string,
     model: RoleModelState,
+    last = false,
   ) => {
+    const status = modelStatus(model);
     return (
-      <div className="st-row">
-        <div className="st-row-text">
-          <div className="st-row-label">{label}</div>
-          <div className="st-row-desc">{description}</div>
-          {renderModelStatus(model)}
-          {model.error && <div className="st-row-error">{model.error}</div>}
-        </div>
-        <div className="st-row-action">
-          <select
-            className="st-select"
-            value={model.preset}
-            onChange={(e) =>
-              onModelPresetChange(model.role, e.target.value as ModelPreset)
-            }
-            aria-label={label}
-            disabled={model.downloadState === "downloading"}
-          >
-            <option value="auto">Auto (recommended)</option>
-            <option value="fast">Fast</option>
-            <option value="balanced">Balanced</option>
-            <option value="best">Best quality</option>
-          </select>
-        </div>
-      </div>
+      <Row
+        label={label}
+        desc={
+          <>
+            {description}
+            {status && <span className="block mt-1">{status}</span>}
+            {model.error && (
+              <span className="block mt-1 text-[11px] text-[#dc2626]">
+                {model.error}
+              </span>
+            )}
+          </>
+        }
+        last={last}
+      >
+        <select
+          className="ds-select"
+          value={model.preset}
+          onChange={(e) =>
+            onModelPresetChange(model.role, e.target.value as ModelPreset)
+          }
+          aria-label={label}
+          disabled={model.downloadState === "downloading"}
+        >
+          <option value="auto">Auto</option>
+          <option value="fast">Fast</option>
+          <option value="balanced">Balanced</option>
+          <option value="best">Best quality</option>
+        </select>
+      </Row>
     );
   };
 
   return (
     <div className="st-layout">
-      {/* ── Sidebar / Tab bar (V2WebSettings: serif label + caps-mono sub) ── */}
+      {/* ── Settings sub-nav: serif label + caps-mono sub + accent rail ── */}
       <aside className="st-sidebar">
         <p className="st-sidebar-label">Settings</p>
         <nav className="st-nav">
@@ -422,7 +630,7 @@ export function SettingsTab({
             >
               <span className="flex flex-col gap-0.5 min-w-0">
                 <span className="st-nav-label">{label}</span>
-                <span className="font-mono text-[9px] tracking-[0.18em] uppercase text-ink-faint">
+                <span className="font-mono text-[9px] tracking-[0.16em] uppercase text-ink-faint">
                   {sub}
                 </span>
               </span>
@@ -430,6 +638,14 @@ export function SettingsTab({
           ))}
         </nav>
         <div className="st-sidebar-spacer" />
+        {appVersion && (
+          <div className="flex items-center gap-2 px-2.5 pt-4">
+            <Check size={11} className="text-ink-faint shrink-0" strokeWidth={1.8} />
+            <span className="font-mono text-[10px] tracking-[0.06em] text-ink-faint">
+              v{appVersion} · UP TO DATE
+            </span>
+          </div>
+        )}
       </aside>
 
       {/* ── Content ── */}
@@ -442,19 +658,66 @@ export function SettingsTab({
               How Oscar <em>behaves</em>.
             </h2>
 
-            {/* Hairline rows — V2DesktopSettings:741 pattern */}
-            <div className="mt-2">
-              <SettingRow
-                label="Global hotkey"
-                description="Hold to listen. Tap to start recording."
-              >
-                <MonoValue value="CTRL + SPACE" />
-              </SettingRow>
+            {micPermission === "denied" && (
+              <div className="mt-2">
+                <Banner
+                  title="Microphone access needed"
+                  body="Oscar can’t hear you yet. Grant access to start dictating and recording."
+                  cta="Grant access"
+                  onCta={requestMicAccess}
+                />
+              </div>
+            )}
 
-              <SettingRow
+            {/* INPUT */}
+            <Group title="INPUT" first={micPermission !== "denied"}>
+              <Row
+                label="Microphone"
+                desc="The device Oscar listens through."
+              >
+                <label className="ds-picker">
+                  <span className="ds-picker-value">{currentMicLabel}</span>
+                  <ChevronRight size={12} className="text-ink-faint" />
+                  <select
+                    value={selectedMicId}
+                    onChange={(e) => onMicChange(e.target.value)}
+                    aria-label="Microphone"
+                  >
+                    <option value="">System default</option>
+                    {micDevices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </Row>
+              {systemAudioSupported && (
+                <Row
+                  label="System audio"
+                  desc="Capture meeting participants on top of your mic."
+                  last
+                >
+                  <Toggle
+                    checked={systemAudioEnabled}
+                    onChange={() => onSystemAudioToggle?.(!systemAudioEnabled)}
+                    label="System audio"
+                  />
+                </Row>
+              )}
+            </Group>
+
+            {/* DICTATION */}
+            <Group title="DICTATION">
+              <Row
+                label="Dictation hotkey"
+                desc="Hold to stream cleaned text into the app you’re in."
+              >
+                <Kbd keys={["Ctrl", "Space"]} />
+              </Row>
+              <Row
                 label="Auto-cleanup"
-                description="Remove filler words. Fix punctuation. Format for the active app."
-                align="center"
+                desc="Remove filler words, fix punctuation, format for the active app."
               >
                 <div className="flex items-center gap-4">
                   <MonoValue
@@ -467,34 +730,19 @@ export function SettingsTab({
                     label="Auto-cleanup"
                   />
                 </div>
-              </SettingRow>
-
-              <SettingRow
+              </Row>
+              <Row
                 label="Context-aware dictation"
-                description={contextAwareDescription}
-                align="center"
+                desc={contextAwareDescription}
               >
-                <div className="flex items-center gap-4">
-                  <MonoValue
-                    value={
-                      contextAwareSupported && contextAwareDictationEnabled && aiImprovementEnabled
-                        ? "ON · CONTEXT-V1"
-                        : !contextAwareSupported
-                          ? "UNAVAILABLE"
-                          : "OFF"
-                    }
-                    on={
-                      contextAwareSupported &&
-                      contextAwareDictationEnabled &&
-                      aiImprovementEnabled
-                    }
-                  />
+                <div className="flex items-center gap-3">
+                  {contextAwareOn && (
+                    <span className="font-mono text-[10.5px] tracking-[0.08em] text-terracotta">
+                      CONTEXT-V1
+                    </span>
+                  )}
                   <Toggle
-                    checked={
-                      contextAwareDictationEnabled &&
-                      aiImprovementEnabled &&
-                      contextAwareSupported
-                    }
+                    checked={contextAwareOn}
                     onChange={() =>
                       onContextAwareDictationChange(!contextAwareDictationEnabled)
                     }
@@ -502,156 +750,28 @@ export function SettingsTab({
                     disabled={contextAwareDisabled}
                   />
                 </div>
-              </SettingRow>
-
-              <SettingRow
-                label="Microphone"
-                description="The input device Oscar listens through."
-                align="center"
-              >
-                <select
-                  className="st-select"
-                  value={selectedMicId}
-                  onChange={(e) => onMicChange(e.target.value)}
-                  aria-label="Microphone"
-                >
-                  <option value="">System Default</option>
-                  {micDevices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label}
-                    </option>
-                  ))}
-                </select>
-              </SettingRow>
-
-              {systemAudioSupported && (
-                <SettingRow
-                  label="System audio"
-                  description="Capture meeting participants on top of your mic."
-                  align="center"
-                >
-                  <div className="flex items-center gap-4">
-                    <MonoValue
-                      value={systemAudioEnabled ? "ON" : "OFF"}
-                      on={systemAudioEnabled}
-                    />
-                    <Toggle
-                      checked={systemAudioEnabled}
-                      onChange={() => onSystemAudioToggle?.(!systemAudioEnabled)}
-                      label="System audio"
-                    />
-                  </div>
-                </SettingRow>
-              )}
-
-              <SettingRow
-                label="Language"
-                description={
-                  autoDetect
-                    ? "Auto-detecting from the first seconds of speech."
-                    : `Currently: ${
-                        LANGUAGES.find((l) => l.code === transcriptionLanguage)?.name ??
-                        transcriptionLanguage
-                      }`
-                }
-                align="center"
-              >
-                <div className="flex items-center gap-4">
-                  <MonoValue
-                    value={autoDetect ? "AUTO" : transcriptionLanguage.toUpperCase()}
-                  />
-                  <Toggle
-                    checked={autoDetect}
-                    onChange={() => onLanguageChange(autoDetect ? "en" : "auto")}
-                    label="Auto-detect"
-                  />
-                </div>
-              </SettingRow>
-            </div>
-
-            {/* Language picker — opens inline when auto-detect off */}
-            {!autoDetect && (
-              <SettingsSection caps="LANGUAGE LIST">
-                <div className="gen-search-wrap">
-                  <Search size={14} className="gen-search-icon" />
-                  <input
-                    type="text"
-                    className="gen-search"
-                    placeholder="Search languages…"
-                    value={langSearch}
-                    onChange={(e) => setLangSearch(e.target.value)}
-                  />
-                </div>
-                <div className="gen-lang-grid mt-3">
-                  {filteredLangs.map((lang) => {
-                    const isSelected = transcriptionLanguage === lang.code;
-                    return (
-                      <button
-                        key={lang.code}
-                        className={`gen-lang-tile${isSelected ? " selected" : ""}`}
-                        onClick={() => onLanguageChange(lang.code)}
-                      >
-                        <span className="gen-lang-flag">{lang.flag}</span>
-                        <span className="gen-lang-name">{lang.name}</span>
-                        <span className="gen-lang-native">{lang.native}</span>
-                      </button>
-                    );
-                  })}
-                  {filteredLangs.length === 0 && (
-                    <p className="gen-lang-empty">
-                      No languages match "{langSearch}"
-                    </p>
-                  )}
-                </div>
-              </SettingsSection>
-            )}
-
-            {/* Voice models — 3/9 caps section */}
-            <SettingsSection caps="VOICE MODELS">
-              {renderModelRow(
-                "Dictation",
-                "For Scribbles and Stream.",
-                dictationModel,
-              )}
-              <div className="st-divider" />
-              {renderModelRow(
-                "Meetings",
-                "For Minutes and long meeting transcription.",
-                meetingModel,
-              )}
-            </SettingsSection>
-
-            {/* How Oscar treats dictated text: a persisted cleanup tone plus
-                the Prompt mode rewrite toggle (also on the recording pill). */}
-            <SettingsSection caps="CLEANUP STYLE">
-              <SettingRow
+              </Row>
+              <Row
                 label="Dictation cleanup"
-                description={
+                desc={
                   CLEANUP_STYLE_OPTIONS.find((o) => o.value === cleanupStyle)
                     ?.hint ?? "How Oscar polishes dictated text."
                 }
-                align="center"
               >
-                <select
-                  className="st-select"
+                <Segmented
+                  ariaLabel="Dictation cleanup style"
                   value={cleanupStyle}
-                  onChange={(e) =>
-                    onCleanupStyleChange(e.target.value as CleanupStyle)
-                  }
-                  aria-label="Dictation cleanup style"
-                >
-                  {CLEANUP_STYLE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </SettingRow>
-
-              <SettingRow
+                  onChange={(v) => onCleanupStyleChange(v)}
+                  options={CLEANUP_STYLE_OPTIONS.map((o) => ({
+                    value: o.value,
+                    label: o.label,
+                  }))}
+                />
+              </Row>
+              <Row
                 label="Prompt mode"
-                description="Rewrites your speech into a clean, ready-to-paste prompt instead of just tidying it."
-                align="center"
+                desc="Rewrites your speech into a clean, ready-to-paste prompt instead of just tidying it."
+                last
               >
                 <div className="flex items-center gap-4">
                   <MonoValue value={promptMode ? "ON" : "OFF"} on={promptMode} />
@@ -661,12 +781,223 @@ export function SettingsTab({
                     label="Prompt mode"
                   />
                 </div>
-              </SettingRow>
-            </SettingsSection>
+              </Row>
+            </Group>
 
-            <SettingsSection caps="EXPERIMENTAL">
-              <VibeCodingPicker />
-            </SettingsSection>
+            {/* LANGUAGE */}
+            <Group title="LANGUAGE">
+              <Row
+                label="Auto-detect language"
+                desc={
+                  autoDetect
+                    ? "Detecting from the first seconds of speech."
+                    : `Fixed to ${currentLangName}.`
+                }
+                last={autoDetect}
+              >
+                <div className="flex items-center gap-4">
+                  <MonoValue
+                    value={
+                      autoDetect ? "AUTO" : transcriptionLanguage.toUpperCase()
+                    }
+                    on={autoDetect}
+                  />
+                  <Toggle
+                    checked={autoDetect}
+                    onChange={() => onLanguageChange(autoDetect ? "en" : "auto")}
+                    label="Auto-detect language"
+                  />
+                </div>
+              </Row>
+              {!autoDetect && (
+                <div className="pt-4">
+                  <div className="gen-search-wrap">
+                    <Search size={14} className="gen-search-icon" />
+                    <input
+                      type="text"
+                      className="gen-search"
+                      placeholder="Search languages…"
+                      value={langSearch}
+                      onChange={(e) => setLangSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="gen-lang-grid mt-3">
+                    {filteredLangs.map((lang) => {
+                      const isSelected = transcriptionLanguage === lang.code;
+                      return (
+                        <button
+                          key={lang.code}
+                          className={`gen-lang-tile${isSelected ? " selected" : ""}`}
+                          onClick={() => onLanguageChange(lang.code)}
+                        >
+                          <span className="gen-lang-flag">{lang.flag}</span>
+                          <span className="gen-lang-name">{lang.name}</span>
+                          <span className="gen-lang-native">{lang.native}</span>
+                        </button>
+                      );
+                    })}
+                    {filteredLangs.length === 0 && (
+                      <p className="gen-lang-empty">
+                        No languages match “{langSearch}”
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </Group>
+
+            {/* VOICE MODELS */}
+            <Group title="VOICE MODELS">
+              {renderModelRow(
+                "Dictation",
+                "For Scribbles and Stream.",
+                dictationModel,
+              )}
+              {renderModelRow(
+                "Meetings",
+                "For Minutes and long meeting transcription.",
+                meetingModel,
+                true,
+              )}
+            </Group>
+
+            {/* EXPERIMENTAL */}
+            <Group title="EXPERIMENTAL">
+              <div className="pt-2">
+                <VibeCodingPicker />
+              </div>
+            </Group>
+          </div>
+        )}
+
+        {/* ════════════ Account ════════════ */}
+        {activeTab === "account" && (
+          <div className="st-content">
+            <span className="st-content-eyebrow">SETTINGS · ACCOUNT</span>
+            <h2 className="st-content-title">
+              You, on <em>Oscar</em>.
+            </h2>
+            <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-ink-soft">
+              Your identity, voice profile, and the devices signed into this
+              account.
+            </p>
+
+            {/* Profile header */}
+            <div className="flex items-center gap-4 pb-6 mt-7 border-b border-cream-300">
+              <div className="h-[52px] w-[52px] rounded-full bg-terracotta text-cream font-serif text-[20px] font-medium flex items-center justify-center shrink-0">
+                {getInitials(userEmail)}
+              </div>
+              <div className="min-w-0">
+                <div className="font-serif text-[22px] font-medium text-ink leading-tight">
+                  {userEmail?.split("@")[0] || "Signed in"}
+                </div>
+                <div className="mt-0.5 text-[13px] text-ink-soft truncate">
+                  {userEmail || "Local session"}
+                </div>
+              </div>
+            </div>
+
+            {/* IDENTITY — caps label stacked above value, action on the right */}
+            <Group title="IDENTITY">
+              <div
+                className="flex items-center justify-between gap-4 py-3.5"
+                style={{ borderBottom: `1px solid ${RULE}` }}
+              >
+                <div className="min-w-0">
+                  <Caps>DISPLAY NAME</Caps>
+                  <div className="mt-1 text-[14px] text-ink truncate">
+                    {userEmail?.split("@")[0] || "—"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openExternalPage(`${WEB_APP_URL}/settings`)}
+                  className="shrink-0 text-[12px] text-terracotta bg-transparent border-none cursor-pointer"
+                >
+                  Edit →
+                </button>
+              </div>
+              <div
+                className="flex items-center justify-between gap-4 py-3.5"
+                style={{ borderBottom: `1px solid ${RULE}` }}
+              >
+                <div className="min-w-0">
+                  <Caps>EMAIL</Caps>
+                  <div className="mt-1 inline-flex items-center gap-2 text-[14px] text-ink truncate">
+                    <Mail size={12} className="text-ink-faint shrink-0" />
+                    {userEmail || "Not signed in"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openExternalPage(`${WEB_APP_URL}/settings`)}
+                  className="shrink-0 text-[12px] text-terracotta bg-transparent border-none cursor-pointer"
+                >
+                  Change →
+                </button>
+              </div>
+              <div className="py-3.5">
+                <Caps>LANGUAGE</Caps>
+                <div className="mt-1 text-[14px] text-ink">
+                  {autoDetect ? "Auto-detect" : currentLangName}
+                </div>
+              </div>
+            </Group>
+
+            {/* VOICE PROFILE — read-only mirror of the General toggles */}
+            <Group title="VOICE PROFILE">
+              <Row
+                label="Auto-cleanup"
+                desc="Gemini removes filler and fixes formatting."
+              >
+                <MonoValue
+                  value={aiImprovementEnabled ? "ON" : "OFF"}
+                  on={aiImprovementEnabled}
+                />
+              </Row>
+              <Row
+                label="Context-aware dictation"
+                desc="Adapts per active app."
+              >
+                <MonoValue
+                  value={
+                    contextAwareOn
+                      ? "ON"
+                      : !contextAwareSupported
+                        ? "UNAVAILABLE"
+                        : "OFF"
+                  }
+                  on={contextAwareOn}
+                />
+              </Row>
+              <Row label="Voice profile" desc="Personalised tuning to your cadence." last>
+                <MonoValue value="DEFAULT" on={false} />
+              </Row>
+            </Group>
+
+            {/* SESSIONS */}
+            <Group title="SESSIONS">
+              <Row
+                label="MacBook · current"
+                desc={userEmail || "Local session"}
+                last
+              >
+                <span className="font-mono text-[11px] tracking-[0.14em] text-terracotta">
+                  HERE
+                </span>
+              </Row>
+              <p className="mt-3 text-[12px] leading-relaxed text-ink-faint">
+                This is the only device signed in here. Sign in on the web or
+                your phone to see them listed.
+              </p>
+              <button
+                onClick={onSignOut}
+                className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent px-4 py-2 text-[12px] text-ink-soft cursor-pointer hover:text-ink transition-colors"
+              >
+                <LogOut size={12} />
+                Sign out of this device
+              </button>
+            </Group>
           </div>
         )}
 
@@ -680,9 +1011,16 @@ export function SettingsTab({
               <h2 className="st-content-title">
                 Words Oscar should <em>know</em>.
               </h2>
-              <div className="st-empty-state">
-                <BookOpen size={32} />
-                <p>Sign in to manage your vocabulary.</p>
+              <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-ink-soft">
+                Names, jargon, file paths — the words Whisper would otherwise
+                miss. Oscar treats this as the canonical spelling.
+              </p>
+              <div className="mt-7">
+                <EmptyPanel
+                  icon={<BookOpen size={17} strokeWidth={1.6} />}
+                  title="Sign in to build your vocabulary."
+                  body="Your custom words sync with your account, so they’re the same on every device. Sign in to add and manage them here."
+                />
               </div>
             </div>
           ))}
@@ -695,132 +1033,23 @@ export function SettingsTab({
               Your <em>plan</em>, your terms.
             </h2>
             {userId && userEmail ? (
-              <BillingSection userId={userId} />
+              <div className="mt-7">
+                <BillingSection userId={userId} />
+              </div>
             ) : (
-              <div className="st-card st-card--grouped">
-                <p className="st-row-desc" style={{ padding: "4px 0" }}>
-                  Sign in to view your plan and usage.
-                </p>
+              <div className="mt-7">
+                <EmptyPanel
+                  icon={<BookOpen size={17} strokeWidth={1.6} />}
+                  title="Sign in to view your plan."
+                  body="Your subscription, usage, and invoices live with your account. Sign in to see them here."
+                />
               </div>
             )}
           </div>
         )}
 
-        {/* ════════════ Account ════════════ */}
-        {activeTab === "account" && (
-          <div className="st-content">
-            <span className="st-content-eyebrow">SETTINGS · ACCOUNT</span>
-            <h2 className="st-content-title">
-              You, on <em>Oscar</em>.
-            </h2>
-            <p className="mt-3 max-w-xl text-[13px] leading-relaxed text-ink-soft">
-              Your identity, voice profile, and how Oscar shows up when it
-              pastes for you.
-            </p>
-
-            {/* IDENTITY — V2WebSettings:376 */}
-            <SettingsSection caps="IDENTITY">
-              <SettingRow label="Display name" align="center">
-                <span className="text-[14px] text-ink">
-                  {userEmail?.split("@")[0] || "—"}
-                </span>
-              </SettingRow>
-              <SettingRow label="Email" align="center">
-                <span className="inline-flex items-center gap-2 text-[14px] text-ink">
-                  <Mail size={12} className="text-ink-faint" />
-                  {userEmail || "Not signed in"}
-                </span>
-              </SettingRow>
-              <SettingRow label="Signed in with" align="center">
-                <span className="inline-flex items-center gap-2 text-[14px] text-ink">
-                  <Lock size={12} className="text-ink-faint" />
-                  Google
-                </span>
-              </SettingRow>
-              <SettingRow label="Language" align="center">
-                <MonoValue
-                  value={
-                    autoDetect
-                      ? "AUTO"
-                      : (
-                          LANGUAGES.find((l) => l.code === transcriptionLanguage)?.name ??
-                          transcriptionLanguage
-                        ).toUpperCase()
-                  }
-                />
-              </SettingRow>
-            </SettingsSection>
-
-            {/* VOICE PROFILE — V2WebSettings:386 */}
-            <SettingsSection caps="VOICE PROFILE">
-              <SettingRow label="Auto-cleanup" align="center">
-                <MonoValue
-                  value={
-                    aiImprovementEnabled
-                      ? "ON · GEMINI REMOVES FILLER"
-                      : "OFF"
-                  }
-                  on={aiImprovementEnabled}
-                />
-              </SettingRow>
-              <SettingRow label="Context-aware dictation" align="center">
-                <MonoValue
-                  value={
-                    contextAwareSupported &&
-                    contextAwareDictationEnabled &&
-                    aiImprovementEnabled
-                      ? "ON · ADAPTS PER ACTIVE APP"
-                      : !contextAwareSupported
-                        ? "UNAVAILABLE"
-                        : "OFF"
-                  }
-                  on={
-                    contextAwareSupported &&
-                    contextAwareDictationEnabled &&
-                    aiImprovementEnabled
-                  }
-                />
-              </SettingRow>
-              <SettingRow label="Voice profile" align="center">
-                <MonoValue value="DEFAULT" on={false} />
-              </SettingRow>
-            </SettingsSection>
-
-            {/* SESSIONS — V2WebSettings:396 */}
-            <SettingsSection caps="SESSIONS">
-              <div className="flex items-center justify-between py-4 border-b border-cream-300">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-terracotta text-cream font-serif text-[13px] font-medium flex items-center justify-center shrink-0">
-                    {getInitials(userEmail)}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-[14px] text-ink truncate">
-                      This device · OSCAR desktop
-                    </div>
-                    <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-ink-faint">
-                      {userEmail || "Local session"}
-                    </span>
-                  </div>
-                </div>
-                <span className="font-mono text-[11px] tracking-[0.14em] text-terracotta">
-                  HERE
-                </span>
-              </div>
-              <button
-                onClick={onSignOut}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-cream-300 bg-transparent px-4 py-2 text-[12px] text-ink-soft cursor-pointer hover:text-ink transition-colors"
-              >
-                <LogOut size={12} />
-                Sign out on this device
-              </button>
-            </SettingsSection>
-          </div>
-        )}
-
         {/* ════════════ Folders ════════════ */}
-        {activeTab === "folders" && (
-          <FoldersPanel userId={userId} />
-        )}
+        {activeTab === "folders" && <FoldersPanel userId={userId} />}
 
         {/* ════════════ Data & privacy ════════════ */}
         {activeTab === "privacy" && (
@@ -829,46 +1058,61 @@ export function SettingsTab({
             <h2 className="st-content-title">
               What we <em>do</em> with your voice.
             </h2>
-            <p className="mt-3 max-w-xl text-[13px] leading-relaxed text-ink-soft">
+            <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-ink-soft">
               Oscar transcribes locally on this device when it can. Audio never
-              leaves your machine unless you opt in. Transcripts sync if you're
+              leaves your machine unless you opt in. Transcripts sync if you’re
               signed in.
             </p>
 
-            {/* WHAT'S STORED — V2WebSettingsPrivacy:458 */}
-            <SettingsSection caps="WHAT'S STORED">
-              <SettingRow
-                label="Audio recordings"
-                description="Audio is discarded after transcription. Local-only by design."
-                align="center"
+            {/* ON THIS MAC */}
+            <Group title="ON THIS DEVICE">
+              <Row
+                label="On-device transcription"
+                desc="Uses the local Whisper model. Audio stays on your machine."
               >
-                <MonoValue value="OFF · DISCARDED" on={false} />
-              </SettingRow>
-              <SettingRow
-                label="Transcripts"
-                description="Cleaned text is stored so your library is searchable."
-                align="center"
-              >
-                <MonoValue value="ON · REQUIRED" />
-              </SettingRow>
-              <SettingRow
-                label="Telemetry"
-                description="Anonymous crash reports only. No content ever leaves."
-                align="center"
+                <MonoValue value="ON" />
+              </Row>
+              <Row
+                label="Cloud fallback"
+                desc="Audio is never uploaded — Oscar always transcribes locally."
+                last
               >
                 <MonoValue value="OFF" on={false} />
-              </SettingRow>
-            </SettingsSection>
+              </Row>
+            </Group>
 
-            {/* YOUR DATA — V2WebSettingsPrivacy:467 */}
-            <SettingsSection caps="YOUR DATA">
-              <div className="space-y-3">
+            {/* WHAT'S STORED */}
+            <Group title="WHAT’S STORED">
+              <Row
+                label="Audio recordings"
+                desc="Audio is discarded after transcription. Local-only by design."
+              >
+                <MonoValue value="DISCARDED" on={false} />
+              </Row>
+              <Row
+                label="Transcripts"
+                desc="Cleaned text is stored so your library is searchable."
+              >
+                <MonoValue value="REQUIRED" />
+              </Row>
+              <Row
+                label="Telemetry"
+                desc="Anonymous crash reports only. No content ever leaves."
+                last
+              >
+                <MonoValue value="OFF" on={false} />
+              </Row>
+            </Group>
+
+            {/* YOUR DATA */}
+            <Group title="YOUR DATA">
+              <div className="space-y-3 pt-1">
                 <div className="rounded-lg p-5 flex items-start justify-between gap-6 bg-cream-200 border border-cream-300">
                   <div className="min-w-0">
-                    <div className="font-serif text-[20px] font-medium text-ink leading-tight">
+                    <div className="font-serif text-[18px] font-medium text-ink leading-tight">
                       Export everything
                     </div>
-                    <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                    <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
                       Download a ZIP of every Scribble, every Minutes, every
                       vocabulary entry. Markdown + JSON.
                     </p>
@@ -882,14 +1126,15 @@ export function SettingsTab({
                     Start export
                   </button>
                 </div>
+
                 <div className="rounded-lg p-5 flex items-start justify-between gap-6 border border-[#d6b3a8]">
                   <div className="min-w-0">
-                    <div className="font-serif text-[20px] font-medium text-[#8c2f25] leading-tight">
+                    <div className="font-serif text-[18px] font-medium text-[#8c2f25] leading-tight">
                       Clear local data
                     </div>
-                    <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
-                      Reset this device — remove downloaded models, cached
-                      data, and sign out. Does not delete server data.
+                    <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
+                      Reset this device — remove downloaded models, cached data,
+                      and sign out. Does not delete server data.
                     </p>
                   </div>
                   {clearConfirm ? (
@@ -923,12 +1168,13 @@ export function SettingsTab({
                     </button>
                   )}
                 </div>
+
                 <div className="rounded-lg p-5 flex items-start justify-between gap-6 border border-[#d6b3a8]">
                   <div className="min-w-0">
-                    <div className="font-serif text-[20px] font-medium text-[#8c2f25] leading-tight">
+                    <div className="font-serif text-[18px] font-medium text-[#8c2f25] leading-tight">
                       Delete account
                     </div>
-                    <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                    <p className="mt-1 text-[12.5px] leading-relaxed text-ink-soft">
                       Permanently delete every Scribble, every Minutes, your
                       subscription. Cannot be undone.
                     </p>
@@ -942,27 +1188,34 @@ export function SettingsTab({
                   </button>
                 </div>
               </div>
-            </SettingsSection>
+            </Group>
 
-            <SettingsSection caps="LEGAL">
-              <div className="space-y-1">
+            {/* LEGAL */}
+            <Group title="LEGAL">
+              <div>
                 {[
                   { label: "Privacy Policy", href: `${WEB_APP_URL}/privacy` },
                   { label: "Terms of Service", href: `${WEB_APP_URL}/terms` },
                   { label: "Refund Policy", href: `${WEB_APP_URL}/refund-policy` },
-                ].map(({ label, href }) => (
+                ].map(({ label, href }, i, arr) => (
                   <button
                     key={href}
                     type="button"
                     onClick={() => openExternalPage(href)}
-                    className="flex items-center justify-between w-full py-3 border-b border-cream-300 bg-transparent border-l-0 border-r-0 border-t-0 cursor-pointer text-left hover:bg-cream-100/40 transition-colors"
+                    className="flex items-center justify-between w-full py-3 bg-transparent border-0 cursor-pointer text-left group"
+                    style={{
+                      borderBottom:
+                        i === arr.length - 1 ? "none" : `1px solid ${RULE}`,
+                    }}
                   >
-                    <span className="text-[14px] text-ink">{label}</span>
+                    <span className="text-[14px] text-ink group-hover:text-terracotta transition-colors">
+                      {label}
+                    </span>
                     <ExternalLink size={12} className="text-ink-faint" />
                   </button>
                 ))}
               </div>
-            </SettingsSection>
+            </Group>
           </div>
         )}
       </div>
@@ -1037,36 +1290,38 @@ function FoldersPanel({ userId }: { userId?: string }) {
       <h2 className="st-content-title">
         How you <em>group</em> things.
       </h2>
-      <p className="mt-3 max-w-xl text-[13px] leading-relaxed text-ink-soft">
-        Oscar routes Scribbles to folders automatically based on what you
-        said. They show up in your sidebar so you can jump straight in.
+      <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-ink-soft">
+        Oscar routes Scribbles to folders automatically based on what you said.
+        They show up in your sidebar so you can jump straight in.
       </p>
 
-      <SettingsSection caps={`YOUR FOLDERS · ${folders.length} · ${totalFiled} SCRIBBLES FILED`}>
+      <Group
+        title={`YOUR FOLDERS · ${folders.length} · ${totalFiled} SCRIBBLES FILED`}
+      >
         {isLoading ? (
           <div className="flex items-center justify-center py-12 text-ink-faint">
             <Loader2 size={20} className="animate-spin" />
           </div>
         ) : folders.length === 0 ? (
-          <div className="rounded-lg p-8 text-center bg-cream-200 border border-cream-300">
-            <FolderOpen className="mx-auto mb-3 text-ink-faint" size={28} />
-            <p className="font-serif text-[18px] text-ink leading-snug">
-              No folders yet.
-            </p>
-            <p className="mt-1.5 text-[13px] text-ink-soft">
-              Folders form when you tag Scribbles. Try a few captures and they
-              will appear here.
-            </p>
+          <div className="pt-2">
+            <EmptyPanel
+              icon={<FolderOpen size={17} strokeWidth={1.6} />}
+              title="No folders yet."
+              body="Folders form when Oscar groups a Scribble by topic. Capture a few and they’ll appear here — then jump in from the sidebar."
+            />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-2 gap-4 pt-3">
             {folders.map((f) => (
               <div
                 key={f.name}
-                className="rounded-lg p-6 bg-cream-200 border border-cream-300"
+                className="rounded-lg p-5 bg-cream-200 border border-cream-300"
               >
                 <div className="flex items-baseline justify-between">
-                  <h3 className="font-serif font-medium text-ink leading-tight" style={{ fontSize: 26, letterSpacing: "-0.015em" }}>
+                  <h3
+                    className="font-serif font-medium text-ink leading-tight"
+                    style={{ fontSize: 22, letterSpacing: "-0.015em" }}
+                  >
                     {f.name}
                   </h3>
                   <span className="font-mono text-[13px] text-terracotta">
@@ -1074,11 +1329,9 @@ function FoldersPanel({ userId }: { userId?: string }) {
                   </span>
                 </div>
                 {f.latestTitle && (
-                  <div className="mt-5 text-[12px] leading-relaxed text-ink-soft">
-                    <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-ink-faint">
-                      LATEST
-                    </span>
-                    <p className="mt-1.5 text-[13px] text-ink line-clamp-2">
+                  <div className="mt-4">
+                    <Caps>LATEST</Caps>
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-soft line-clamp-2">
                       {f.latestTitle}
                     </p>
                   </div>
@@ -1087,11 +1340,12 @@ function FoldersPanel({ userId }: { userId?: string }) {
             ))}
           </div>
         )}
-        <p className="mt-6 inline-flex items-center gap-2 text-[12px] text-ink-soft">
-          <Plus size={12} className="text-ink-faint" />
-          New folders form when Oscar groups a Scribble. No manual create yet.
-        </p>
-      </SettingsSection>
+        {folders.length > 0 && (
+          <p className="mt-6 text-[12px] leading-relaxed text-ink-faint">
+            New folders form when Oscar groups a Scribble. No manual create yet.
+          </p>
+        )}
+      </Group>
     </div>
   );
 }

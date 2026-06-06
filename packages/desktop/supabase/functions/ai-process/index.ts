@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import {
+  getStreamLanguageInstruction,
   getStreamStyleInstruction,
   isPromptEngineerStyle,
   STREAM_PROMPT_ENGINEER_SYSTEM_PROMPT,
@@ -59,6 +60,11 @@ interface AIProcessRequest {
   // team-specific spellings and background material. Empty / missing =
   // baseline behaviour.
   orgContextBlock?: string;
+  // User-selected transcription language code (e.g. "hi", "hi-en", "en",
+  // "auto"). Only honoured for transcribe_cleanup; tells Mercury 2 which
+  // script/language to keep the cleaned output in. Missing / "auto" =
+  // preserve whatever language the transcript is already in.
+  language?: string;
 }
 
 interface AIProcessResponse {
@@ -534,6 +540,7 @@ function buildStreamCleanupPrompt(
   text: string,
   routing?: DictationRoutingResult,
   stylePreset?: string,
+  language?: string,
 ): { system: string; user: string } {
   // Prompt Engineer is a rewrite mode: swap the SYSTEM prompt entirely so the
   // model may restructure/expand instead of the locked "format only" formatter.
@@ -552,11 +559,15 @@ function buildStreamCleanupPrompt(
   // Tone presets ("polished" / "concise") add one line to the USER prompt and
   // compose with the category instruction; faithful / unknown add nothing.
   const styleInstruction = getStreamStyleInstruction(stylePreset);
+  // Keep the output in the user's selected language/script (Devanagari for
+  // "hi", Roman for Hinglish, …); "auto" / unknown add nothing.
+  const languageInstruction = getStreamLanguageInstruction(language);
 
   const user = [
     `Context: ${category}; app=${appKey}`,
     getStreamCategoryInstruction(category),
     styleInstruction,
+    languageInstruction,
     "<transcript>",
     text,
     "</transcript>",
@@ -573,11 +584,12 @@ function buildPrompt(
   context?: DictationContextSnapshot,
   routing?: DictationRoutingResult,
   stylePreset?: string,
+  language?: string,
 ): { system: string; user: string } {
   if (mode === "transcribe_cleanup") {
     // Hot path for Stream and Scribble dictation. Keep this prompt tiny so
     // paste is not blocked behind hundreds of fixed prompt tokens.
-    return buildStreamCleanupPrompt(text, routing, stylePreset);
+    return buildStreamCleanupPrompt(text, routing, stylePreset, language);
   }
 
   const system =
@@ -688,6 +700,7 @@ Deno.serve(async (req: Request) => {
       routing,
       stylePreset,
       orgContextBlock,
+      language,
     }: AIProcessRequest = await req.json();
     if (!text || typeof text !== "string" || !text.trim()) {
       return new Response(JSON.stringify({ error: "Missing or empty 'text' field." }), {
@@ -737,6 +750,7 @@ Deno.serve(async (req: Request) => {
       context,
       routing,
       stylePreset,
+      language,
     );
 
     // Append the workspace context block when present. Trimmed so an empty

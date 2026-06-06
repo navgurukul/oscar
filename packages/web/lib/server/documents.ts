@@ -2,8 +2,7 @@ import { randomUUID } from "crypto";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { parseDocument } from "./documentParse";
 import { buildDocumentEmbeddingInput, embedText } from "./embeddings";
-import { generateText, getGeminiApiKey } from "./ai-route";
-import { API_CONFIG } from "../constants";
+import { getMercuryApiKey, mercuryGenerateText } from "./mercury";
 
 const BUCKET = "org-documents";
 const TERM_CATEGORIES = ["acronym", "product", "project", "tool", "terminology"] as const;
@@ -257,8 +256,8 @@ export async function uploadDocument(params: {
   let summary: string | null = null;
   if (parsed.text.trim()) {
     try {
-      const apiKey = getGeminiApiKey();
-      summary = await generateText({
+      const apiKey = getMercuryApiKey();
+      summary = await mercuryGenerateText({
         apiKey,
         messages: [
           {
@@ -272,7 +271,6 @@ export async function uploadDocument(params: {
         ],
         maxTokens: 300,
         temperature: 0.2,
-        model: API_CONFIG.GEMINI_MODEL_FAST,
         timeoutMs: 15000,
       });
     } catch (err) {
@@ -357,7 +355,7 @@ export async function uploadDocument(params: {
 
     // B: Entity Extraction
     try {
-      const apiKey = getGeminiApiKey();
+      const apiKey = getMercuryApiKey();
       const extractionPrompt = `Analyze the following document and extract:
 1. Organization terms: acronyms, products, projects, tools, and technical terminology.
 2. For every term, include likely aliases and common ASR (Speech-to-Text) mistakes. Think like a dictation system: split camelCase, expand acronyms, include phonetic spellings, comma-separated variants, and likely wrong words.
@@ -393,7 +391,7 @@ Rules:
 - prefer product/project names and acronyms over ordinary English words.
 - Ensure the output is valid JSON. Do not include any explanations, markdown code blocks, or text before/after the JSON.`;
 
-      const jsonStr = await generateText({
+      const jsonStr = await mercuryGenerateText({
         apiKey,
         messages: [
           { role: "system", content: "You are a precise entity extraction assistant. You output only valid JSON." },
@@ -401,7 +399,6 @@ Rules:
         ],
         maxTokens: 2048,
         temperature: 0.1,
-        model: API_CONFIG.GEMINI_MODEL_FAST,
         timeoutMs: 25000,
       });
 

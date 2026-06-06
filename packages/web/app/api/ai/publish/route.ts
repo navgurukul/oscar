@@ -9,10 +9,9 @@ import {
   applyCors,
   authenticateRequest,
   corsPreflightResponse,
-  generateText,
-  getGeminiApiKey,
   parseJsonBody,
 } from "@/lib/server/ai-route";
+import { getMercuryApiKey, mercuryGenerateText } from "@/lib/server/mercury";
 import { buildOrgContext } from "@/lib/server/orgContext";
 import { usageService } from "@/lib/services/usage.service";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
@@ -51,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   let apiKey: string;
   try {
-    apiKey = getGeminiApiKey();
+    apiKey = getMercuryApiKey();
   } catch {
     return applyCors(
       NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 })
@@ -142,7 +141,7 @@ export async function POST(req: NextRequest) {
     : "";
 
   try {
-    const markdown = await generateText({
+    const markdown = await mercuryGenerateText({
       apiKey,
       messages: [
         {

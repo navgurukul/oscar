@@ -9,6 +9,12 @@ export interface Organization {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * When true, meetings recorded by members are auto-published (visibility
+   * "public" + a share token) so the summary surfaces a public link. Default
+   * false. See migration 014.
+   */
+  auto_publish_minutes: boolean;
 }
 
 export interface OrganizationMember {
