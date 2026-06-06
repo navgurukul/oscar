@@ -29,13 +29,53 @@ export const scribblesService = {
     scribble: DBScribbleInsert
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
     const supabase = getSupabase();
+
+    // Generate the id client-side so the row can be recovered by id if the
+    // INSERT's RETURNING representation comes back empty (see below).
+    const id = scribble.id ?? crypto.randomUUID();
+
+    // Use .select() (array form) instead of .select().single(): if an INSERT
+    // ever commits but its RETURNING representation comes back empty (a
+    // transient read-after-write/visibility edge), .single() would throw
+    // PGRST116 and turn a committed save into a false "Save failed". Recover by
+    // re-reading the row by id rather than reporting data loss.
     const { data, error } = await supabase
       .from("scribbles")
-      .insert(scribble)
-      .select()
-      .single();
+      .insert({ ...scribble, id })
+      .select();
 
-    return { data, error: error as Error | null };
+    // A genuine insert failure (constraint / RLS WITH CHECK / network).
+    if (error) {
+      return { data: null, error: error as Error };
+    }
+
+    // Happy path: the row was written and returned.
+    const created = data?.[0] ?? null;
+    if (created) {
+      return { data: created, error: null };
+    }
+
+    // Insert succeeded (no error) but RETURNING was empty — the row committed.
+    // Re-read it by its known id rather than surfacing a false failure.
+    const { data: recovered } = await supabase
+      .from("scribbles")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (recovered) {
+      return { data: recovered, error: null };
+    }
+
+    // Still unreadable: almost always a broken deployed SELECT policy on
+    // `scribbles` (the write most likely committed). Surface a precise,
+    // non-destructive message instead of a generic save failure.
+    return {
+      data: null,
+      error: new Error(
+        "Your scribble was saved, but it couldn't be loaded back due to a permission/visibility issue. Refresh to see it."
+      ),
+    };
   },
 
   /**
@@ -64,7 +104,10 @@ export const scribblesService = {
       .select("*")
       .eq("id", id)
       .is("deleted_at", null)
-      .single();
+      // maybeSingle(): a missing/soft-deleted row returns {data:null,error:null}
+      // instead of throwing PGRST116, so callers can tell "not found" from a
+      // real error rather than surfacing a misleading crash.
+      .maybeSingle();
 
     return { data, error: error as Error | null };
   },

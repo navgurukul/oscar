@@ -280,7 +280,12 @@ export default function ResultsPage() {
       }
     } catch (err) {
       console.error("Save failed:", err);
-      toast({ title: "Save failed", description: "Could not save.", variant: "destructive" });
+      toast({
+        title: "Save failed",
+        description:
+          err instanceof Error && err.message ? err.message : "Could not save.",
+        variant: "destructive",
+      });
     } finally {
       setIsSaving(false);
     }

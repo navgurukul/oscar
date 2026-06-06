@@ -101,8 +101,25 @@ export default function ScribbleDetailPage() {
         return;
       }
       setIsLoading(true);
-      const { data, error } = await scribblesService.getScribbleById(id);
+      let { data, error } = await scribblesService.getScribbleById(id);
+      // Read-after-write / transient miss: retry once before giving up so a
+      // momentary empty read doesn't look like the scribble "disappeared".
       if (error || !data) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        ({ data, error } = await scribblesService.getScribbleById(id));
+      }
+      if (error) {
+        toast({
+          title: "Couldn't load that scribble",
+          description: "Something went wrong — refreshing usually fixes it.",
+          variant: "destructive",
+        });
+        router.push("/scribble");
+      } else if (!data) {
+        toast({
+          title: "Scribble not available",
+          description: "It may have been moved to trash or no longer exists.",
+        });
         router.push("/scribble");
       } else if (user && data.user_id !== user.id) {
         router.push("/scribble");
@@ -120,7 +137,7 @@ export default function ScribbleDetailPage() {
       setIsLoading(false);
     };
     load();
-  }, [id, router, user, authLoading]);
+  }, [id, router, user, authLoading, toast]);
 
   useEffect(() => {
     setModeContent({});
