@@ -45,6 +45,7 @@ function RecordingPageInner() {
   const {
     isInitializing,
     isRequestingPermission,
+    isReady,
     isRecording,
     isProcessing,
     isPermissionDenied,
@@ -80,26 +81,32 @@ function RecordingPageInner() {
     };
   }, [cancelFormatting]);
 
+  // Resume into "Continue Recording" only once the STT engine is actually ready.
+  // Gating on isReady is critical: the hook's initial state is IDLE, which
+  // passed the old negative checks, so this used to fire before sttService
+  // existed and raced a fixed 800ms timer against mic-permission + model init.
+  // When init ran long (the common case) the seeded startRecording() hit its
+  // "no service yet" guard and silently no-opped — recording never resumed.
   useEffect(() => {
-    if (
-      !isInitializing &&
-      !isRequestingPermission &&
-      !isRecording &&
-      !isPermissionDenied
-    ) {
-      const shouldContinue = storageService.getContinueMode();
-      if (shouldContinue) {
-        const rawText = storageService.getRawText();
-        if (rawText) {
-          toast({ title: "Resuming Recording", description: "Preparing to add to your Scribble…" });
-          storageService.clearContinueMode();
-          setTimeout(() => startRecording(rawText), 800);
-        } else {
-          storageService.clearContinueMode();
-        }
-      }
+    if (!storageService.getContinueMode()) return;
+
+    // Permission denied / no engine coming: drop the pending resume so it can't
+    // fire unexpectedly on a later recording in the same tab.
+    if (isPermissionDenied) {
+      storageService.clearContinueMode();
+      return;
     }
-  }, [isInitializing, isRequestingPermission, isRecording, isPermissionDenied, startRecording, toast]);
+    if (!isReady) return;
+
+    // Consume the flag first so the resume happens exactly once, even under
+    // StrictMode double-invoke or dependency-driven re-runs.
+    storageService.clearContinueMode();
+    const rawText = storageService.getRawText();
+    if (!rawText) return;
+
+    toast({ title: "Resuming Recording", description: "Preparing to add to your Scribble…" });
+    void startRecording(rawText);
+  }, [isReady, isPermissionDenied, startRecording, toast]);
 
   const clearStepInterval = useCallback(() => {
     if (stepIntervalRef.current) {
