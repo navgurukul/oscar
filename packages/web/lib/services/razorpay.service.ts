@@ -99,6 +99,24 @@ export const razorpayService = {
   },
 
   /**
+   * Detect the Razorpay "the id provided does not exist" error.
+   *
+   * This fires when a stored razorpay_customer_id was created under a
+   * different Razorpay account/key set (e.g. the test keys were rotated).
+   * The old customer no longer resolves under the current account, so any
+   * subscriptions.create call referencing it returns 400. Callers use this to
+   * recreate the customer and retry once instead of wedging the org forever.
+   */
+  isCustomerNotFoundError(error: unknown): boolean {
+    const e = error as {
+      statusCode?: number;
+      error?: { description?: string };
+    };
+    const description = e?.error?.description?.toLowerCase() ?? "";
+    return e?.statusCode === 400 && description.includes("does not exist");
+  },
+
+  /**
    * Fetch subscription details from Razorpay
    */
   async fetchSubscription(
