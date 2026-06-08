@@ -12,6 +12,10 @@ import type {
 } from "@/lib/types/scribble.types";
 import { queryKeys } from "./keys";
 
+// refetchOnMount: "always" — the provider sets staleTime 30s + refetchOnWindowFocus
+// false, so without this a client-side <Link> back into the library would serve the
+// pre-mutation cache (a saved scribble / folder change would not appear until a hard
+// refresh). "always" forces a network refetch every time the list page mounts.
 export function useScribbles(enabled = true) {
   return useQuery<DBScribble[]>({
     queryKey: queryKeys.scribbles,
@@ -21,6 +25,7 @@ export function useScribbles(enabled = true) {
       return data ?? [];
     },
     enabled,
+    refetchOnMount: "always",
   });
 }
 
@@ -33,6 +38,7 @@ export function useTrashedScribbles(enabled = true) {
       return data ?? [];
     },
     enabled,
+    refetchOnMount: "always",
   });
 }
 
@@ -45,6 +51,7 @@ export function useFolders(enabled = true) {
       return data ?? [];
     },
     enabled,
+    refetchOnMount: "always",
   });
 }
 

@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   FolderPlus,
@@ -19,6 +20,8 @@ import { TrashSheet } from "@/components/scribble/TrashSheet";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { scribblesService } from "@/lib/services/scribbles.service";
+import { useScribbles, useTrashedScribbles } from "@/lib/hooks/queries/useScribbles";
+import { queryKeys } from "@/lib/hooks/queries/keys";
 import { useToast } from "@/hooks/use-toast";
 import type { DBScribble } from "@/lib/types/scribble.types";
 import {
@@ -90,20 +93,35 @@ export default function ScribblePage() {
   const router = useRouter();
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
+  const qc = useQueryClient();
 
-  const [allScribbles, setAllScribbles] = useState<DBScribble[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // The library is React-Query-backed so writes from anywhere (results page,
+  // detail page, trash sheet) reconcile here, and refetchOnMount: "always"
+  // (see useScribbles) re-pulls fresh data on every navigation into the page.
+  const queriesEnabled = !authLoading && !!user;
+  const {
+    data: allScribbles = [],
+    isLoading: scribblesLoading,
+    isError: scribblesError,
+  } = useScribbles(queriesEnabled);
+  const { data: trashed = [] } = useTrashedScribbles(queriesEnabled);
+  const isLoading = queriesEnabled && scribblesLoading;
+  const error = scribblesError ? "Could not load your library. Please try again." : null;
+  const trashCount = trashed.length;
+
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearch = useDeferredValue(searchQuery);
   const [sortBy, setSortBy] = useState<SortOption>("updated");
   const [currentView, setCurrentView] = useState<SavedViewKey>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [trashCount, setTrashCount] = useState(0);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+
+  // Apply an optimistic/authoritative update to the shared ["scribbles"] cache.
+  const patchScribblesCache = (updater: (prev: DBScribble[]) => DBScribble[]) =>
+    qc.setQueryData<DBScribble[]>(queryKeys.scribbles, (prev) => updater(prev ?? []));
 
   const folderCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -123,9 +141,8 @@ export default function ScribblePage() {
     if (authLoading) return;
     if (!user) {
       router.push(`/auth?redirectTo=${encodeURIComponent("/scribble")}`);
-      return;
     }
-    void loadWorkspace();
+    // Data loading is handled by the useScribbles/useTrashedScribbles queries.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id]);
 
@@ -227,21 +244,8 @@ export default function ScribblePage() {
     return SYSTEM_VIEWS.find((v) => v.id === currentView)?.label ?? "Library";
   }, [currentView]);
 
-  async function loadWorkspace() {
-    setIsLoading(true);
-    setError(null);
-    const [scribblesResult, trashedResult] = await Promise.all([
-      scribblesService.getScribbles(),
-      scribblesService.getTrashedScribbles(),
-    ]);
-    if (scribblesResult.error) setError("Could not load your library. Please try again.");
-    else setAllScribbles(scribblesResult.data ?? []);
-    if (!trashedResult.error) setTrashCount(trashedResult.data?.length ?? 0);
-    setIsLoading(false);
-  }
-
-  function updateScribblesInState(updated: DBScribble[]) {
-    setAllScribbles((prev) => mergeScribbles(prev, updated));
+  function refreshTrash() {
+    void qc.invalidateQueries({ queryKey: queryKeys.trashedScribbles });
   }
 
   function toggleSelection(id: string) {
@@ -266,18 +270,18 @@ export default function ScribblePage() {
     e.preventDefault();
     e.stopPropagation();
     const newStarred = !s.is_starred;
-    setAllScribbles((prev) =>
+    patchScribblesCache((prev) =>
       prev.map((item) => (item.id === s.id ? { ...item, is_starred: newStarred } : item))
     );
     const { data, error: e2 } = await scribblesService.toggleStar(s.id, newStarred);
     if (e2 || !data) {
-      setAllScribbles((prev) =>
+      patchScribblesCache((prev) =>
         prev.map((item) => (item.id === s.id ? { ...item, is_starred: s.is_starred } : item))
       );
       toast({ title: "Couldn't update star", variant: "destructive" });
       return;
     }
-    updateScribblesInState([data]);
+    patchScribblesCache((prev) => mergeScribbles(prev, [data]));
   }
 
   async function handleDeleteOne(id: string, e: React.MouseEvent) {
@@ -289,13 +293,13 @@ export default function ScribblePage() {
       toast({ title: "Couldn't move Scribble to trash", variant: "destructive" });
       return;
     }
-    setAllScribbles((prev) => prev.filter((s) => s.id !== id));
+    patchScribblesCache((prev) => prev.filter((s) => s.id !== id));
     setSelectedIds((prev) => {
       const next = new Set(prev);
       next.delete(id);
       return next;
     });
-    setTrashCount((t) => t + 1);
+    refreshTrash();
   }
 
   async function applyBulkUpdate(
@@ -311,7 +315,7 @@ export default function ScribblePage() {
       setIsApplying(false);
       return;
     }
-    updateScribblesInState(data);
+    patchScribblesCache((prev) => mergeScribbles(prev, data));
     setSelectedIds(new Set());
     toast({ title: successMessage, description: `${data.length} Scribble${data.length === 1 ? "" : "s"} updated.` });
     setIsApplying(false);
@@ -328,9 +332,10 @@ export default function ScribblePage() {
       setIsApplying(false);
       return;
     }
-    setAllScribbles((prev) => prev.filter((s) => !selectedIds.has(s.id)));
+    const removed = new Set(selectedIds);
+    patchScribblesCache((prev) => prev.filter((s) => !removed.has(s.id)));
     setSelectedIds(new Set());
-    setTrashCount((t) => t + data.length);
+    refreshTrash();
     toast({ title: "Moved to trash", description: `${data.length} Scribble${data.length === 1 ? "" : "s"} moved.` });
     setIsApplying(false);
   }
@@ -796,7 +801,10 @@ export default function ScribblePage() {
       <TrashSheet
         open={isTrashOpen}
         onOpenChange={setIsTrashOpen}
-        onRestore={() => void loadWorkspace()}
+        onRestore={() => {
+          void qc.invalidateQueries({ queryKey: queryKeys.scribbles });
+          refreshTrash();
+        }}
       />
     </main>
   );

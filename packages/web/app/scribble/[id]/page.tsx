@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { scribblesService } from "@/lib/services/scribbles.service";
+import { queryKeys } from "@/lib/hooks/queries/keys";
 import { feedbackService } from "@/lib/services/feedback.service";
 import { storageService } from "@/lib/services/storage.service";
 import { aiService } from "@/lib/services/ai.service";
@@ -69,6 +71,12 @@ export default function ScribbleDetailPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
+
+  // Reconcile the library's React Query cache so edits/stars made here are
+  // reflected in /scribble without a hard refresh.
+  const invalidateLibrary = () =>
+    void qc.invalidateQueries({ queryKey: queryKeys.scribbles });
 
   const [scribble, setScribble] = useState<DBScribble | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -250,6 +258,7 @@ export default function ScribbleDetailPage() {
     } else {
       setScribble({ ...scribble, edited_text: editedText });
       if (activeMode !== "normal") setModeContent((p) => ({ ...p, [activeMode]: editedText }));
+      invalidateLibrary();
     }
     setIsSaving(false);
   };
@@ -314,6 +323,7 @@ export default function ScribbleDetailPage() {
       toast({ title: "Failed to update star", variant: "destructive" });
     } else {
       setScribble((p) => (p ? { ...p, is_starred: data.is_starred } : p));
+      invalidateLibrary();
     }
     setIsStarring(false);
   };

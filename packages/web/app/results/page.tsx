@@ -3,11 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useScribbleStorage } from "@/lib/hooks/useScribbleStorage";
 import { useAIEmailFormatting } from "@/lib/hooks/useAIEmailFormatting";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { storageService } from "@/lib/services/storage.service";
 import { scribblesService } from "@/lib/services/scribbles.service";
+import { queryKeys } from "@/lib/hooks/queries/keys";
 import { feedbackService } from "@/lib/services/feedback.service";
 import { aiService } from "@/lib/services/ai.service";
 import { Spinner } from "@/components/ui/spinner";
@@ -47,8 +49,16 @@ export default function ResultsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { user } = useAuth();
+  const qc = useQueryClient();
   const { isLoading, formattedScribble, rawText, title, updateFormattedScribble } =
     useScribbleStorage();
+
+  // Keep the library's React Query cache in sync after a write so the saved /
+  // re-filed scribble shows up in /scribble without a hard refresh.
+  const invalidateLibrary = (includeFolders = false) => {
+    void qc.invalidateQueries({ queryKey: queryKeys.scribbles });
+    if (includeFolders) void qc.invalidateQueries({ queryKey: queryKeys.folders });
+  };
 
   const [editedText, setEditedText] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -232,6 +242,7 @@ export default function ResultsPage() {
     else {
       updateFormattedScribble(editedText);
       if (activeMode !== "normal") setModeContent((p) => ({ ...p, [activeMode]: editedText }));
+      invalidateLibrary();
     }
     setIsSaving(false);
   };
@@ -276,6 +287,7 @@ export default function ResultsPage() {
         setScribbleId(data.id);
         storageService.setCurrentScribbleId(data.id);
         setIsScribbleSaved(true);
+        invalidateLibrary(true);
         toast({ title: "Saved", description: "Scribble saved to the cloud." });
       }
     } catch (err) {
@@ -302,6 +314,8 @@ export default function ResultsPage() {
     if (error) {
       setIsStarred(!next);
       toast({ title: "Failed to star", variant: "destructive" });
+    } else {
+      invalidateLibrary();
     }
   };
 
@@ -315,6 +329,7 @@ export default function ResultsPage() {
       if (folderName && !availableFolders.includes(folderName)) {
         setAvailableFolders([...availableFolders, folderName]);
       }
+      invalidateLibrary(true);
       toast({ title: folderName ? `Filed to ${folderName}` : "Removed from folder" });
     }
   };
