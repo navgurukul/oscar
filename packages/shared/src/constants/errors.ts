@@ -37,7 +37,10 @@ export const ERROR_MESSAGES = {
   AI_REQUEST_FAILED: "AI request failed",
   INVALID_JSON_BODY: "Invalid JSON body",
   INVALID_AI_RESPONSE: "Invalid AI response",
-  SERVER_MISSING_API_KEY: "Server missing GEMINI_API_KEY",
+  // Thrown by the Mercury client (lib/server/mercury.ts) and the Gemini routes,
+  // so keep it provider-neutral — a hardcoded "GEMINI" misdirects debugging when
+  // it's actually MERCURY_API_KEY that's unset.
+  SERVER_MISSING_API_KEY: "Server is missing an AI provider API key",
   RAW_TEXT_REQUIRED: "rawText is required",
   TEXT_REQUIRED: "text is required",
   NO_TEXT_PROVIDED_FOR_FORMATTING: "No text provided for formatting",

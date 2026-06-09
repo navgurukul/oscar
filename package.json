@@ -1,6 +1,6 @@
 {
   "name": "oscar",
-  "version": "0.5.1",
+  "version": "0.7.30",
   "private": true,
   "scripts": {
     "dev:web": "cd packages/web && pnpm dev",

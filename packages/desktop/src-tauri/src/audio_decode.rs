@@ -248,3 +248,17 @@ pub(crate) fn decode_audio_to_pcm(bytes: &[u8], ext: &str) -> Result<Vec<f32>, S
         _ => decode_with_symphonia(bytes, ext),
     }
 }
+
+/// Decode a recorded dictation blob (mp4/AAC or webm/opus) from the webview to
+/// 16 kHz mono f32 PCM, in Rust via symphonia.
+///
+/// The dictation pill used to decode the MediaRecorder blob in the webview with
+/// `AudioContext.decodeAudioData`, but WKWebView on macOS 26/27 throws
+/// `EncodingError: Decoding failed` on the very mp4/AAC its own MediaRecorder
+/// produces — so every dictation silently lost its audio (recording fine, decode
+/// dead). This routes dictation through the same decoder the meeting-segment path
+/// already uses (`decode_audio_to_pcm`), which is unaffected by the WebKit bug.
+#[tauri::command]
+pub fn decode_audio_blob(bytes: Vec<u8>, ext: String) -> Result<Vec<f32>, String> {
+    decode_audio_to_pcm(&bytes, &ext)
+}

@@ -50,7 +50,10 @@ export class STTService {
 
       this.transcriptCallback = onTranscriptUpdate;
 
-      // Create STT instance with transcript callback
+      // Create STT instance with transcript callback.
+      // Forward the full RecordingConfig — continueOnSilence / silenceThresholdMs
+      // were previously dropped here, silently overriding the caller's intent
+      // with the library defaults.
       this.sttInstance = new STTLogic(
         this.createLogCallback(),
         (transcript) => this.handleTranscriptUpdate(transcript),
@@ -59,6 +62,10 @@ export class STTService {
             config?.interimSaveIntervalMs ||
             RECORDING_CONFIG.INTERIM_SAVE_INTERVAL_MS,
           preserveTranscriptOnStart: config?.preserveTranscriptOnStart ?? true,
+          continueOnSilence: config?.continueOnSilence ?? true,
+          ...(config?.silenceThresholdMs != null
+            ? { silenceThresholdMs: config.silenceThresholdMs }
+            : {}),
         },
       );
 
@@ -111,8 +118,10 @@ export class STTService {
       this.sttInstance.start();
       this.isRecordingActive = true;
 
-      // iOS Safari specific restart strategy
-      if (browserService.isIOSSafari()) {
+      // WebKit (iOS + macOS Safari, Tauri WKWebView) drops the recognition
+      // session after ~30-60s, so proactively rotate it to keep capturing past
+      // the first window. Blink/Gecko don't need this.
+      if (browserService.needsPreemptiveRestart()) {
         this.startPreemptiveRestartStrategy();
       }
     } catch (error) {
@@ -238,8 +247,9 @@ export class STTService {
   }
 
   /**
-   * Start preemptive restart strategy for iOS Safari
-   * iOS Safari stops recognition after ~30s, so we restart proactively
+   * Start preemptive restart strategy for WebKit engines.
+   * All Apple-WebKit surfaces (iOS + macOS Safari, WKWebView) stop recognition
+   * after ~30-60s, so we restart proactively to avoid losing later audio.
    */
   private startPreemptiveRestartStrategy(): void {
     if (this.restartInterval) {

@@ -82,6 +82,14 @@ export function useMinutesRecorder({
   const [segmentsCompleted, setSegmentsCompleted] = useState(0);
   const [segmentsTotal, setSegmentsTotal] = useState(0);
   const [systemAudioWarning, setSystemAudioWarning] = useState("");
+  // Mic-only mute. True = the local microphone is silenced; system-audio
+  // capture of the other participants keeps running. See setMicMuted below.
+  const [isMuted, setIsMuted] = useState(false);
+  // Reactive mirror of sessionUsesSystemAudioRef: true while this session is
+  // actually capturing the other participants (system audio). Lets the UI tell
+  // "muted, others still recorded" apart from a mic-only meeting where muting
+  // captures nothing.
+  const [isCapturingSystemAudio, setIsCapturingSystemAudio] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const isRecordingRef = useRef(false);
@@ -100,6 +108,7 @@ export function useMinutesRecorder({
   const startedAtRef = useRef("");
   const sessionUsesSystemAudioRef = useRef(false);
   const systemAudioActiveRef = useRef(false);
+  const isMutedRef = useRef(false);
 
   const vadAudioContextRef = useRef<AudioContext | null>(null);
   const vadSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
@@ -113,6 +122,51 @@ export function useMinutesRecorder({
   useEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
+
+  // ─── Mic mute ────────────────────────────────────────────────────────────
+  // Mutes ONLY the local microphone track. System-audio capture (the other
+  // participants, handled in Rust) is never touched, and the shared warm
+  // stream is never stopped: `track.enabled = false` delivers digital silence
+  // to both the segment MediaRecorder and the VAD monitor, so muted mic audio
+  // is dropped as silence rather than transcribed or hallucinated. Using
+  // `track.stop()` here would kill the device and leak a dead track into the
+  // dictation flow, which reuses the same warm stream.
+  //
+  // Note: while muted the VAD monitor reads those zero samples, so the
+  // speech-boundary rotation never triggers; segments fall back to the
+  // time-based segmentTimer (MEETING_SEGMENT_DURATION_MS), which is the
+  // intended, fully-functional fallback.
+  const applyMicEnabled = useCallback(
+    (enabled: boolean) => {
+      const stream = warmStreamRef.current;
+      if (!stream) return;
+      for (const track of stream.getAudioTracks()) {
+        track.enabled = enabled;
+      }
+    },
+    [warmStreamRef],
+  );
+
+  const setMicMuted = useCallback(
+    (muted: boolean) => {
+      applyMicEnabled(!muted);
+      isMutedRef.current = muted;
+      setIsMuted(muted);
+    },
+    [applyMicEnabled],
+  );
+
+  const toggleMute = useCallback(() => {
+    setMicMuted(!isMutedRef.current);
+  }, [setMicMuted]);
+
+  // Keep the sessionUsesSystemAudio ref and its reactive mirror in lockstep so
+  // the UI can truthfully report whether the other participants are still being
+  // captured while the mic is muted.
+  const setSessionUsesSystemAudio = useCallback((value: boolean) => {
+    sessionUsesSystemAudioRef.current = value;
+    setIsCapturingSystemAudio(value);
+  }, []);
 
   const stopVadMonitor = useCallback(() => {
     vadProcessorRef.current?.disconnect();
@@ -248,9 +302,14 @@ export function useMinutesRecorder({
     nextSegmentIndexRef.current = 0;
     stopRequestedRef.current = false;
     segmentStopRef.current = null;
-    sessionUsesSystemAudioRef.current = false;
+    setSessionUsesSystemAudio(false);
     systemAudioActiveRef.current = false;
     mediaRecorderRef.current = null;
+    // Reset mute state up front so the invariant ("a fresh session starts
+    // capturing") holds even on the early-return error paths below, where the
+    // setMicMuted(false) in startRecording would otherwise be skipped.
+    isMutedRef.current = false;
+    setIsMuted(false);
     setTranscript("");
     setTranscriptSegments([]);
     setStartedAt("");
@@ -259,7 +318,7 @@ export function useMinutesRecorder({
     setSegmentsCompleted(0);
     setSegmentsTotal(0);
     setTranscriptionStatus("idle");
-  }, [stopVadMonitor]);
+  }, [stopVadMonitor, setSessionUsesSystemAudio]);
 
   const maybeCompleteFinalization = () => {
     if (!stopRequestedRef.current) return;
@@ -392,9 +451,9 @@ export function useMinutesRecorder({
     const stream = warmStreamRef.current;
     if (!stream) return;
 
-    const useMp4 = MediaRecorder.isTypeSupported("audio/mp4");
-    const mimeType = useMp4 ? "audio/mp4" : "audio/webm";
-    const ext = useMp4 ? "mp4" : "webm";
+    const useWebm = MediaRecorder.isTypeSupported("audio/webm");
+    const mimeType = useWebm ? "audio/webm" : "audio/mp4";
+    const ext = useWebm ? "webm" : "mp4";
     const segmentIndex = nextSegmentIndexRef.current;
     const segmentUsesSystemAudio = sessionUsesSystemAudioRef.current;
     nextSegmentIndexRef.current += 1;
@@ -438,7 +497,7 @@ export function useMinutesRecorder({
                 "[meeting] system audio segment rotation failed:",
                 err,
               );
-              sessionUsesSystemAudioRef.current = false;
+              setSessionUsesSystemAudio(false);
               systemAudioActiveRef.current = false;
               void invoke("stop_system_audio_capture").catch(() => {});
             })
@@ -557,6 +616,13 @@ export function useMinutesRecorder({
         }
       }
 
+      // Fresh session always starts capturing. Clear any mic-mute left over
+      // from a prior meeting or dictation: `track.enabled = false` persists on
+      // the shared warm stream and survives the readyState==="live" reuse
+      // check above, which would otherwise start this meeting mic-dead (no
+      // "You" speaker ever surfaces).
+      setMicMuted(false);
+
       sessionIdRef.current += 1;
       const sessionId = sessionIdRef.current;
       stopRequestedRef.current = false;
@@ -576,7 +642,7 @@ export function useMinutesRecorder({
         try {
           await invoke("start_system_audio_capture");
           systemAudioActiveRef.current = true;
-          sessionUsesSystemAudioRef.current = true;
+          setSessionUsesSystemAudio(true);
           setSystemAudioWarning("");
           console.log("[meeting-record] System audio capture started");
         } catch (err) {
@@ -585,7 +651,7 @@ export function useMinutesRecorder({
             err,
           );
           systemAudioActiveRef.current = false;
-          sessionUsesSystemAudioRef.current = false;
+          setSessionUsesSystemAudio(false);
           const reason = String(err).replace(/^Error:\s*/i, "");
           setSystemAudioWarning(
             `${reason} Meeting recording will continue with your microphone only.`,
@@ -593,7 +659,7 @@ export function useMinutesRecorder({
         }
       } else {
         systemAudioActiveRef.current = false;
-        sessionUsesSystemAudioRef.current = false;
+        setSessionUsesSystemAudio(false);
         setSystemAudioWarning("");
       }
 
@@ -616,6 +682,9 @@ export function useMinutesRecorder({
   const stopRecording = () => {
     isRecordingRef.current = false;
     setIsRecording(false);
+    // Restore the mic track so a muted meeting never leaves the shared warm
+    // stream disabled for the next dictation/meeting session.
+    setMicMuted(false);
     stopRequestedRef.current = true;
     setTranscriptionStatus("finalizing");
 
@@ -660,6 +729,9 @@ export function useMinutesRecorder({
     setSegmentsCompleted(0);
     setSegmentsTotal(0);
     setTranscriptionStatus("idle");
+    // A fresh meeting setup ("New meeting" / Back / start-from-event) starts
+    // unmuted; clear any stale mute so the next record pill doesn't show MUTED.
+    setMicMuted(false);
   };
 
   const clearSystemAudioWarning = () => {
@@ -689,13 +761,24 @@ export function useMinutesRecorder({
           );
         });
       }
+      // Re-enable the mic track on unmount so a mid-mute teardown doesn't leave
+      // the shared warm stream muted for the dictation flow.
+      const warmStream = warmStreamRef.current;
+      if (warmStream) {
+        for (const track of warmStream.getAudioTracks()) {
+          track.enabled = true;
+        }
+      }
     };
-  }, [stopVadMonitor]);
+  }, [stopVadMonitor, warmStreamRef]);
 
   return {
     isRecording,
     isRecordingRef,
     isPreparing,
+    isMuted,
+    toggleMute,
+    isCapturingSystemAudio,
     recordingTime,
     transcript,
     transcriptSegments,

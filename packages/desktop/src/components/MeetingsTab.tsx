@@ -5,6 +5,7 @@ import { buildMeetingContextPack, copyMarkdownAsRichText } from "@oscar/shared";
 import { aiService } from "../services/ai.service";
 import {
   Mic,
+  MicOff,
   Copy,
   Check,
   RotateCcw,
@@ -159,6 +160,12 @@ interface MeetingsTabProps {
   onAuthError?: () => Promise<boolean>;
   onStartRecording: () => void;
   onStopRecording: () => void;
+  /** True while the local mic is muted (system audio keeps recording). */
+  isMuted?: boolean;
+  /** Toggle the local mic mute. Other participants keep being captured. */
+  onToggleMute?: () => void;
+  /** True when system audio (other participants) is actually being captured. */
+  isCapturingSystemAudio?: boolean;
   recordingTime: number;
   transcript: string;
   transcriptSegments: MeetingTranscriptSegment[];
@@ -495,6 +502,9 @@ export function MeetingsTab({
   onAuthError,
   onStartRecording,
   onStopRecording,
+  isMuted = false,
+  onToggleMute,
+  isCapturingSystemAudio = false,
   recordingTime,
   transcript,
   transcriptSegments,
@@ -749,6 +759,80 @@ export function MeetingsTab({
     transcriptSegments,
   ]);
 
+  // Stable identity for the meeting record across re-saves: the same row is
+  // upserted first with empty notes (save-first), then again with the distilled
+  // notes once enhance resolves. Kept in refs so re-renders never mint a new id
+  // or reset the created-at stamp.
+  const savedMeetingIdRef = useRef<string | null>(null);
+  const savedCreatedAtRef = useRef<string>("");
+  // Re-entrancy guard for processTranscript. persistMeeting() now saves during
+  // the "processing" phase, and onSaveMeeting is a fresh closure on every App
+  // render — so saving churns processTranscript's identity and re-fires the
+  // finalization effect while phase is still "processing". Without this guard
+  // that would launch duplicate (concurrent) enhance calls for one meeting.
+  const processingRef = useRef(false);
+
+  // Persist the meeting (raw transcript + whatever notes we have) to the Minutes
+  // library. Idempotent on id, so it's safe to call repeatedly. This is the core
+  // of the "never lose a recorded meeting" guarantee: a long recording is saved
+  // BEFORE the AI distill step runs, so a 429 / quota / network failure can no
+  // longer erase it — the notes simply stay empty until the user regenerates.
+  const persistMeeting = useCallback(
+    (notesMarkdown: string) => {
+      const request = buildNoteRequest();
+      const hasContent =
+        request.transcript_segments.length > 0 ||
+        transcript.trim().length > 0 ||
+        request.my_notes_markdown.trim().length > 0 ||
+        notesMarkdown.trim().length > 0;
+      // Don't create an empty ghost record (no transcript, no notes, no result).
+      if (!hasContent) return;
+
+      const now = new Date().toISOString();
+      if (!savedMeetingIdRef.current) {
+        savedMeetingIdRef.current = `meeting_${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+        savedCreatedAtRef.current = now;
+      }
+
+      const labeledTranscript =
+        request.transcript_segments.length > 0
+          ? buildLabeledTranscript(
+              request.transcript_segments,
+              liveSpeakerLabels,
+            )
+          : transcript;
+
+      onSaveMeeting({
+        id: savedMeetingIdRef.current,
+        startedAt:
+          selectedCalendarEvent?.start_at ||
+          meetingStartedAt ||
+          savedCreatedAtRef.current,
+        meetingTitle: request.meeting_title,
+        meetingLocalDatetime: request.meeting_local_datetime,
+        attendeesCompact: request.attendees_compact,
+        attendeesFull: request.attendees_full,
+        calendarContext: request.calendar_context,
+        meetingTypeHint: request.meeting_type_hint,
+        transcript: labeledTranscript,
+        transcriptSegments: request.transcript_segments,
+        myNotesMarkdown: request.my_notes_markdown,
+        notesMarkdown,
+        createdAt: savedCreatedAtRef.current,
+      });
+    },
+    [
+      buildNoteRequest,
+      liveSpeakerLabels,
+      meetingStartedAt,
+      onSaveMeeting,
+      selectedCalendarEvent,
+      transcript,
+    ],
+  );
+
   const handleRegenerateSaved = useCallback(
     async (saved: SavedMeetingRecord) => {
       if (regenerating) return;
@@ -793,9 +877,19 @@ export function MeetingsTab({
     // resolves a no-speech / no-notes meeting to an honest empty note, so we
     // still transition to the result screen rather than leaving the
     // "distilling…" screen spinning forever.
+    if (processingRef.current) return;
+    processingRef.current = true;
     setStreaming(true);
     setResult("");
     setError("");
+
+    // Save-first: persist the raw transcript before the AI step so a 429 /
+    // quota / network failure can never erase a recorded meeting. Only on the
+    // first distill — a "Regenerate" re-run already has a saved record whose
+    // notes we must not blank if this attempt fails.
+    if (!savedMeetingIdRef.current) {
+      persistMeeting("");
+    }
 
     try {
       let processed: string;
@@ -819,6 +913,8 @@ export function MeetingsTab({
           await aiService.generateEnhancedMeetingNote(buildNoteRequest());
       }
       setResult(processed);
+      // Fill the distilled notes into the already-saved record.
+      persistMeeting(processed);
       setPhase("result");
     } catch (processingError) {
       setError(
@@ -827,10 +923,20 @@ export function MeetingsTab({
           : String(processingError),
       );
       setPhase("result");
+      // The raw transcript was saved up front (persistMeeting above), so the
+      // meeting is safe in the Minutes library and can be regenerated once the
+      // AI service recovers — nothing is lost.
     } finally {
+      processingRef.current = false;
       setStreaming(false);
     }
-  }, [buildNoteRequest, hasTranscriptInput, manualNotes, onAuthError]);
+  }, [
+    buildNoteRequest,
+    hasTranscriptInput,
+    manualNotes,
+    onAuthError,
+    persistMeeting,
+  ]);
 
   useEffect(() => {
     // Fire once finalization completes — even when nothing usable was
@@ -842,56 +948,11 @@ export function MeetingsTab({
     }
   }, [minutesTranscriptionStatus, phase, processTranscript]);
 
-  const savedMeetingIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (
-      phase !== "result" ||
-      streaming ||
-      !result ||
-      error ||
-      savedMeetingIdRef.current
-    ) {
-      return;
-    }
-
-    const request = buildNoteRequest();
-    const now = new Date().toISOString();
-    const meetingId = `meeting_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    savedMeetingIdRef.current = meetingId;
-
-    const labeledTranscript =
-      request.transcript_segments.length > 0
-        ? buildLabeledTranscript(request.transcript_segments, liveSpeakerLabels)
-        : transcript;
-
-    onSaveMeeting({
-      id: meetingId,
-      startedAt: selectedCalendarEvent?.start_at || meetingStartedAt || now,
-      meetingTitle: request.meeting_title,
-      meetingLocalDatetime: request.meeting_local_datetime,
-      attendeesCompact: request.attendees_compact,
-      attendeesFull: request.attendees_full,
-      calendarContext: request.calendar_context,
-      meetingTypeHint: request.meeting_type_hint,
-      transcript: labeledTranscript,
-      transcriptSegments: request.transcript_segments,
-      myNotesMarkdown: request.my_notes_markdown,
-      notesMarkdown: result,
-      createdAt: now,
-    });
-  }, [
-    buildNoteRequest,
-    error,
-    liveSpeakerLabels,
-    meetingStartedAt,
-    onSaveMeeting,
-    phase,
-    result,
-    selectedCalendarEvent,
-    streaming,
-    transcript,
-    transcriptSegments,
-  ]);
+  // The meeting is persisted by persistMeeting() inside processTranscript:
+  // save-first with empty notes before the AI step, then again with the
+  // distilled notes on success. No gated post-result save effect — that gate
+  // (`!result || error`) was what discarded the transcript on an enhance
+  // failure.
 
   const startFromEvent = (event: CalendarEvent) => {
     // Clear any prior recorder state (transcript, segments, and the elapsed
@@ -909,6 +970,7 @@ export function MeetingsTab({
     setManualNotes("");
     setResultTab("notes");
     savedMeetingIdRef.current = null;
+    savedCreatedAtRef.current = "";
   };
 
   const handleStopRecording = () => {
@@ -963,6 +1025,7 @@ export function MeetingsTab({
     setResultTab("notes");
     onClearTranscript();
     savedMeetingIdRef.current = null;
+    savedCreatedAtRef.current = "";
   };
 
   const handleNewMeeting = () => {
@@ -1241,8 +1304,12 @@ export function MeetingsTab({
                       "Untitled meeting"}
                   </div>
                   <div className="font-mono text-[11px] text-ink-faint">
-                    {formatTime(recordingTime)} · still recording in the
-                    background
+                    {formatTime(recordingTime)} ·{" "}
+                    {isMuted
+                      ? isCapturingSystemAudio
+                        ? "mic muted · others still recording"
+                        : "mic muted · mic-only meeting"
+                      : "still recording in the background"}
                   </div>
                 </div>
                 <button
@@ -1500,9 +1567,14 @@ export function MeetingsTab({
                               {meeting.attendeesCompact}
                             </div>
                           )}
-                          {meeting.notesMarkdown && (
+                          {meeting.notesMarkdown ? (
                             <p className="mt-1 truncate text-[12px] leading-relaxed text-ink-soft">
                               {markdownPreview(meeting.notesMarkdown)}
+                            </p>
+                          ) : (
+                            <p className="mt-1 font-mono text-[11px] tracking-[0.04em] text-terracotta">
+                              Transcript saved · notes not generated — open to
+                              regenerate
                             </p>
                           )}
                         </div>
@@ -1531,6 +1603,7 @@ export function MeetingsTab({
 
   if (phase === "view_saved" && viewingSaved) {
     const savedParsed = parseMinutes(viewingSaved.notesMarkdown);
+    const hasSavedNotes = viewingSaved.notesMarkdown.trim().length > 0;
     const savedTurnCount =
       viewingSaved.transcriptSegments.length > 0
         ? groupSegmentsIntoTurns(
@@ -1634,8 +1707,26 @@ export function MeetingsTab({
           {/* body */}
           {resultTab === "notes" && (
             <section className="px-9 pt-7 pb-6">
-              <MinutesDistillView markdown={viewingSaved.notesMarkdown} />
-              <MinutesShareLink meeting={viewingSaved} />
+              {hasSavedNotes ? (
+                <>
+                  <MinutesDistillView markdown={viewingSaved.notesMarkdown} />
+                  <MinutesShareLink meeting={viewingSaved} />
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-12 text-center">
+                  <p
+                    className="font-serif text-[17px] text-ink"
+                    style={GARAMOND_FONT_STYLE}
+                  >
+                    Notes weren&rsquo;t generated for this meeting
+                  </p>
+                  <p className="max-w-md text-[12.5px] leading-relaxed text-ink-soft">
+                    The transcript is saved safely — see the Transcript tab.
+                    Press Regenerate below to distill the minutes, useful when
+                    the AI step hit a temporary limit during recording.
+                  </p>
+                </div>
+              )}
             </section>
           )}
 
@@ -1671,15 +1762,22 @@ export function MeetingsTab({
           {/* footer */}
           <div className="border-t border-cream-300 px-9 py-5 flex items-center gap-2">
             <button
-              className={FOOTER_BUTTON_PRIMARY_CLASS_NAME}
+              className={cn(
+                FOOTER_BUTTON_PRIMARY_CLASS_NAME,
+                !hasSavedNotes && "cursor-not-allowed opacity-50",
+              )}
               onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
+              disabled={!hasSavedNotes}
               type="button"
             >
               {copied ? <Check size={11} /> : <Copy size={11} />}
               {copied ? "Copied" : "Copy clean"}
             </button>
             <button
-              className={FOOTER_BUTTON_CLASS_NAME}
+              className={cn(
+                FOOTER_BUTTON_CLASS_NAME,
+                !hasSavedNotes && "cursor-not-allowed opacity-50",
+              )}
               onClick={() =>
                 void handleShareByEmail({
                   subjectTitle: viewingSaved.meetingTitle,
@@ -1687,6 +1785,7 @@ export function MeetingsTab({
                   markdown: viewingSaved.notesMarkdown,
                 })
               }
+              disabled={!hasSavedNotes}
               type="button"
             >
               <Mail size={11} />
@@ -1775,9 +1874,22 @@ export function MeetingsTab({
               <span className="ml-auto inline-flex items-center gap-1.5">
                 {isRecording ? (
                   <>
-                    <span className="inline-block h-[7px] w-[7px] rounded-full bg-terracotta animate-pulse" />
-                    <span className="font-mono text-[11px] text-terracotta">
-                      RECORDING · {formatTime(recordingTime)}
+                    <span
+                      className={cn(
+                        "inline-block h-[7px] w-[7px] rounded-full",
+                        isMuted
+                          ? "bg-ink-faint"
+                          : "bg-terracotta animate-pulse",
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "font-mono text-[11px]",
+                        isMuted ? "text-ink-faint" : "text-terracotta",
+                      )}
+                    >
+                      {isMuted ? "MIC MUTED" : "RECORDING"} ·{" "}
+                      {formatTime(recordingTime)}
                     </span>
                   </>
                 ) : (
@@ -1894,7 +2006,11 @@ export function MeetingsTab({
                               : "S"
                           } DETECTED`
                         : isRecording
-                          ? "LISTENING…"
+                          ? isMuted
+                            ? isCapturingSystemAudio
+                              ? "MIC MUTED · OTHERS LIVE"
+                              : "MIC MUTED · MIC ONLY"
+                            : "LISTENING…"
                           : ""}
                     </span>
                   }
@@ -1933,7 +2049,8 @@ export function MeetingsTab({
               <div className="flex items-center gap-[2px] h-4">
                 {Array.from({ length: 18 }).map((_, i) => {
                   const base = 3 + Math.abs(Math.sin(i * 0.7 + 1.2)) * 12;
-                  const h = isRecording ? base : base * 0.4;
+                  const live = isRecording && !isMuted;
+                  const h = live ? base : base * 0.4;
                   return (
                     <span
                       key={i}
@@ -1941,7 +2058,7 @@ export function MeetingsTab({
                       style={{
                         width: 2,
                         height: h,
-                        opacity: isRecording ? 0.6 + (i / 18) * 0.4 : 0.3,
+                        opacity: live ? 0.6 + (i / 18) * 0.4 : 0.3,
                         transition: "height 200ms ease",
                       }}
                     />
@@ -1951,6 +2068,32 @@ export function MeetingsTab({
               <span className="font-mono text-[12px] text-cream">
                 {formatTime(recordingTime)}
               </span>
+              {isRecording && onToggleMute && (
+                <button
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors",
+                    isMuted
+                      ? "bg-terracotta text-cream hover:bg-terracotta-600"
+                      : "bg-cream/15 text-cream hover:bg-cream/25",
+                  )}
+                  onClick={onToggleMute}
+                  type="button"
+                  aria-pressed={isMuted}
+                  aria-label="Toggle microphone mute"
+                  title={
+                    isMuted
+                      ? isCapturingSystemAudio
+                        ? "Your mic is muted. Other participants are still being recorded — click to unmute."
+                        : "Your mic is muted. This is a mic-only meeting, so nothing is captured while muted — click to unmute."
+                      : isCapturingSystemAudio
+                        ? "Mute your mic. Other participants (system audio) keep recording."
+                        : "Mute your mic."
+                  }
+                >
+                  {isMuted ? <MicOff size={11} /> : <Mic size={11} />}
+                  {isMuted ? "Muted" : "Mute"}
+                </button>
+              )}
               {isRecording ? (
                 <button
                   className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream transition-colors hover:bg-terracotta-600"
@@ -2246,8 +2389,28 @@ export function MeetingsTab({
         {resultTab === "notes" && (
           <section className="px-9 pt-7 pb-6">
             {error && (
-              <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">
-                {error}
+              <div className="mb-4 space-y-3">
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                  {error}
+                </div>
+                <div className="rounded-md border border-cream-300 bg-cream-50 px-3 py-2 text-[12.5px] leading-relaxed text-ink-soft">
+                  Your transcript is saved to the Minutes library — nothing was
+                  lost. You can view it in the Transcript tab and regenerate
+                  these notes anytime once the service recovers.
+                </div>
+                <button
+                  className={FOOTER_BUTTON_PRIMARY_CLASS_NAME}
+                  onClick={() => {
+                    setResult("");
+                    setError("");
+                    setPhase("processing");
+                    void processTranscript();
+                  }}
+                  type="button"
+                >
+                  <RotateCcw size={11} />
+                  Try again
+                </button>
               </div>
             )}
             {!result && !error && (

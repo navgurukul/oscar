@@ -60,11 +60,11 @@ interface AIProcessRequest {
   // team-specific spellings and background material. Empty / missing =
   // baseline behaviour.
   orgContextBlock?: string;
-  // User-selected transcription language code (e.g. "hi", "hi-en", "en",
-  // "auto"). Only honoured for transcribe_cleanup; tells Mercury 2 which
-  // script/language to keep the cleaned output in. Missing / "auto" =
-  // preserve whatever language the transcript is already in.
-  language?: string;
+  // Pill language selector: "en" | "hi" | "hi-en" | "auto". Drives script
+  // handling in cleanup — "hi" forces Devanagari output (transliterating
+  // Roman Whisper output if needed); "hi-en" forces plain ASCII Roman
+  // (never IAST diacritics); "en" is English. Missing / "auto" = detect.
+  language?: "en" | "hi" | "hi-en" | "auto";
 }
 
 interface AIProcessResponse {
@@ -124,6 +124,11 @@ const STREAM_CLEANUP_SYSTEM_PROMPT =
   "Never add facts or complete unfinished thoughts. Preserve meaning, language, names, URLs, code, paths, flags, IDs, and technical terms. " +
   "Treat the Organization Context block (if provided below) as the absolute authoritative guideline for proper spellings of names, acronyms, tools, products, and terminology. Correct transcription errors to match these guidelines, but do not import any facts or details from the context that were not actually spoken. " +
   "For Hinglish, keep the user's original language unless cleanup needs a light correction. " +
+  "\n\nSCRIPT RULES (highest priority — never violate):\n" +
+  "- If language is 'hi' (Hindi): output MUST be in Devanagari (देवनागरी) script. If the input arrives in Roman script (Whisper sometimes transliterates), CONVERT it to Devanagari. Never output Roman, never output IAST/diacritical Roman (no ā, ī, ē, ṁ, ḍ, ṭ, etc.). Example: input 'Mujhe ghar jaana hai' → output 'मुझे घर जाना है'.\n" +
+  "- If language is 'hi-en' (Hinglish): output MUST be plain ASCII Roman script only. Use natural English spellings of Hindi words (mujhe, jana, hai, bazaar, achha, theek, haan, nahi, arey). NEVER use diacritics or macrons (no ā, ī, ē, ṁ, ḍ, ṭ). NEVER convert to Devanagari. Example: 'Mujhī āj kām par jānā hai' → 'Mujhe aaj kaam par jana hai'.\n" +
+  "- If language is 'en' (English): standard English cleanup. Do not introduce Hindi or Devanagari.\n" +
+  "- If language is missing or 'auto': detect from the input — if Devanagari characters present, preserve Devanagari; if Roman-only with Hindi words, treat as Hinglish (plain Roman, no diacritics).\n\n" +
   "Short one-word utterances (yes, no, ok, hi, you, bye, thanks, etc.) are real dictation — clean them normally, never drop them. " +
   "Output an empty string ONLY when the transcript is literally empty, whitespace, or pure punctuation.";
 
@@ -536,6 +541,20 @@ function buildContextAwareCleanupPrompt(
   return { system: CONTEXT_AWARE_CLEANUP_SYSTEM_PROMPT, user };
 }
 
+function getLanguageInstruction(language?: string): string {
+  const lang = (language ?? "").trim().toLowerCase();
+  if (lang === "hi") {
+    return "Language: hi (Hindi). Output MUST be in Devanagari script. If input is in Roman, transliterate to Devanagari. No IAST diacritics.";
+  }
+  if (lang === "hi-en") {
+    return "Language: hi-en (Hinglish). Output MUST be plain ASCII Roman. No diacritics, no Devanagari. Use natural spellings (mujhe, jana, hai, bazaar, achha, haan, nahi, arey).";
+  }
+  if (lang === "en") {
+    return "Language: en (English). Standard English cleanup.";
+  }
+  return "Language: auto. Detect from input — Devanagari stays Devanagari; Roman with Hindi words stays plain Roman (no diacritics).";
+}
+
 function buildStreamCleanupPrompt(
   text: string,
   routing?: DictationRoutingResult,
@@ -565,6 +584,7 @@ function buildStreamCleanupPrompt(
 
   const user = [
     `Context: ${category}; app=${appKey}`,
+    getLanguageInstruction(language),
     getStreamCategoryInstruction(category),
     styleInstruction,
     languageInstruction,
@@ -702,6 +722,12 @@ Deno.serve(async (req: Request) => {
       orgContextBlock,
       language,
     }: AIProcessRequest = await req.json();
+    if (Deno.env.get("AI_PROCESS_DEBUG") === "1") {
+      const langForLog = sanitizeOneLine(language) || "MISSING";
+      console.info(
+        `[ai-process-debug] received language=${langForLog} mode=${mode}`,
+      );
+    }
     if (!text || typeof text !== "string" || !text.trim()) {
       return new Response(JSON.stringify({ error: "Missing or empty 'text' field." }), {
         status: 400,

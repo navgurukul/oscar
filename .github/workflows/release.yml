@@ -256,6 +256,74 @@ jobs:
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
         run: ../../node_modules/.bin/tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} ${{ matrix.extra_cargo_args }}
 
+      # Re-seal the macOS .app and rebuild the .app.tar.gz updater artifact from
+      # the re-signed bundle. `tauri build` without an Apple identity leaves the
+      # .app only linker-signed (Contents/MacOS/oscar) with NO valid bundle-level
+      # _CodeSignature/CodeResources seal. macOS 15/26+ launches such a bundle
+      # DEGRADED (NSApplication runs, but the recording-pill window + tray never
+      # initialise and TCC grants are dropped) — this is exactly what broke on a
+      # user's Mac after the v0.7.32 auto-update.
+      #
+      # Two modes, both empty-secret-safe (the bash tests the vars, so unset
+      # secrets simply select ad-hoc):
+      #   • ad-hoc (default, FREE, no Apple account) — `codesign -s -` produces a
+      #     valid seal. Launches fully; first DMG install needs a one-time
+      #     Gatekeeper bypass and TCC grants reset each update (ad-hoc cdhash
+      #     changes per build).
+      #   • Developer ID (set APPLE_SIGNING_IDENTITY + APPLE_CERTIFICATE[_PASSWORD]
+      #     repo secrets) — stable identity so TCC persists across updates.
+      #     NOTE: Gatekeeper-frictionless installs ALSO need notarization
+      #     (`xcrun notarytool` + `stapler`) which requires a paid account; wire
+      #     that here once available. Until then both modes still need the
+      #     one-time first-install bypass.
+      - name: Sign & repackage macOS bundle
+        if: runner.os == 'macOS'
+        working-directory: packages/desktop
+        env:
+          TARGET: ${{ matrix.target }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          BASE="src-tauri/target/$TARGET/release/bundle"
+          APP=$(find "$BASE/macos" -maxdepth 1 -name "*.app" -type d | head -n 1)
+          [ -n "$APP" ] || { echo "No .app bundle found in $BASE/macos" >&2; exit 1; }
+          APP_NAME=$(basename "$APP")
+
+          if [ -n "${APPLE_SIGNING_IDENTITY:-}" ] && [ -n "${APPLE_CERTIFICATE:-}" ]; then
+            echo "── Developer ID signing as: $APPLE_SIGNING_IDENTITY ──"
+            KEYCHAIN="$RUNNER_TEMP/oscar-signing.keychain-db"
+            KEYCHAIN_PW="$(uuidgen)"
+            security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN"
+            security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+            echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+            security import "$RUNNER_TEMP/cert.p12" -P "${APPLE_CERTIFICATE_PASSWORD:-}" \
+              -t cert -f pkcs12 -k "$KEYCHAIN" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: \
+              -s -k "$KEYCHAIN_PW" "$KEYCHAIN" >/dev/null
+            security list-keychains -d user -s "$KEYCHAIN" \
+              $(security list-keychains -d user | sed 's/[[:space:]"]//g')
+            codesign --force --deep --timestamp --options runtime \
+              --entitlements src-tauri/entitlements.plist \
+              --sign "$APPLE_SIGNING_IDENTITY" "$APP"
+            rm -f "$RUNNER_TEMP/cert.p12"
+          else
+            echo "── Ad-hoc signing (no Apple Developer account configured) ──"
+            codesign --force --deep --sign - "$APP"
+          fi
+
+          echo "── Verify the bundle seal is valid ──"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+          echo "── Rebuild .app.tar.gz so the updater artifact carries the new seal ──"
+          TGZ=$(find "$BASE/macos" -maxdepth 1 -name "*.app.tar.gz" | head -n 1)
+          [ -n "$TGZ" ] || TGZ="$BASE/macos/${APP_NAME}.tar.gz"
+          rm -f "$TGZ"
+          tar -C "$BASE/macos" -czf "$TGZ" "$APP_NAME"
+          echo "Repackaged $(basename "$TGZ")"
+
       - name: Create macOS DMG
         if: runner.os == 'macOS'
         working-directory: packages/desktop
@@ -298,6 +366,54 @@ jobs:
 
           hdiutil verify "$DMG_DIR/OSCAR_${VERSION}_${ARCH}.dmg"
           rm -rf "$STAGE"
+
+      # Hard gate against re-shipping a broken seal — the exact v0.7.32 failure
+      # ("code has no resources but signature indicates they must be present"),
+      # which macOS 15/26+ launches degraded. The seal MUST be valid, and MUST
+      # survive the round-trip through the .app.tar.gz updater artifact (the
+      # in-place-swap path that broke on the user's Mac). Works in both modes.
+      - name: Verify macOS signature seal
+        if: runner.os == 'macOS'
+        working-directory: packages/desktop
+        env:
+          TARGET: ${{ matrix.target }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          BASE="src-tauri/target/$TARGET/release/bundle"
+          APP=$(find "$BASE/macos" -maxdepth 1 -name "*.app" -type d | head -n 1)
+          [ -n "$APP" ] || { echo "No .app bundle found" >&2; exit 1; }
+
+          echo "── .app seal must be valid ──"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+          echo "── updater artifact (.app.tar.gz) must preserve the seal ──"
+          TGZ=$(find "$BASE/macos" -maxdepth 1 -name "*.app.tar.gz" | head -n 1)
+          [ -n "$TGZ" ] || { echo "ERROR: no .app.tar.gz updater artifact" >&2; exit 1; }
+          TMP=$(mktemp -d)
+          tar -xzf "$TGZ" -C "$TMP"
+          EXTRACTED=$(find "$TMP" -maxdepth 1 -name "*.app" -type d | head -n 1)
+          [ -n "$EXTRACTED" ] || { echo "ERROR: no .app inside $TGZ" >&2; exit 1; }
+          # This is the exact check that failed on the broken v0.7.32 install.
+          codesign --verify --deep --strict --verbose=2 "$EXTRACTED"
+          rm -rf "$TMP"
+
+          if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            echo "── Developer ID mode: assert authority ──"
+            codesign -dvv "$APP" 2>&1 | grep -q "Authority=Developer ID Application" || {
+              echo "ERROR: APPLE_SIGNING_IDENTITY is set but the .app is not Developer ID signed." >&2
+              codesign -dvv "$APP" 2>&1 | grep -iE "Authority|Signature|flags" >&2 || true
+              exit 1
+            }
+            spctl --assess --type exec -vvv "$APP" \
+              || echo "::warning::Developer ID signed but Gatekeeper rejects — notarization (paid: xcrun notarytool + stapler) is still required for frictionless installs."
+          else
+            echo "── Ad-hoc mode (free): valid seal, not notarized ──"
+            codesign -dvv "$APP" 2>&1 | grep -iE "Signature|flags" || true
+            echo "::notice title=Ad-hoc macOS build::Valid ad-hoc seal — launches fully on macOS 15/26+. First DMG install needs a one-time Gatekeeper bypass (right-click Open / 'Open Anyway' / xattr -dr com.apple.quarantine); TCC grants reset each auto-update (ad-hoc cdhash churn). Add APPLE_* secrets for a stable Developer ID identity."
+          fi
+
+          echo "✓ macOS seal verified"
 
       - name: Sign bundles
         if: runner.os != 'Windows'

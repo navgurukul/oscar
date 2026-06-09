@@ -84,6 +84,15 @@ const EDGE_FUNCTION_FETCH_ERROR = "Failed to send a request to the Edge Function
 const EDGE_FUNCTION_RELAY_ERROR = "Relay Error invoking the Edge Function";
 const EDGE_FUNCTION_NON_2XX_ERROR = "Edge Function returned a non-2xx status code";
 const NO_USABLE_MEETING_NOTES_ERROR = "NO_USABLE_MEETING_NOTES";
+// Provider quota / billing / rate-limit signals. These are account-level or
+// transient (not a malformed request), so the meeting-enhance flow treats them
+// as recoverable and falls back to the ai-process summarizer — which runs on a
+// different provider (Mercury) with a separate quota — instead of throwing and
+// letting the caller discard the meeting. Matches Gemini quota text
+// ("RESOURCE_EXHAUSTED", "prepayment credits are depleted", "429 Too Many
+// Requests") and generic rate-limit / insufficient-credit phrasing.
+const QUOTA_ENHANCE_FAILURE_RE =
+  /\b429\b|too many requests|resource[_\s]?exhausted|quota|prepayment credits|rate[\s-]?limit|insufficient.*credit/i;
 const NON_SUBSTANTIVE_BULLET_RE =
   /^(none captured|no (specific )?.*captured|not captured|n\/a)\.?$/i;
 const {
@@ -401,12 +410,17 @@ function hasSubstantiveBullets(markdown: string): boolean {
   return countSubstantiveBullets(markdown) > 0;
 }
 
+function isQuotaMeetingEnhanceFailure(message: string): boolean {
+  return QUOTA_ENHANCE_FAILURE_RE.test(message);
+}
+
 function isRecoverableMeetingEnhanceFailure(message: string): boolean {
   return (
     message.includes(EDGE_FUNCTION_FETCH_ERROR) ||
     message.includes(EDGE_FUNCTION_RELAY_ERROR) ||
     message.includes(EDGE_FUNCTION_NON_2XX_ERROR) ||
-    message.includes(NO_USABLE_MEETING_NOTES_ERROR)
+    message.includes(NO_USABLE_MEETING_NOTES_ERROR) ||
+    isQuotaMeetingEnhanceFailure(message)
   );
 }
 
@@ -825,6 +839,10 @@ export const aiService = {
       const shouldUseFallback =
         isRecoverableMeetingEnhanceFailure(initialMessage);
       const shouldRetryWithCompaction =
+        // A quota / billing failure won't be fixed by resending a smaller
+        // request to the same provider — skip straight to the cross-provider
+        // fallback below instead of burning another doomed Gemini call.
+        !isQuotaMeetingEnhanceFailure(initialMessage) &&
         !startWithCompactedRequest &&
         meetingRequestChanged(request, compactedRequest);
 

@@ -40,6 +40,35 @@ export const browserService = {
   },
 
   /**
+   * Detect whether the SpeechRecognition engine is Apple WebKit.
+   *
+   * The Web Speech API on every Apple-WebKit surface — iOS Safari, macOS
+   * Safari, and embedded WKWebView (e.g. the Tauri desktop app on macOS) —
+   * terminates the recognition session after ~30-60s. Blink (Chrome/Edge/
+   * Brave) and Gecko (Firefox) do not, so they need no proactive restart.
+   *
+   * Chrome ships its own "AppleWebKit" token in the UA for legacy reasons, so
+   * WebKit is identified as AppleWebKit *minus* any Chromium/Blink marker.
+   */
+  isWebKitSpeechEngine(): boolean {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent;
+    const isBlink = /Chrome|Chromium|CriOS|Edg|EdgiOS|OPR|Brave/i.test(ua);
+    return /AppleWebKit/i.test(ua) && !isBlink;
+  },
+
+  /**
+   * Whether the recognition engine needs the preemptive stop/start restart
+   * strategy to survive a long recording. True for all Apple-WebKit engines
+   * (iOS + macOS Safari, WKWebView), which silently drop the session mid-
+   * recording — without proactive restarts only the opening ~minute of audio
+   * is ever committed.
+   */
+  needsPreemptiveRestart(): boolean {
+    return this.isWebKitSpeechEngine();
+  },
+
+  /**
    * Check microphone permission status
    * @returns Promise with permission granted status and optional error message
    */

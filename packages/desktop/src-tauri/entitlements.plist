@@ -2,13 +2,30 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
+    <!-- Hardened Runtime — REQUIRED for Apple notarization. WebKit (WKWebView)
+         and the Rust/native libs the app dlopen's (whisper, oniguruma, onnx)
+         need JIT + executable memory + relaxed library validation, otherwise
+         the notarized hardened-runtime process is killed on launch. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <!-- Microphone / audio capture (dictation + meeting recording). -->
     <key>com.apple.security.device.audio-input</key>
     <true/>
     <key>com.apple.security.device.microphone</key>
     <true/>
+
+    <!-- AppleEvents automation — used to paste transcribed text into the
+         frontmost app. Accessibility itself is granted at runtime via TCC
+         (AXIsProcessTrustedWithOptions), NOT via an entitlement, so the old
+         non-standard `com.apple.security.accessibility` key was dropped: it
+         had no runtime effect and risks an "invalid entitlement" notarization
+         rejection. -->
     <key>com.apple.security.automation.apple-events</key>
-    <true/>
-    <key>com.apple.security.accessibility</key>
     <true/>
   </dict>
 </plist>

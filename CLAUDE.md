@@ -249,7 +249,11 @@ Audio → STT (Whisper/browser) → Text Formatting Agent → Title Agent → St
 - Builds all platforms in parallel: macOS (aarch64 + x86_64), Windows (x64), Linux (x64)
 - Artifacts: DMG, App bundle, NSIS installer, AppImage, DEB
 - Publishes to GitHub Releases + generates `updates.json` for Tauri auto-updater
-- Secrets needed: `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, Supabase keys
+- Updater-signing secrets (minisign, all platforms): `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, Supabase keys
+- macOS code signing (`Sign & repackage macOS bundle` step): re-seals the `.app` and rebuilds the `.app.tar.gz` updater artifact. `tauri build` alone leaves the bundle without a valid `_CodeSignature` seal, which macOS 15/26+ launches **degraded** (no Stream pill, no tray, dropped TCC grants) — the v0.7.32 incident.
+  - **Ad-hoc, default, free** (no Apple account): `codesign -s -` produces a valid seal → app launches fully. Caveats: first DMG install needs a one-time Gatekeeper bypass (right-click Open / "Open Anyway" / `xattr -dr com.apple.quarantine`); TCC grants reset on each auto-update (ad-hoc cdhash changes per build).
+  - **Developer ID, optional** (stable cdhash → TCC persists across updates): set repo secrets `APPLE_SIGNING_IDENTITY` (`Developer ID Application: NAME (TEAMID)`), `APPLE_CERTIFICATE` (base64 .p12), `APPLE_CERTIFICATE_PASSWORD`. Frictionless (bypass-free) installs additionally need notarization (`xcrun notarytool` + `stapler`, paid account) — documented in the step but not yet wired.
+  - The `Verify macOS signature seal` step hard-fails the release if the seal is invalid or doesn't survive the `.app.tar.gz` round-trip (guards the v0.7.32 regression).
 
 ---
 

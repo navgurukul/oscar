@@ -180,6 +180,7 @@ pub fn run() {
             whisper::validate_whisper_model_file,
             whisper::warm_whisper_runtime,
             whisper::transcribe_audio,
+            audio_decode::decode_audio_blob,
             meeting::transcribe_meeting_audio,
             meeting::clear_meeting_segment_buffers,
             meeting::rotate_meeting_system_audio_segment,
