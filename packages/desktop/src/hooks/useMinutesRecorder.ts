@@ -451,9 +451,9 @@ export function useMinutesRecorder({
     const stream = warmStreamRef.current;
     if (!stream) return;
 
-    const useMp4 = MediaRecorder.isTypeSupported("audio/mp4");
-    const mimeType = useMp4 ? "audio/mp4" : "audio/webm";
-    const ext = useMp4 ? "mp4" : "webm";
+    const useWebm = MediaRecorder.isTypeSupported("audio/webm");
+    const mimeType = useWebm ? "audio/webm" : "audio/mp4";
+    const ext = useWebm ? "webm" : "mp4";
     const segmentIndex = nextSegmentIndexRef.current;
     const segmentUsesSystemAudio = sessionUsesSystemAudioRef.current;
     nextSegmentIndexRef.current += 1;
