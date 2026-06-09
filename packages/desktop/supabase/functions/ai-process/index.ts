@@ -63,7 +63,7 @@ interface AIProcessRequest {
   // handling in cleanup — "hi" forces Devanagari output (transliterating
   // Roman Whisper output if needed); "hi-en" forces plain ASCII Roman
   // (never IAST diacritics); "en" is English. Missing / "auto" = detect.
-  language?: string;
+  language?: "en" | "hi" | "hi-en" | "auto";
 }
 
 interface AIProcessResponse {
@@ -717,9 +717,12 @@ Deno.serve(async (req: Request) => {
       orgContextBlock,
       language,
     }: AIProcessRequest = await req.json();
-    console.info(
-      `[ai-process-debug] received language=${language ?? "MISSING"} mode=${mode}`,
-    );
+    if (Deno.env.get("AI_PROCESS_DEBUG") === "1") {
+      const langForLog = sanitizeOneLine(language) || "MISSING";
+      console.info(
+        `[ai-process-debug] received language=${langForLog} mode=${mode}`,
+      );
+    }
     if (!text || typeof text !== "string" || !text.trim()) {
       return new Response(JSON.stringify({ error: "Missing or empty 'text' field." }), {
         status: 400,
