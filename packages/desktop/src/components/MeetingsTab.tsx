@@ -5,6 +5,7 @@ import { buildMeetingContextPack, copyMarkdownAsRichText } from "@oscar/shared";
 import { aiService } from "../services/ai.service";
 import {
   Mic,
+  MicOff,
   Copy,
   Check,
   RotateCcw,
@@ -159,6 +160,12 @@ interface MeetingsTabProps {
   onAuthError?: () => Promise<boolean>;
   onStartRecording: () => void;
   onStopRecording: () => void;
+  /** True while the local mic is muted (system audio keeps recording). */
+  isMuted?: boolean;
+  /** Toggle the local mic mute. Other participants keep being captured. */
+  onToggleMute?: () => void;
+  /** True when system audio (other participants) is actually being captured. */
+  isCapturingSystemAudio?: boolean;
   recordingTime: number;
   transcript: string;
   transcriptSegments: MeetingTranscriptSegment[];
@@ -495,6 +502,9 @@ export function MeetingsTab({
   onAuthError,
   onStartRecording,
   onStopRecording,
+  isMuted = false,
+  onToggleMute,
+  isCapturingSystemAudio = false,
   recordingTime,
   transcript,
   transcriptSegments,
@@ -1241,8 +1251,12 @@ export function MeetingsTab({
                       "Untitled meeting"}
                   </div>
                   <div className="font-mono text-[11px] text-ink-faint">
-                    {formatTime(recordingTime)} · still recording in the
-                    background
+                    {formatTime(recordingTime)} ·{" "}
+                    {isMuted
+                      ? isCapturingSystemAudio
+                        ? "mic muted · others still recording"
+                        : "mic muted · mic-only meeting"
+                      : "still recording in the background"}
                   </div>
                 </div>
                 <button
@@ -1775,9 +1789,22 @@ export function MeetingsTab({
               <span className="ml-auto inline-flex items-center gap-1.5">
                 {isRecording ? (
                   <>
-                    <span className="inline-block h-[7px] w-[7px] rounded-full bg-terracotta animate-pulse" />
-                    <span className="font-mono text-[11px] text-terracotta">
-                      RECORDING · {formatTime(recordingTime)}
+                    <span
+                      className={cn(
+                        "inline-block h-[7px] w-[7px] rounded-full",
+                        isMuted
+                          ? "bg-ink-faint"
+                          : "bg-terracotta animate-pulse",
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "font-mono text-[11px]",
+                        isMuted ? "text-ink-faint" : "text-terracotta",
+                      )}
+                    >
+                      {isMuted ? "MIC MUTED" : "RECORDING"} ·{" "}
+                      {formatTime(recordingTime)}
                     </span>
                   </>
                 ) : (
@@ -1894,7 +1921,11 @@ export function MeetingsTab({
                               : "S"
                           } DETECTED`
                         : isRecording
-                          ? "LISTENING…"
+                          ? isMuted
+                            ? isCapturingSystemAudio
+                              ? "MIC MUTED · OTHERS LIVE"
+                              : "MIC MUTED · MIC ONLY"
+                            : "LISTENING…"
                           : ""}
                     </span>
                   }
@@ -1933,7 +1964,8 @@ export function MeetingsTab({
               <div className="flex items-center gap-[2px] h-4">
                 {Array.from({ length: 18 }).map((_, i) => {
                   const base = 3 + Math.abs(Math.sin(i * 0.7 + 1.2)) * 12;
-                  const h = isRecording ? base : base * 0.4;
+                  const live = isRecording && !isMuted;
+                  const h = live ? base : base * 0.4;
                   return (
                     <span
                       key={i}
@@ -1941,7 +1973,7 @@ export function MeetingsTab({
                       style={{
                         width: 2,
                         height: h,
-                        opacity: isRecording ? 0.6 + (i / 18) * 0.4 : 0.3,
+                        opacity: live ? 0.6 + (i / 18) * 0.4 : 0.3,
                         transition: "height 200ms ease",
                       }}
                     />
@@ -1951,6 +1983,32 @@ export function MeetingsTab({
               <span className="font-mono text-[12px] text-cream">
                 {formatTime(recordingTime)}
               </span>
+              {isRecording && onToggleMute && (
+                <button
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors",
+                    isMuted
+                      ? "bg-terracotta text-cream hover:bg-terracotta-600"
+                      : "bg-cream/15 text-cream hover:bg-cream/25",
+                  )}
+                  onClick={onToggleMute}
+                  type="button"
+                  aria-pressed={isMuted}
+                  aria-label="Toggle microphone mute"
+                  title={
+                    isMuted
+                      ? isCapturingSystemAudio
+                        ? "Your mic is muted. Other participants are still being recorded — click to unmute."
+                        : "Your mic is muted. This is a mic-only meeting, so nothing is captured while muted — click to unmute."
+                      : isCapturingSystemAudio
+                        ? "Mute your mic. Other participants (system audio) keep recording."
+                        : "Mute your mic."
+                  }
+                >
+                  {isMuted ? <MicOff size={11} /> : <Mic size={11} />}
+                  {isMuted ? "Muted" : "Mute"}
+                </button>
+              )}
               {isRecording ? (
                 <button
                   className="inline-flex items-center gap-1.5 rounded-full bg-terracotta px-3.5 py-1.5 text-[11px] font-medium text-cream transition-colors hover:bg-terracotta-600"
