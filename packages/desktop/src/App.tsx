@@ -1129,9 +1129,9 @@ function App() {
     }
 
     try {
-      const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
-        ? "audio/mp4"
-        : "audio/webm";
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "audio/mp4";
       const recorder = new MediaRecorder(stream, { mimeType });
       recorder.ondataavailable = () => {};
       recorder.start(50);
@@ -1525,9 +1525,9 @@ function App() {
     stream.getAudioTracks().forEach((t) => (t.enabled = true));
 
     streamRef.current = stream;
-    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
-      ? "audio/mp4"
-      : "audio/webm";
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+      ? "audio/webm"
+      : "audio/mp4";
     const mediaRecorder = new MediaRecorder(stream, { mimeType });
     mediaRecorderRef.current = mediaRecorder;
     audioChunksRef.current = [];
@@ -1619,9 +1619,9 @@ function App() {
       return;
     }
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
-      ? "audio/mp4"
-      : "audio/webm";
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+      ? "audio/webm"
+      : "audio/mp4";
     const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
 
     if (audioBlob.size < 500) {
@@ -1632,26 +1632,24 @@ function App() {
 
     setStatus(`Decoding ${(audioBlob.size / 1024).toFixed(0)}KB audio...`);
     const tDecode0 = performance.now();
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const audioContext = new AudioContext({ sampleRate: 16000 });
+    // Decode in Rust (symphonia), NOT WebAudio. WKWebView on macOS 26/27 throws
+    // `EncodingError: Decoding failed` from AudioContext.decodeAudioData on the
+    // mp4/AAC its own MediaRecorder produces, which silently killed every
+    // dictation (recording was fine, decode wasn't). The Rust path mirrors the
+    // meeting-segment decoder and returns 16 kHz mono f32 directly — no mixdown.
     let audioData: Float32Array;
-
     try {
-      const decoded = await audioContext.decodeAudioData(arrayBuffer);
-      const numChannels = decoded.numberOfChannels;
-      const length = decoded.length;
-      const mono = new Float32Array(length);
-      for (let ch = 0; ch < numChannels; ch++) {
-        const channel = decoded.getChannelData(ch);
-        for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
-      }
-      audioData = mono;
+      const blobBytes = Array.from(new Uint8Array(await audioBlob.arrayBuffer()));
+      const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+      const pcm = await invoke<number[]>("decode_audio_blob", {
+        bytes: blobBytes,
+        ext,
+      });
+      audioData = Float32Array.from(pcm);
     } catch (e) {
-      setStatus(`❌ Decode failed (${mimeType}): ${e}`);
+      setStatus(`❌ Decode failed: ${e}`);
       invoke("hide_recording_pill").catch(console.warn);
       return;
-    } finally {
-      audioContext.close();
     }
 
     if (audioData.length < 1600) {
@@ -2190,9 +2188,9 @@ function App() {
       return;
     }
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
-      ? "audio/mp4"
-      : "audio/webm";
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+      ? "audio/webm"
+      : "audio/mp4";
     const audioBlob = new Blob(scribbleAudioChunksRef.current, { type: mimeType });
 
     if (audioBlob.size < 500) {
@@ -2206,26 +2204,22 @@ function App() {
     setScribbleStatus("transcribing");
     setStatus("transcribing");
 
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const audioContext = new AudioContext({ sampleRate: 16000 });
+    // Decode in Rust (symphonia), NOT WebAudio — WKWebView's decodeAudioData
+    // throws EncodingError on the mp4/AAC MediaRecorder produces on macOS 26/27
+    // (see processAudio). Returns 16 kHz mono f32 directly.
     let audioData: Float32Array;
-
     try {
-      const decoded = await audioContext.decodeAudioData(arrayBuffer);
-      const numChannels = decoded.numberOfChannels;
-      const length = decoded.length;
-      const mono = new Float32Array(length);
-      for (let ch = 0; ch < numChannels; ch++) {
-        const channel = decoded.getChannelData(ch);
-        for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
-      }
-      audioData = mono;
+      const blobBytes = Array.from(new Uint8Array(await audioBlob.arrayBuffer()));
+      const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+      const pcm = await invoke<number[]>("decode_audio_blob", {
+        bytes: blobBytes,
+        ext,
+      });
+      audioData = Float32Array.from(pcm);
     } catch (e) {
-      setStatus(`Scribble decode failed (${mimeType}): ${e}`);
+      setStatus(`Scribble decode failed: ${e}`);
       finish(`Decode failed: ${e}`);
       return;
-    } finally {
-      audioContext.close();
     }
 
     await runScribblePipeline(audioData, finish);
@@ -2273,26 +2267,38 @@ function App() {
     setScribbleStatus("transcribing");
     setStatus(`Importing ${file.name}…`);
 
+    // Prefer Rust (symphonia) for mp4/m4a/aac/wav/webm — WKWebView's
+    // decodeAudioData is broken on macOS 26/27. Fall back to WebAudio for the
+    // formats symphonia isn't built with (mp3/flac/ogg) so those still import.
     let audioData: Float32Array;
-    const audioContext = new AudioContext({ sampleRate: 16000 });
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const decoded = await audioContext.decodeAudioData(arrayBuffer);
-      const numChannels = decoded.numberOfChannels;
-      const length = decoded.length;
-      const mono = new Float32Array(length);
-      for (let ch = 0; ch < numChannels; ch++) {
-        const channel = decoded.getChannelData(ch);
-        for (let i = 0; i < length; i++) mono[i] += channel[i] / numChannels;
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      try {
+        const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+        const pcm = await invoke<number[]>("decode_audio_blob", { bytes, ext });
+        audioData = Float32Array.from(pcm);
+      } catch {
+        const audioContext = new AudioContext({ sampleRate: 16000 });
+        try {
+          const decoded = await audioContext.decodeAudioData(
+            await file.arrayBuffer(),
+          );
+          const mono = new Float32Array(decoded.length);
+          for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+            const channel = decoded.getChannelData(ch);
+            for (let i = 0; i < decoded.length; i++)
+              mono[i] += channel[i] / decoded.numberOfChannels;
+          }
+          audioData = mono;
+        } finally {
+          audioContext.close();
+        }
       }
-      audioData = mono;
     } catch (e) {
       setStatus(`Could not read that audio file: ${e}`);
       finish("Could not read that file.");
-      audioContext.close();
       return;
     }
-    audioContext.close();
 
     await runScribblePipeline(audioData, finish);
   };
@@ -2331,9 +2337,9 @@ function App() {
     // disabled; re-enable it so a scribble never starts mic-dead.
     stream.getAudioTracks().forEach((t) => (t.enabled = true));
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
-      ? "audio/mp4"
-      : "audio/webm";
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+      ? "audio/webm"
+      : "audio/mp4";
     const mediaRecorder = new MediaRecorder(stream, { mimeType });
     scribbleMediaRecorderRef.current = mediaRecorder;
     scribbleAudioChunksRef.current = [];
