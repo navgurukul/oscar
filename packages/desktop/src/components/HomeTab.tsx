@@ -280,7 +280,7 @@ function HomeTab({
                                 isSaved ? "text-terracotta" : "text-ink-faint"
                               }`}
                             >
-                              {isSaving ? "SAVING…" : isSaved ? "SAVED" : "SAVE AS SCRIBBLE"}
+                              {isSaving ? "SAVING…" : isSaved ? "SAVED" : "SAVE"}
                             </span>
                           </button>
                         )}
