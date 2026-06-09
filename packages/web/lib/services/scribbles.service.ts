@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient, ensureFreshSession } from "@/lib/supabase/client";
 import type {
   DBScribble,
   DBScribbleInsert,
@@ -11,6 +11,17 @@ import type {
  */
 function getSupabase() {
   return createClient();
+}
+
+/**
+ * Get the Supabase client with a guaranteed-fresh session. Use for every
+ * write so an expired access token is refreshed *before* the request rather
+ * than silently failing RLS (auth.uid() = user_id WITH CHECK) and forcing the
+ * user to re-login. ensureFreshSession() de-dupes concurrent refreshes.
+ */
+async function getAuthedSupabase() {
+  await ensureFreshSession();
+  return getSupabase();
 }
 
 function emptyWriteError(action: string) {
@@ -28,7 +39,7 @@ export const scribblesService = {
   async createScribble(
     scribble: DBScribbleInsert
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
 
     // Generate the id client-side so the row can be recovered by id if the
     // INSERT's RETURNING representation comes back empty (see below).
@@ -119,7 +130,7 @@ export const scribblesService = {
     id: string,
     updates: DBScribbleUpdate
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -141,7 +152,7 @@ export const scribblesService = {
       return { data: [], error: null };
     }
 
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -163,7 +174,7 @@ export const scribblesService = {
    * Soft delete a scribble by setting deleted_at
    */
   async deleteScribble(id: string): Promise<{ error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({ deleted_at: new Date().toISOString() })
@@ -188,7 +199,7 @@ export const scribblesService = {
       return { data: [], error: null };
     }
 
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({
@@ -216,7 +227,7 @@ export const scribblesService = {
     id: string,
     isStarred: boolean
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({ is_starred: isStarred })
@@ -278,7 +289,7 @@ export const scribblesService = {
   async restoreScribble(
     id: string
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({ deleted_at: null, updated_at: new Date().toISOString() })
@@ -293,7 +304,7 @@ export const scribblesService = {
    * Permanently delete a scribble (hard delete)
    */
   async permanentDelete(id: string): Promise<{ error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .delete()

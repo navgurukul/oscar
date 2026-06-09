@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient, ensureFreshSession } from "@/lib/supabase/client";
 import type {
   DictationCategory,
   DictationContextSource,
@@ -14,6 +14,17 @@ function getSupabase() {
   return createClient();
 }
 
+/**
+ * Get the Supabase client with a guaranteed-fresh session. Use for every
+ * write so an expired access token is refreshed *before* the request rather
+ * than silently failing RLS and forcing the user to re-login.
+ * ensureFreshSession() de-dupes concurrent refreshes.
+ */
+async function getAuthedSupabase() {
+  await ensureFreshSession();
+  return getSupabase();
+}
+
 export const feedbackService = {
   /**
    * Submit feedback for a scribble's AI formatting
@@ -23,7 +34,7 @@ export const feedbackService = {
     helpful: boolean,
     reasons?: FeedbackReason[]
   ): Promise<{ success: boolean; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const normalizedReasons =
       helpful
         ? null

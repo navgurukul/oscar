@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient, ensureFreshSession } from "@/lib/supabase/client";
 import type {
   MeetingAttendee,
   MeetingCalendarContext,
@@ -115,6 +115,17 @@ function getSupabase() {
   return createClient();
 }
 
+/**
+ * Get the Supabase client with a guaranteed-fresh session. Use for every
+ * write so an expired access token is refreshed *before* the request rather
+ * than silently failing RLS and forcing the user to re-login.
+ * ensureFreshSession() de-dupes concurrent refreshes.
+ */
+async function getAuthedSupabase() {
+  await ensureFreshSession();
+  return getSupabase();
+}
+
 export const meetingsService = {
   async getMeetings(): Promise<{
     data: SavedMeetingRecord[] | null;
@@ -137,7 +148,7 @@ export const meetingsService = {
     id: string,
     updates: MeetingUpdate
   ): Promise<{ data: SavedMeetingRecord | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
 
     const dbUpdates: Record<string, unknown> = {};
     if (updates.meetingTitle !== undefined)
@@ -200,7 +211,7 @@ export const meetingsService = {
   async deleteMeeting(
     id: string
   ): Promise<{ error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { error } = await supabase.from("meetings").delete().eq("id", id);
     return { error: error ? (error as Error) : null };
   },

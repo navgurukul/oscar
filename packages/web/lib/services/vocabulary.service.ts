@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient, ensureFreshSession } from "@/lib/supabase/client";
 import type {
   DBVocabularyEntry,
   DBVocabularyInsert,
@@ -11,6 +11,17 @@ import type {
  */
 function getSupabase() {
   return createClient();
+}
+
+/**
+ * Get the Supabase client with a guaranteed-fresh session. Use for every
+ * write so an expired access token is refreshed *before* the request rather
+ * than silently failing RLS and forcing the user to re-login.
+ * ensureFreshSession() de-dupes concurrent refreshes.
+ */
+async function getAuthedSupabase() {
+  await ensureFreshSession();
+  return getSupabase();
 }
 
 export const vocabularyService = {
@@ -36,7 +47,7 @@ export const vocabularyService = {
   async addVocabularyEntry(
     entry: DBVocabularyInsert
   ): Promise<{ data: DBVocabularyEntry | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("user_vocabulary")
       .insert(entry)
@@ -53,7 +64,7 @@ export const vocabularyService = {
     id: string,
     updates: DBVocabularyUpdate
   ): Promise<{ data: DBVocabularyEntry | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("user_vocabulary")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -68,7 +79,7 @@ export const vocabularyService = {
    * Delete a vocabulary entry
    */
   async deleteVocabularyEntry(id: string): Promise<{ error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { error } = await supabase
       .from("user_vocabulary")
       .delete()
