@@ -756,7 +756,7 @@ export const aiService = {
 
   // Polished Scribble formatting. Routes through the web app's /api/ai/format
   // so the desktop output matches the web Scribble output exactly (single
-  // Gemini prompt, single rate-limit bucket).
+  // Mercury 2 prompt, single rate-limit bucket).
   async formatScribble(rawText: string): Promise<string> {
     if (!rawText.trim()) {
       throw new Error("No text provided for AI processing.");

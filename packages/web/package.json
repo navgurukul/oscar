@@ -1,6 +1,6 @@
 {
   "name": "@oscar/web",
-  "version": "0.3.59",
+  "version": "0.7.30",
   "private": true,
   "scripts": {
     "dev": "next dev",

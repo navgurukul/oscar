@@ -368,6 +368,9 @@ function App() {
     isRecording: isMeetingRecording,
     isRecordingRef: isMeetingRecordingRef,
     isPreparing: isMeetingPreparing,
+    isMuted: isMeetingMuted,
+    toggleMute: toggleMeetingMute,
+    isCapturingSystemAudio: isMeetingCapturingSystemAudio,
     recordingTime: meetingRecordingTime,
     transcript: meetingTranscript,
     transcriptSegments: meetingTranscriptSegments,
@@ -1517,6 +1520,10 @@ function App() {
       return;
     }
 
+    // A prior meeting mute may have left this shared warm stream's mic track
+    // disabled; re-enable it so dictation never starts mic-dead.
+    stream.getAudioTracks().forEach((t) => (t.enabled = true));
+
     streamRef.current = stream;
     const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
       ? "audio/mp4"
@@ -2320,6 +2327,10 @@ function App() {
       }
     }
 
+    // A prior meeting mute may have left this shared warm stream's mic track
+    // disabled; re-enable it so a scribble never starts mic-dead.
+    stream.getAudioTracks().forEach((t) => (t.enabled = true));
+
     const mimeType = MediaRecorder.isTypeSupported("audio/mp4")
       ? "audio/mp4"
       : "audio/webm";
@@ -2791,6 +2802,9 @@ function App() {
                   onAuthError={promptReauth}
                   onStartRecording={startMeetingRecording}
                   onStopRecording={stopMeetingRecording}
+                  isMuted={isMeetingMuted}
+                  onToggleMute={toggleMeetingMute}
+                  isCapturingSystemAudio={isMeetingCapturingSystemAudio}
                   recordingTime={meetingRecordingTime}
                   transcript={meetingTranscript}
                   transcriptSegments={meetingTranscriptSegments}

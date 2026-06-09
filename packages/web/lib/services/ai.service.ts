@@ -11,10 +11,8 @@ import { applyTranscriptPostProcessing } from "../prompts";
 import { localFormatterService } from "./localFormatter.service";
 
 const RETRY_CONFIG = {
-  MAX_RETRIES: 2,
-  INITIAL_DELAY_MS: 1000,
-  TIMEOUT_MS: 15000,      // ✅ was 60s — matches backend 12s + small buffer
-  TITLE_TIMEOUT_MS: 8000, // ✅ titles are tiny, fail fast
+  TIMEOUT_MS: 15000,       // ✅ was 60s — matches backend 12s + small buffer
+  TITLE_TIMEOUT_MS: 13000, // ✅ just above backend 12s so we never abort a still-working server
 } as const;
 
 export type TransformMode = "summary" | "bullets";
@@ -75,36 +73,6 @@ async function fetchWithTimeout(
   } finally {
     externalSignal?.removeEventListener("abort", handleExternalAbort);
   }
-}
-
-async function retryWithBackoff<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = RETRY_CONFIG.MAX_RETRIES,
-  initialDelay: number = RETRY_CONFIG.INITIAL_DELAY_MS,
-  signal?: AbortSignal
-): Promise<T> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (signal?.aborted) throw new Error(ERROR_MESSAGES.FORMATTING_CANCELLED);
-    try {
-      return await fn();
-    } catch (error: unknown) {
-      lastError = error as Error;
-      if (lastError.message === ERROR_MESSAGES.FORMATTING_CANCELLED) throw lastError;
-      if (
-        lastError.message?.includes("400") ||
-        lastError.message?.includes("401") ||
-        lastError.message?.includes("403")
-      ) throw lastError;
-
-      if (attempt < maxRetries) {
-        const delay = initialDelay * Math.pow(2, attempt);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-  }
-  throw lastError;
 }
 
 /**
@@ -374,32 +342,30 @@ export const aiService = {
     if (!source) return { success: false, error: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_TITLE };
     if (signal?.aborted) return this.generateFallbackTitle(source);
 
+    // No client-side retry here: the title route already retries internally
+    // (ai-route generateText, RETRY_MAX=2). Wrapping that in another retry
+    // compounded to ~9 Gemini attempts and a long tail. One attempt, then
+    // fall back to the instant local heuristic — titles are non-critical and
+    // this keeps the parallel format+title path bounded.
     try {
-      return await retryWithBackoff(
-        async () => {
-          const response = await fetchWithTimeout(
-            API_CONFIG.TITLE_ENDPOINT,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ text: source }),
-            },
-            RETRY_CONFIG.TITLE_TIMEOUT_MS,
-            signal
-          );
-
-          if (!response.ok) return this.generateFallbackTitle(source);
-
-          const data = (await response.json()) as TitleResponse;
-          const title = data?.title?.trim();
-          if (!title) return this.generateFallbackTitle(source);
-
-          return { success: true, title: this.sanitizeTitle(title) };
+      const response = await fetchWithTimeout(
+        API_CONFIG.TITLE_ENDPOINT,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: source }),
         },
-        RETRY_CONFIG.MAX_RETRIES,
-        RETRY_CONFIG.INITIAL_DELAY_MS,
+        RETRY_CONFIG.TITLE_TIMEOUT_MS,
         signal
       );
+
+      if (!response.ok) return this.generateFallbackTitle(source);
+
+      const data = (await response.json()) as TitleResponse;
+      const title = data?.title?.trim();
+      if (!title) return this.generateFallbackTitle(source);
+
+      return { success: true, title: this.sanitizeTitle(title) };
     } catch {
       return this.generateFallbackTitle(source);
     }

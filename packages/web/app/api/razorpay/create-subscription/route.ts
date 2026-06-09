@@ -94,20 +94,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Create a fresh Razorpay customer for the org and persist its id.
+    const provisionCustomer = async (): Promise<string> => {
+      const customer = await razorpayService.createCustomer(
+        active.organization.name || user.email || "Workspace",
+        user.email || ""
+      );
+      await subscriptionService.updateOrgSubscription(active.organization.id, {
+        razorpay_customer_id: customer.id,
+      });
+      return customer.id;
+    };
+
     // Get or create Razorpay customer (one customer per org)
     let razorpayCustomerId = subscription?.razorpay_customer_id;
 
     if (!razorpayCustomerId) {
       try {
-        const customer = await razorpayService.createCustomer(
-          active.organization.name || user.email || "Workspace",
-          user.email || ""
-        );
-        razorpayCustomerId = customer.id;
-
-        await subscriptionService.updateOrgSubscription(active.organization.id, {
-          razorpay_customer_id: razorpayCustomerId,
-        });
+        razorpayCustomerId = await provisionCustomer();
       } catch (error) {
         console.error("Error creating Razorpay customer:", error);
         return NextResponse.json(
@@ -118,13 +122,35 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Razorpay subscription stamped with both org id and user id.
-    try {
-      const razorpaySubscription = await razorpayService.createSubscription(
-        razorpayCustomerId,
+    //
+    // A stored customer id can be orphaned when the Razorpay account/keys are
+    // rotated — the old customer no longer exists under the new account and
+    // Razorpay rejects the create with 400 "the id provided does not exist".
+    // Detect that, mint a fresh customer, and retry once so the org self-heals
+    // instead of being permanently wedged on a stale id.
+    const createSub = (customerId: string) =>
+      razorpayService.createSubscription(
+        customerId,
         billingCycle,
         user.id,
         active.organization.id
       );
+
+    try {
+      let razorpaySubscription;
+      try {
+        razorpaySubscription = await createSub(razorpayCustomerId);
+      } catch (error) {
+        if (razorpayService.isCustomerNotFoundError(error)) {
+          console.warn(
+            `Stale Razorpay customer ${razorpayCustomerId} for org ${active.organization.id}; recreating and retrying.`
+          );
+          razorpayCustomerId = await provisionCustomer();
+          razorpaySubscription = await createSub(razorpayCustomerId);
+        } else {
+          throw error;
+        }
+      }
 
       const response: CreateSubscriptionResponse = {
         subscriptionId: razorpaySubscription.id,

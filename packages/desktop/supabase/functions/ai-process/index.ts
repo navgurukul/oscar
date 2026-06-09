@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import {
+  getStreamLanguageInstruction,
   getStreamStyleInstruction,
   isPromptEngineerStyle,
   STREAM_PROMPT_ENGINEER_SYSTEM_PROMPT,
@@ -577,12 +578,16 @@ function buildStreamCleanupPrompt(
   // Tone presets ("polished" / "concise") add one line to the USER prompt and
   // compose with the category instruction; faithful / unknown add nothing.
   const styleInstruction = getStreamStyleInstruction(stylePreset);
+  // Keep the output in the user's selected language/script (Devanagari for
+  // "hi", Roman for Hinglish, …); "auto" / unknown add nothing.
+  const languageInstruction = getStreamLanguageInstruction(language);
 
   const user = [
     `Context: ${category}; app=${appKey}`,
     getLanguageInstruction(language),
     getStreamCategoryInstruction(category),
     styleInstruction,
+    languageInstruction,
     "<transcript>",
     text,
     "</transcript>",

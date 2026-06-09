@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient, ensureFreshSession } from "@/lib/supabase/client";
 import type {
   DBScribble,
   DBScribbleInsert,
@@ -11,6 +11,17 @@ import type {
  */
 function getSupabase() {
   return createClient();
+}
+
+/**
+ * Get the Supabase client with a guaranteed-fresh session. Use for every
+ * write so an expired access token is refreshed *before* the request rather
+ * than silently failing RLS (auth.uid() = user_id WITH CHECK) and forcing the
+ * user to re-login. ensureFreshSession() de-dupes concurrent refreshes.
+ */
+async function getAuthedSupabase() {
+  await ensureFreshSession();
+  return getSupabase();
 }
 
 function emptyWriteError(action: string) {
@@ -28,14 +39,54 @@ export const scribblesService = {
   async createScribble(
     scribble: DBScribbleInsert
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
+
+    // Generate the id client-side so the row can be recovered by id if the
+    // INSERT's RETURNING representation comes back empty (see below).
+    const id = scribble.id ?? crypto.randomUUID();
+
+    // Use .select() (array form) instead of .select().single(): if an INSERT
+    // ever commits but its RETURNING representation comes back empty (a
+    // transient read-after-write/visibility edge), .single() would throw
+    // PGRST116 and turn a committed save into a false "Save failed". Recover by
+    // re-reading the row by id rather than reporting data loss.
     const { data, error } = await supabase
       .from("scribbles")
-      .insert(scribble)
-      .select()
-      .single();
+      .insert({ ...scribble, id })
+      .select();
 
-    return { data, error: error as Error | null };
+    // A genuine insert failure (constraint / RLS WITH CHECK / network).
+    if (error) {
+      return { data: null, error: error as Error };
+    }
+
+    // Happy path: the row was written and returned.
+    const created = data?.[0] ?? null;
+    if (created) {
+      return { data: created, error: null };
+    }
+
+    // Insert succeeded (no error) but RETURNING was empty — the row committed.
+    // Re-read it by its known id rather than surfacing a false failure.
+    const { data: recovered } = await supabase
+      .from("scribbles")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (recovered) {
+      return { data: recovered, error: null };
+    }
+
+    // Still unreadable: almost always a broken deployed SELECT policy on
+    // `scribbles` (the write most likely committed). Surface a precise,
+    // non-destructive message instead of a generic save failure.
+    return {
+      data: null,
+      error: new Error(
+        "Your scribble was saved, but it couldn't be loaded back due to a permission/visibility issue. Refresh to see it."
+      ),
+    };
   },
 
   /**
@@ -64,7 +115,10 @@ export const scribblesService = {
       .select("*")
       .eq("id", id)
       .is("deleted_at", null)
-      .single();
+      // maybeSingle(): a missing/soft-deleted row returns {data:null,error:null}
+      // instead of throwing PGRST116, so callers can tell "not found" from a
+      // real error rather than surfacing a misleading crash.
+      .maybeSingle();
 
     return { data, error: error as Error | null };
   },
@@ -76,7 +130,7 @@ export const scribblesService = {
     id: string,
     updates: DBScribbleUpdate
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -98,7 +152,7 @@ export const scribblesService = {
       return { data: [], error: null };
     }
 
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -120,7 +174,7 @@ export const scribblesService = {
    * Soft delete a scribble by setting deleted_at
    */
   async deleteScribble(id: string): Promise<{ error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({ deleted_at: new Date().toISOString() })
@@ -145,7 +199,7 @@ export const scribblesService = {
       return { data: [], error: null };
     }
 
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({
@@ -173,7 +227,7 @@ export const scribblesService = {
     id: string,
     isStarred: boolean
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({ is_starred: isStarred })
@@ -235,7 +289,7 @@ export const scribblesService = {
   async restoreScribble(
     id: string
   ): Promise<{ data: DBScribble | null; error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .update({ deleted_at: null, updated_at: new Date().toISOString() })
@@ -250,7 +304,7 @@ export const scribblesService = {
    * Permanently delete a scribble (hard delete)
    */
   async permanentDelete(id: string): Promise<{ error: Error | null }> {
-    const supabase = getSupabase();
+    const supabase = await getAuthedSupabase();
     const { data, error } = await supabase
       .from("scribbles")
       .delete()

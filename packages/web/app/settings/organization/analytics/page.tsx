@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
@@ -137,10 +138,13 @@ export default function AnalyticsPage() {
   if (active && active.role !== "owner" && active.role !== "admin") {
     return (
       <main
-        className="min-h-screen flex items-center justify-center px-4"
+        className="min-h-screen flex flex-col items-center justify-center gap-5 px-4 text-center"
         style={{ background: v2.cream, color: v2.ink }}
       >
         <p style={{ color: v2.inkSoft }}>Only owners or admins can view analytics.</p>
+        <Link href={ROUTES.ORG_SETTINGS} className="inline-block hover:opacity-80">
+          <V2Caps>← BACK TO ORG SETTINGS</V2Caps>
+        </Link>
       </main>
     );
   }
@@ -148,10 +152,13 @@ export default function AnalyticsPage() {
   if (!data || !active) {
     return (
       <main
-        className="min-h-screen flex items-center justify-center px-4"
+        className="min-h-screen flex flex-col items-center justify-center gap-5 px-4 text-center"
         style={{ background: v2.cream, color: v2.ink }}
       >
         <p style={{ color: v2.inkSoft }}>No data yet.</p>
+        <Link href={ROUTES.ORG_SETTINGS} className="inline-block hover:opacity-80">
+          <V2Caps>← BACK TO ORG SETTINGS</V2Caps>
+        </Link>
       </main>
     );
   }

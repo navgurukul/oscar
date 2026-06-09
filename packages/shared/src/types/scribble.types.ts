@@ -68,6 +68,10 @@ export type Visibility = "private" | "org" | "public";
 
 // Insert type for creating a new scribble
 export interface DBScribbleInsert extends DictationScribbleMetadata {
+  // Optional client-supplied primary key. Lets the create path recover the
+  // row by id when an INSERT commits but its RETURNING representation is
+  // suppressed by a deployed RLS policy (avoids a false "Save failed").
+  id?: string;
   user_id: string;
   title: string;
   raw_text: string;

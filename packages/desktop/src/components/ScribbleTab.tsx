@@ -888,6 +888,7 @@ export function ScribbleTab({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DBScribble | null>(null);
   const [trashCount, setTrashCount] = useState(0);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1463,7 +1464,7 @@ export function ScribbleTab({
               onMoveToFolder={(f) => void handleMoveToFolder(selected, f)}
               onExportTxt={() => handleExportTxt(selected)}
               onExportMarkdown={() => handleExportMarkdown(selected)}
-              onDelete={() => void handleDelete(selected)}
+              onDelete={() => setPendingDelete(selected)}
             />
           )}
 
@@ -1493,6 +1494,61 @@ export function ScribbleTab({
           loadTrashCount();
         }}
       />
+
+      {/* Confirm before soft-deleting a scribble — parity with the web app,
+          which guards delete with a confirmation. Prevents an accidental
+          single-click trashing (the Trash button had no confirmation). */}
+      {pendingDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-confirm-title"
+          className="fixed inset-0 z-[2000] flex items-center justify-center p-10"
+          style={{ background: "rgba(15,13,10,0.55)" }}
+          onClick={() => setPendingDelete(null)}
+        >
+          <div
+            className="w-[420px] max-w-full rounded-2xl bg-cream text-ink overflow-hidden"
+            style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-8 pt-8 pb-7">
+              <h1
+                id="delete-confirm-title"
+                className="font-serif font-medium tracking-[-0.025em] leading-[1.05] text-ink"
+                style={{ fontSize: 26 }}
+              >
+                Move to trash?
+              </h1>
+              <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">
+                "{pendingDelete.title?.trim() || "Untitled Scribble"}" will be moved to
+                trash. You can restore it from the trash later.
+              </p>
+              <div className="mt-7 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPendingDelete(null)}
+                  className="rounded-full px-5 py-2.5 text-[13px] font-medium text-ink-soft bg-transparent border border-cream-300 cursor-pointer transition-colors hover:text-ink"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = pendingDelete;
+                    setPendingDelete(null);
+                    void handleDelete(target);
+                  }}
+                  className="rounded-full px-5 py-2.5 text-[13px] font-medium text-cream cursor-pointer transition-opacity hover:opacity-90 border-none"
+                  style={{ background: "#8c2f25" }}
+                >
+                  Move to trash
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating recording control — live timer / stop / status. Shown only
           for the populated three-pane while a capture is in flight; on the

@@ -14,11 +14,10 @@ import {
   authenticateRequest,
   corsPreflightResponse,
   createPlainTextStreamResponse,
-  getGeminiApiKey,
   parseJsonBody,
-  startGeminiStream,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
+import { getMercuryApiKey, startMercuryStream } from "@/lib/server/mercury";
 import { buildOrgContext, joinSystemPrompt } from "@/lib/server/orgContext";
 
 const REQUEST_TIMEOUT_MS = 12000;
@@ -38,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   let apiKey: string;
   try {
-    apiKey = getGeminiApiKey();
+    apiKey = getMercuryApiKey();
   } catch {
     return applyCors(
       NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 })
@@ -97,7 +96,7 @@ export async function POST(req: NextRequest) {
         API_CONFIG.FORMAT_MAX_TOKENS,
         Math.ceil(piece.length / 4) + MAX_TOKENS_BUFFER
       );
-      return startGeminiStream({
+      return startMercuryStream({
         apiKey,
         messages: [
           {

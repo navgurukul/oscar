@@ -8,12 +8,11 @@ import {
 } from "@/lib/middleware/rate-limit";
 import {
   createPlainTextStreamResponse,
-  getGeminiApiKey,
   getOptionalTrimmedString,
   parseJsonBody,
-  startGeminiStream,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
+import { getMercuryApiKey, startMercuryStream } from "@/lib/server/mercury";
 import { buildOrgContext, joinSystemPrompt } from "@/lib/server/orgContext";
 
 const REQUEST_TIMEOUT_MS = 12000;
@@ -40,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   let apiKey: string;
   try {
-    apiKey = getGeminiApiKey();
+    apiKey = getMercuryApiKey();
   } catch {
     return NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 });
   }
@@ -84,7 +83,7 @@ export async function POST(req: NextRequest) {
   try {
     const baseSystem = `${getSystemPrompt(mode)}\nReturn plain text only. Do NOT wrap output in markdown code blocks or backticks.`;
     const systemPrompt = joinSystemPrompt(baseSystem, orgPromptBlock);
-    const pending = startGeminiStream({
+    const pending = startMercuryStream({
       apiKey,
       messages: [
         {

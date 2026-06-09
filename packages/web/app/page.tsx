@@ -483,8 +483,36 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
             <span className="inline-block rounded-full" style={{ height: 7, width: 7, background: v2.accent }} />
             Try Oscar free
           </button>
-          <Link href="/download" className="text-[14px]" style={{ color: v2.inkSoft }}>
-            · or download the desktop app
+          <Link
+            href="/download"
+            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-[14px] font-medium transition-colors duration-200"
+            style={{ background: "transparent", color: v2.ink, border: `1px solid ${v2.ruleHard}` }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = v2.ink;
+              e.currentTarget.style.background = v2.cream2;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = v2.ruleHard;
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              style={{ display: "block" }}
+            >
+              <path d="M12 3v12" />
+              <path d="m7 11 5 5 5-5" />
+              <path d="M5 21h14" />
+            </svg>
+            Download desktop app
           </Link>
         </div>
 
@@ -581,13 +609,46 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
         >
           Try Oscar <em style={{ fontStyle: "italic", color: v2.accent }}>today</em>.
         </h2>
-        <button
-          onClick={onStart}
-          className="mt-9 rounded-full px-7 py-3.5 text-[15px] font-medium"
-          style={{ background: v2.ink, color: v2.cream }}
-        >
-          Get Oscar — it&rsquo;s free
-        </button>
+        <div className="mt-9 flex items-center justify-center gap-4 flex-wrap">
+          <button
+            onClick={onStart}
+            className="rounded-full px-7 py-3.5 text-[15px] font-medium"
+            style={{ background: v2.ink, color: v2.cream }}
+          >
+            Get Oscar — it&rsquo;s free
+          </button>
+          <Link
+            href="/download"
+            className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-[15px] font-medium transition-colors duration-200"
+            style={{ background: "transparent", color: v2.ink, border: `1px solid ${v2.ruleHard}` }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = v2.ink;
+              e.currentTarget.style.background = v2.cream2;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = v2.ruleHard;
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              style={{ display: "block" }}
+            >
+              <path d="M12 3v12" />
+              <path d="m7 11 5 5 5-5" />
+              <path d="M5 21h14" />
+            </svg>
+            Download desktop app
+          </Link>
+        </div>
       </section>
 
       <footer
