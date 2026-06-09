@@ -333,6 +333,7 @@
       background: #b8623d;
       flex-shrink: 0;
     }
+    .ctx-label .ctx-prefix,
     .ctx-label .ctx-app {
       font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 10px;
@@ -343,6 +344,9 @@
     }
     .ctx-label.low .ctx-dot { background: #8b8780; }
     .ctx-label.low .ctx-app { color: #8b8780; }
+    /* Low confidence = unrecognized app: no "Optimized for" claim, just the
+       raw OS name. The prefix only shows for a known, actually-optimized app. */
+    .ctx-label.low .ctx-prefix { display: none; }
     body[data-ctx="on"][data-phase="expanded"]  .ctx-label,
     body[data-ctx="on"][data-phase="ready"]     .ctx-label,
     body[data-ctx="on"][data-phase="recording"] .ctx-label { display: inline-flex; }
@@ -701,6 +705,7 @@
           <div class="ready-body" data-body="ready">
             <span class="ctx-label" id="ctx-label" aria-hidden="true">
               <span class="ctx-dot"></span>
+              <span class="ctx-prefix" id="ctx-prefix">Optimized for</span>
               <span class="ctx-app" id="ctx-app"></span>
             </span>
             <span class="ready-text" id="ready-text">Click to dictate</span>

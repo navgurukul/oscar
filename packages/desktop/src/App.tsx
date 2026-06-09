@@ -904,6 +904,28 @@ function App() {
           ? null
           : buildDictationContextSnapshot(ev.payload);
         pendingStopRef.current = false;
+
+        // Push the captured context to the always-on pill so its label can read
+        // "Optimized for X" for a recognized app (high confidence) or the raw OS
+        // app name for an unrecognized one (low confidence, no "optimized"
+        // claim). Gated on the same context-aware setting + platform that drive
+        // routing/persistence; cleared again when the flow ends (processAudio
+        // finally) so a stale label can't linger on the next handle hover.
+        const pillContextSnapshot = dictationContextRef.current;
+        const pillContextEnabled =
+          contextAwareDictationEnabledRef.current &&
+          isContextAwarePlatform(getDesktopPlatform());
+        if (pillContextSnapshot && pillContextEnabled) {
+          const pillRouting = routeDictationContext(pillContextSnapshot);
+          const known = pillRouting.confidence !== "low";
+          emit("pill-context-app", {
+            name: known ? pillRouting.appKey : pillContextSnapshot.appName,
+            confidence: known ? "high" : "low",
+          }).catch(() => {});
+        } else {
+          emit("pill-context-app", null).catch(() => {});
+        }
+
         if (whisperLoadedRef.current && !isRecordingRef.current) {
           hotkeyStartInFlightRef.current = true;
           void startHotkeyRecording().finally(() => {
@@ -1995,6 +2017,10 @@ function App() {
       }, 1500);
     } finally {
       setIsProcessing(false);
+      // Clear the pill's context label as the flow ends; the next record-start
+      // re-emits a fresh one. The "Inserted into document" outcome toast below
+      // is unchanged and shows for every app, recognized or not.
+      emit("pill-context-app", null).catch(() => {});
       // Success path: show the outcome toast — "Inserted" when auto-paste
       // landed the text in the focused app, "Copied" when only the clipboard
       // was set. When the session was dead, the raw transcript still pasted but
