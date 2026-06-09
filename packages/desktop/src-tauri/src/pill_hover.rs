@@ -115,7 +115,10 @@ pub(crate) fn start(app: AppHandle) {
 
             if in_zone {
                 leave_started = None;
-                if !last_in_zone && is_resting {
+                // Only expand when Stream is enabled (authenticated + set up).
+                // Bookkeeping below still runs so a login mid-hover expands on
+                // the next zone entry.
+                if !last_in_zone && is_resting && crate::pill::pill_enabled() {
                     crate::pill::apply_phase_from_rust(&app, "expanded");
                 }
                 last_in_zone = true;

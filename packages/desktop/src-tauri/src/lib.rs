@@ -203,6 +203,7 @@ pub fn run() {
             pill::pill_push_settings,
             pill::pill_request_record_start,
             pill::pill_request_record_stop,
+            pill::set_pill_enabled,
             permissions::check_accessibility_permission,
             permissions::request_accessibility_permission,
             permissions::check_dictation_ctrl_conflict,

@@ -49,6 +49,11 @@ pub(crate) fn register_recording_hotkey<R: tauri::Runtime>(
     app.global_shortcut()
         .on_shortcut(shortcut, move |_app, _sc, event| match event.state {
             ShortcutState::Pressed => {
+                // Stream disabled (logged out / pre-setup): hotkey no-ops. The
+                // shortcut stays registered to avoid re-registration churn.
+                if !crate::pill::pill_enabled() {
+                    return;
+                }
                 if !is_rec.swap(true, Ordering::SeqCst) {
                     log::info!("[hotkey] Ctrl+Space PRESSED — capturing frontmost context");
                     #[cfg(target_os = "windows")]

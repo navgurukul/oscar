@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { meetingsService } from "./services/meetings.service";
 import { aiService } from "./services/ai.service";
-import { streamsService } from "./services/streams.service";
 import { scribblesService } from "./services/scribbles.service";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -1963,33 +1962,10 @@ function App() {
       });
       timings["persist"] = Math.round(performance.now() - tPersist0);
 
-      // Phase 5: persist this dictation to Supabase so the web /streams page
-      // can show the user a private history. Fire-and-forget — the service
-      // swallows its own errors so a slow network here cannot block the next
-      // dictation. Skips when cleanup returned empty (already early-returned
-      // above) but still runs when paste failed and we only put text on the
-      // clipboard, because the dictation itself is still useful history.
-      const streamRawText = rawWhisperText ?? "";
-      const streamFormattedText = finalText ?? "";
-      if (streamRawText.trim() || streamFormattedText.trim()) {
-        void streamsService.record({
-          raw_transcript: streamRawText,
-          formatted_text: streamFormattedText,
-          app_key:
-            dictationRouting?.appKey ??
-            activeDictationContext?.appId ??
-            null,
-          destination_app:
-            _targetApp ?? activeDictationContext?.appName ?? null,
-          duration_ms: Math.round(performance.now() - tStart),
-          dictation_category: dictationMetadata.dictation_category ?? null,
-          dictation_variant: dictationMetadata.dictation_variant ?? null,
-          dictation_context_source:
-            dictationMetadata.dictation_context_source ?? null,
-          dictation_prompt_version:
-            dictationMetadata.dictation_prompt_version ?? null,
-        });
-      }
+      // Stream is a local-only feature: the dictation lives in localTranscripts
+      // (saved to disk above) and never persists to the backend. A row is only
+      // written to the `streams` table when the user submits feedback — see the
+      // future persist-on-feedback path that reuses streamsService.record().
 
       if (!shouldPaste) {
         // Auto-paste is off: still write the result to the OS clipboard so the
@@ -2652,6 +2628,18 @@ function App() {
 
     fetchSubscription();
   }, [user]);
+
+  // Stream is a logged-in-only desktop feature. The pill window, its hover
+  // poller, and the global hotkey are created/registered in Rust independent of
+  // this React tree, so gating the render below isn't enough — we must tell Rust
+  // to actually hide/disable them. Enable only for a fully set-up, authenticated
+  // session (mirrors the render gates just below); disable on sign-out or
+  // session expiry (the auth listener sets user → null, re-running this effect).
+  useEffect(() => {
+    const enabled =
+      !!user && permissionsShown === true && setupComplete === true;
+    invoke("set_pill_enabled", { enabled }).catch(console.warn);
+  }, [user, permissionsShown, setupComplete]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
