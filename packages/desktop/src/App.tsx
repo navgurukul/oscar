@@ -1719,10 +1719,10 @@ function App() {
       const result = await invoke<Transcription>("transcribe_audio", {
         audioData: audioDataForIpc,
         initialPrompt: buildInitialPrompt(
-          transcriptionLanguage,
+          transcriptionLanguageRef.current,
           dictWordsRef.current,
         ),
-        language: getWhisperLanguage(transcriptionLanguage, "dictation"),
+        language: getWhisperLanguage(transcriptionLanguageRef.current, "dictation"),
       });
       timings["whisper-transcribe"] = Math.round(performance.now() - tWhisper0);
 
@@ -2101,10 +2101,10 @@ function App() {
       const result = await invoke<Transcription>("transcribe_audio", {
         audioData: Array.from(audioData),
         initialPrompt: buildInitialPrompt(
-          transcriptionLanguage,
+          transcriptionLanguageRef.current,
           dictWordsRef.current,
         ),
-        language: getWhisperLanguage(transcriptionLanguage, "dictation"),
+        language: getWhisperLanguage(transcriptionLanguageRef.current, "dictation"),
       });
 
       const rawText = result.text?.trim() ?? "";
