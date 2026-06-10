@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { buildMeetingContextPack, copyMarkdownAsRichText } from "@oscar/shared";
+import {
+  appendMinutesShareFooter,
+  buildMeetingContextPack,
+  copyMarkdownAsRichText,
+} from "@oscar/shared";
 import { aiService } from "../services/ai.service";
 import {
   Mic,
@@ -69,13 +73,19 @@ const FOOTER_BUTTON_CLASS_NAME =
 const FOOTER_BUTTON_PRIMARY_CLASS_NAME =
   "inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-[7px] text-[12px] text-cream transition-colors hover:bg-ink-night";
 
-// Live public-link row, shown under a meeting's notes when the workspace has
-// auto-publish on (so the row carries the same /m/{token} link the summary
-// surfaces on web). Renders nothing for private meetings.
+// Public /m/{token} link for a meeting — only when it's actually public.
+function minutesShareUrl(meeting: SavedMeetingRecord): string | null {
+  if (meeting.visibility !== "public" || !meeting.publicShareToken) return null;
+  return `${WEB_APP_URL}/m/${meeting.publicShareToken}`;
+}
+
+// Live public-link row, shown under a meeting's notes when it carries a public
+// /m/{token} link (the same link the summary surfaces on web). Renders nothing
+// for private meetings.
 function MinutesShareLink({ meeting }: { meeting: SavedMeetingRecord }) {
   const [copied, setCopied] = useState(false);
-  if (meeting.visibility !== "public" || !meeting.publicShareToken) return null;
-  const url = `${WEB_APP_URL}/m/${meeting.publicShareToken}`;
+  const url = minutesShareUrl(meeting);
+  if (!url) return null;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(url);
@@ -91,6 +101,9 @@ function MinutesShareLink({ meeting }: { meeting: SavedMeetingRecord }) {
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-terracotta">
           Public link · anyone can read
         </span>
+        <p className="mt-0.5 text-[13px] font-medium text-ink">
+          Open the full minutes in Oscar
+        </p>
         <p
           className="mt-0.5 truncate text-[12px] text-ink-soft"
           style={{ maxWidth: 520 }}
@@ -979,8 +992,10 @@ export function MeetingsTab({
     setPhase("processing");
   };
 
-  const handleCopy = async (markdown: string) => {
-    await copyMarkdownAsRichText(markdown);
+  const handleCopy = async (markdown: string, shareUrl?: string | null) => {
+    await copyMarkdownAsRichText(
+      appendMinutesShareFooter(markdown, shareUrl ?? null),
+    );
     setCopied(true);
     setTimeout(() => setCopied(false), 2_000);
   };
@@ -1766,7 +1781,12 @@ export function MeetingsTab({
                 FOOTER_BUTTON_PRIMARY_CLASS_NAME,
                 !hasSavedNotes && "cursor-not-allowed opacity-50",
               )}
-              onClick={() => void handleCopy(viewingSaved.notesMarkdown)}
+              onClick={() =>
+                void handleCopy(
+                  viewingSaved.notesMarkdown,
+                  minutesShareUrl(viewingSaved),
+                )
+              }
               disabled={!hasSavedNotes}
               type="button"
             >

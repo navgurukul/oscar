@@ -43,7 +43,14 @@ export const organizationService = {
   async update(
     id: string,
     patch: Partial<
-      Pick<Organization, "name" | "slug" | "logo_url" | "auto_publish_minutes">
+      Pick<
+        Organization,
+        | "name"
+        | "slug"
+        | "logo_url"
+        | "auto_publish_minutes"
+        | "default_meeting_visibility"
+      >
     >
   ): Promise<Organization> {
     return api(`/api/org/${id}`, { method: "PATCH", body: JSON.stringify(patch) });

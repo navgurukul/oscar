@@ -11,6 +11,9 @@ export interface DBStream {
   destination_app: string | null;
   raw_transcript: string;
   formatted_text: string;
+  /** Free-text user feedback on the dictation. A stream row is only persisted
+   *  when the user submits feedback, so in practice this is non-empty. */
+  feedback: string | null;
   duration_ms: number | null;
   dictation_category: DictationCategory | null;
   dictation_variant: DictationCategory | null;
@@ -26,6 +29,7 @@ export interface DBStreamInsert {
   destination_app?: string | null;
   raw_transcript: string;
   formatted_text: string;
+  feedback?: string | null;
   duration_ms?: number | null;
   dictation_category?: DictationCategory | null;
   dictation_variant?: DictationCategory | null;

@@ -249,7 +249,14 @@ export async function createOrganization(
 export async function updateOrganization(
   organizationId: string,
   patch: Partial<
-    Pick<Organization, "name" | "slug" | "logo_url" | "auto_publish_minutes">
+    Pick<
+      Organization,
+      | "name"
+      | "slug"
+      | "logo_url"
+      | "auto_publish_minutes"
+      | "default_meeting_visibility"
+    >
   >
 ): Promise<Organization | null> {
   const supabase = getSupabaseAdmin();

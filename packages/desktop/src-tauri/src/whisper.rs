@@ -750,24 +750,43 @@ fn is_hallucination_segment(
         }
     }
 
-    // CJK / Hangul / Hiragana / Katakana segments in a non-CJK target
-    // language are almost always hallucinations on Indian English / Hinglish
-    // meetings.
-    let mut script_counts = (0usize, 0usize); // (cjk_like, latin_like)
+    // Wrong-script detection. Whisper emits stray foreign-script tokens on
+    // silence / cross-talk (e.g. the Hebrew "אג" that surfaced in the meeting
+    // that prompted this). For a Latin/Devanagari target (en, hi, Hinglish)
+    // ANY unrelated script — CJK, Hangul, Kana, Hebrew, Arabic, Cyrillic,
+    // Greek, Thai — is junk; Latin and Devanagari both count as "expected" so
+    // real Hindi and English survive. Under "auto" (or any other target) we
+    // stay conservative and drop only CJK — the original behaviour — so a
+    // genuinely CJK auto-detected clip isn't wiped.
+    let mut expected_chars = 0usize; // Latin + Devanagari
+    let mut cjk_chars = 0usize;
+    let mut foreign_chars = 0usize; // CJK + other non-Latin/Devanagari scripts
     for c in trimmed.chars() {
         let code = c as u32;
-        if (0xAC00..=0xD7AF).contains(&code) // Hangul
+        let is_cjk = (0xAC00..=0xD7AF).contains(&code) // Hangul
             || (0x3040..=0x30FF).contains(&code) // Hiragana / Katakana
             || (0x4E00..=0x9FFF).contains(&code) // CJK Unified
-            || (0x3400..=0x4DBF).contains(&code) // CJK Ext A
-        {
-            script_counts.0 += 1;
-        } else if c.is_ascii_alphabetic() {
-            script_counts.1 += 1;
+            || (0x3400..=0x4DBF).contains(&code); // CJK Ext A
+        let is_other_foreign = (0x0590..=0x05FF).contains(&code) // Hebrew
+            || (0x0600..=0x06FF).contains(&code) // Arabic
+            || (0x0400..=0x04FF).contains(&code) // Cyrillic
+            || (0x0370..=0x03FF).contains(&code) // Greek
+            || (0x0E00..=0x0E7F).contains(&code); // Thai
+        if is_cjk {
+            cjk_chars += 1;
+            foreign_chars += 1;
+        } else if is_other_foreign {
+            foreign_chars += 1;
+        } else if c.is_ascii_alphabetic() || (0x0900..=0x097F).contains(&code) {
+            expected_chars += 1; // Latin or Devanagari
         }
     }
+    let latin_deva_target = matches!(language, "en" | "hi");
+    if latin_deva_target && foreign_chars > 0 && foreign_chars >= expected_chars {
+        return true;
+    }
     let target_is_cjk = matches!(language, "ko" | "ja" | "zh");
-    if !target_is_cjk && script_counts.0 > 0 && script_counts.0 >= script_counts.1 {
+    if !target_is_cjk && cjk_chars > 0 && cjk_chars >= expected_chars {
         return true;
     }
 
@@ -869,6 +888,36 @@ pub(crate) fn transcribe_audio_inner(
     params.set_print_timestamps(false);
     params.set_n_threads(hardware_profile().whisper_thread_count());
 
+    // ── Anti-repetition / anti-hallucination decoding controls ──────────────
+    //
+    // The dominant meeting failure mode is a decoder repetition loop: on
+    // silence, cross-talk, or low-level room noise Whisper emits the same
+    // phrase for dozens of consecutive segments (the "I will do all of my PR
+    // marks" ×30 incident). Two mechanisms guard against it:
+    //
+    //   • no_context(true): each internal 30s window decodes WITHOUT the
+    //     previous window's *decoded* text as context, so a loop that starts
+    //     in one window cannot self-propagate forward across the clip. The
+    //     app-level cross-chunk continuity hint still flows through
+    //     initial_prompt below (we keep the transcript tail deduped upstream),
+    //     so proper-noun carryover is preserved without the runaway feedback.
+    //
+    //   • Temperature fallback: when a window decodes as low-entropy
+    //     (repetitive — high compression ratio) or low-confidence (gibberish),
+    //     whisper.cpp re-decodes it at a higher temperature instead of
+    //     committing the loop. We pin whisper.cpp's own defaults explicitly so
+    //     the fallback can't silently switch off on a crate/upstream bump.
+    //
+    // suppress_nst drops non-speech tokens ([music], [noise], applause) that
+    // otherwise surface as hallucinated text on noisy meeting audio.
+    params.set_no_context(true);
+    params.set_suppress_nst(true);
+    params.set_temperature(0.0);
+    params.set_temperature_inc(0.2);
+    params.set_entropy_thold(2.4);
+    params.set_logprob_thold(-1.0);
+    params.set_no_speech_thold(0.6);
+
     // Inject personal dictionary words as Whisper initial prompt
     if let Some(prompt) = initial_prompt {
         if !prompt.is_empty() {
@@ -898,6 +947,15 @@ pub(crate) fn transcribe_audio_inner(
     let mut structured_segments = Vec::new();
     let mut dropped_no_speech = 0usize;
     let mut dropped_hallucination = 0usize;
+    // Consecutive-repetition collapse. A decoder loop emits the same phrase as
+    // many adjacent segments from one source ("I will do all of my PR marks"
+    // ×30). The per-segment hallucination check can't see it — each line is
+    // individually well-formed — and the frontend overlap-dedup misses it
+    // because mic/speaker loops arrive interleaved by timestamp. This runs
+    // per-source (transcribe_audio_inner handles one source per call), so the
+    // repeats ARE adjacent here and a normalized equality check collapses them.
+    let mut dropped_repetition = 0usize;
+    let mut last_kept_norm: Option<String> = None;
 
     // Tightened from whisper.cpp default 0.6 → 0.5 to cut hallucinations on
     // borderline-silent or cross-talk segments more aggressively. Whisper's
@@ -956,6 +1014,30 @@ pub(crate) fn transcribe_audio_inner(
                     continue;
                 }
 
+                // Collapse a run of identical adjacent segments to one. Compare
+                // on a normalized form (lowercased, punctuation stripped) so
+                // "PR marks." and "pr marks" count as the same loop iteration.
+                let normalized: String = trimmed
+                    .to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+                    .collect::<String>()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if !normalized.is_empty()
+                    && last_kept_norm.as_deref() == Some(normalized.as_str())
+                {
+                    dropped_repetition += 1;
+                    log::debug!(
+                        "[whisper] Collapsing repeated segment {}: {:?}",
+                        i,
+                        trimmed
+                    );
+                    continue;
+                }
+                last_kept_norm = Some(normalized);
+
                 full_text.push_str(trimmed);
                 full_text.push(' ');
 
@@ -974,6 +1056,15 @@ pub(crate) fn transcribe_audio_inner(
         }
     }
 
+    if dropped_repetition > 0 {
+        log::info!(
+            "[whisper] Collapsed {} consecutive repeated segment(s)",
+            dropped_repetition
+        );
+        // Fold into the hallucination tally so perf/telemetry reflects total
+        // junk removed without a schema change across the Rust/TS boundary.
+        dropped_hallucination += dropped_repetition;
+    }
     if dropped_no_speech > 0 {
         log::info!(
             "[whisper] Dropped {} segment(s) above no_speech threshold {:.2}",

@@ -308,14 +308,14 @@ export function V2MarketingHeader({
   ctaLabel = "Get Oscar",
   ctaHref = "/auth",
 }: {
-  active?: "PRODUCT" | "PRICING" | "BLOG" | "SIGN IN";
+  active?: "PRODUCT" | "PRICING" | "CHANGELOG" | "SIGN IN";
   ctaLabel?: string;
   ctaHref?: string;
 }) {
-  const items: Array<{ label: "PRODUCT" | "PRICING" | "BLOG" | "SIGN IN"; href: string }> = [
+  const items: Array<{ label: "PRODUCT" | "PRICING" | "CHANGELOG" | "SIGN IN"; href: string }> = [
     { label: "PRODUCT", href: "/" },
     { label: "PRICING", href: "/pricing" },
-    { label: "BLOG", href: "/" },
+    { label: "CHANGELOG", href: "/changelog" },
     { label: "SIGN IN", href: "/auth" },
   ];
   return (

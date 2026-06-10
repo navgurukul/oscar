@@ -25,7 +25,13 @@ export function getWhisperLanguage(
 ) {
   if (transcriptionLanguage === "auto") return undefined;
   if (transcriptionLanguage === "hi-en") {
-    return "en";
+    // Hinglish is Hindi-dominant code-switching. Forcing "en" makes Whisper
+    // mangle the Hindi portions into nonsense English ("C salary big pigs"
+    // out of actual Hindi speech); "hi" decodes the Hindi acoustically and
+    // still transcribes the embedded English words. Script normalisation
+    // (Devanagari → readable Hinglish) happens downstream in the Minutes
+    // enhance step, so the user-facing notes stay readable.
+    return "hi";
   }
   return transcriptionLanguage;
 }

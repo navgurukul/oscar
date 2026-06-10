@@ -8,6 +8,7 @@
 //! Linux: secondary webview windows crash tao's event loop, so state lands on
 //! the tray-icon tooltip instead.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{LogicalPosition, LogicalSize, Manager};
 
@@ -25,6 +26,18 @@ const PILL_H_REST: f64 = 16.0;          // 5–6 px handle + ~10 px hover buffer
 const PILL_H_EXPANDED: f64 = 200.0;     // pill + toast space
 const PILL_H_SETTINGS: f64 = 380.0;     // pill + settings popover
 static CURRENT_PILL_PHASE: Mutex<&'static str> = Mutex::new("rest");
+
+// Gates the entire Stream/pill surface on auth. The pill window, the
+// cursor-hover poller (pill_hover.rs) and the global hotkey (hotkey.rs) all
+// check this before showing/firing, so a logged-out user never sees or
+// triggers Stream. Flipped by `set_pill_enabled`, driven from the React auth
+// gate. Defaults to false so the pill stays hidden until the app signals a
+// fully set-up, authenticated session.
+static PILL_ENABLED: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn pill_enabled() -> bool {
+    PILL_ENABLED.load(Ordering::SeqCst)
+}
 
 fn normalize_phase(phase: &str) -> &'static str {
     match phase {
@@ -91,6 +104,12 @@ fn apply_phase_script<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, phase
 }
 
 fn sync_pill_phase(app: &tauri::AppHandle, phase: &'static str) {
+    // Never show the pill while Stream is disabled (logged out / pre-setup).
+    // This is the safety net: every phase command routes through here, so a
+    // stray phase event can't resurrect the pill once it's been hidden.
+    if !pill_enabled() {
+        return;
+    }
     create_pill_window(app);
 
     if let Some(w) = app.get_webview_window("recording-pill") {
@@ -199,8 +218,14 @@ pub(crate) fn create_pill_window(app: &tauri::AppHandle) {
                 let _ = w.set_always_on_top(true);
             }
 
-            // Now show the always-present edge handle.
-            let _ = w.show();
+            // Show the edge handle only when Stream is enabled (authenticated +
+            // set up). Otherwise keep it hidden — pre-creation still makes the
+            // first real show fast once the user signs in.
+            if pill_enabled() {
+                let _ = w.show();
+            } else {
+                let _ = w.hide();
+            }
 
             // Re-apply on macOS — show() can re-trigger window realization which
             // sometimes resets the NSPanel level back to default.
@@ -361,6 +386,41 @@ pub fn get_pill_phase() -> String {
     current_pill_phase().to_string()
 }
 
+/// Enable or disable the entire Stream/pill surface. Driven by the React auth
+/// gate: enabled only for a fully set-up, authenticated session. When disabled
+/// the pill window is really hidden (not just collapsed to rest), and the
+/// hover poller + global hotkey no-op via `pill_enabled()`. Idempotent.
+#[tauri::command]
+pub fn set_pill_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    PILL_ENABLED.store(enabled, Ordering::SeqCst);
+    log::info!("[pill] set_pill_enabled → {}", enabled);
+
+    #[cfg(target_os = "linux")]
+    {
+        // No pill window on Linux — the tray tooltip is the only surface.
+        let _ = app;
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        if enabled {
+            // Bring the edge handle back at rest.
+            sync_pill_phase(&app, "rest");
+        } else {
+            // Real hide — distinct from hide_recording_pill's collapse-to-rest.
+            // NSWindow/NSPanel ops are not safe off the main thread.
+            let app_clone = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                if let Some(w) = app_clone.get_webview_window("recording-pill") {
+                    let _ = w.hide();
+                }
+            });
+        }
+        Ok(())
+    }
+}
+
 /// Stop the pill cursor-hover poller ahead of an updater install. The poller
 /// touches the pill window every ~45ms; if it is still running when the NSIS
 /// `/UPDATE` installer (or the plugin's `cleanup_before_exit`) tears the window
@@ -379,6 +439,11 @@ pub fn stop_pill_hover() {
 #[tauri::command]
 pub fn pill_request_record_start(app: tauri::AppHandle) -> Result<(), String> {
     log::info!("[pill] pill_request_record_start");
+
+    // Stream disabled (logged out / pre-setup): ignore this entry point too.
+    if !pill_enabled() {
+        return Ok(());
+    }
 
     #[cfg(target_os = "windows")]
     {
