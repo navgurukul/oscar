@@ -523,9 +523,13 @@ function App() {
       setAuthLoading(false);
       // Proactively validate a restored session. A hard restart (e.g.
       // auto-update relaunch) can leave a stale/rotated refresh token that
-      // getSession() still hands back; revalidate clears it now → AuthScreen,
-      // instead of letting the first dictation fail AI cleanup silently.
-      if (s) void revalidateSession();
+      // getSession() still hands back; force a real refresh so a dead token is
+      // detected and cleared now → AuthScreen, instead of sitting under a
+      // not-yet-expired access token until the first pill dictation hits it and
+      // fails AI cleanup ("Sign in to enable AI"). A non-forced check returns
+      // early while the access token looks valid and never probes the refresh
+      // token, so the dead-session state stays hidden — that was the bug.
+      if (s) void revalidateSession({ force: true });
     });
 
     const {

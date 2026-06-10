@@ -74,9 +74,12 @@ export async function getValidAccessToken(): Promise<string> {
  * that silently fails every authenticated call. Returns `true` when a usable
  * session remains.
  *
- * @param opts.force revalidate even a not-yet-expired token (used after an auth
- *   failure mid-dictation, where the stored token may look valid but the server
- *   has already rejected it).
+ * @param opts.force revalidate even a not-yet-expired token. Used at launch and
+ *   after an auth failure mid-dictation: `getSession()` returns the cached
+ *   session from disk without contacting the server, so a not-yet-expired
+ *   access token can sit on top of a dead/rotated refresh token. Forcing a
+ *   refresh is the only way to detect that before the next AI call hits it (and
+ *   surfaces as the "Sign in to enable AI" pill).
  */
 export async function revalidateSession(
   opts: { force?: boolean } = {},
@@ -92,9 +95,14 @@ export async function revalidateSession(
 
   const { error } = await supabase.auth.refreshSession();
   if (error) {
-    // Dead/rotated refresh token. Clear locally → onAuthStateChange fires
-    // SIGNED_OUT → the app renders AuthScreen for re-authentication.
-    await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+    // Only a genuine auth rejection (dead/rotated refresh token) should clear
+    // the session: clearing it → onAuthStateChange fires SIGNED_OUT → the app
+    // renders AuthScreen. A transient/offline network failure must NOT sign the
+    // user out — keep the cached session so they stay logged in offline and
+    // retry on the next focus/launch.
+    if (isAuthSessionError(error)) {
+      await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+    }
     return false;
   }
   return true;
