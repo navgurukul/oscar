@@ -50,8 +50,11 @@ setInterval(() => {
  * Atomically increment a rate-limit counter in Supabase.
  * Returns the new {count, resetAt} or null if Supabase is unavailable.
  *
- * Uses an upsert: on conflict the count is incremented in-place when the
- * window is still valid, or reset to 1 when it has expired.
+ * Primary path: the increment_rate_limit RPC (migration 017) does the whole
+ * thing in one statement, so concurrent requests can't read the same count and
+ * both write count+1. If the RPC is missing (not yet deployed) it falls back to
+ * the original — non-atomic — select-then-upsert, which is still correct in the
+ * absence of a burst.
  */
 async function supabaseIncrement(
   key: string,
@@ -59,6 +62,23 @@ async function supabaseIncrement(
 ): Promise<{ count: number; resetAt: number } | null> {
   try {
     const supabase = getSupabaseAdmin();
+
+    // Atomic path (migration 017).
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "increment_rate_limit",
+      { p_key: key, p_window_ms: windowMs }
+    );
+    if (!rpcError) {
+      const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+      if (row?.out_count != null && row?.out_reset_at != null) {
+        return {
+          count: row.out_count as number,
+          resetAt: new Date(row.out_reset_at as string).getTime(),
+        };
+      }
+    }
+
+    // Fallback: non-atomic select-then-upsert (RPC not deployed yet).
     const now = new Date();
     const resetAt = new Date(Date.now() + windowMs);
 

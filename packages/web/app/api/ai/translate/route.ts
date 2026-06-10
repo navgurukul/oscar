@@ -7,6 +7,7 @@ import {
   getClientIdentifier,
 } from "@/lib/middleware/rate-limit";
 import {
+  enforceRecordingQuota,
   parseJsonBody,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
@@ -45,6 +46,10 @@ export async function POST(req: NextRequest) {
     tagName: "text",
   });
   if (!inputResult.success) return inputResult.response;
+
+  // Block further AI spend once the org is over its free monthly quota.
+  const quotaResponse = await enforceRecordingQuota(user.id);
+  if (quotaResponse) return quotaResponse;
 
   const rawTargetLanguage = bodyResult.data.targetLanguage;
   const targetLanguage = rawTargetLanguage === undefined ? "en" : rawTargetLanguage;

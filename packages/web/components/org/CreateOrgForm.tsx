@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useAuth } from "@/lib/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { organizationService } from "@/lib/services/organization.service";
 import { v2, v2Serif, v2Mono, V2Caps, V2Mono } from "@/components/v2/V2Primitives";
@@ -14,12 +15,56 @@ const USE_CASES = [
   "Something else",
 ] as const;
 
+// Generic public email providers — auto-join checkbox is hidden for users on
+// these domains (they can't claim everyone's gmail/yahoo/etc). Mirrors the
+// server-side list in lib/server/emailDomains.ts so the UI never offers a
+// choice the API would reject.
+const GENERIC_EMAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "yahoo.com",
+  "yahoo.co.in",
+  "yahoo.co.uk",
+  "outlook.com",
+  "hotmail.com",
+  "live.com",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "aol.com",
+  "proton.me",
+  "protonmail.com",
+  "pm.me",
+  "zoho.com",
+  "yandex.com",
+  "mail.com",
+  "gmx.com",
+  "fastmail.com",
+  "tutanota.com",
+]);
+
 export function CreateOrgForm({ onCreated }: { onCreated?: (orgId: string) => void }) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [useCase, setUseCase] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Extract owner's email domain. Hide the auto-join checkbox if it's a
+  // generic provider or unparseable — only teams on their own domain get
+  // the inline offer.
+  const ownerDomain = useMemo(() => {
+    const email = user?.email ?? "";
+    const domain = email.split("@")[1]?.toLowerCase() ?? "";
+    if (!domain) return null;
+    if (GENERIC_EMAIL_DOMAINS.has(domain)) return null;
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) return null;
+    return domain;
+  }, [user?.email]);
+
+  // Default checked when offered — Granola-style, frictionless team setup.
+  const [autoJoin, setAutoJoin] = useState(true);
 
   const submit = async () => {
     const trimmed = name.trim();
@@ -29,6 +74,7 @@ export function CreateOrgForm({ onCreated }: { onCreated?: (orgId: string) => vo
       const org = await organizationService.create({
         name: trimmed,
         slug: slug.trim() || undefined,
+        auto_join_email_domain: ownerDomain && autoJoin ? ownerDomain : null,
       });
       toast({ title: "Workspace created", description: org.name });
       await organizationService.switchTo(org.id);
@@ -36,6 +82,7 @@ export function CreateOrgForm({ onCreated }: { onCreated?: (orgId: string) => vo
       setName("");
       setSlug("");
       setUseCase(null);
+      setAutoJoin(true);
     } catch (err) {
       toast({
         title: "Could not create workspace",
@@ -130,6 +177,43 @@ export function CreateOrgForm({ onCreated }: { onCreated?: (orgId: string) => vo
           })}
         </div>
       </div>
+
+      {ownerDomain && (
+        <div className="mt-7">
+          <V2Caps>TEAM AUTO-JOIN</V2Caps>
+          <label
+            htmlFor="auto-join-checkbox"
+            className="mt-3 flex items-start gap-3 cursor-pointer select-none rounded-md px-3 py-3"
+            style={{ border: `1px solid ${v2.rule}` }}
+          >
+            <input
+              id="auto-join-checkbox"
+              type="checkbox"
+              checked={autoJoin}
+              onChange={(e) => setAutoJoin(e.target.checked)}
+              className="mt-0.5 h-4 w-4 cursor-pointer"
+              style={{ accentColor: v2.accent }}
+            />
+            <span>
+              <span
+                className="block text-[13.5px] font-medium"
+                style={{ color: v2.ink }}
+              >
+                Allow teammates with a{" "}
+                <span style={{ fontFamily: v2Mono }}>@{ownerDomain}</span>{" "}
+                email to auto-join
+              </span>
+              <span
+                className="mt-0.5 block text-[12px] leading-relaxed"
+                style={{ color: v2.inkSoft }}
+              >
+                New signups with your domain join as Members automatically.
+                You can change this later in Settings.
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
 
       <div className="mt-10 flex items-center gap-3">
         <button

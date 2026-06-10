@@ -1,19 +1,20 @@
 /**
- * Increment Usage API Route
+ * Usage Refresh API Route
  * POST /api/usage/increment
  *
- * Pre-flight enforcement: Checks monthly recording limit BEFORE incrementing usage.
- * - Free tier: Limited to FREE_MONTHLY_RECORDINGS per month (10)
- * - Pro tier: Unlimited recordings
- * - Returns 402 Payment Required if free user exceeds quota
- * 
- * This prevents free users from processing recordings beyond their monthly limit.
+ * NOTE: This endpoint no longer increments. The monthly recording counter is now
+ * incremented authoritatively, server-side, in /api/ai/format (the recording
+ * entry point for both web and desktop Scribbles) so a tampered client cannot
+ * skip metering to earn unlimited AI spend. Incrementing here as well would
+ * double-count. The route is retained at its original path for client
+ * compatibility (SubscriptionContext.incrementUsage) and simply returns the
+ * current authoritative usage so the UI can refresh.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { usageService } from "@/lib/services/usage.service";
-import { SUBSCRIPTION_CONFIG, RATE_LIMITS } from "@/lib/constants";
+import { RATE_LIMITS } from "@/lib/constants";
 import {
   applyRateLimit,
   getClientIdentifier,
@@ -39,39 +40,19 @@ export async function POST(request: NextRequest) {
     );
     if (rateLimitResult) return rateLimitResult;
 
-    // PRE-FLIGHT CHECK: Verify user hasn't exceeded monthly limit
-    // This calls get_monthly_usage() internally and compares against tier limits
-    const { allowed, current } = await usageService.canUserRecord(user.id);
-
-    if (!allowed) {
-      // Return 402 Payment Required to signal upgrade needed
-      return NextResponse.json(
-        {
-          error: "Scribble recording limit reached",
-          message: "You've reached your monthly Scribble recording limit. Upgrade to Pro for unlimited Scribble recordings.",
-          current,
-          remaining: 0,
-          upgradeRequired: true,
-          limit: SUBSCRIPTION_CONFIG.FREE_MONTHLY_RECORDINGS,
-        },
-        { status: 402 } // 402 Payment Required
-      );
-    }
-
-    // Limit check passed - increment usage
-    const newCount = await usageService.incrementRecordingUsage(user.id);
-
-    // Recalculate remaining after increment
-    const usageStats = await usageService.canUserRecord(user.id);
+    // Read-only: return the current authoritative usage (incremented by the
+    // format route, not here) so the client can refresh its displayed counts.
+    const { allowed, remaining } = await usageService.canUserRecord(user.id);
+    const recordingsThisMonth = await usageService.getMonthlyUsage(user.id);
 
     return NextResponse.json({
       success: true,
-      recordingsThisMonth: newCount,
-      remaining: usageStats.remaining,
-      canRecord: usageStats.allowed,
+      recordingsThisMonth,
+      remaining,
+      canRecord: allowed,
     });
   } catch (error) {
-    console.error("Increment usage error:", error);
+    console.error("Usage refresh error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -1,5 +1,9 @@
 export const SUBSCRIPTION_CONFIG = {
-  FREE_MONTHLY_RECORDINGS: 10,
+  // Kept equal to FREE_ORG_MONTHLY_RECORDINGS. This is the value shown to users
+  // (pricing, billing, upgrade prompts, usage stats); enforcement is org-scoped
+  // and uses FREE_ORG_MONTHLY_RECORDINGS. They drifted (10 shown vs 25 enforced),
+  // so users were told a lower limit than the server actually allowed.
+  FREE_MONTHLY_RECORDINGS: 25,
   // Free org tier: shared recording quota across every workspace member.
   // Each member's recording (web + desktop) increments the same counter.
   FREE_ORG_MONTHLY_RECORDINGS: 25,

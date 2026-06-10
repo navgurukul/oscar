@@ -49,6 +49,44 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "v0.7.38",
+    date: "10 JUN 2026",
+    tag: "TEAMS",
+    title: "Team auto-join & tougher sign-in",
+    lede: "Claim your email domain so teammates land in your workspace automatically, sign-in only trusts a flow you started, and a shaky network no longer logs you out.",
+    changes: [
+      { kind: "new", area: "TEAMS", text: "Claim an email domain for your org so anyone who signs up with that domain joins your workspace automatically." },
+      { kind: "improved", area: "DESKTOP", text: "Desktop sign-in fails closed — only the exact sign-in you started on this device is accepted." },
+      { kind: "improved", area: "DESKTOP", text: "A flaky or offline network no longer signs you out; your session is kept and retried." },
+      { kind: "fixed", area: "SCRIBBLE", text: "Deleting a note updates Trash immediately instead of lagging behind." },
+    ],
+  },
+  {
+    version: "v0.7.37",
+    date: "10 JUN 2026",
+    tag: "WEB",
+    title: "Security & editing hardening",
+    lede: "Sign-in and shared links are tougher, editing reshaped notes no longer loses work, and your free monthly limit now reads true.",
+    changes: [
+      { kind: "fixed", area: "SCRIBBLE", text: "Editing a note in bullet, summary, or email view no longer does nothing or overwrites your original — edits land where you expect." },
+      { kind: "fixed", area: "WEB", text: "Free plan now shows the correct monthly Scribble limit, matching what's enforced." },
+      { kind: "improved", area: "DESKTOP", text: "Hardened sign-in so only a sign-in you started is accepted." },
+      { kind: "improved", area: "WEB", text: "Hardened redirect handling and added browser security headers across the app." },
+    ],
+  },
+  {
+    version: "v0.7.36",
+    date: "10 JUN 2026",
+    tag: "DESKTOP",
+    title: "Sharper dictation, steadier sign-in",
+    lede: "Whisper handles repetition and Hinglish more gracefully, expired desktop sessions send you back to sign-in cleanly, and this changelog is new.",
+    changes: [
+      { kind: "fixed", area: "DESKTOP", text: "Transcription is more robust against repetition loops, hallucinations, and Hinglish speech." },
+      { kind: "fixed", area: "DESKTOP", text: "An expired session now lands you on the sign-in screen instead of a stuck recording pill." },
+      { kind: "new", area: "WEB", text: "Added this changelog page with a release timeline." },
+    ],
+  },
+  {
     version: "v0.7.35",
     date: "10 JUN 2026",
     tag: "STREAM",

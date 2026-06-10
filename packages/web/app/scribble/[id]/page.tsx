@@ -251,13 +251,20 @@ export default function ScribbleDetailPage() {
 
   const handleSaveEdit = async () => {
     if (!scribble || !editedText) return;
+    // Reshape views (bullets/summary/email/translate) are derived, session-only
+    // representations. Blurring the textarea in one of those modes must NOT
+    // overwrite the canonical edited_text — persist to the in-memory mode buffer
+    // instead. Only the normal view is the note.
+    if (activeMode !== "normal") {
+      setModeContent((p) => ({ ...p, [activeMode]: editedText }));
+      return;
+    }
     setIsSaving(true);
     const { error } = await scribblesService.updateScribble(scribble.id, { edited_text: editedText });
     if (error) {
       toast({ title: "Save failed", variant: "destructive" });
     } else {
       setScribble({ ...scribble, edited_text: editedText });
-      if (activeMode !== "normal") setModeContent((p) => ({ ...p, [activeMode]: editedText }));
       invalidateLibrary();
     }
     setIsSaving(false);

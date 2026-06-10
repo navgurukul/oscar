@@ -31,6 +31,15 @@ function DesktopCallbackContent() {
       const queryParams = new URLSearchParams(window.location.search);
       const desktopState = queryParams.get("desktop_state");
 
+      // Scrub the OAuth tokens (carried in the URL fragment) out of browser
+      // history now that we've captured them above — a back-navigation or a
+      // shared/inspected history entry must not be able to replay them.
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search,
+      );
+
       // Read from both hash (Supabase implicit) and query (Google code flow)
       const accessToken  = hashParams.get("access_token");
       const refreshToken = hashParams.get("refresh_token");
@@ -248,13 +257,13 @@ function DesktopCallbackContent() {
           <p className="mt-3 text-[14px] leading-relaxed" style={{ color: "#5a5852" }}>
             {errorMessage}
           </p>
-          <a
-            href="/auth"
-            className="mt-7 inline-block rounded-full px-5 py-2.5 text-[13px] font-medium"
-            style={{ background: "#1a1816", color: "#f7f4ee" }}
-          >
-            Try again
-          </a>
+          <p className="mt-7 text-[14px] leading-relaxed" style={{ color: "#5a5852" }}>
+            Head back to the Oscar desktop app and click{" "}
+            <span style={{ color: "#1a1816", fontWeight: 600 }}>
+              &ldquo;Continue with Google&rdquo;
+            </span>{" "}
+            again to retry.
+          </p>
         </div>
       </main>
     );

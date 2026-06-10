@@ -660,7 +660,7 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
           <Link href="/privacy"><V2Caps>PRIVACY</V2Caps></Link>
           <Link href="/terms"><V2Caps>TERMS</V2Caps></Link>
           <Link href="/refund-policy"><V2Caps>REFUNDS</V2Caps></Link>
-          <V2Caps>© NAVGURUKUL · 2026</V2Caps>
+          <V2Caps>© SAMYAK ARTH SERVICES PRIVATE LIMITED · 2026</V2Caps>
         </div>
       </footer>
     </main>

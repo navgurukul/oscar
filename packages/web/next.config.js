@@ -1,6 +1,40 @@
 /** @type {import('next').NextConfig} */
 const path = require("path");
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseWs = supabaseUrl.replace(/^https/, "wss");
+
+// Introduced Report-Only: this logs violations without blocking requests, so it
+// can be validated against real traffic (Razorpay checkout, the ONNX CDN script,
+// Supabase REST + realtime) and then promoted to an enforcing
+// `Content-Security-Policy` header. Enforcing a wrong policy would break the app.
+const cspReportOnly = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://checkout.razorpay.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com",
+  "font-src 'self' data:",
+  `connect-src 'self' ${supabaseUrl} ${supabaseWs} https://api.razorpay.com https://lumberjack.razorpay.com https://cdn.jsdelivr.net`,
+  "frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+]
+  .join("; ")
+  .replace(/\s+/g, " ");
+
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // Recording uses getUserMedia, so microphone must stay allowed for same-origin.
+  { key: "Permissions-Policy", value: "camera=(), geolocation=(), microphone=(self)" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+  { key: "Content-Security-Policy-Report-Only", value: cspReportOnly },
+];
+
 const nextConfig = {
   reactStrictMode: false,
   transpilePackages: ["@oscar/shared"],
@@ -17,24 +51,12 @@ const nextConfig = {
       },
     ],
   },
-  // Required for SharedArrayBuffer (WASM multi-threading)
-  /* async headers() {
-    return [
-      {
-        source: "/(.*)",
-        headers: [
-          {
-            key: "Cross-Origin-Opener-Policy",
-            value: "same-origin",
-          },
-          {
-            key: "Cross-Origin-Embedder-Policy",
-            value: "require-corp",
-          },
-        ],
-      },
-    ];
-  }, */
+  async headers() {
+    return [{ source: "/(.*)", headers: securityHeaders }];
+  },
+  // COOP/COEP (Cross-Origin-Opener/Embedder-Policy) are intentionally NOT set:
+  // require-corp breaks cross-origin resources (Razorpay, CDN script, images).
+  // They were needed for SharedArrayBuffer (WASM multi-threading) but are off.
   // Exclude ONNX from webpack bundling (it loads WASM dynamically)
   webpack: (config, { isServer }) => {
     if (!isServer) {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { supabase } from "../../supabase";
+import { beginAuthFlow, clearAuthFlow } from "../../lib/auth-flow";
 import { CoverShowcase } from "./CoverShowcase";
 import { StepIndicator } from "./StepIndicator";
 
@@ -13,7 +14,6 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [oauthState, setOauthState] = useState<{
-    verifier: string;
     url: string;
   } | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -46,6 +46,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
         pollingRef.current = null;
       }
       setOauthState(null);
+      clearAuthFlow();
       setLoading(false);
       setError("Authentication timed out. Please try again.");
     }, 5 * 60 * 1000);
@@ -62,11 +63,16 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
     setError("");
     setLoading(true);
 
+    // Mark this sign-in as in-flight before opening the browser so the
+    // deep-link handler will only accept the auth callback we asked for, and
+    // round-trip the nonce through the web callback as `desktop_state`.
+    const desktopState = beginAuthFlow();
+
     try {
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback`,
+          redirectTo: `${import.meta.env.VITE_WEB_APP_URL || "https://oscar.samyarth.org"}/auth/desktop-callback?desktop_state=${encodeURIComponent(desktopState)}`,
           skipBrowserRedirect: true,
         },
       });
@@ -74,12 +80,25 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
       if (oauthError) throw oauthError;
       if (!data?.url) throw new Error("No OAuth URL returned");
 
-      setOauthState({ verifier: "", url: data.url });
+      setOauthState({ url: data.url });
       await openUrl(data.url);
     } catch (authError: unknown) {
+      clearAuthFlow();
       setError((authError as Error).message);
       setLoading(false);
     }
+  };
+
+  // Abandon an in-flight sign-in: stop polling, drop the in-flight flag so a
+  // late callback is rejected, and re-enable the button.
+  const cancelSignIn = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    setOauthState(null);
+    clearAuthFlow();
+    setLoading(false);
   };
 
   return (
@@ -147,6 +166,16 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
               </svg>
               {loading ? "Opening browser..." : "Continue with Google"}
             </button>
+
+            {oauthState && (
+              <button
+                type="button"
+                className="mt-3 w-full rounded-lg border border-slate-200 bg-transparent px-4 py-2.5 text-[0.9rem] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                onClick={cancelSignIn}
+              >
+                Cancel
+              </button>
+            )}
 
             <p className="terms-text">
               By signing up, you agree to our{" "}
