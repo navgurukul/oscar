@@ -10,108 +10,15 @@ import {
   V2Wordmark,
   V2MarketingHeader,
 } from "@/components/v2/V2Primitives";
+import {
+  RELEASES,
+  CHANGELOG_FILTERS,
+  type ChangeKind,
+  type ChangeArea,
+  type Release,
+} from "@/lib/changelog.data";
 
-type ChangeKind = "new" | "improved" | "fixed";
-
-interface Change {
-  kind: ChangeKind;
-  area: string;
-  text: string;
-}
-
-interface Release {
-  version: string;
-  date: string;
-  title: string;
-  lede?: string;
-  tag: string;
-  featured?: boolean;
-  vignette?: boolean;
-  changes: Change[];
-}
-
-const RELEASES: Release[] = [
-  {
-    version: "v2.4",
-    date: "29 MAY 2026",
-    tag: "STREAM",
-    featured: true,
-    vignette: true,
-    title: "Vibe Coding — dictation that speaks your editor's language",
-    lede: "Hold Ctrl + Space inside Cursor, VS Code, or your terminal and Oscar now writes code-aware text: it knows when you mean a symbol, a path, or prose, and formats accordingly.",
-    changes: [
-      { kind: "new", area: "STREAM", text: "Vibe Coding mode auto-detects code editors and switches to a code-aware cleanup model." },
-      { kind: "new", area: "STREAM", text: "Inline mode picker on the pill — switch between Prose, Code, and Commit-message styles mid-dictation." },
-      { kind: "improved", area: "STREAM", text: "Context detection is ~40% faster; the pill now labels the target app before you speak." },
-      { kind: "fixed", area: "STREAM", text: "Fixed a case where backticks were doubled when dictating into Markdown code fences." },
-    ],
-  },
-  {
-    version: "v2.3",
-    date: "06 MAY 2026",
-    tag: "SCRIBBLE",
-    title: "Translate & Transform, now for every Scribble",
-    lede: "Turn any voice note into a clean email, a tweet thread, or a different language — without leaving the editor.",
-    changes: [
-      { kind: "new", area: "SCRIBBLE", text: "Translate a Scribble into 14 languages while keeping its structure and TL;DR intact." },
-      { kind: "new", area: "SCRIBBLE", text: "Transform presets: Email, Slack message, Tweet thread, Meeting recap, and a custom prompt." },
-      { kind: "improved", area: "SCRIBBLE", text: "Version history now shows a side-by-side diff between any two saved revisions." },
-      { kind: "improved", area: "WEB", text: "Public share links render the AI margin notes as collapsible footnotes." },
-      { kind: "fixed", area: "SCRIBBLE", text: "Resolved a rare loss of the distilled summary when editing during processing." },
-    ],
-  },
-  {
-    version: "v2.2",
-    date: "11 APR 2026",
-    tag: "MINUTES",
-    title: "Minutes joins your calendar",
-    lede: "Connect Google or Outlook and Oscar offers to record the moment a call begins — no more scrambling for the record button.",
-    changes: [
-      { kind: "new", area: "MINUTES", text: "Calendar auto-join: a one-tap prompt appears 30 seconds before any scheduled call." },
-      { kind: "new", area: "MINUTES", text: "Speaker labels — Oscar separates voices and attributes decisions and action items to people." },
-      { kind: "improved", area: "MINUTES", text: "Transcript view now scrolls in lockstep with audio playback and is fully searchable." },
-      { kind: "fixed", area: "DESKTOP", text: "Fixed system-audio capture dropping on macOS after waking from sleep." },
-    ],
-  },
-  {
-    version: "v2.1",
-    date: "18 MAR 2026",
-    tag: "TEAMS",
-    title: "Team workspaces are generally available",
-    lede: "Shared folders, roles, and a single billing relationship for the whole org.",
-    changes: [
-      { kind: "new", area: "TEAMS", text: "Workspaces with Owner / Admin / Member roles and per-folder sharing." },
-      { kind: "new", area: "TEAMS", text: "Audit log records exports, deletions, role changes, and share events." },
-      { kind: "improved", area: "TEAMS", text: "Analytics dashboard for minutes captured, Scribbles created, and active members." },
-      { kind: "fixed", area: "WEB", text: "Invite-acceptance links no longer expire early when opened on mobile." },
-    ],
-  },
-  {
-    version: "v2.0",
-    date: "24 FEB 2026",
-    tag: "THE REDESIGN",
-    title: "A warmer, quieter Oscar",
-    lede: "A ground-up redesign — a cream editorial canvas, a presence-not-a-button pill, and AI that speaks from the margin instead of interrupting.",
-    changes: [
-      { kind: "new", area: "BRAND", text: "New visual language: warm cream stage, ink type, terracotta reserved for live audio." },
-      { kind: "improved", area: "DESKTOP", text: "Desktop app rebuilt — half the memory footprint and a faster cold start." },
-      { kind: "improved", area: "WEB", text: "Single-Scribble editor in six reading states, with AI notes in the right margin." },
-      { kind: "fixed", area: "WEB", text: "Countless contrast and focus-state fixes across the web app." },
-    ],
-  },
-];
-
-const FILTER_KEYS = ["All", "Stream", "Minutes", "Scribble", "Web", "Teams"] as const;
-type FilterKey = (typeof FILTER_KEYS)[number];
-
-const FILTER_AREA_MAP: Record<FilterKey, string | null> = {
-  All: null,
-  Stream: "STREAM",
-  Minutes: "MINUTES",
-  Scribble: "SCRIBBLE",
-  Web: "WEB",
-  Teams: "TEAMS",
-};
+const GITHUB_RELEASES_URL = "https://github.com/navgurukul/oscar/releases";
 
 // ─── ClPill ──────────────────────────────────────────────────────────────
 function ClPill({ kind }: { kind: ChangeKind }) {
@@ -145,7 +52,7 @@ function ClPill({ kind }: { kind: ChangeKind }) {
 }
 
 // ─── ClChange ────────────────────────────────────────────────────────────
-function ClChange({ kind, area, children }: { kind: ChangeKind; area: string; children: React.ReactNode }) {
+function ClChange({ kind, area, children }: { kind: ChangeKind; area: ChangeArea; children: React.ReactNode }) {
   return (
     <li
       className="flex items-start gap-4 py-3.5"
@@ -167,6 +74,8 @@ function ClChange({ kind, area, children }: { kind: ChangeKind; area: string; ch
 }
 
 // ─── ClFeatureVignette ───────────────────────────────────────────────────
+// The Stream pill as presence — terracotta only while audio is live, and a
+// "on your machine" caption that matches the real local-first behaviour.
 function ClFeatureVignette() {
   return (
     <div
@@ -184,7 +93,7 @@ function ClFeatureVignette() {
           className="ml-3"
           style={{ fontFamily: v2Mono, fontSize: 10, letterSpacing: "0.14em", color: "#7a7670" }}
         >
-          CURSOR · main.rs
+          STREAM · ON YOUR MACHINE
         </span>
       </div>
       <div className="px-7 py-9 flex flex-col items-center gap-6">
@@ -215,7 +124,7 @@ function ClFeatureVignette() {
             ))}
           </span>
           <span style={{ fontFamily: v2Serif, fontSize: 12.5, color: v2.cream2 }}>
-            vibe coding · 0:12
+            listening · 0:08
           </span>
         </div>
         <p
@@ -228,9 +137,9 @@ function ClFeatureVignette() {
             textAlign: "center",
           }}
         >
-          &ldquo;refactor the parser to return a{" "}
-          <span style={{ color: v2.accentSoft }}>Result</span> and bubble the error
-          up&rdquo;
+          Audio is transcribed{" "}
+          <span style={{ color: v2.accentSoft }}>locally</span> — your dictation
+          never leaves the desktop or reaches the web.
         </p>
       </div>
     </div>
@@ -238,7 +147,7 @@ function ClFeatureVignette() {
 }
 
 // ─── ClRelease ───────────────────────────────────────────────────────────
-function ClRelease({ release, areaFilter }: { release: Release; areaFilter: string | null }) {
+function ClRelease({ release, areaFilter }: { release: Release; areaFilter: ChangeArea | null }) {
   const changes = areaFilter
     ? release.changes.filter((c) => c.area === areaFilter)
     : release.changes;
@@ -352,11 +261,13 @@ function ClRelease({ release, areaFilter }: { release: Release; areaFilter: stri
 
 // ═══ PAGE ═════════════════════════════════════════════════════════════════
 export default function ChangelogPage() {
-  const [filter, setFilter] = useState<FilterKey>("All");
+  const [filterLabel, setFilterLabel] = useState("All");
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
 
-  const areaFilter = FILTER_AREA_MAP[filter];
+  const areaFilter =
+    CHANGELOG_FILTERS.find((f) => f.label === filterLabel)?.area ?? null;
+
   const visibleReleases = RELEASES.filter((r) =>
     areaFilter ? r.changes.some((c) => c.area === areaFilter) : true,
   );
@@ -435,7 +346,9 @@ export default function ChangelogPage() {
               </form>
             )}
             <a
-              href="/changelog/rss.xml"
+              href={GITHUB_RELEASES_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2"
               style={{ color: v2.inkFaint }}
             >
@@ -448,19 +361,19 @@ export default function ChangelogPage() {
                   strokeLinecap="round"
                 />
               </svg>
-              <V2Caps size={9}>RSS FEED</V2Caps>
+              <V2Caps size={9}>ALL RELEASES</V2Caps>
             </a>
           </div>
         </div>
 
         {/* filter chips */}
         <div className="mt-10 md:mt-12 flex items-center gap-2 md:gap-2.5 flex-wrap">
-          {FILTER_KEYS.map((label) => {
-            const active = filter === label;
+          {CHANGELOG_FILTERS.map(({ label }) => {
+            const active = filterLabel === label;
             return (
               <button
                 key={label}
-                onClick={() => setFilter(label)}
+                onClick={() => setFilterLabel(label)}
                 className="rounded-full text-[12.5px] font-medium transition-colors"
                 style={{
                   padding: "7px 15px",
@@ -483,14 +396,12 @@ export default function ChangelogPage() {
         style={{ borderTop: `1px solid ${v2.rule}` }}
       >
         <div className="space-y-0">
-          {visibleReleases.map((r, i) => (
-            <ClRelease key={i} release={r} areaFilter={areaFilter} />
+          {visibleReleases.map((r) => (
+            <ClRelease key={r.version} release={r} areaFilter={areaFilter} />
           ))}
 
           {visibleReleases.length === 0 && (
-            <div
-              className="grid grid-cols-12 gap-x-6 md:gap-x-10"
-            >
+            <div className="grid grid-cols-12 gap-x-6 md:gap-x-10">
               <div className="hidden md:block md:col-span-3" />
               <div
                 className="col-span-12 md:col-span-9 pb-20"
@@ -511,7 +422,7 @@ export default function ChangelogPage() {
           )}
         </div>
 
-        {/* tail */}
+        {/* tail — older history lives on GitHub */}
         <div className="grid grid-cols-12 gap-x-6 md:gap-x-10">
           <div className="hidden md:block md:col-span-3" />
           <div
@@ -531,7 +442,16 @@ export default function ChangelogPage() {
                 fontStyle: "italic",
               }}
             >
-              &hellip;and that&rsquo;s where Oscar began.
+              Earlier builds &mdash;{" "}
+              <a
+                href={GITHUB_RELEASES_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: v2.accent, fontStyle: "normal" }}
+              >
+                see the full release history on GitHub
+              </a>
+              .
             </p>
           </div>
         </div>
