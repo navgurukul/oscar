@@ -37,6 +37,21 @@ export async function getOrCreateDefaultOrg(
     console.error("[org] ensure_default_org failed", error);
     return null;
   }
+
+  // After the personal org is in place, check if the user's email domain
+  // matches an org with auto_join_email_domain set. If so, add them as a
+  // Member and flip their active org to the team org. Non-blocking — if it
+  // fails the user still has their personal org from ensure_default_org.
+  if (userEmail) {
+    const { error: joinErr } = await supabase.rpc("auto_join_matching_org", {
+      p_user_id: userId,
+      p_user_email: userEmail,
+    });
+    if (joinErr) {
+      console.error("[org] auto_join_matching_org failed", joinErr);
+    }
+  }
+
   return (data as string | null) ?? null;
 }
 
@@ -202,7 +217,8 @@ export async function createOrganization(
   ownerId: string,
   ownerEmail: string,
   name: string,
-  slug?: string
+  slug?: string,
+  autoJoinEmailDomain?: string | null
 ): Promise<Organization | null> {
   const supabase = getSupabaseAdmin();
   const fallback = (slug ?? name)
@@ -222,9 +238,18 @@ export async function createOrganization(
     candidate = `${fallback}-${n + 1}`;
   }
 
+  const insertPayload: Record<string, unknown> = {
+    name,
+    slug: candidate,
+    created_by: ownerId,
+  };
+  if (autoJoinEmailDomain) {
+    insertPayload.auto_join_email_domain = autoJoinEmailDomain;
+  }
+
   const { data: org, error: orgError } = await supabase
     .from("organizations")
-    .insert({ name, slug: candidate, created_by: ownerId })
+    .insert(insertPayload)
     .select("*")
     .single();
 
@@ -256,6 +281,7 @@ export async function updateOrganization(
       | "logo_url"
       | "auto_publish_minutes"
       | "default_meeting_visibility"
+      | "auto_join_email_domain"
     >
   >
 ): Promise<Organization | null> {
