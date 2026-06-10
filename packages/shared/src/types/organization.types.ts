@@ -12,9 +12,17 @@ export interface Organization {
   /**
    * When true, meetings recorded by members are auto-published (visibility
    * "public" + a share token) so the summary surfaces a public link. Default
-   * false. See migration 014.
+   * false. See migration 014. Superseded by `default_meeting_visibility` —
+   * retained for back-compat; the auto-publish trigger no longer reads it.
    */
   auto_publish_minutes: boolean;
+  /**
+   * Visibility applied to every new meeting a member records, unless an
+   * explicit choice is made. "public" → a /m/{token} share link in the summary
+   * (anyone with the link can read), "org" → shared with the workspace,
+   * "private" → owner only. Product default is "public". See migration 015.
+   */
+  default_meeting_visibility: "private" | "org" | "public";
 }
 
 export interface OrganizationMember {

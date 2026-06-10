@@ -20,6 +20,7 @@ export async function PATCH(
     slug?: string;
     logo_url?: string | null;
     auto_publish_minutes?: boolean;
+    default_meeting_visibility?: string;
   };
   try {
     body = await request.json();
@@ -36,6 +37,13 @@ export async function PATCH(
   if (body.logo_url !== undefined) patch.logo_url = body.logo_url;
   if (typeof body.auto_publish_minutes === "boolean") {
     patch.auto_publish_minutes = body.auto_publish_minutes;
+  }
+  if (
+    body.default_meeting_visibility === "private" ||
+    body.default_meeting_visibility === "org" ||
+    body.default_meeting_visibility === "public"
+  ) {
+    patch.default_meeting_visibility = body.default_meeting_visibility;
   }
 
   if (Object.keys(patch).length === 0) {

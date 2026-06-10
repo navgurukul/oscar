@@ -55,9 +55,9 @@ export function OrgDetailsForm({ organization, role, onUpdated }: Props) {
   const [name, setName] = useState(organization.name);
   const [slug, setSlug] = useState(organization.slug);
   const [busy, setBusy] = useState(false);
-  const [autoPublish, setAutoPublish] = useState(
-    organization.auto_publish_minutes
-  );
+  const [visibility, setVisibility] = useState<
+    "private" | "org" | "public"
+  >(organization.default_meeting_visibility ?? "public");
   const [sharingBusy, setSharingBusy] = useState(false);
 
   const dirty = name.trim() !== organization.name || slug.trim() !== organization.slug;
@@ -83,24 +83,27 @@ export function OrgDetailsForm({ organization, role, onUpdated }: Props) {
     }
   };
 
-  const toggleAutoPublish = async () => {
-    if (!canEdit || sharingBusy) return;
-    const next = !autoPublish;
+  const changeVisibility = async (next: "private" | "org" | "public") => {
+    if (!canEdit || sharingBusy || next === visibility) return;
+    const prev = visibility;
     setSharingBusy(true);
-    setAutoPublish(next); // optimistic
+    setVisibility(next); // optimistic
     try {
       const updated = await organizationService.update(organization.id, {
-        auto_publish_minutes: next,
+        default_meeting_visibility: next,
       });
       onUpdated?.(updated);
       toast({
-        title: next ? "Auto-publish on" : "Auto-publish off",
-        description: next
-          ? "New meetings get a public share link in their summary."
-          : "New meetings stay private unless you share them.",
+        title: "Default visibility updated",
+        description:
+          next === "public"
+            ? "New meetings get a public share link in their summary."
+            : next === "org"
+            ? "New meetings are shared with the workspace only."
+            : "New meetings stay private unless you share them.",
       });
     } catch (err) {
-      setAutoPublish(!next); // revert
+      setVisibility(prev); // revert
       toast({
         title: "Update failed",
         description: err instanceof Error ? err.message : "Try again.",
@@ -110,6 +113,29 @@ export function OrgDetailsForm({ organization, role, onUpdated }: Props) {
       setSharingBusy(false);
     }
   };
+
+  const VISIBILITY_OPTIONS: Array<{
+    value: "public" | "org" | "private";
+    label: string;
+    blurb: string;
+  }> = [
+    {
+      value: "public",
+      label: "Public link",
+      blurb:
+        "Every new meeting gets a public /m/ link in its summary — anyone with the link can read it, no sign-in.",
+    },
+    {
+      value: "org",
+      label: "Workspace",
+      blurb: "New meetings are visible to workspace members only.",
+    },
+    {
+      value: "private",
+      label: "Private",
+      blurb: "New meetings stay private to the recorder until shared.",
+    },
+  ];
 
   return (
     <div className="space-y-12">
@@ -158,40 +184,66 @@ export function OrgDetailsForm({ organization, role, onUpdated }: Props) {
           )}
         </div>
         <div className="col-span-12 md:col-span-9">
-          <div
-            className="flex items-start justify-between gap-6 py-4"
-            style={{ borderBottom: `1px solid ${v2.rule}` }}
+          <p
+            className="text-[14px] font-medium"
+            style={{ color: v2.ink }}
           >
-            <div className="min-w-0">
-              <p className="text-[14px] font-medium" style={{ color: v2.ink }}>
-                Auto-publish new Minutes
-              </p>
-              <p
-                className="mt-1 text-[12px] leading-relaxed"
-                style={{ color: v2.inkSoft, maxWidth: 460 }}
-              >
-                Every meeting a member records gets a public link in its summary —
-                anyone with the link can read it, no sign-in. Off by default;
-                existing meetings stay private.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={autoPublish}
-              aria-label="Auto-publish new Minutes"
-              disabled={!canEdit || sharingBusy}
-              onClick={() => void toggleAutoPublish()}
-              className="relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50"
-              style={{ background: autoPublish ? v2.accent : v2.rule }}
-            >
-              <span
-                className="inline-block h-5 w-5 rounded-full bg-white transition-transform"
-                style={{
-                  transform: autoPublish ? "translateX(22px)" : "translateX(2px)",
-                }}
-              />
-            </button>
+            Default visibility for new Minutes
+          </p>
+          <p
+            className="mt-1 text-[12px] leading-relaxed"
+            style={{ color: v2.inkSoft, maxWidth: 480 }}
+          >
+            Applies to meetings recorded from now on. Existing meetings keep their
+            current visibility — change any one from its own page.
+          </p>
+          <div className="mt-4 space-y-2">
+            {VISIBILITY_OPTIONS.map((opt) => {
+              const active = visibility === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  disabled={!canEdit || sharingBusy}
+                  onClick={() => void changeVisibility(opt.value)}
+                  className="flex w-full items-start gap-3 rounded-xl px-4 py-3 text-left transition-colors disabled:opacity-50"
+                  style={{
+                    border: `1px solid ${active ? v2.accent : v2.rule}`,
+                    background: active ? v2.accentSoft : "transparent",
+                  }}
+                >
+                  <span
+                    className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+                    style={{
+                      border: `1.5px solid ${active ? v2.accent : v2.rule}`,
+                    }}
+                  >
+                    {active && (
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ background: v2.accent }}
+                      />
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span
+                      className="block text-[13.5px] font-medium"
+                      style={{ color: v2.ink }}
+                    >
+                      {opt.label}
+                    </span>
+                    <span
+                      className="mt-0.5 block text-[12px] leading-relaxed"
+                      style={{ color: v2.inkSoft }}
+                    >
+                      {opt.blurb}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </section>
