@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { meetingsService } from "./services/meetings.service";
 import { aiService } from "./services/ai.service";
 import { scribblesService } from "./services/scribbles.service";
+import { streamsService } from "./services/streams.service";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { homeDir } from "@tauri-apps/api/path";
@@ -1950,6 +1951,9 @@ function App() {
       const newTranscript: LocalTranscript = {
         id: crypto.randomUUID(),
         text: finalText,
+        // Keep the raw transcript locally so it can be persisted alongside the
+        // formatted text if the user later leaves feedback on this dictation.
+        rawText: rawWhisperText ?? null,
         createdAt: new Date().toISOString(),
         ...dictationMetadata,
       };
@@ -2803,6 +2807,26 @@ function App() {
                       saveSetting("localTranscripts", updated);
                       return updated;
                     });
+                  }}
+                  onSubmitFeedback={async (transcript, feedback) => {
+                    // Stream stays local until the user gives feedback. On
+                    // submit we persist one row carrying the original
+                    // transcript, the formatted text, and the feedback. Stream
+                    // is signed-in-only, so record() always has a user_id.
+                    const id = await streamsService.record({
+                      raw_transcript: transcript.rawText ?? "",
+                      formatted_text: transcript.text,
+                      feedback,
+                      app_key: transcript.dictation_app_key ?? null,
+                      dictation_category:
+                        transcript.dictation_category ?? null,
+                      dictation_variant: transcript.dictation_variant ?? null,
+                      dictation_context_source:
+                        transcript.dictation_context_source ?? null,
+                      dictation_prompt_version:
+                        transcript.dictation_prompt_version ?? null,
+                    });
+                    if (!id) throw new Error("Failed to save feedback");
                   }}
                 />
               )}

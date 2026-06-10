@@ -22,7 +22,12 @@ export interface DictationScribbleMetadata {
 // Local transcript (desktop-only, but defined centrally for consistency)
 export interface LocalTranscript extends DictationScribbleMetadata {
   id: string;
+  /** AI-formatted / cleaned text — what the user sees and pastes. */
   text: string;
+  /** Raw Whisper transcript, kept so it can be persisted alongside the
+   *  formatted text if the user later submits feedback on this dictation.
+   *  Optional: dictations created before this was added won't have it. */
+  rawText?: string | null;
   createdAt: string;
 }
 
