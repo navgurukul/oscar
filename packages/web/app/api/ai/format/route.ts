@@ -14,17 +14,25 @@ import {
   authenticateRequest,
   corsPreflightResponse,
   createPlainTextStreamResponse,
+  enforceRecordingQuota,
   parseJsonBody,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
 import { getMercuryApiKey, startMercuryStream } from "@/lib/server/mercury";
 import { buildOrgContext, joinSystemPrompt } from "@/lib/server/orgContext";
+import { usageService } from "@/lib/services/usage.service";
 
 const REQUEST_TIMEOUT_MS = 12000;
 
 const LONG_TEXT_THRESHOLD = 2500;
 const CHUNK_SIZE = 1600;
 const MAX_TOKENS_BUFFER = 200;
+// Hard ceiling on parallel chunk streams per request. Paragraph-splitting a
+// pathological input (many blank lines) could otherwise fan out dozens of
+// concurrent model streams off a single rate-limit token. The 12k input cap
+// keeps size-based chunking well under this, so exceeding it means the
+// paragraph split went wide — fall back to size-based chunking instead.
+const MAX_CHUNKS = 10;
 
 export function OPTIONS() {
   return corsPreflightResponse();
@@ -62,16 +70,30 @@ export async function POST(req: NextRequest) {
     ? bodyResult.data.documentIds.filter((id): id is string => typeof id === "string")
     : undefined;
 
+  // Server-side quota gate. Format is the recording entry point for both web and
+  // desktop Scribbles, so enforcing here closes the revenue leak regardless of
+  // client tampering.
+  const quotaResponse = await enforceRecordingQuota(user.id);
+  if (quotaResponse) return applyCors(quotaResponse);
+
   try {
+    const sizeChunks = () =>
+      rawText.match(new RegExp(`.{1,${CHUNK_SIZE}}(\\s|$)`, "g"))
+        ?.map((s) => s.trim())
+        .filter(Boolean) ?? [rawText];
+
     const isLong = rawText.length > LONG_TEXT_THRESHOLD;
     const paraChunks = rawText.split(/\n{2,}/).filter(Boolean);
-    const safeChunks = isLong
+    let safeChunks = isLong
       ? paraChunks.length > 1
         ? paraChunks
-        : rawText.match(new RegExp(`.{1,${CHUNK_SIZE}}(\\s|$)`, "g"))
-            ?.map((s) => s.trim())
-            .filter(Boolean) ?? [rawText]
+        : sizeChunks()
       : [rawText];
+    // Bound the parallel fan-out: a wide paragraph split collapses to size-based
+    // chunking, which the 12k input cap keeps under MAX_CHUNKS.
+    if (safeChunks.length > MAX_CHUNKS) {
+      safeChunks = sizeChunks();
+    }
 
     const orgCtx = await buildOrgContext(user.id, {
       documentIds,
@@ -128,6 +150,15 @@ export async function POST(req: NextRequest) {
             if (i < chunkStreams.length - 1) {
               controller.enqueue(encoder.encode("\n\n"));
             }
+          }
+          // Meter the recording server-side once the work is done. This is the
+          // single authoritative increment point (the old client-driven
+          // /api/usage/increment is now a read-only refresh). Best-effort: a
+          // counter write failure must not corrupt the user's output.
+          try {
+            await usageService.incrementRecordingUsage(user.id);
+          } catch (incErr) {
+            console.error("Failed to increment recording usage:", incErr);
           }
         } finally {
           controller.close();

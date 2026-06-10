@@ -1,9 +1,18 @@
 import { GoogleGenerativeAI, type GenerationConfig } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
+import { API_CONFIG, ERROR_MESSAGES, SUBSCRIPTION_CONFIG } from "@/lib/constants";
 import { validateUserInput, wrapUserInput } from "@/lib/prompts";
 import { createClient } from "@/lib/supabase/server";
+import { usageService } from "@/lib/services/usage.service";
+
+// Absolute ceiling on any single AI-route input. The expensive routes (format)
+// fan out one model stream per chunk, so an uncapped transcript is a cost-
+// amplification vector — one rate-limit token, unbounded parallel spend. 12k
+// chars (~2k words / ~15 min of speech) is a generous single-Scribble bound and
+// mirrors the publish route's cap. Longer input is rejected, not silently
+// truncated, so the user knows to split the recording.
+export const MAX_AI_INPUT_CHARS = 12000;
 
 export type AIMessage = {
   role: "system" | "user" | "assistant";
@@ -126,7 +135,11 @@ export function getGeminiApiKey(): string {
 
 export function validateAndWrapInput(
   value: unknown,
-  { requiredError, tagName }: { requiredError: string; tagName: string }
+  {
+    requiredError,
+    tagName,
+    maxLength = MAX_AI_INPUT_CHARS,
+  }: { requiredError: string; tagName: string; maxLength?: number }
 ):
   | { success: true; text: string; wrappedText: string }
   | { success: false; response: NextResponse } {
@@ -135,6 +148,19 @@ export function validateAndWrapInput(
     return {
       success: false,
       response: NextResponse.json({ error: requiredError }, { status: 400 }),
+    };
+  }
+
+  if (text.length > maxLength) {
+    return {
+      success: false,
+      response: NextResponse.json(
+        {
+          error: "Input too large",
+          details: `Text exceeds the ${maxLength.toLocaleString()}-character limit. Split it into shorter recordings.`,
+        },
+        { status: 413 }
+      ),
     };
   }
 
@@ -153,6 +179,31 @@ export function validateAndWrapInput(
   }
 
   return { success: true, text, wrappedText: wrapUserInput(text, tagName) };
+}
+
+// ── Usage quota ──────────────────────────────────────────────────────────────
+// Server-side enforcement of the free-tier monthly recording quota. The counter
+// itself is incremented authoritatively in the format route (see that route),
+// so a tampered client cannot earn unlimited AI spend by skipping the old
+// client-driven /api/usage/increment call. Returns a 402 response when the org
+// is over quota, or null to proceed. Pro orgs always pass.
+export async function enforceRecordingQuota(
+  userId: string
+): Promise<NextResponse | null> {
+  const { allowed, current } = await usageService.canUserRecord(userId);
+  if (allowed) return null;
+  return NextResponse.json(
+    {
+      error: "Monthly Scribble limit reached",
+      message:
+        "You've reached your free monthly Scribble limit. Upgrade to Pro for unlimited Scribbles.",
+      current,
+      remaining: 0,
+      upgradeRequired: true,
+      limit: SUBSCRIPTION_CONFIG.FREE_ORG_MONTHLY_RECORDINGS,
+    },
+    { status: 402 }
+  );
 }
 
 // ── Response helpers ───────────────────────────────────────────────────────

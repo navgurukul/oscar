@@ -8,6 +8,7 @@ import {
 } from "@/lib/middleware/rate-limit";
 import {
   createPlainTextStreamResponse,
+  enforceRecordingQuota,
   getOptionalTrimmedString,
   parseJsonBody,
   validateAndWrapInput,
@@ -42,6 +43,10 @@ export async function POST(req: NextRequest) {
     tagName: "content",
   });
   if (!inputResult.success) return inputResult.response;
+
+  // Block further AI spend once the org is over its free monthly quota.
+  const quotaResponse = await enforceRecordingQuota(user.id);
+  if (quotaResponse) return quotaResponse;
 
   try {
     const sanitizedTitle = sanitizeUserInput(
