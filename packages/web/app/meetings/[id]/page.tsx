@@ -27,7 +27,7 @@ import { MeetingMetadataEditor } from "@/components/meetings/MeetingMetadataEdit
 import { DeleteMeetingDialog } from "@/components/meetings/DeleteMeetingDialog";
 import { ShareDialog } from "@/components/org/ShareDialog";
 import { useToast } from "@/hooks/use-toast";
-import { copyMarkdownAsRichText } from "@oscar/shared";
+import { appendMinutesShareFooter, copyMarkdownAsRichText } from "@oscar/shared";
 import type {
   MeetingAttendee,
   MeetingTranscriptSegment,
@@ -293,13 +293,12 @@ export default function MeetingDetailPage() {
     if (!meeting) return;
     const md = stripCitations(meeting.notesMarkdown);
     const url = meetingShareUrl(meeting, window.location.origin);
-    const payload = url ? `${md}\n\n---\n\n**Shared link:** ${url}` : md;
-    await copyMarkdownAsRichText(payload);
+    await copyMarkdownAsRichText(appendMinutesShareFooter(md, url));
     toast({
       title: "Copied!",
       description: url
-        ? "Notes + public link copied to clipboard."
-        : "Notes copied to clipboard.",
+        ? "Minutes + Oscar link copied to clipboard."
+        : "Minutes copied to clipboard.",
     });
   }, [meeting, toast]);
 
@@ -870,6 +869,24 @@ function NotesTab({
               Edit notes
             </button>
           </aside>
+        </div>
+      )}
+
+      {shareUrl && (
+        <div
+          className="mt-14 pt-7"
+          style={{ borderTop: `1px solid ${v2.rule}` }}
+        >
+          <V2Caps color={v2.inkFaint}>OPEN THE FULL MINUTES</V2Caps>
+          <a
+            href={shareUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-flex items-center gap-1.5 text-[14px] font-medium"
+            style={{ color: v2.accent }}
+          >
+            Open the full minutes in Oscar →
+          </a>
         </div>
       )}
     </section>
