@@ -41,13 +41,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   // Every signed-in surface and every marketing/auth route now mounts its
   // own V2 header. The legacy FloatingNavbar / AuthEdgeButton / HomeRecordingButton
-  // were retired with the v2 redesign — kept only the Footer, which still
-  // injects globally on landing (signed-out) and settings (signed-in).
+  // were retired with the v2 redesign — kept only the Footer, which now
+  // injects on settings (signed-in) only.
   const isAuthenticated = !!session;
-  const isLandingPage = pathname === "/";
   const isSettingsPage = pathname === "/settings";
-  const shouldShowFooter =
-    (!isAuthenticated && isLandingPage) || (isAuthenticated && isSettingsPage);
+  const shouldShowFooter = isAuthenticated && isSettingsPage;
 
   return (
     <div className="flex flex-col min-h-screen">
