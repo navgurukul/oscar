@@ -33,6 +33,7 @@ import {
   V2WebHeader,
 } from "@/components/v2/V2Primitives";
 import { ROUTES } from "@/lib/constants";
+import { stripCitations } from "@/lib/meetings/markdown";
 
 function formatDateCap(iso: string): string {
   const d = new Date(iso);
@@ -141,8 +142,12 @@ export default function MeetingsPage() {
         (m) =>
           m.meetingTitle.toLowerCase().includes(q) ||
           m.attendeesCompact.toLowerCase().includes(q) ||
-          m.notesMarkdown.toLowerCase().includes(q) ||
-          m.myNotesMarkdown.toLowerCase().includes(q)
+          // Strip evidence/citation artifacts first — the raw markdown carries
+          // <!-- ev:start=… src=microphone --> comments and [[…]] tokens, which
+          // otherwise false-positive on "ev", "src", "microphone", or stray
+          // timestamp fragments for nearly every meeting.
+          stripCitations(m.notesMarkdown).toLowerCase().includes(q) ||
+          stripCitations(m.myNotesMarkdown).toLowerCase().includes(q)
       );
     }
     return result;
