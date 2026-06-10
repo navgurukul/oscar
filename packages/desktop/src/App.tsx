@@ -380,6 +380,7 @@ function App() {
     segmentQueue: minutesSegmentQueue,
     segmentsCompleted: minutesSegmentsCompleted,
     segmentsTotal: minutesSegmentsTotal,
+    failedSegments: minutesFailedSegments,
     systemAudioWarning,
     clearSystemAudioWarning,
     startRecording: startMeetingRecording,
@@ -2926,6 +2927,7 @@ function App() {
                   minutesSegmentQueue={minutesSegmentQueue}
                   minutesSegmentsCompleted={minutesSegmentsCompleted}
                   minutesSegmentsTotal={minutesSegmentsTotal}
+                  minutesFailedSegments={minutesFailedSegments}
                 />
                 </div>
               )}

@@ -196,6 +196,9 @@ interface MeetingsTabProps {
   minutesSegmentQueue: number;
   minutesSegmentsCompleted: number;
   minutesSegmentsTotal: number;
+  /** Segment indices whose transcription failed; the result phase warns the
+   *  user their notes may have gaps. */
+  minutesFailedSegments?: number[];
   hostName: string;
   hostEmail: string;
 }
@@ -535,6 +538,7 @@ export function MeetingsTab({
   minutesSegmentQueue,
   minutesSegmentsCompleted,
   minutesSegmentsTotal,
+  minutesFailedSegments = [],
   hostName,
   hostEmail,
 }: MeetingsTabProps) {
@@ -2368,6 +2372,13 @@ export function MeetingsTab({
           )}
 
           {systemAudioNotice && <div className="mt-3">{systemAudioNotice}</div>}
+
+          {minutesFailedSegments.length > 0 && (
+            <div className="mt-3 rounded-xl border border-orange-300 bg-orange-50 px-3.5 py-3 text-[0.9rem] leading-[1.5] text-orange-800">
+              {minutesFailedSegments.length} of {minutesSegmentsTotal} audio
+              segments could not be transcribed — notes may have gaps.
+            </div>
+          )}
 
           {/* tab bar */}
           <div className={RESULT_TABS_CLASS_NAME}>

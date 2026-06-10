@@ -81,6 +81,11 @@ export function useMinutesRecorder({
   const [segmentQueue, setSegmentQueue] = useState(0);
   const [segmentsCompleted, setSegmentsCompleted] = useState(0);
   const [segmentsTotal, setSegmentsTotal] = useState(0);
+  // Indices of segments whose transcription threw. segmentsCompleted advances
+  // for these too (the worker counts them in `finally`), so without this the
+  // progress bar reads "done" while the audio silently vanished. The result
+  // phase reads this to warn the user the notes may have gaps.
+  const [failedSegments, setFailedSegments] = useState<number[]>([]);
   const [systemAudioWarning, setSystemAudioWarning] = useState("");
   // Mic-only mute. True = the local microphone is silenced; system-audio
   // capture of the other participants keeps running. See setMicMuted below.
@@ -317,6 +322,7 @@ export function useMinutesRecorder({
     setSegmentQueue(0);
     setSegmentsCompleted(0);
     setSegmentsTotal(0);
+    setFailedSegments([]);
     setTranscriptionStatus("idle");
   }, [stopVadMonitor, setSessionUsesSystemAudio]);
 
@@ -416,6 +422,11 @@ export function useMinutesRecorder({
         }
       } catch (err) {
         console.error("[meeting] segment transcription failed:", err);
+        setFailedSegments((prev) =>
+          prev.includes(job.segmentIndex)
+            ? prev
+            : [...prev, job.segmentIndex],
+        );
       } finally {
         setSegmentsCompleted((prev) => prev + 1);
       }
@@ -744,6 +755,7 @@ export function useMinutesRecorder({
     setSegmentQueue(0);
     setSegmentsCompleted(0);
     setSegmentsTotal(0);
+    setFailedSegments([]);
     setTranscriptionStatus("idle");
     // A fresh meeting setup ("New meeting" / Back / start-from-event) starts
     // unmuted; clear any stale mute so the next record pill doesn't show MUTED.
@@ -805,6 +817,7 @@ export function useMinutesRecorder({
     segmentQueue,
     segmentsCompleted,
     segmentsTotal,
+    failedSegments,
     systemAudioWarning,
     clearSystemAudioWarning,
     startRecording,
