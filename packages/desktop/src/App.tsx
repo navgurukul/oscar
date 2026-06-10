@@ -236,6 +236,9 @@ function App() {
   const [scribbleStatus, setScribbleStatus] = useState<string | null>(null);
   const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
+  const [engineBootPhase, setEngineBootPhase] = useState<
+    "idle" | "loading" | "warming" | "ready" | "error"
+  >("idle");
   const [_isProcessing, setIsProcessing] = useState(false);
   const [hotkeyWarning, setHotkeyWarning] = useState("");
   const [dictationConflict, setDictationConflict] = useState(false);
@@ -1410,14 +1413,18 @@ function App() {
 
   const initWhisper = async () => {
     try {
+      setEngineBootPhase("loading");
       await ensureWhisperModelLoaded("dictation");
       setStatus("Preparing voice engine...");
+      setEngineBootPhase("warming");
       void warmVoiceEngine().finally(() => {
         setStatus("Ready! Hold Ctrl+Space anywhere to record.");
+        setEngineBootPhase("ready");
       });
       return true;
     } catch {
       setWhisperLoadedAndRef(false);
+      setEngineBootPhase("error");
       setStatus("Whisper model not found. Set the path in Settings.");
       return false;
     }
@@ -2730,6 +2737,32 @@ function App() {
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {(engineBootPhase === "loading" || engineBootPhase === "warming") && (
+        <div className="px-6 py-4 border-b border-cream-300 bg-cream-200 flex items-center gap-4">
+          <div
+            className="shrink-0 h-5 w-5 rounded-full border-2 border-ink/20 border-t-terracotta animate-spin"
+            aria-hidden
+          />
+          <div className="flex-1 min-w-0">
+            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+              {engineBootPhase === "loading"
+                ? "Setting up voice engine"
+                : "Warming up"}
+            </span>
+            <p className="mt-1 font-serif text-[16px] leading-snug tracking-[-0.005em] text-ink">
+              {engineBootPhase === "loading"
+                ? "Loading the on-device speech model…"
+                : "Almost ready — warming up the transcriber…"}
+            </p>
+            <p className="mt-1 text-[12px] text-ink-soft">
+              The first launch after installing can take a few minutes. You can
+              keep using the app — dictation unlocks automatically when this
+              finishes.
+            </p>
+          </div>
         </div>
       )}
 

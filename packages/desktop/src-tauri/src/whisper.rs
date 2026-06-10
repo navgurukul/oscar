@@ -577,12 +577,18 @@ fn parse_content_range_total(header: &str) -> Option<u64> {
     total_str.parse::<u64>().ok()
 }
 
+//Run on the blocking pool, same pattern as transcribe_audio below.
 #[tauri::command]
-pub fn load_whisper_model(
+pub async fn load_whisper_model(
     path: String,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
-    load_whisper_model_inner("dictation", &path, state.inner())
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        load_whisper_model_inner("dictation", &path, &state)
+    })
+    .await
+    .map_err(|e| format!("Model load task failed: {}", e))?
 }
 
 fn load_whisper_model_inner(
@@ -632,18 +638,31 @@ fn load_whisper_model_inner(
 }
 
 #[tauri::command]
-pub fn ensure_whisper_model_loaded(
+pub async fn ensure_whisper_model_loaded(
     role: String,
     path: String,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
-    load_whisper_model_inner(&role, &path, state.inner())
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        load_whisper_model_inner(&role, &path, &state)
+    })
+    .await
+    .map_err(|e| format!("Model load task failed: {}", e))?
 }
 
+//off the main thread for the same Not-Responding reason as the loads above.
 #[tauri::command]
-pub fn warm_whisper_runtime(
+pub async fn warm_whisper_runtime(
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<String, String> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || warm_whisper_runtime_inner(&state))
+        .await
+        .map_err(|e| format!("Warmup task failed: {}", e))?
+}
+
+fn warm_whisper_runtime_inner(state: &Arc<Mutex<AppState>>) -> Result<String, String> {
     let context = {
         let locked = state.lock().map_err(|e| e.to_string())?;
         locked
