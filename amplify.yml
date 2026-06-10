@@ -18,6 +18,8 @@ applications:
             - echo "RAZORPAY_PLAN_MONTHLY=$RAZORPAY_PLAN_MONTHLY" >> .env.production
             - echo "RAZORPAY_PLAN_YEARLY=$RAZORPAY_PLAN_YEARLY" >> .env.production
             - echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> .env.production
+            - echo "MERCURY_API_KEY=$MERCURY_API_KEY" >> .env.production
+            - echo "RESEND_API_KEY=$RESEND_API_KEY" >> .env.production
             - npx next build
       artifacts:
         baseDirectory: .next
@@ -45,8 +47,14 @@ applications:
           RAZORPAY_PLAN_YEARLY: $RAZORPAY_PLAN_YEARLY
           NEXT_PUBLIC_RAZORPAY_KEY_ID: $NEXT_PUBLIC_RAZORPAY_KEY_ID
 
-          # Gemini AI Configuration
+          # AI Configuration
           GEMINI_API_KEY: $GEMINI_API_KEY
+          # Mercury 2 (Inception) — required: Scribble/stream formatting,
+          # titles, transform, translate, email all 500 without it.
+          MERCURY_API_KEY: $MERCURY_API_KEY
+          # Resend — transactional email. Optional: features degrade to no-op
+          # when unset, but prod email is silently disabled without it.
+          RESEND_API_KEY: $RESEND_API_KEY
 
           # Desktop App Configuration
           NEXT_PUBLIC_APP_VERSION: $NEXT_PUBLIC_APP_VERSION
