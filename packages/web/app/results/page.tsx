@@ -231,9 +231,15 @@ export default function ResultsPage() {
 
   const handleSaveEdit = async () => {
     if (!editedText) return;
+    // Reshape views (bullets/summary/email/translate) are derived, session-only
+    // representations — persist edits to the in-memory mode buffer, never write
+    // them over the canonical edited_text. Only the normal view is the note.
+    if (activeMode !== "normal") {
+      setModeContent((p) => ({ ...p, [activeMode]: editedText }));
+      return;
+    }
     if (!scribbleId) {
       updateFormattedScribble(editedText);
-      if (activeMode !== "normal") setModeContent((p) => ({ ...p, [activeMode]: editedText }));
       return;
     }
     setIsSaving(true);
@@ -241,7 +247,6 @@ export default function ResultsPage() {
     if (error) toast({ title: "Save failed", variant: "destructive" });
     else {
       updateFormattedScribble(editedText);
-      if (activeMode !== "normal") setModeContent((p) => ({ ...p, [activeMode]: editedText }));
       invalidateLibrary();
     }
     setIsSaving(false);
@@ -357,9 +362,6 @@ export default function ResultsPage() {
       </main>
     );
   }
-
-  const displayText =
-    activeMode === "normal" ? editedText : modeContent[activeMode] || editedText;
 
   return (
     <main style={{ background: v2.cream, color: v2.ink, minHeight: "100vh", fontFamily: "var(--font-figtree), system-ui" }}>
@@ -481,7 +483,7 @@ export default function ResultsPage() {
               </div>
             ) : (
               <textarea
-                value={displayText || ""}
+                value={editedText || ""}
                 onChange={(e) => setEditedText(e.target.value)}
                 onBlur={handleSaveEdit}
                 placeholder="Your Scribble will appear here..."
