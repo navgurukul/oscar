@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { supabase } from "../../supabase";
+import { beginAuthFlow, clearAuthFlow } from "../../lib/auth-flow";
 import { CoverShowcase } from "./CoverShowcase";
 import { StepIndicator } from "./StepIndicator";
 
@@ -62,6 +63,10 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
     setError("");
     setLoading(true);
 
+    // Mark this sign-in as in-flight before opening the browser so the
+    // deep-link handler will only accept the auth callback we asked for.
+    beginAuthFlow();
+
     try {
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -77,6 +82,7 @@ export function AuthScreen({ onAuth }: AuthScreenProps) {
       setOauthState({ verifier: "", url: data.url });
       await openUrl(data.url);
     } catch (authError: unknown) {
+      clearAuthFlow();
       setError((authError as Error).message);
       setLoading(false);
     }

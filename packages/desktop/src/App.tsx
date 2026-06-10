@@ -27,6 +27,7 @@ import { AuthScreen } from "./components/onboarding/AuthScreen";
 import { PermissionsScreen } from "./components/onboarding/PermissionsScreen";
 import { SetupScreen } from "./components/onboarding/SetupScreen";
 import { isAuthSessionError, revalidateSession } from "./lib/auth-session";
+import { clearAuthFlow, isAuthCallbackTrusted } from "./lib/auth-flow";
 import {
   isContextAwarePlatform,
   routeDictationContext,
@@ -653,6 +654,19 @@ function App() {
         }
 
         if (accessToken && refreshToken) {
+          // Reject auth callbacks that don't correspond to a sign-in this app
+          // started. Without this, any local process or web page could fire
+          // oscar://auth/callback with an attacker's tokens and silently switch
+          // the app into the attacker's account. See lib/auth-flow.ts.
+          if (!isAuthCallbackTrusted(urlObj.searchParams.get("state"))) {
+            console.error(
+              "[deep-link] Rejected auth callback: no matching in-flight sign-in",
+            );
+            clearAuthFlow();
+            return;
+          }
+          clearAuthFlow();
+
           // Set the session using the tokens from the web app
           const { data, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
