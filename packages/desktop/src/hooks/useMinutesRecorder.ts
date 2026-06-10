@@ -365,6 +365,7 @@ export function useMinutesRecorder({
               transcriptionLanguageRef.current,
               "minutes",
             ),
+            sessionId: job.sessionId,
             segmentIndex: job.segmentIndex,
             previousTailText: getTranscriptTailWords(transcriptRef.current, 30),
           },
@@ -488,6 +489,7 @@ export function useMinutesRecorder({
       segmentHasDetectedSpeech = segmentSpeechMs >= MEETING_MIN_SPEECH_MS;
       rotationPromise = segmentUsesSystemAudio
         ? invoke("rotate_meeting_system_audio_segment", {
+            sessionId,
             segmentIndex,
             restartCapture: mode === "rotate",
           })
@@ -499,7 +501,9 @@ export function useMinutesRecorder({
               );
               setSessionUsesSystemAudio(false);
               systemAudioActiveRef.current = false;
-              void invoke("stop_system_audio_capture").catch(() => {});
+              void invoke("stop_system_audio_capture", { sessionId }).catch(
+                () => {},
+              );
             })
         : Promise.resolve();
 
@@ -541,6 +545,7 @@ export function useMinutesRecorder({
           queueSegment({
             blob: audioBlob,
             ext,
+            sessionId,
             segmentIndex,
             useSystemAudio: segmentUsesSystemAudio,
             startedAtMs: segmentStartedAtMs,
@@ -635,12 +640,14 @@ export function useMinutesRecorder({
       });
 
       if (systemAudioEnabled && systemAudioSupported) {
-        // Clear any stale capture state from a prior session (component unmount,
-        // hot-reload, or rotation error) before starting. Backend stop is
-        // idempotent on macOS (sck_stop_capture) and Windows (WASAPI state check).
-        await invoke("stop_system_audio_capture").catch(() => {});
         try {
-          await invoke("start_system_audio_capture");
+          // start_system_audio_capture takes ownership of the shared backend
+          // for this session: it first stops any stale capture left by an
+          // abandoned prior session (component unmount, hot-reload, or a
+          // rotation error that never stopped), records this session id as the
+          // active owner, then starts. Threading sessionId means a late
+          // rotate/stop from the previous meeting no longer kills this capture.
+          await invoke("start_system_audio_capture", { sessionId });
           systemAudioActiveRef.current = true;
           setSessionUsesSystemAudio(true);
           setSystemAudioWarning("");
@@ -705,7 +712,9 @@ export function useMinutesRecorder({
 
     stopVadMonitor();
     if (systemAudioActiveRef.current) {
-      void invoke("stop_system_audio_capture").catch((err) => {
+      void invoke("stop_system_audio_capture", {
+        sessionId: sessionIdRef.current,
+      }).catch((err) => {
         console.warn("[meeting] failed to stop system audio capture:", err);
       });
       systemAudioActiveRef.current = false;
@@ -714,6 +723,13 @@ export function useMinutesRecorder({
   };
 
   const clearTranscript = () => {
+    // Bump the session id so any in-flight stale segment worker or rotation
+    // from the prior meeting is discarded — the segment recorder loop checks
+    // sessionIdRef before continuing, and queued jobs carry their own session —
+    // then wipe the Rust-side per-segment system-audio buffers so the next
+    // meeting starts from a clean slate (no stale PCM at a colliding index).
+    sessionIdRef.current += 1;
+    void invoke("clear_meeting_segment_buffers").catch(() => {});
     transcriptRef.current = "";
     transcriptSegmentsRef.current = [];
     startedAtRef.current = "";
@@ -754,7 +770,9 @@ export function useMinutesRecorder({
       }
       if (systemAudioActiveRef.current) {
         systemAudioActiveRef.current = false;
-        void invoke("stop_system_audio_capture").catch((err) => {
+        void invoke("stop_system_audio_capture", {
+          sessionId: sessionIdRef.current,
+        }).catch((err) => {
           console.warn(
             "[meeting-record] stop_system_audio_capture on unmount:",
             err,

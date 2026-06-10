@@ -168,6 +168,7 @@ pub fn run() {
             whisper_context: None,
             loaded_model_path: None,
             meeting_system_audio_segments: HashMap::new(),
+            active_meeting_session: 0,
         })))
         .manage(HotkeyState {
             is_recording: is_recording.clone(),
