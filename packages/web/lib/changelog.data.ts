@@ -49,6 +49,31 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "v0.7.37",
+    date: "10 JUN 2026",
+    tag: "WEB",
+    title: "Security & editing hardening",
+    lede: "Sign-in and shared links are tougher, editing reshaped notes no longer loses work, and your free monthly limit now reads true.",
+    changes: [
+      { kind: "fixed", area: "SCRIBBLE", text: "Editing a note in bullet, summary, or email view no longer does nothing or overwrites your original — edits land where you expect." },
+      { kind: "fixed", area: "WEB", text: "Free plan now shows the correct monthly Scribble limit, matching what's enforced." },
+      { kind: "improved", area: "DESKTOP", text: "Hardened sign-in so only a sign-in you started is accepted." },
+      { kind: "improved", area: "WEB", text: "Hardened redirect handling and added browser security headers across the app." },
+    ],
+  },
+  {
+    version: "v0.7.36",
+    date: "10 JUN 2026",
+    tag: "DESKTOP",
+    title: "Sharper dictation, steadier sign-in",
+    lede: "Whisper handles repetition and Hinglish more gracefully, expired desktop sessions send you back to sign-in cleanly, and this changelog is new.",
+    changes: [
+      { kind: "fixed", area: "DESKTOP", text: "Transcription is more robust against repetition loops, hallucinations, and Hinglish speech." },
+      { kind: "fixed", area: "DESKTOP", text: "An expired session now lands you on the sign-in screen instead of a stuck recording pill." },
+      { kind: "new", area: "WEB", text: "Added this changelog page with a release timeline." },
+    ],
+  },
+  {
     version: "v0.7.35",
     date: "10 JUN 2026",
     tag: "STREAM",
