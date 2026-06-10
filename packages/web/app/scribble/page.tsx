@@ -347,7 +347,7 @@ export default function ScribblePage() {
     ]);
     setSelectedIds(new Set());
     refreshTrash();
-    toast({ title: "Moved to trash", description: ${data.length} Scribble${data.length === 1 ? "" : "s"} moved. });
+    toast({ title: "Moved to trash", description: `${data.length} Scribble${data.length === 1 ? "" : "s"} moved.` });
     setIsApplying(false);
   }
 
