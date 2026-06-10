@@ -113,8 +113,13 @@ export async function mercuryGenerateText(params: MercuryCallParams): Promise<st
     }
 
     if (!response.ok) {
+      // Log the upstream body for server-side debugging, but keep it OUT of the
+      // Error message: that message surfaces to clients as `details` and (in the
+      // format route) used to stream into the note the user saves. Leak only the
+      // status.
       const body = await response.text().catch(() => "");
-      lastError = new Error(`Mercury API error ${response.status}: ${body}`);
+      console.error(`Mercury API error ${response.status}:`, body);
+      lastError = new Error(`Mercury API error ${response.status}`);
       if (isRetryableStatus(response.status) && attempt < RETRY_MAX) {
         await backoff(attempt);
         continue;

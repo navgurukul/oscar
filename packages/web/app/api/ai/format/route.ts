@@ -144,8 +144,12 @@ export async function POST(req: NextRequest) {
             try {
               await chunkStreams[i].pipe(controller, encoder);
             } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              controller.enqueue(encoder.encode(`\n[Error on chunk ${i + 1}: ${msg}]\n`));
+              // Never stream the upstream error into the note the user saves.
+              // Log it server-side and fall back to the original unformatted
+              // text for this chunk so content is preserved, not replaced by an
+              // error string.
+              console.error(`Format chunk ${i + 1} failed:`, err);
+              controller.enqueue(encoder.encode(safeChunks[i] ?? ""));
             }
             if (i < chunkStreams.length - 1) {
               controller.enqueue(encoder.encode("\n\n"));
