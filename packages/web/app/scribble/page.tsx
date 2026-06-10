@@ -288,12 +288,19 @@ export default function ScribblePage() {
     e.preventDefault();
     e.stopPropagation();
     if (!window.confirm("Move this Scribble to trash?")) return;
-    const { error: e2 } = await scribblesService.deleteScribble(id);
-    if (e2) {
+    const deletedItem = allScribbles.find((scribble) => scribble.id === id);
+    const { error: deleteError } = await scribblesService.deleteScribble(id);
+    if (deleteError) {
       toast({ title: "Couldn't move Scribble to trash", variant: "destructive" });
       return;
     }
-    patchScribblesCache((prev) => prev.filter((s) => s.id !== id));
+    patchScribblesCache((prev) => prev.filter((scribble) => scribble.id !== id));
+    if (deletedItem) {
+      qc.setQueryData<DBScribble[]>(queryKeys.trashedScribbles, (prev) => [
+        { ...deletedItem, deleted_at: new Date().toISOString() },
+        ...(prev ?? []),
+      ]);
+    }
     setSelectedIds((prev) => {
       const next = new Set(prev);
       next.delete(id);
@@ -326,17 +333,21 @@ export default function ScribblePage() {
     if (!window.confirm(`Move ${selectedCount} selected Scribbles to trash?`)) return;
     setIsApplying(true);
     const ids = Array.from(selectedIds);
-    const { data, error: e2 } = await scribblesService.deleteScribbles(ids);
-    if (e2 || !data) {
+    const { data, error: deleteError } = await scribblesService.deleteScribbles(ids);
+    if (deleteError || !data) {
       toast({ title: "Couldn't move Scribbles to trash", variant: "destructive" });
       setIsApplying(false);
       return;
     }
-    const removed = new Set(selectedIds);
-    patchScribblesCache((prev) => prev.filter((s) => !removed.has(s.id)));
+    const removedIds = new Set(selectedIds);
+    patchScribblesCache((prev) => prev.filter((scribble) => !removedIds.has(scribble.id)));
+    qc.setQueryData<DBScribble[]>(queryKeys.trashedScribbles, (prev) => [
+      ...data.map((scribble) => ({ ...scribble, deleted_at: scribble.deleted_at ?? new Date().toISOString() })),
+      ...(prev ?? []),
+    ]);
     setSelectedIds(new Set());
     refreshTrash();
-    toast({ title: "Moved to trash", description: `${data.length} Scribble${data.length === 1 ? "" : "s"} moved.` });
+    toast({ title: "Moved to trash", description: ${data.length} Scribble${data.length === 1 ? "" : "s"} moved. });
     setIsApplying(false);
   }
 
