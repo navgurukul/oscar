@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { sanitizeInternalPath } from "@/lib/safe-redirect";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -61,15 +62,11 @@ export async function updateSession(request: NextRequest) {
 
   // Redirect logged in users away from auth page
   if (request.nextUrl.pathname === "/auth" && user) {
-    const rawRedirectTo =
-      request.nextUrl.searchParams.get("redirectTo") || "/";
-    // Prevent open redirect: only allow relative paths that start with /
-    // and do not contain protocol schemes (e.g. //evil.com or javascript:)
-    const isSafeRedirect =
-      rawRedirectTo.startsWith("/") &&
-      !rawRedirectTo.startsWith("//") &&
-      !rawRedirectTo.toLowerCase().includes(":");
-    const safePath = isSafeRedirect ? rawRedirectTo : "/";
+    // Prevent open redirect: only allow in-app paths (see sanitizeInternalPath).
+    const safePath = sanitizeInternalPath(
+      request.nextUrl.searchParams.get("redirectTo"),
+      "/"
+    );
     const url = request.nextUrl.clone();
     url.pathname = safePath;
     url.search = "";

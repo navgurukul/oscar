@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { sanitizeInternalPath } from "@/lib/safe-redirect";
 import { Spinner } from "@/components/ui/spinner";
 import {
   v2,
@@ -17,7 +18,10 @@ function PostCallbackContent() {
   const queryNext = searchParams?.get("next");
   const storedNext =
     typeof window !== "undefined" ? sessionStorage.getItem("auth_redirect_next") : null;
-  const next = queryNext ?? storedNext ?? "/";
+  // Only ever redirect to an in-app path — `next` is attacker-controllable
+  // (query param or sessionStorage), so an absolute/protocol-relative value
+  // would be an open redirect.
+  const next = sanitizeInternalPath(queryNext ?? storedNext, "/");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
