@@ -49,6 +49,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "v0.7.38",
+    date: "10 JUN 2026",
+    tag: "TEAMS",
+    title: "Team auto-join & tougher sign-in",
+    lede: "Claim your email domain so teammates land in your workspace automatically, sign-in only trusts a flow you started, and a shaky network no longer logs you out.",
+    changes: [
+      { kind: "new", area: "TEAMS", text: "Claim an email domain for your org so anyone who signs up with that domain joins your workspace automatically." },
+      { kind: "improved", area: "DESKTOP", text: "Desktop sign-in fails closed — only the exact sign-in you started on this device is accepted." },
+      { kind: "improved", area: "DESKTOP", text: "A flaky or offline network no longer signs you out; your session is kept and retried." },
+      { kind: "fixed", area: "SCRIBBLE", text: "Deleting a note updates Trash immediately instead of lagging behind." },
+    ],
+  },
+  {
     version: "v0.7.37",
     date: "10 JUN 2026",
     tag: "WEB",
