@@ -7,10 +7,19 @@ import { NextResponse } from "next/server";
  *
  * On platforms like AWS Amplify the server-side function runs behind a
  * reverse-proxy / CDN, so `request.url` may contain an internal address
- * (e.g. http://localhost:3000).  We check forwarded headers first and
- * fall back to the URL parsed from the request only as a last resort.
+ * (e.g. http://localhost:3000).  We trust NEXT_PUBLIC_WEB_APP_URL when set,
+ * then fall back to forwarded headers, then to the URL parsed from the request.
  */
 function getOrigin(request: Request): string {
+  // Trust the configured canonical origin first. The forwarded headers below
+  // are client-influenced, so honoring them ahead of an explicit env var would
+  // let a spoofed Host / X-Forwarded-Host redirect the token-bearing Location
+  // response to an attacker-controlled host.
+  const configured = process.env.NEXT_PUBLIC_WEB_APP_URL;
+  if (configured) {
+    return configured.replace(/\/+$/, "");
+  }
+
   const headers = new Headers(request.headers);
 
   // x-forwarded-host is set by most reverse proxies / CDNs

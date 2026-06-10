@@ -6,45 +6,47 @@
 // attacker's tokens and silently switch the app into the attacker's account —
 // the victim's dictated notes would then save into the attacker's account.
 //
-// We mark a sign-in as "in flight" in localStorage immediately before opening
-// the browser, and the deep-link handler only accepts an auth callback while a
-// fresh in-flight flow exists. An unsolicited callback (no sign-in started) is
-// rejected. The flag is purely local — it does not depend on the web preserving
-// any parameter through the OAuth round-trip, so it cannot lock users out.
-//
-// A nonce is also recorded for defense-in-depth: if a `state` value ever rides
-// back on the callback (the web already forwards `desktop_state` as `state`),
-// it must match. A missing `state` degrades to the in-flight check rather than
-// failing, so wiring the nonce end-to-end stays a safe, optional follow-up.
+// Defense: immediately before opening the browser we mint a single-use nonce
+// and stash it in localStorage. The web app round-trips that nonce back as the
+// `state` query param on the callback (AuthScreen appends it as
+// `?desktop_state=`, desktop-callback forwards it as `&state=`). The deep-link
+// handler accepts the callback ONLY when a fresh flow is in progress AND the
+// returned nonce matches. We FAIL CLOSED: a missing/empty/mismatched nonce is
+// rejected. This is safe because the sign-in path always carries the nonce
+// end-to-end; an unsolicited callback never will.
 
-const AUTH_FLOW_KEY = "oscar_auth_flow";
+const AUTH_FLOW_KEY = "oscar.auth.flow.v1";
 const AUTH_FLOW_TTL_MS = 30 * 60 * 1000; // 30 min — generous for a slow sign-in
 
 interface AuthFlow {
-  nonce: string;
-  ts: number;
+  state: string;
+  startedAt: number;
 }
 
+/** A 128-bit cryptographically-random nonce as a 32-char hex string. */
 function randomNonce(): string {
-  try {
-    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-      return crypto.randomUUID();
-    }
-  } catch {
-    /* fall through */
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let hex = "";
+  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+  return hex;
 }
 
-/** Record an in-flight sign-in just before opening the browser. Returns the nonce. */
+/**
+ * Record an in-flight sign-in just before opening the browser. Returns the
+ * nonce to append to the OAuth `redirectTo` as `?desktop_state=<nonce>`.
+ */
 export function beginAuthFlow(): string {
-  const nonce = randomNonce();
+  const state = randomNonce();
   try {
-    localStorage.setItem(AUTH_FLOW_KEY, JSON.stringify({ nonce, ts: Date.now() }));
+    localStorage.setItem(
+      AUTH_FLOW_KEY,
+      JSON.stringify({ state, startedAt: Date.now() } satisfies AuthFlow),
+    );
   } catch {
     /* localStorage unavailable — the deep-link handler will reject, user retries */
   }
-  return nonce;
+  return state;
 }
 
 export function clearAuthFlow(): void {
@@ -56,11 +58,15 @@ export function clearAuthFlow(): void {
 }
 
 /**
- * True only when an auth-callback deep link corresponds to a sign-in this app
- * actually started (fresh in-flight flag), and — when the callback carries a
- * `state` nonce — that nonce matches the one we issued.
+ * True ONLY when an auth-callback deep link corresponds to a sign-in this app
+ * actually started: a flow is in progress, its nonce matches `stateParam`, and
+ * it began within the TTL. Fails closed — an empty/null `stateParam`, a missing
+ * flow, a mismatched nonce, or an expired flow all return false.
  */
 export function isAuthCallbackTrusted(stateParam: string | null): boolean {
+  // Fail closed: no nonce on the callback → never trust it.
+  if (!stateParam) return false;
+
   let flow: AuthFlow | null = null;
   try {
     const raw = localStorage.getItem(AUTH_FLOW_KEY);
@@ -68,8 +74,7 @@ export function isAuthCallbackTrusted(stateParam: string | null): boolean {
   } catch {
     flow = null;
   }
-  if (!flow || typeof flow.ts !== "number") return false;
-  if (Date.now() - flow.ts > AUTH_FLOW_TTL_MS) return false;
-  if (stateParam && flow.nonce && stateParam !== flow.nonce) return false;
-  return true;
+  if (!flow || typeof flow.startedAt !== "number" || !flow.state) return false;
+  if (Date.now() - flow.startedAt > AUTH_FLOW_TTL_MS) return false;
+  return stateParam === flow.state;
 }
