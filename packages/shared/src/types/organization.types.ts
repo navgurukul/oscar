@@ -23,6 +23,15 @@ export interface Organization {
    * "private" → owner only. Product default is "public". See migration 015.
    */
   default_meeting_visibility: "private" | "org" | "public";
+  /**
+   * Email domain (lowercase, e.g. "navgurukul.org"). When set, any user
+   * signing up with an email matching this domain is auto-added as a Member
+   * of this org on signup, and their active org is flipped to this team org.
+   * Only one org can claim a given domain. Generic public domains
+   * (gmail.com, yahoo.com, outlook.com, etc.) are blocked at the API layer.
+   * Null = feature off for this org. See migration 016.
+   */
+  auto_join_email_domain: string | null;
 }
 
 export interface OrganizationMember {

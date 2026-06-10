@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { organizationService } from "@/lib/services/organization.service";
 import type { Organization, OrganizationRole } from "@oscar/shared/types";
@@ -248,6 +248,13 @@ export function OrgDetailsForm({ organization, role, onUpdated }: Props) {
         </div>
       </section>
 
+      {/* Team auto-join — owner-only, gates membership on email domain */}
+      <AutoJoinSection
+        organization={organization}
+        role={role}
+        onUpdated={onUpdated}
+      />
+
       {/* Workspace mark — visual placeholder, no upload service wired yet */}
       <section
         className="grid grid-cols-12 gap-6 md:gap-10"
@@ -281,5 +288,230 @@ export function OrgDetailsForm({ organization, role, onUpdated }: Props) {
         </div>
       </section>
     </div>
+  );
+}
+
+function AutoJoinSection({
+  organization,
+  role,
+  onUpdated,
+}: {
+  organization: Organization;
+  role: OrganizationRole;
+  onUpdated?: (org: Organization) => void;
+}) {
+  const { toast } = useToast();
+  const canEdit = role === "owner";
+  const initialDomain = organization.auto_join_email_domain ?? "";
+  const [domain, setDomain] = useState(initialDomain);
+  const [saving, setSaving] = useState(false);
+  const [candidates, setCandidates] = useState<
+    Array<{ user_id: string; email: string; display_name: string }>
+  >([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [adding, setAdding] = useState(false);
+
+  const enabled = !!organization.auto_join_email_domain;
+  const dirty = domain.trim().toLowerCase() !== initialDomain.toLowerCase();
+
+  const reloadCandidates = useCallback(async () => {
+    if (!organization.auto_join_email_domain) {
+      setCandidates([]);
+      return;
+    }
+    setCandidatesLoading(true);
+    try {
+      const list = await organizationService.listAutoJoinCandidates(organization.id);
+      setCandidates(list);
+    } catch (err) {
+      console.error("[org] list auto-join candidates failed", err);
+    } finally {
+      setCandidatesLoading(false);
+    }
+  }, [organization.auto_join_email_domain, organization.id]);
+
+  useEffect(() => {
+    void reloadCandidates();
+  }, [reloadCandidates]);
+
+  const save = async (nextDomain: string | null) => {
+    if (!canEdit || saving) return;
+    setSaving(true);
+    try {
+      const updated = await organizationService.update(organization.id, {
+        auto_join_email_domain: nextDomain,
+      });
+      onUpdated?.(updated);
+      setDomain(nextDomain ?? "");
+      toast({
+        title: nextDomain ? "Auto-join enabled" : "Auto-join disabled",
+        description: nextDomain
+          ? `New users with @${nextDomain} emails will auto-join.`
+          : "Sign-ups no longer auto-join this workspace.",
+      });
+    } catch (err) {
+      toast({
+        title: "Update failed",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addAll = async () => {
+    if (adding || candidates.length === 0) return;
+    setAdding(true);
+    try {
+      const result = await organizationService.backfillAutoJoin(
+        organization.id,
+        candidates.map((c) => c.user_id)
+      );
+      toast({
+        title: result.added > 0 ? `Added ${result.added} member${result.added === 1 ? "" : "s"}` : "No new members",
+        description:
+          result.added > 0
+            ? "They'll see the workspace next time they open Oscar."
+            : "Everyone matching is already a member.",
+      });
+      await reloadCandidates();
+    } catch (err) {
+      toast({
+        title: "Add failed",
+        description: err instanceof Error ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <section
+      className="grid grid-cols-12 gap-6 md:gap-10"
+      style={{ borderTop: `1px solid ${v2.rule}`, paddingTop: 24 }}
+    >
+      <div className="col-span-12 md:col-span-3">
+        <V2Caps>TEAM AUTO-JOIN</V2Caps>
+        {!canEdit && (
+          <p className="mt-2 text-[12px]" style={{ color: v2.inkFaint }}>
+            Owner-only control.
+          </p>
+        )}
+      </div>
+      <div className="col-span-12 md:col-span-9">
+        <p className="text-[14px] font-medium" style={{ color: v2.ink }}>
+          Auto-join by email domain
+        </p>
+        <p
+          className="mt-1 text-[12px] leading-relaxed"
+          style={{ color: v2.inkSoft, maxWidth: 480 }}
+        >
+          Anyone signing up with an email from this domain joins as a Member
+          automatically. Domain must match your own email. Generic providers
+          (gmail.com, yahoo.com, etc.) are not allowed.
+        </p>
+
+        <div className="mt-4 flex items-center gap-3">
+          <div
+            className="flex items-center gap-2 rounded-md px-3 py-2"
+            style={{ border: `1px solid ${v2.rule}`, flex: 1, maxWidth: 320 }}
+          >
+            <span className="text-[13px]" style={{ color: v2.inkFaint }}>
+              @
+            </span>
+            <input
+              value={domain}
+              onChange={(e) =>
+                setDomain(e.target.value.toLowerCase().replace(/^@/, ""))
+              }
+              disabled={!canEdit || saving}
+              placeholder="navgurukul.org"
+              className="flex-1 bg-transparent outline-none disabled:opacity-60"
+              style={{
+                fontSize: 13,
+                color: v2.ink,
+                fontFamily: "var(--font-figtree), system-ui",
+              }}
+            />
+          </div>
+          {canEdit && (
+            <>
+              <button
+                onClick={() => void save(domain.trim() || null)}
+                disabled={!dirty || saving}
+                className="text-[12px] rounded-full px-4 py-2 font-medium disabled:opacity-50"
+                style={{ background: v2.ink, color: v2.cream }}
+              >
+                {saving ? "Saving…" : enabled && !dirty ? "Saved" : "Save"}
+              </button>
+              {enabled && (
+                <button
+                  onClick={() => void save(null)}
+                  disabled={saving}
+                  className="text-[12px] rounded-full px-4 py-2 font-medium disabled:opacity-50"
+                  style={{ border: `1px solid ${v2.rule}`, color: v2.ink }}
+                >
+                  Turn off
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {enabled && (
+          <div
+            className="mt-5 rounded-xl px-4 py-3"
+            style={{ border: `1px solid ${v2.rule}`, background: v2.cream2 }}
+          >
+            {candidatesLoading ? (
+              <p className="text-[12px]" style={{ color: v2.inkSoft }}>
+                Checking for existing users…
+              </p>
+            ) : candidates.length === 0 ? (
+              <p className="text-[12px]" style={{ color: v2.inkSoft }}>
+                No existing users with @{organization.auto_join_email_domain}{" "}
+                emails are waiting to be added.
+              </p>
+            ) : (
+              <>
+                <p className="text-[13px] font-medium" style={{ color: v2.ink }}>
+                  {candidates.length} existing user
+                  {candidates.length === 1 ? "" : "s"} with @
+                  {organization.auto_join_email_domain} email
+                  {candidates.length === 1 ? "" : "s"} not in this workspace yet
+                </p>
+                <ul
+                  className="mt-2 text-[12px] space-y-1"
+                  style={{ color: v2.inkSoft }}
+                >
+                  {candidates.slice(0, 5).map((c) => (
+                    <li key={c.user_id}>
+                      • {c.display_name} ({c.email})
+                    </li>
+                  ))}
+                  {candidates.length > 5 && (
+                    <li>…and {candidates.length - 5} more</li>
+                  )}
+                </ul>
+                {canEdit && (
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      onClick={() => void addAll()}
+                      disabled={adding}
+                      className="text-[12px] rounded-full px-4 py-2 font-medium disabled:opacity-50"
+                      style={{ background: v2.accent, color: v2.cream }}
+                    >
+                      {adding ? "Adding…" : `Add all as Members`}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

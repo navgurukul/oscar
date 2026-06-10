@@ -36,7 +36,11 @@ export const organizationService = {
     return api(`/api/org/current`);
   },
 
-  async create(input: { name: string; slug?: string }): Promise<Organization> {
+  async create(input: {
+    name: string;
+    slug?: string;
+    auto_join_email_domain?: string | null;
+  }): Promise<Organization> {
     return api(`/api/org`, { method: "POST", body: JSON.stringify(input) });
   },
 
@@ -50,10 +54,24 @@ export const organizationService = {
         | "logo_url"
         | "auto_publish_minutes"
         | "default_meeting_visibility"
+        | "auto_join_email_domain"
       >
     >
   ): Promise<Organization> {
     return api(`/api/org/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  },
+
+  async listAutoJoinCandidates(
+    id: string
+  ): Promise<Array<{ user_id: string; email: string; display_name: string }>> {
+    return api(`/api/org/${id}/auto-join-candidates`);
+  },
+
+  async backfillAutoJoin(id: string, userIds: string[]): Promise<{ added: number }> {
+    return api(`/api/org/${id}/auto-join-candidates`, {
+      method: "POST",
+      body: JSON.stringify({ user_ids: userIds }),
+    });
   },
 
   async switchTo(organizationId: string): Promise<void> {
