@@ -418,6 +418,9 @@ interface SettingsTabProps {
   onPromptModeChange: (on: boolean) => void;
   onMicChange: (deviceId: string) => void;
   onClearData: () => void;
+  perfLogTranscripts: boolean;
+  onPerfLogTranscriptsChange: (enabled: boolean) => void;
+  onClearDiagnostics: () => void;
   userEmail?: string;
   userId?: string;
   onSignOut: () => void;
@@ -448,6 +451,9 @@ export function SettingsTab({
   onPromptModeChange,
   onMicChange,
   onClearData,
+  perfLogTranscripts,
+  onPerfLogTranscriptsChange,
+  onClearDiagnostics,
   userEmail,
   userId,
   onSignOut,
@@ -469,6 +475,7 @@ export function SettingsTab({
     resolveTab(initialSection),
   );
   const [clearConfirm, setClearConfirm] = useState(false);
+  const [diagnosticsCleared, setDiagnosticsCleared] = useState(false);
   const [langSearch, setLangSearch] = useState("");
   const [micDevices, setMicDevices] = useState<MicDevice[]>([]);
   const [micPermission, setMicPermission] = useState<
@@ -1101,6 +1108,39 @@ export function SettingsTab({
                 last
               >
                 <MonoValue value="OFF" on={false} />
+              </Row>
+            </Group>
+
+            {/* DIAGNOSTICS */}
+            <Group title="DIAGNOSTICS">
+              <Row
+                label="Log transcripts to diagnostics file"
+                desc="Saves the raw and AI-cleaned text of each dictation to a local perf.jsonl file for quality debugging. Off by default — timing and length stats are recorded either way."
+              >
+                <Toggle
+                  checked={perfLogTranscripts}
+                  onChange={() =>
+                    onPerfLogTranscriptsChange(!perfLogTranscripts)
+                  }
+                  label="Log transcripts to diagnostics file"
+                />
+              </Row>
+              <Row
+                label="Clear diagnostics log"
+                desc="Delete the local perf.jsonl diagnostics file (and its backup) from this device."
+                last
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearDiagnostics();
+                    setDiagnosticsCleared(true);
+                  }}
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] text-ink-soft border border-cream-300 bg-transparent cursor-pointer"
+                >
+                  <Trash2 size={11} />
+                  {diagnosticsCleared ? "Cleared" : "Clear log"}
+                </button>
               </Row>
             </Group>
 

@@ -414,12 +414,21 @@ function isQuotaMeetingEnhanceFailure(message: string): boolean {
   return QUOTA_ENHANCE_FAILURE_RE.test(message);
 }
 
+// A NO_USABLE_MEETING_NOTES failure is the server's hallucination / substance
+// filter reporting it found nothing transcript-backed worth distilling. It must
+// NOT be treated as recoverable: the Mercury fallback (ai-process) has no
+// hallucination filter, so routing this case there would fabricate notes and
+// undo the server-side silent-meeting protection. Handled by an explicit
+// short-circuit in generateEnhancedMeetingNote instead.
+function isNoUsableMeetingNotesFailure(message: string): boolean {
+  return message.includes(NO_USABLE_MEETING_NOTES_ERROR);
+}
+
 function isRecoverableMeetingEnhanceFailure(message: string): boolean {
   return (
     message.includes(EDGE_FUNCTION_FETCH_ERROR) ||
     message.includes(EDGE_FUNCTION_RELAY_ERROR) ||
     message.includes(EDGE_FUNCTION_NON_2XX_ERROR) ||
-    message.includes(NO_USABLE_MEETING_NOTES_ERROR) ||
     isQuotaMeetingEnhanceFailure(message)
   );
 }
@@ -836,6 +845,16 @@ export const aiService = {
       return await invokeMeetingEnhance(accessToken, initialRequest);
     } catch (initialError) {
       const initialMessage = await extractInvokeError(initialError);
+
+      // The server found no transcript-backed content (silent / hallucination-
+      // only meeting). Honor that verdict with an honest empty note — never
+      // hand it to Mercury, which would fabricate notes (no hallucination
+      // filter). Don't retry either: compaction can't conjure speech that
+      // wasn't there.
+      if (isNoUsableMeetingNotesFailure(initialMessage)) {
+        return buildEmptyMeetingMarkdown(request);
+      }
+
       const shouldUseFallback =
         isRecoverableMeetingEnhanceFailure(initialMessage);
       const shouldRetryWithCompaction =
@@ -853,6 +872,11 @@ export const aiService = {
           return await invokeMeetingEnhance(accessToken, compactedRequest);
         } catch (retryError) {
           const retryMessage = await extractInvokeError(retryError);
+          // Same guard as the initial attempt: a no-usable-notes verdict on the
+          // compacted retry must not reach Mercury either.
+          if (isNoUsableMeetingNotesFailure(retryMessage)) {
+            return buildEmptyMeetingMarkdown(request);
+          }
           if (isRecoverableMeetingEnhanceFailure(retryMessage)) {
             return buildFallbackMeetingMarkdown(accessToken, compactedRequest);
           }

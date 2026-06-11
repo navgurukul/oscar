@@ -42,19 +42,9 @@ import {
   V2WebHeader,
 } from "@/components/v2/V2Primitives";
 import { ROUTES } from "@/lib/constants";
+import { stripCitations } from "@/lib/meetings/markdown";
 
 type Tab = "notes" | "transcript" | "rough";
-
-function stripCitations(markdown: string): string {
-  // Oscar's enhance pipeline emits citation tokens like [[seg:abc-123]] and
-  // shortened [[12-0]] timestamp refs. Strip every [[...]] token plus stray
-  // HTML comments — they shouldn't reach the rendered notes.
-  return markdown
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/\s*\[\[[^\]\n]+\]\]/g, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .trim();
-}
 
 function cleanBulletText(text: string): string {
   // Strip GFM task markers ([ ], [x]) and inline markdown emphasis from

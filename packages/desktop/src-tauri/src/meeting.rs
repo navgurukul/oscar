@@ -16,27 +16,62 @@ pub fn is_system_audio_supported() -> bool {
 }
 
 #[tauri::command]
-pub async fn start_system_audio_capture() -> Result<String, String> {
-    log::info!("[system-audio] start_system_audio_capture called");
+pub async fn start_system_audio_capture(
+    session_id: u64,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<String, String> {
+    log::info!("[system-audio] start_system_audio_capture called (session {session_id})");
     // The macOS backend blocks on a ScreenCaptureKit semaphore (up to 15s) and
     // Windows/Linux spawn capture threads. Run off the main thread so a slow or
     // hung start never freezes the UI ("recording did not start") — sync Tauri
     // commands execute on the event-loop thread.
-    tauri::async_runtime::spawn_blocking(|| system_audio::backend().start_capture())
-        .await
-        .map_err(|e| format!("[system-audio] start worker join error: {e}"))??;
-    Ok("System audio capture started".to_string())
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let backend = system_audio::backend();
+        // Hold the AppState lock across the backend calls so a concurrent
+        // rotate/stop (which check `active_meeting_session` under the same
+        // lock) cannot interleave and steal this session's capture.
+        let mut app_state = state.lock().map_err(|e| e.to_string())?;
+        // Take ownership of the shared backend for this session and clear any
+        // stale capture left running by an abandoned prior session (component
+        // unmount, hot-reload, or a rotation error that never stopped). The
+        // backend's stop_capture is idempotent on every platform, so this
+        // doubles as the pre-flight cleanup the caller used to issue itself.
+        backend.stop_capture();
+        app_state.active_meeting_session = session_id;
+        backend.start_capture()?;
+        Ok("System audio capture started".to_string())
+    })
+    .await
+    .map_err(|e| format!("[system-audio] start worker join error: {e}"))?
 }
 
 #[tauri::command]
-pub async fn stop_system_audio_capture() -> Result<String, String> {
-    log::info!("[system-audio] stop_system_audio_capture called");
+pub async fn stop_system_audio_capture(
+    session_id: u64,
+    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+) -> Result<String, String> {
+    log::info!("[system-audio] stop_system_audio_capture called (session {session_id})");
     // stop_capture blocks on a stop semaphore (up to 5s on macOS); keep it off
     // the main thread for the same reason as start.
-    tauri::async_runtime::spawn_blocking(|| system_audio::backend().stop_capture())
-        .await
-        .map_err(|e| format!("[system-audio] stop worker join error: {e}"))?;
-    Ok("System audio capture stopped".to_string())
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let backend = system_audio::backend();
+        // Only the session that currently owns the backend may stop it. A late
+        // stop from an abandoned meeting must not kill the capture of the
+        // meeting that replaced it. Hold the lock across the backend call to
+        // close the check → stop TOCTOU against start/rotate.
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        if app_state.active_meeting_session != session_id {
+            return Ok(format!(
+                "stop ignored: session {session_id} is not the active meeting session"
+            ));
+        }
+        backend.stop_capture();
+        Ok("System audio capture stopped".to_string())
+    })
+    .await
+    .map_err(|e| format!("[system-audio] stop worker join error: {e}"))?
 }
 
 /// Transcribe meeting audio: receives microphone audio from the frontend,
@@ -125,6 +160,7 @@ pub fn clear_meeting_segment_buffers(
 
 #[tauri::command]
 pub async fn rotate_meeting_system_audio_segment(
+    session_id: u64,
     segment_index: usize,
     restart_capture: bool,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -134,24 +170,30 @@ pub async fn rotate_meeting_system_audio_segment(
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let backend = system_audio::backend();
+        // Verify ownership and perform stop/drain/insert/restart while holding
+        // the lock, so a stale rotation from an abandoned meeting can neither
+        // stop the new meeting's live capture nor insert PCM at a colliding
+        // (session, index) key. Bailing before any backend call is the whole
+        // point — touching the singleton backend here is what corrupts state.
+        let mut app_state = state.lock().map_err(|e| e.to_string())?;
+        if app_state.active_meeting_session != session_id {
+            return Ok(format!(
+                "rotate ignored: session {session_id} is not the active meeting session"
+            ));
+        }
         backend.stop_capture();
         let segment = backend.drain();
         let sample_count = segment.len();
-
-        {
-            let mut app_state = state.lock().map_err(|e| e.to_string())?;
-            app_state
-                .meeting_system_audio_segments
-                .insert(segment_index, segment);
-        }
+        app_state
+            .meeting_system_audio_segments
+            .insert((session_id, segment_index), segment);
 
         if restart_capture {
             backend.start_capture()?;
         }
 
         Ok(format!(
-            "Stored system audio segment {} ({} samples)",
-            segment_index, sample_count
+            "Stored system audio segment {segment_index} ({sample_count} samples) for session {session_id}"
         ))
     })
     .await
@@ -165,6 +207,7 @@ pub async fn transcribe_meeting_segment_bytes(
     use_system_audio: bool,
     initial_prompt: Option<String>,
     language: Option<String>,
+    session_id: u64,
     segment_index: usize,
     previous_tail_text: Option<String>,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
@@ -191,7 +234,7 @@ pub async fn transcribe_meeting_segment_bytes(
             let mut app_state = state.lock().map_err(|e| e.to_string())?;
             app_state
                 .meeting_system_audio_segments
-                .remove(&segment_index)
+                .remove(&(session_id, segment_index))
                 .unwrap_or_default()
         } else {
             Vec::new()
