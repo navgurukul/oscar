@@ -1959,8 +1959,40 @@ function App() {
       finalCleanedText = cleanupReturnedEmpty ? "" : finalText;
 
       if (cleanupReturnedEmpty) {
-        console.info("[process] AI cleanup returned empty — treating as silence");
-        setStatus("⚠️ No speech detected. Try speaking louder or closer.");
+        // Mercury returned empty — its "no real speech" signal. But Whisper DID
+        // produce text, so dropping it silently loses the user's words. Keep the
+        // raw transcript: persist it locally and tell the user it was saved
+        // unpolished. We still skip auto-paste — an empty cleanup is a
+        // low-confidence signal, so we don't push the raw text into their app.
+        const rawText =
+          rawWhisperText && rawWhisperText.trim().length > 0
+            ? rawWhisperText
+            : null;
+        if (rawText) {
+          finalCleanedText = rawText;
+          console.info(
+            "[process] AI cleanup returned empty — saving raw transcript unpolished",
+          );
+          setTranscript((prev) => (prev ? prev + "\n\n" + rawText : rawText));
+          const rawRecord: LocalTranscript = {
+            id: crypto.randomUUID(),
+            text: rawText,
+            rawText,
+            createdAt: new Date().toISOString(),
+            ...dictationMetadata,
+          };
+          setLocalTranscripts((prev) => {
+            const updated = [rawRecord, ...prev];
+            saveSetting("localTranscripts", updated);
+            return updated;
+          });
+          setStatus("Saved your words (couldn't polish them) — see Home.");
+        } else {
+          console.info(
+            "[process] AI cleanup returned empty — treating as silence",
+          );
+          setStatus("⚠️ No speech detected. Try speaking louder or closer.");
+        }
         return;
       }
 
