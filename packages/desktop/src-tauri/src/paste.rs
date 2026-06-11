@@ -121,9 +121,21 @@ pub fn paste_transcription(
         #[cfg(target_os = "windows")]
         {
             use std::sync::atomic::Ordering;
-            use windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+            use windows_sys::Win32::UI::WindowsAndMessaging::{IsWindow, SetForegroundWindow};
             let hwnd = crate::state::FOCUSED_WIN_HWND.load(Ordering::SeqCst) as isize;
             if hwnd != 0 {
+                // The captured HWND can go stale — the target window may be
+                // closed between hotkey press and paste. Foregrounding and
+                // pasting then lands Ctrl+V in whatever window inherited focus
+                // (often Oscar itself). Bail to clipboard-only so the user
+                // pastes where they actually intend.
+                if unsafe { IsWindow(hwnd) } == 0 {
+                    log::warn!(
+                        "[paste] captured HWND 0x{:x} is no longer valid — clipboard only",
+                        hwnd as usize
+                    );
+                    return Ok("CLIPBOARD_ONLY".into());
+                }
                 unsafe {
                     SetForegroundWindow(hwnd);
                 }
