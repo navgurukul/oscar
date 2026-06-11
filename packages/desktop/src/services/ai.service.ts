@@ -46,6 +46,11 @@ interface AIProcessRequest {
   // Tells Mercury 2 cleanup to preserve Devanagari for "hi", apply Hinglish
   // spelling rules for "hi-en", or standard English cleanup for "en".
   // Missing/empty = edge function auto-detects from text content.
+  //
+  // Note: desktop "hi-en" now runs on the Oriserve model, which already emits
+  // romanized Hinglish, so the spelling-rules pass is idempotent there. It is
+  // still required for the web app (browser STT) and the low-RAM desktop
+  // fallback, which emit Devanagari — so this contract is unchanged.
   language?: string;
 }
 

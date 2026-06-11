@@ -18,11 +18,19 @@ import { StepIndicator } from "./StepIndicator";
 
 interface SetupScreenProps {
   onComplete: () => Promise<void> | void;
+  // Current transcription language (e.g. "hi-en"). Onboarding resolves the
+  // model the app will actually use for this language, so we download it once
+  // here instead of fetching a general model and then re-downloading the
+  // language-specific one on first launch.
+  transcriptionLanguage: string;
 }
 
 type Phase = "detecting" | "ready" | "downloading" | "error";
 
-export function SetupScreen({ onComplete }: SetupScreenProps) {
+export function SetupScreen({
+  onComplete,
+  transcriptionLanguage,
+}: SetupScreenProps) {
   const [phase, setPhase] = useState<Phase>("detecting");
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
@@ -55,7 +63,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
       try {
         const [hw, { recommendation: rec, resolved }] = await Promise.all([
           detectHardware(),
-          resolveModelForRole("dictation", "auto"),
+          resolveModelForRole("dictation", "auto", transcriptionLanguage),
         ]);
         if (cancelled) return;
         setHardware(hw);
