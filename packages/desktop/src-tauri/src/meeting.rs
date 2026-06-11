@@ -80,46 +80,53 @@ pub async fn stop_system_audio_capture(
 ///
 /// This avoids transferring large system audio buffers across the IPC boundary.
 #[tauri::command]
-pub fn transcribe_meeting_audio(
+pub async fn transcribe_meeting_audio(
     mic_audio_data: Vec<f32>,
     initial_prompt: Option<String>,
     language: Option<String>,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
-    // Stop system audio capture and retrieve buffered samples
-    let backend = system_audio::backend();
-    backend.stop_capture();
-    let system_audio_data = backend.drain();
+    let state = Arc::clone(&state);
+    // Inference runs for many seconds on meeting-length audio; a sync command
+    // would hold the main thread and freeze the UI ("Not Responding").
+    tauri::async_runtime::spawn_blocking(move || {
+        // Stop system audio capture and retrieve buffered samples
+        let backend = system_audio::backend();
+        backend.stop_capture();
+        let system_audio_data = backend.drain();
 
-    log::info!(
-        "[meeting] mic samples={}, system audio samples={}",
-        mic_audio_data.len(),
-        system_audio_data.len()
-    );
+        log::info!(
+            "[meeting] mic samples={}, system audio samples={}",
+            mic_audio_data.len(),
+            system_audio_data.len()
+        );
 
-    let mut results = Vec::new();
+        let mut results = Vec::new();
 
-    if !mic_audio_data.is_empty() {
-        results.push(transcribe_audio_inner(
-            &mic_audio_data,
-            initial_prompt.as_deref(),
-            language.as_deref(),
-            &state,
-            Some("microphone"),
-        )?);
-    }
+        if !mic_audio_data.is_empty() {
+            results.push(transcribe_audio_inner(
+                &mic_audio_data,
+                initial_prompt.as_deref(),
+                language.as_deref(),
+                &state,
+                Some("microphone"),
+            )?);
+        }
 
-    if !system_audio_data.is_empty() {
-        results.push(transcribe_audio_inner(
-            &system_audio_data,
-            initial_prompt.as_deref(),
-            language.as_deref(),
-            &state,
-            Some("speaker"),
-        )?);
-    }
+        if !system_audio_data.is_empty() {
+            results.push(transcribe_audio_inner(
+                &system_audio_data,
+                initial_prompt.as_deref(),
+                language.as_deref(),
+                &state,
+                Some("speaker"),
+            )?);
+        }
 
-    Ok(merge_transcription_results(results))
+        Ok(merge_transcription_results(results))
+    })
+    .await
+    .map_err(|e| format!("[meeting] transcribe worker join error: {e}"))?
 }
 
 fn merge_transcription_prompt(
@@ -272,7 +279,7 @@ pub async fn transcribe_meeting_segment_bytes(
 /// decode entirely in Rust (no renderer AudioContext), resample to 16 kHz,
 /// and merge microphone/system transcription timelines if system audio is active.
 #[tauri::command]
-pub fn transcribe_meeting_audio_b64(
+pub async fn transcribe_meeting_audio_b64(
     audio_b64: String,
     ext: String,
     use_system_audio: bool,
@@ -280,50 +287,57 @@ pub fn transcribe_meeting_audio_b64(
     language: Option<String>,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
-    // Decode base64 → raw compressed bytes
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(&audio_b64)
-        .map_err(|e| format!("[meeting_b64] base64 decode failed: {e}"))?;
+    // base64 decode + symphonia decode + inference — all CPU-bound; keep off
+    // the main thread so the UI stays responsive during long clips.
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        // Decode base64 → raw compressed bytes
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&audio_b64)
+            .map_err(|e| format!("[meeting_b64] base64 decode failed: {e}"))?;
 
-    log::info!(
-        "[meeting_b64] received {} bytes (ext={})",
-        bytes.len(),
-        ext
-    );
+        log::info!(
+            "[meeting_b64] received {} bytes (ext={})",
+            bytes.len(),
+            ext
+        );
 
-    // Decode audio to 16 kHz mono f32 PCM — all in Rust, off the renderer thread
-    let mic_pcm = decode_audio_to_pcm(&bytes, &ext)?;
+        // Decode audio to 16 kHz mono f32 PCM — all in Rust, off the renderer thread
+        let mic_pcm = decode_audio_to_pcm(&bytes, &ext)?;
 
-    log::info!("[meeting_b64] decoded {} mic samples", mic_pcm.len());
+        log::info!("[meeting_b64] decoded {} mic samples", mic_pcm.len());
 
-    // Stop system audio capture and retrieve buffered samples
-    let backend = system_audio::backend();
-    if use_system_audio {
-        backend.stop_capture();
-    }
-    let system_audio_data = backend.drain();
+        // Stop system audio capture and retrieve buffered samples
+        let backend = system_audio::backend();
+        if use_system_audio {
+            backend.stop_capture();
+        }
+        let system_audio_data = backend.drain();
 
-    let mut results = Vec::new();
+        let mut results = Vec::new();
 
-    if !mic_pcm.is_empty() {
-        results.push(transcribe_audio_inner(
-            &mic_pcm,
-            initial_prompt.as_deref(),
-            language.as_deref(),
-            &state,
-            Some("microphone"),
-        )?);
-    }
+        if !mic_pcm.is_empty() {
+            results.push(transcribe_audio_inner(
+                &mic_pcm,
+                initial_prompt.as_deref(),
+                language.as_deref(),
+                &state,
+                Some("microphone"),
+            )?);
+        }
 
-    if !system_audio_data.is_empty() {
-        results.push(transcribe_audio_inner(
-            &system_audio_data,
-            initial_prompt.as_deref(),
-            language.as_deref(),
-            &state,
-            Some("speaker"),
-        )?);
-    }
+        if !system_audio_data.is_empty() {
+            results.push(transcribe_audio_inner(
+                &system_audio_data,
+                initial_prompt.as_deref(),
+                language.as_deref(),
+                &state,
+                Some("speaker"),
+            )?);
+        }
 
-    Ok(merge_transcription_results(results))
+        Ok(merge_transcription_results(results))
+    })
+    .await
+    .map_err(|e| format!("[meeting_b64] transcribe worker join error: {e}"))?
 }

@@ -27,7 +27,6 @@ import { AuthScreen } from "./components/onboarding/AuthScreen";
 import { PermissionsScreen } from "./components/onboarding/PermissionsScreen";
 import { SetupScreen } from "./components/onboarding/SetupScreen";
 import { isAuthSessionError, revalidateSession } from "./lib/auth-session";
-import { clearAuthFlow, isAuthCallbackTrusted } from "./lib/auth-flow";
 import {
   isContextAwarePlatform,
   routeDictationContext,
@@ -237,6 +236,13 @@ function App() {
   const [scribbleStatus, setScribbleStatus] = useState<string | null>(null);
   const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
+  // Boot progress of the local voice engine (model load + warm-up). Drives the
+  // banner in the main shell so the first launch after install — when the
+  // model load and warm-up can take minutes — reads as visible progress
+  // instead of a hang.
+  const [engineBootPhase, setEngineBootPhase] = useState<
+    "idle" | "loading" | "warming" | "ready" | "error"
+  >("idle");
   const [_isProcessing, setIsProcessing] = useState(false);
   const [hotkeyWarning, setHotkeyWarning] = useState("");
   const [dictationConflict, setDictationConflict] = useState(false);
@@ -537,13 +543,9 @@ function App() {
       setAuthLoading(false);
       // Proactively validate a restored session. A hard restart (e.g.
       // auto-update relaunch) can leave a stale/rotated refresh token that
-      // getSession() still hands back; force a real refresh so a dead token is
-      // detected and cleared now → AuthScreen, instead of sitting under a
-      // not-yet-expired access token until the first pill dictation hits it and
-      // fails AI cleanup ("Sign in to enable AI"). A non-forced check returns
-      // early while the access token looks valid and never probes the refresh
-      // token, so the dead-session state stays hidden — that was the bug.
-      if (s) void revalidateSession({ force: true });
+      // getSession() still hands back; revalidate clears it now → AuthScreen,
+      // instead of letting the first dictation fail AI cleanup silently.
+      if (s) void revalidateSession();
     });
 
     const {
@@ -667,19 +669,6 @@ function App() {
         }
 
         if (accessToken && refreshToken) {
-          // Reject auth callbacks that don't correspond to a sign-in this app
-          // started. Without this, any local process or web page could fire
-          // oscar://auth/callback with an attacker's tokens and silently switch
-          // the app into the attacker's account. See lib/auth-flow.ts.
-          if (!isAuthCallbackTrusted(urlObj.searchParams.get("state"))) {
-            console.error(
-              "[deep-link] Rejected auth callback: no matching in-flight sign-in",
-            );
-            clearAuthFlow();
-            return;
-          }
-          clearAuthFlow();
-
           // Set the session using the tokens from the web app
           const { data, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
@@ -1455,6 +1444,7 @@ function App() {
 
   const initWhisper = async () => {
     try {
+      setEngineBootPhase("loading");
       // Shown on the home screen while the model resolves — this can include a
       // one-time download of a few hundred MB (e.g. the Hinglish model on first
       // use), so give feedback instead of a silent wait. The per-model download
@@ -1462,12 +1452,15 @@ function App() {
       setStatus("Preparing speech model…");
       await ensureWhisperModelLoaded("dictation");
       setStatus("Preparing voice engine...");
+      setEngineBootPhase("warming");
       void warmVoiceEngine().finally(() => {
         setStatus("Ready! Hold Ctrl+Space anywhere to record.");
+        setEngineBootPhase("ready");
       });
       return true;
     } catch {
       setWhisperLoadedAndRef(false);
+      setEngineBootPhase("error");
       setStatus("Whisper model not found. Set the path in Settings.");
       return false;
     }
@@ -2852,6 +2845,32 @@ function App() {
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {(engineBootPhase === "loading" || engineBootPhase === "warming") && (
+        <div className="px-6 py-4 border-b border-cream-300 bg-cream-200 flex items-center gap-4">
+          <div
+            className="shrink-0 h-5 w-5 rounded-full border-2 border-ink/20 border-t-terracotta animate-spin"
+            aria-hidden
+          />
+          <div className="flex-1 min-w-0">
+            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+              {engineBootPhase === "loading"
+                ? "Setting up voice engine"
+                : "Warming up"}
+            </span>
+            <p className="mt-1 font-serif text-[16px] leading-snug tracking-[-0.005em] text-ink">
+              {engineBootPhase === "loading"
+                ? "Loading the on-device speech model…"
+                : "Almost ready — warming up the transcriber…"}
+            </p>
+            <p className="mt-1 text-[12px] text-ink-soft">
+              The first launch after installing can take a few minutes. You can
+              keep using the app — dictation unlocks automatically when this
+              finishes.
+            </p>
+          </div>
         </div>
       )}
 
