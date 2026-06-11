@@ -161,12 +161,13 @@ pub fn paste_transcription(
         enigo
             .key(Key::Control, Direction::Press)
             .map_err(|e| format!("ctrl down failed: {e}"))?;
-        enigo
-            .key(Key::Unicode('v'), Direction::Click)
-            .map_err(|e| format!("v click failed: {e}"))?;
-        enigo
-            .key(Key::Control, Direction::Release)
-            .map_err(|e| format!("ctrl up failed: {e}"))?;
+        // Always attempt to release Ctrl, even if the V click errors —
+        // returning early on a failed click would leave Ctrl logically held
+        // down system-wide, breaking every subsequent keystroke.
+        let click = enigo.key(Key::Unicode('v'), Direction::Click);
+        let release = enigo.key(Key::Control, Direction::Release);
+        click.map_err(|e| format!("v click failed: {e}"))?;
+        release.map_err(|e| format!("ctrl up failed: {e}"))?;
         Ok("pasted".to_string())
     }
 }
