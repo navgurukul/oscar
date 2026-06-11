@@ -1604,6 +1604,20 @@ function App() {
       );
     };
 
+    // Re-check for a stop that landed between the getUserMedia resolution above
+    // and here, before arming the recorder. The earlier check only covers the
+    // stream-acquisition await; a very short tap whose release arrives in this
+    // window would otherwise start a recording with no pending stop left to end
+    // it, so it would run until the next manual stop. Abort cleanly instead.
+    if (pendingStopRef.current) {
+      pendingStopRef.current = false;
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      setStatus("Recording too short — try holding longer");
+      invoke("hide_recording_pill").catch(console.warn);
+      return;
+    }
+
     mediaRecorder.start(100);
     startAudioMeter(stream);
     isRecordingRef.current = true;
