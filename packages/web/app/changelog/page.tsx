@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import {
   v2,
   v2Serif,
   v2Mono,
   V2Caps,
-  V2Wordmark,
-  V2MarketingHeader,
+  V2PublicHeader,
+  V2Footer,
 } from "@/components/v2/V2Primitives";
 import {
   RELEASES,
@@ -279,7 +278,7 @@ export default function ChangelogPage() {
 
   return (
     <main style={{ background: v2.cream, color: v2.ink, minHeight: "100vh" }}>
-      <V2MarketingHeader active="CHANGELOG" />
+      <V2PublicHeader active="CHANGELOG" />
 
       {/* hero */}
       <section
@@ -458,24 +457,7 @@ export default function ChangelogPage() {
       </section>
 
       {/* footer */}
-      <footer
-        className="px-6 md:px-14 py-12 flex items-center justify-between flex-wrap gap-4"
-        style={{ borderTop: `1px solid ${v2.rule}` }}
-      >
-        <V2Wordmark />
-        <div className="flex items-center gap-8 flex-wrap">
-          <Link href="/privacy">
-            <V2Caps>PRIVACY</V2Caps>
-          </Link>
-          <Link href="/terms">
-            <V2Caps>TERMS</V2Caps>
-          </Link>
-          <Link href="/refund-policy">
-            <V2Caps>REFUNDS</V2Caps>
-          </Link>
-          <V2Caps>© NAVGURUKUL · 2026</V2Caps>
-        </div>
-      </footer>
+      <V2Footer />
     </main>
   );
 }

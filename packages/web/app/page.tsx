@@ -14,10 +14,10 @@ import {
   v2Serif,
   V2Caps,
   V2Mono,
-  V2Wordmark,
   V2Source,
   V2WebHeader,
   V2MarketingHeader,
+  V2Footer,
 } from "@/components/v2/V2Primitives";
 
 const TESTIMONIALS: Array<[string, string]> = [
@@ -651,18 +651,7 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
         </div>
       </section>
 
-      <footer
-        className="px-6 md:px-14 py-12 flex items-center justify-between flex-wrap gap-4"
-        style={{ borderTop: `1px solid ${v2.rule}` }}
-      >
-        <V2Wordmark />
-        <div className="flex items-center gap-8">
-          <Link href="/privacy"><V2Caps>PRIVACY</V2Caps></Link>
-          <Link href="/terms"><V2Caps>TERMS</V2Caps></Link>
-          <Link href="/refund-policy"><V2Caps>REFUNDS</V2Caps></Link>
-          <V2Caps>© SAMYAK ARTH SERVICES PRIVATE LIMITED · 2026</V2Caps>
-        </div>
-      </footer>
+      <V2Footer />
     </main>
   );
 }

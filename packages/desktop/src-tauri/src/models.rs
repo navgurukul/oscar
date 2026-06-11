@@ -22,12 +22,31 @@ pub enum WhisperModelVariant {
     LargeV3Turbo,
     #[serde(rename = "large-v3-turbo-q5_0")]
     LargeV3TurboQ5,
+    // Oriserve Whisper-Hindi2Hinglish fine-tunes (Apache-2.0). Specialised for
+    // Hindi-dominant code-switching with *romanized Latin* output (e.g. "kal
+    // meeting hai"), so they are NEVER part of the general accuracy ladder in
+    // `hardware.rs::recommend` — they are selected only when the user picks the
+    // "hi-en" (Hinglish) transcription language. Apex (0.8B) is the fast
+    // dictation tier; Prime (1.55B) the higher-accuracy meetings tier.
+    #[serde(rename = "hindi2hinglish-apex")]
+    Hindi2HinglishApex,
+    #[serde(rename = "hindi2hinglish-prime")]
+    Hindi2HinglishPrime,
 }
 
 impl WhisperModelVariant {
     pub fn all() -> &'static [WhisperModelVariant] {
         use WhisperModelVariant::*;
-        &[Tiny, Base, Small, Medium, LargeV3TurboQ5, LargeV3Turbo]
+        &[
+            Tiny,
+            Base,
+            Small,
+            Medium,
+            LargeV3TurboQ5,
+            LargeV3Turbo,
+            Hindi2HinglishApex,
+            Hindi2HinglishPrime,
+        ]
     }
 
     pub fn spec(&self) -> ModelSpec {
@@ -90,6 +109,33 @@ impl WhisperModelVariant {
                 sha256: "07617879c4a257c3e119b7cc5f8ab95146811f9e59933abefebbd1f4da6b8037",
                 size_bytes: 1_620_000_000,
                 min_ram_gb: 8,
+                quality: 6,
+                supports_multilingual: true,
+            },
+            // Oriserve Whisper-Hindi2Hinglish-Apex (0.8B, distilled large-v3),
+            // q5_0. Fast tier for Hinglish dictation — same on-disk footprint as
+            // the turbo q5 model. `quality` only orders the two Hinglish models
+            // against each other (Apex < Prime); they are never compared against
+            // the general ladder because the Hinglish path is language-gated.
+            Hindi2HinglishApex => ModelSpec {
+                variant: *self,
+                filename: "ggml-hindi2hinglish-apex-q5_0.bin",
+                url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-hindi2hinglish-apex-q5_0.bin",
+                sha256: "9d877151b15cec1feb9110cfbc0a3162cf377bcc0ab1935174226f461cf60f13",
+                size_bytes: 574_041_195,
+                min_ram_gb: 4,
+                quality: 5,
+                supports_multilingual: true,
+            },
+            // Oriserve Whisper-Hindi2Hinglish-Prime (1.55B, full large-v3), q5_0.
+            // Higher-accuracy tier for Hinglish meetings.
+            Hindi2HinglishPrime => ModelSpec {
+                variant: *self,
+                filename: "ggml-hindi2hinglish-prime-q5_0.bin",
+                url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-hindi2hinglish-prime-q5_0.bin",
+                sha256: "ccd4e5e48de189f9be887007f96744cb51a3ee086d97ab8787b132f94055fda3",
+                size_bytes: 1_081_140_203,
+                min_ram_gb: 6,
                 quality: 6,
                 supports_multilingual: true,
             },

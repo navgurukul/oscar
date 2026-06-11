@@ -8,7 +8,11 @@ export type WhisperModelVariant =
   | "small"
   | "medium"
   | "large-v3-turbo"
-  | "large-v3-turbo-q5_0";
+  | "large-v3-turbo-q5_0"
+  // Oriserve Hindi2Hinglish fine-tunes — romanized Latin output, selected only
+  // for the "hi-en" transcription language (see hardware.rs::recommend_for_language).
+  | "hindi2hinglish-apex"
+  | "hindi2hinglish-prime";
 
 export type WhisperRole = "dictation" | "minutes";
 
@@ -108,6 +112,27 @@ export const FALLBACK_MODELS: Record<WhisperModelVariant, ModelSpec> = {
     quality: 6,
     supportsMultilingual: true,
   },
+  // Oriserve Hindi2Hinglish q5_0 fine-tunes. Values mirror models.rs exactly.
+  "hindi2hinglish-apex": {
+    variant: "hindi2hinglish-apex",
+    filename: "ggml-hindi2hinglish-apex-q5_0.bin",
+    url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-hindi2hinglish-apex-q5_0.bin",
+    sha256: "9d877151b15cec1feb9110cfbc0a3162cf377bcc0ab1935174226f461cf60f13",
+    sizeBytes: 574_041_195,
+    minRamGb: 4,
+    quality: 5,
+    supportsMultilingual: true,
+  },
+  "hindi2hinglish-prime": {
+    variant: "hindi2hinglish-prime",
+    filename: "ggml-hindi2hinglish-prime-q5_0.bin",
+    url: "https://djpsaiqyvjjg7.cloudfront.net/ggml-hindi2hinglish-prime-q5_0.bin",
+    sha256: "ccd4e5e48de189f9be887007f96744cb51a3ee086d97ab8787b132f94055fda3",
+    sizeBytes: 1_081_140_203,
+    minRamGb: 6,
+    quality: 6,
+    supportsMultilingual: true,
+  },
 };
 
 export function relativeModelPath(variant: WhisperModelVariant): string {
@@ -144,6 +169,10 @@ export function modelDisplayName(variant: WhisperModelVariant): string {
       return "Turbo";
     case "large-v3-turbo":
       return "Turbo HD";
+    case "hindi2hinglish-apex":
+      return "Hinglish Fast";
+    case "hindi2hinglish-prime":
+      return "Hinglish HD";
   }
 }
 
@@ -156,10 +185,14 @@ export async function detectHardware(): Promise<HardwareProfile> {
 export async function recommendWhisperModel(
   role: WhisperRole,
   preset: ModelPreset,
+  // Transcription language code (e.g. "hi-en"). Routes Hinglish to the
+  // Oriserve models; omitted/other languages use the hardware-only ladder.
+  language?: string,
 ): Promise<ModelRecommendation> {
   return invoke<ModelRecommendation>("recommend_whisper_model", {
     role,
     preset,
+    language: language ?? null,
   });
 }
 

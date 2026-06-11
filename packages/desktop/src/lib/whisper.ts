@@ -28,9 +28,15 @@ export function getWhisperLanguage(
     // Hinglish is Hindi-dominant code-switching. Forcing "en" makes Whisper
     // mangle the Hindi portions into nonsense English ("C salary big pigs"
     // out of actual Hindi speech); "hi" decodes the Hindi acoustically and
-    // still transcribes the embedded English words. Script normalisation
-    // (Devanagari → readable Hinglish) happens downstream in the Minutes
-    // enhance step, so the user-facing notes stay readable.
+    // still transcribes the embedded English words. This holds for both the
+    // general model and the Oriserve Hindi2Hinglish model that the backend now
+    // routes "hi-en" to (it is fine-tuned from large-v3, so the "hi" language
+    // token still primes Hindi acoustics).
+    //
+    // Output script: the Oriserve model emits romanized Latin Hinglish directly.
+    // On hardware too small for it, the general-model fallback emits Devanagari,
+    // which the downstream Mercury/Gemini cleanup romanizes via the language
+    // hint — so user-facing notes stay readable on every tier.
     return "hi";
   }
   return transcriptionLanguage;

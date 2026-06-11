@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, LogOut, Settings as SettingsIcon } from "lucide-react";
+import { ChevronDown, LogOut, Settings as SettingsIcon, Sparkles } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -99,6 +99,12 @@ export function V2AccountMenu() {
           <Link href={ROUTES.SETTINGS} className="flex items-center gap-2">
             <SettingsIcon className="h-4 w-4" style={{ color: v2.inkSoft }} />
             <span style={{ fontSize: 13, color: v2.ink }}>Account & billing</span>
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild className="cursor-pointer">
+          <Link href={ROUTES.CHANGELOG} className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" style={{ color: v2.inkSoft }} />
+            <span style={{ fontSize: 13, color: v2.ink }}>What&rsquo;s new</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator style={{ background: v2.rule }} />

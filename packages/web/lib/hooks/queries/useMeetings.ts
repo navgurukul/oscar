@@ -21,6 +21,11 @@ export function useMeetings(enabled = true) {
       return data ?? [];
     },
     enabled,
+    // Meetings are distilled on the desktop app and written to Supabase out of
+    // band, so the web list goes stale silently. Refetch when the window
+    // regains focus (overrides the global default) so a freshly distilled
+    // meeting shows up without a manual refresh. Scoped to this query only.
+    refetchOnWindowFocus: true,
   });
 }
 

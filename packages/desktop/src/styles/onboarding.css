@@ -242,14 +242,111 @@
   border: 1px solid rgba(248, 113, 113, 0.2);
 }
 
-.auth-message {
-  font-size: 0.8rem;
-  color: #34d399;
-  margin: 0;
-  padding: 8px 10px;
-  background: rgba(52, 211, 153, 0.1);
-  border-radius: 6px;
-  border: 1px solid rgba(52, 211, 153, 0.2);
+/* ── Eyebrow label (shared by sign-in + connecting phases) ───────────────── */
+
+.auth-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--terra-500);
+}
+
+.auth-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--terra-500);
+  animation: auth-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes auth-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.65); }
+}
+
+/* ── Browser-handoff fallback (didn't open?) ─────────────────────────────── */
+
+.auth-fallback {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+  padding: 14px 18px;
+  background: var(--cream-50);
+  border: 1px solid var(--cream-300);
+  border-radius: 12px;
+}
+
+.auth-fallback-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.auth-fallback-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.auth-fallback-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--cream-300);
+  flex-shrink: 0;
+}
+
+.auth-fallback-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+
+.auth-fallback-btn:hover {
+  color: var(--ink-soft);
+}
+
+.auth-fallback-btn.accent {
+  color: var(--terra-500);
+}
+
+.auth-fallback-btn.accent:hover {
+  color: var(--terra-600);
+}
+
+/* ── Cancel-and-go-back ghost link ───────────────────────────────────────── */
+
+.auth-cancel-link {
+  display: block;
+  width: 100%;
+  margin-top: 20px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink-faint);
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.auth-cancel-link:hover {
+  color: var(--ink-soft);
 }
 
 .auth-switch {

@@ -54,7 +54,17 @@ pub(crate) struct AppState {
     /// AppState mutex, and run inference without blocking other commands.
     pub(crate) whisper_context: Option<Arc<WhisperContext>>,
     pub(crate) loaded_model_path: Option<String>,
-    pub(crate) meeting_system_audio_segments: HashMap<usize, Vec<f32>>,
+    /// System-audio PCM captured per meeting segment, keyed by
+    /// `(session_id, segment_index)`. The session dimension prevents a slow
+    /// rotation task from an abandoned meeting from colliding with a freshly
+    /// started meeting at the same segment index. See `meeting.rs`.
+    pub(crate) meeting_system_audio_segments: HashMap<(u64, usize), Vec<f32>>,
+    /// Session id (monotonic, set by `start_system_audio_capture`) that
+    /// currently owns the shared system-audio backend. Rotate/stop commands
+    /// carrying a different id are stale and must no-op without touching the
+    /// backend, so a late task from an abandoned meeting cannot kill the live
+    /// capture of the meeting that replaced it.
+    pub(crate) active_meeting_session: u64,
 }
 
 pub(crate) struct HotkeyState {

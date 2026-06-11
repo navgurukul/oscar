@@ -81,6 +81,11 @@ export function useMinutesRecorder({
   const [segmentQueue, setSegmentQueue] = useState(0);
   const [segmentsCompleted, setSegmentsCompleted] = useState(0);
   const [segmentsTotal, setSegmentsTotal] = useState(0);
+  // Indices of segments whose transcription threw. segmentsCompleted advances
+  // for these too (the worker counts them in `finally`), so without this the
+  // progress bar reads "done" while the audio silently vanished. The result
+  // phase reads this to warn the user the notes may have gaps.
+  const [failedSegments, setFailedSegments] = useState<number[]>([]);
   const [systemAudioWarning, setSystemAudioWarning] = useState("");
   // Mic-only mute. True = the local microphone is silenced; system-audio
   // capture of the other participants keeps running. See setMicMuted below.
@@ -317,6 +322,7 @@ export function useMinutesRecorder({
     setSegmentQueue(0);
     setSegmentsCompleted(0);
     setSegmentsTotal(0);
+    setFailedSegments([]);
     setTranscriptionStatus("idle");
   }, [stopVadMonitor, setSessionUsesSystemAudio]);
 
@@ -365,6 +371,7 @@ export function useMinutesRecorder({
               transcriptionLanguageRef.current,
               "minutes",
             ),
+            sessionId: job.sessionId,
             segmentIndex: job.segmentIndex,
             previousTailText: getTranscriptTailWords(transcriptRef.current, 30),
           },
@@ -415,6 +422,11 @@ export function useMinutesRecorder({
         }
       } catch (err) {
         console.error("[meeting] segment transcription failed:", err);
+        setFailedSegments((prev) =>
+          prev.includes(job.segmentIndex)
+            ? prev
+            : [...prev, job.segmentIndex],
+        );
       } finally {
         setSegmentsCompleted((prev) => prev + 1);
       }
@@ -488,6 +500,7 @@ export function useMinutesRecorder({
       segmentHasDetectedSpeech = segmentSpeechMs >= MEETING_MIN_SPEECH_MS;
       rotationPromise = segmentUsesSystemAudio
         ? invoke("rotate_meeting_system_audio_segment", {
+            sessionId,
             segmentIndex,
             restartCapture: mode === "rotate",
           })
@@ -499,7 +512,9 @@ export function useMinutesRecorder({
               );
               setSessionUsesSystemAudio(false);
               systemAudioActiveRef.current = false;
-              void invoke("stop_system_audio_capture").catch(() => {});
+              void invoke("stop_system_audio_capture", { sessionId }).catch(
+                () => {},
+              );
             })
         : Promise.resolve();
 
@@ -541,6 +556,7 @@ export function useMinutesRecorder({
           queueSegment({
             blob: audioBlob,
             ext,
+            sessionId,
             segmentIndex,
             useSystemAudio: segmentUsesSystemAudio,
             startedAtMs: segmentStartedAtMs,
@@ -635,12 +651,14 @@ export function useMinutesRecorder({
       });
 
       if (systemAudioEnabled && systemAudioSupported) {
-        // Clear any stale capture state from a prior session (component unmount,
-        // hot-reload, or rotation error) before starting. Backend stop is
-        // idempotent on macOS (sck_stop_capture) and Windows (WASAPI state check).
-        await invoke("stop_system_audio_capture").catch(() => {});
         try {
-          await invoke("start_system_audio_capture");
+          // start_system_audio_capture takes ownership of the shared backend
+          // for this session: it first stops any stale capture left by an
+          // abandoned prior session (component unmount, hot-reload, or a
+          // rotation error that never stopped), records this session id as the
+          // active owner, then starts. Threading sessionId means a late
+          // rotate/stop from the previous meeting no longer kills this capture.
+          await invoke("start_system_audio_capture", { sessionId });
           systemAudioActiveRef.current = true;
           setSessionUsesSystemAudio(true);
           setSystemAudioWarning("");
@@ -660,7 +678,17 @@ export function useMinutesRecorder({
       } else {
         systemAudioActiveRef.current = false;
         setSessionUsesSystemAudio(false);
-        setSystemAudioWarning("");
+        if (systemAudioEnabled && !systemAudioSupported) {
+          // Capture is on in settings but this device/build can't capture
+          // system audio. Surface a brief notice so the user knows remote
+          // participants won't be recorded, rather than silently dropping to
+          // mic-only. (A user who turned the setting off gets no notice.)
+          setSystemAudioWarning(
+            "System audio capture isn't supported on this device, so remote participants won't be recorded. Meeting recording will continue with your microphone only.",
+          );
+        } else {
+          setSystemAudioWarning("");
+        }
       }
 
       startVadMonitor(stream);
@@ -705,7 +733,9 @@ export function useMinutesRecorder({
 
     stopVadMonitor();
     if (systemAudioActiveRef.current) {
-      void invoke("stop_system_audio_capture").catch((err) => {
+      void invoke("stop_system_audio_capture", {
+        sessionId: sessionIdRef.current,
+      }).catch((err) => {
         console.warn("[meeting] failed to stop system audio capture:", err);
       });
       systemAudioActiveRef.current = false;
@@ -714,6 +744,13 @@ export function useMinutesRecorder({
   };
 
   const clearTranscript = () => {
+    // Bump the session id so any in-flight stale segment worker or rotation
+    // from the prior meeting is discarded — the segment recorder loop checks
+    // sessionIdRef before continuing, and queued jobs carry their own session —
+    // then wipe the Rust-side per-segment system-audio buffers so the next
+    // meeting starts from a clean slate (no stale PCM at a colliding index).
+    sessionIdRef.current += 1;
+    void invoke("clear_meeting_segment_buffers").catch(() => {});
     transcriptRef.current = "";
     transcriptSegmentsRef.current = [];
     startedAtRef.current = "";
@@ -728,6 +765,7 @@ export function useMinutesRecorder({
     setSegmentQueue(0);
     setSegmentsCompleted(0);
     setSegmentsTotal(0);
+    setFailedSegments([]);
     setTranscriptionStatus("idle");
     // A fresh meeting setup ("New meeting" / Back / start-from-event) starts
     // unmuted; clear any stale mute so the next record pill doesn't show MUTED.
@@ -754,7 +792,9 @@ export function useMinutesRecorder({
       }
       if (systemAudioActiveRef.current) {
         systemAudioActiveRef.current = false;
-        void invoke("stop_system_audio_capture").catch((err) => {
+        void invoke("stop_system_audio_capture", {
+          sessionId: sessionIdRef.current,
+        }).catch((err) => {
           console.warn(
             "[meeting-record] stop_system_audio_capture on unmount:",
             err,
@@ -787,6 +827,7 @@ export function useMinutesRecorder({
     segmentQueue,
     segmentsCompleted,
     segmentsTotal,
+    failedSegments,
     systemAudioWarning,
     clearSystemAudioWarning,
     startRecording,

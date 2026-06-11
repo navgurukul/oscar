@@ -194,6 +194,53 @@ pub fn recommend(
     }
 }
 
+/// Language-aware wrapper around [`recommend`].
+///
+/// The Hinglish (`"hi-en"`) transcription language routes to the Oriserve
+/// Hindi2Hinglish models, which emit *romanized Latin* directly — Apex for
+/// dictation (latency), Prime for meetings (accuracy). Both are RAM-floored:
+/// a box too small for the specialised model falls through to the general
+/// ladder (whose Devanagari output the downstream Mercury/Gemini cleanup still
+/// romanizes via the `language` hint), so the feature degrades instead of
+/// failing. Every other language defers to the hardware-only `recommend` and
+/// can never receive a Hinglish-specialised model.
+pub fn recommend_for_language(
+    role: WhisperRole,
+    preset: ModelPreset,
+    profile: &HardwareProfile,
+    language: Option<&str>,
+) -> ModelRecommendation {
+    use WhisperModelVariant::*;
+
+    if language == Some("hi-en") {
+        let candidates: &[WhisperModelVariant] = match (role, preset) {
+            // Dictation always prefers the fast Apex tier.
+            (WhisperRole::Dictation, _) => &[Hindi2HinglishApex, Small, Base, Tiny],
+            // Meetings prefer the accurate Prime tier; Fast caps at Apex.
+            (WhisperRole::Minutes, ModelPreset::Fast) => &[Hindi2HinglishApex, Small, Base, Tiny],
+            (WhisperRole::Minutes, _) => {
+                &[Hindi2HinglishPrime, Hindi2HinglishApex, Small, Base, Tiny]
+            }
+        };
+
+        let chosen = candidates
+            .iter()
+            .find(|v| profile.ram_gb >= v.spec().min_ram_gb)
+            .copied()
+            .unwrap_or(Tiny);
+
+        let spec = chosen.spec();
+        let reason = build_reason(role, preset, profile, &spec);
+        return ModelRecommendation {
+            spec,
+            preset,
+            reason,
+        };
+    }
+
+    recommend(role, preset, profile)
+}
+
 fn build_reason(
     role: WhisperRole,
     preset: ModelPreset,
@@ -240,9 +287,10 @@ pub fn detect_hardware() -> HardwareProfile {
 pub fn recommend_whisper_model(
     role: WhisperRole,
     preset: ModelPreset,
+    language: Option<String>,
 ) -> ModelRecommendation {
     let profile = HardwareProfile::detect();
-    recommend(role, preset, &profile)
+    recommend_for_language(role, preset, &profile, language.as_deref())
 }
 
 #[tauri::command]
@@ -345,5 +393,83 @@ mod tests {
         let p = profile(2, 2, GpuBackend::None);
         let r = recommend(WhisperRole::Minutes, ModelPreset::Best, &p);
         assert!(p.ram_gb >= r.spec.min_ram_gb);
+    }
+
+    fn is_hinglish(v: WhisperModelVariant) -> bool {
+        matches!(
+            v,
+            WhisperModelVariant::Hindi2HinglishApex | WhisperModelVariant::Hindi2HinglishPrime
+        )
+    }
+
+    #[test]
+    fn hinglish_dictation_uses_apex() {
+        let p = profile(8, 4, GpuBackend::None);
+        let r = recommend_for_language(
+            WhisperRole::Dictation,
+            ModelPreset::Auto,
+            &p,
+            Some("hi-en"),
+        );
+        assert_eq!(r.spec.variant, WhisperModelVariant::Hindi2HinglishApex);
+    }
+
+    #[test]
+    fn hinglish_minutes_uses_prime() {
+        let p = profile(8, 4, GpuBackend::None);
+        let r =
+            recommend_for_language(WhisperRole::Minutes, ModelPreset::Auto, &p, Some("hi-en"));
+        assert_eq!(r.spec.variant, WhisperModelVariant::Hindi2HinglishPrime);
+    }
+
+    #[test]
+    fn hinglish_minutes_fast_caps_at_apex() {
+        let p = profile(8, 4, GpuBackend::None);
+        let r =
+            recommend_for_language(WhisperRole::Minutes, ModelPreset::Fast, &p, Some("hi-en"));
+        assert_eq!(r.spec.variant, WhisperModelVariant::Hindi2HinglishApex);
+    }
+
+    #[test]
+    fn hinglish_low_ram_falls_back_to_general_ladder() {
+        // 2 GB can't fit Apex (4 GB floor) → a general model whose Devanagari
+        // output the downstream cleanup romanizes. Must stay within the RAM
+        // floor and must NOT be a Hinglish-specialised model.
+        let p = profile(2, 2, GpuBackend::None);
+        let r = recommend_for_language(
+            WhisperRole::Dictation,
+            ModelPreset::Auto,
+            &p,
+            Some("hi-en"),
+        );
+        assert!(p.ram_gb >= r.spec.min_ram_gb);
+        assert!(!is_hinglish(r.spec.variant));
+    }
+
+    #[test]
+    fn non_hinglish_never_returns_oriserve() {
+        // Any non-"hi-en" language defers to the hardware ladder — the Hinglish
+        // models bias output toward romanized Hinglish and must never serve a
+        // general transcription request.
+        let p = profile(32, 10, GpuBackend::Metal);
+        for lang in [Some("en"), Some("hi"), Some("auto"), None] {
+            for role in [WhisperRole::Dictation, WhisperRole::Minutes] {
+                for preset in [
+                    ModelPreset::Auto,
+                    ModelPreset::Fast,
+                    ModelPreset::Balanced,
+                    ModelPreset::Best,
+                ] {
+                    let r = recommend_for_language(role, preset, &p, lang);
+                    assert!(
+                        !is_hinglish(r.spec.variant),
+                        "got Hinglish model for lang={:?} role={:?} preset={:?}",
+                        lang,
+                        role,
+                        preset
+                    );
+                }
+            }
+        }
     }
 }
