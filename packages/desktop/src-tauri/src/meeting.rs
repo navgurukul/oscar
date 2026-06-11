@@ -51,6 +51,7 @@ pub async fn transcribe_meeting_audio(
     language: Option<String>,
     state: tauri::State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<TranscriptionResult, String> {
+    let state = Arc::clone(&state);
     tauri::async_runtime::spawn_blocking(move || {
         // Stop system audio capture and retrieve buffered samples
         let backend = system_audio::backend();
