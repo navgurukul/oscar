@@ -111,18 +111,57 @@ mod mac {
     }
 
     fn run_osascript(script: &str) -> Option<String> {
-        std::process::Command::new("osascript")
-            .args(["-e", script])
-            .output()
-            .ok()
-            .and_then(|output| {
-                if !output.status.success() {
-                    return None;
-                }
+        use std::io::Read;
+        use std::process::{Command, Stdio};
+        use std::time::{Duration, Instant};
 
-                Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-            })
-            .filter(|value| !value.is_empty())
+        // Bound how long this can block. Context capture runs synchronously on
+        // the hotkey thread (see hotkey.rs) before the pill transitions to
+        // recording, and a busy/unresponsive browser can stall the AppleScript
+        // bridge for seconds. Cap the wait, kill the child on timeout, and
+        // return None so the field is simply omitted rather than delaying the
+        // rest→recording transition.
+        const OSASCRIPT_TIMEOUT: Duration = Duration::from_millis(400);
+        const POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+        let mut child = Command::new("osascript")
+            .args(["-e", script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .ok()?;
+
+        let start = Instant::now();
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) => {
+                    if start.elapsed() >= OSASCRIPT_TIMEOUT {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return None;
+                    }
+                    std::thread::sleep(POLL_INTERVAL);
+                }
+                Err(_) => return None,
+            }
+        };
+
+        if !status.success() {
+            return None;
+        }
+
+        // osascript output here is a single URL/title line, so the piped buffer
+        // never fills before exit — safe to read after the process has ended.
+        let mut buf = String::new();
+        child.stdout.take()?.read_to_string(&mut buf).ok()?;
+        let trimmed = buf.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
     }
 
     fn get_browser_site_context(bundle_id: Option<&str>) -> (Option<String>, Option<String>) {
