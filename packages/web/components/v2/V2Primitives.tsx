@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { CSSProperties, ReactNode } from "react";
+import { useAuth } from "@/lib/contexts/AuthContext";
 
 const LazyOrgSwitcher = dynamic(
   () => import("@/components/org/OrgSwitcher").then((m) => m.OrgSwitcher),
@@ -354,5 +355,52 @@ export function V2MarketingHeader({
         {ctaLabel}
       </Link>
     </header>
+  );
+}
+
+// Auth-aware chrome for public pages that BOTH signed-in and signed-out users
+// can land on directly (pricing, changelog). Signed-out → marketing nav with the
+// "Get Oscar" CTA; signed-in → the full app header (wordmark, workspace switcher,
+// primary tabs, account menu) so the page matches the rest of the app instead of
+// flashing a "Sign in" header at someone already signed in. Mirrors the same
+// session check the home route uses.
+export function V2PublicHeader({
+  active,
+}: {
+  active?: "PRODUCT" | "PRICING" | "CHANGELOG";
+}) {
+  const { session, isLoading } = useAuth();
+  if (session && !isLoading) return <V2AppHeader />;
+  return <V2MarketingHeader active={active} />;
+}
+
+// Single canonical site footer — wordmark + legal links + copyright. Every
+// marketing / legal / account surface renders THIS so casing, link set, legal
+// entity, and year never drift page-to-page. Year is derived at render time, so
+// it can't go stale (the old inline footers hardcoded "2026"). Purpose-specific
+// footers — the share-link metadata strip (/m, /s) and the signed-in activity
+// strip on the home feed — are intentionally distinct and not replaced.
+export function V2Footer() {
+  const year = new Date().getFullYear();
+  const links: HeaderNav[] = [
+    { label: "PRIVACY", href: "/privacy" },
+    { label: "TERMS", href: "/terms" },
+    { label: "REFUNDS", href: "/refund-policy" },
+  ];
+  return (
+    <footer
+      className="px-6 md:px-14 py-12 flex items-center justify-between flex-wrap gap-4"
+      style={{ borderTop: `1px solid ${v2.rule}` }}
+    >
+      <V2Wordmark />
+      <div className="flex items-center gap-8 flex-wrap">
+        {links.map((l) => (
+          <Link key={l.label} href={l.href} className="hover:opacity-80 transition-opacity">
+            <V2Caps>{l.label}</V2Caps>
+          </Link>
+        ))}
+        <V2Caps>© SAMYAK ARTH SERVICES PRIVATE LIMITED · {year}</V2Caps>
+      </div>
+    </footer>
   );
 }

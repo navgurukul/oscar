@@ -55,6 +55,10 @@ export interface Transcription {
 export interface MeetingSegmentJob {
   blob: Blob;
   ext: string;
+  /** Recording session that produced this segment. Threaded through to the
+   *  Rust transcribe command so it reads the matching `(session, index)`
+   *  system-audio buffer and never a buffer left by an abandoned meeting. */
+  sessionId: number;
   segmentIndex: number;
   useSystemAudio: boolean;
   startedAtMs: number;

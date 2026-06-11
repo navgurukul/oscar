@@ -206,54 +206,124 @@ pub fn set_window_above_fullscreen(ns_window_ptr: *mut c_void) {
     }
 }
 
-/// Activate a running macOS app by its display name using NSRunningApplication.
+/// Activate a running macOS app so a subsequent Cmd+V lands in its window.
+///
+/// Matching is by **bundle identifier** when `bundle_id` is provided, via
+/// `NSRunningApplication runningApplicationsWithBundleIdentifier:`. A bundle id
+/// is unique and immune to two running apps sharing a localized name, so this
+/// is the reliable path. When no bundle id is available, we fall back to an
+/// EXACT (case-insensitive) match on `localizedName` — never a substring match,
+/// which previously let dictation activate (and paste into) the wrong app
+/// because `runningApplications` order is arbitrary.
+///
+/// When a bundle id is given but no running app carries it, we return
+/// `Ok(false)` rather than falling back to a name match: the bundle id is
+/// authoritative, and a name fallback there would reintroduce the wrong-app
+/// risk the bundle id exists to remove.
+///
 /// Unlike `open -a`, this does NOT trigger a Space-switch animation, so it is
-/// safe to use with fullscreen apps.  Returns Ok(true) if the app was found and
-/// activated, Ok(false) if the app was not in the running-applications list.
-pub fn activate_app(app_name: &str) -> Result<bool, String> {
+/// safe with fullscreen apps. Returns Ok(true) if a matching app was found and
+/// activated, Ok(false) if none matched.
+pub fn activate_app(bundle_id: Option<&str>, app_name: &str) -> Result<bool, String> {
     unsafe {
-        // NSWorkspace.sharedWorkspace.runningApplications
-        let ws_class = objc_getClass(b"NSWorkspace\0".as_ptr() as *const _);
-        if ws_class.is_null() { return Err("NSWorkspace class not found".into()); }
-        let sel_shared   = sel_registerName(b"sharedWorkspace\0".as_ptr() as *const _);
-        let sel_running  = sel_registerName(b"runningApplications\0".as_ptr() as *const _);
-        let sel_count    = sel_registerName(b"count\0".as_ptr() as *const _);
-        let sel_obj_at   = sel_registerName(b"objectAtIndex:\0".as_ptr() as *const _);
-        let sel_loc_name = sel_registerName(b"localizedName\0".as_ptr() as *const _);
-        let sel_utf8     = sel_registerName(b"UTF8String\0".as_ptr() as *const _);
+        // NSApplicationActivateIgnoringOtherApps = 1 << 1 = 2
         let sel_activate = sel_registerName(b"activateWithOptions:\0".as_ptr() as *const _);
-
-        type MsgId  = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
-        type MsgIdx = unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
         type MsgU64 = unsafe extern "C" fn(*mut c_void, *mut c_void, u64) -> bool;
-        type MsgCStr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const std::ffi::c_char;
-        type MsgCnt = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
+        let msg_act: MsgU64 = std::mem::transmute(objc_msgSend as *const ());
 
-        let msg_id:   MsgId   = std::mem::transmute(objc_msgSend as *const ());
-        let msg_idx:  MsgIdx  = std::mem::transmute(objc_msgSend as *const ());
-        let msg_act:  MsgU64  = std::mem::transmute(objc_msgSend as *const ());
+        type MsgId = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
+        type MsgIdx = unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
+        type MsgCnt = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
+        let msg_id: MsgId = std::mem::transmute(objc_msgSend as *const ());
+        let msg_idx: MsgIdx = std::mem::transmute(objc_msgSend as *const ());
+        let msg_cnt: MsgCnt = std::mem::transmute(objc_msgSend as *const ());
+
+        let sel_count = sel_registerName(b"count\0".as_ptr() as *const _);
+        let sel_obj_at = sel_registerName(b"objectAtIndex:\0".as_ptr() as *const _);
+
+        // ── Preferred path: match by bundle identifier ──────────────────────
+        if let Some(bundle) = bundle_id.map(str::trim).filter(|s| !s.is_empty()) {
+            let ra_class = objc_getClass(b"NSRunningApplication\0".as_ptr() as *const _);
+            let ns_string_class = objc_getClass(b"NSString\0".as_ptr() as *const _);
+            if ra_class.is_null() || ns_string_class.is_null() {
+                return Err("NSRunningApplication/NSString class not found".into());
+            }
+
+            // Wrap the bundle id as an NSString via +[NSString stringWithUTF8String:].
+            let c_bundle =
+                std::ffi::CString::new(bundle).map_err(|_| "bundle id contained NUL byte")?;
+            let sel_str_utf8 =
+                sel_registerName(b"stringWithUTF8String:\0".as_ptr() as *const _);
+            type MsgClsCStr = unsafe extern "C" fn(
+                *mut c_void,
+                *mut c_void,
+                *const std::ffi::c_char,
+            ) -> *mut c_void;
+            let msg_str: MsgClsCStr = std::mem::transmute(objc_msgSend as *const ());
+            let ns_bundle = msg_str(ns_string_class, sel_str_utf8, c_bundle.as_ptr());
+            if ns_bundle.is_null() {
+                return Ok(false);
+            }
+
+            // +[NSRunningApplication runningApplicationsWithBundleIdentifier:] → NSArray*
+            let sel_apps_for_bundle = sel_registerName(
+                b"runningApplicationsWithBundleIdentifier:\0".as_ptr() as *const _,
+            );
+            type MsgClsId =
+                unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> *mut c_void;
+            let msg_apps: MsgClsId = std::mem::transmute(objc_msgSend as *const ());
+            let apps = msg_apps(ra_class, sel_apps_for_bundle, ns_bundle);
+            if apps.is_null() || msg_cnt(apps, sel_count) == 0 {
+                return Ok(false);
+            }
+
+            let app = msg_idx(apps, sel_obj_at, 0);
+            if app.is_null() {
+                return Ok(false);
+            }
+            msg_act(app, sel_activate, 2);
+            return Ok(true);
+        }
+
+        // ── Fallback: exact (case-insensitive) localizedName match ──────────
+        let target = app_name.trim().to_lowercase();
+        if target.is_empty() {
+            return Ok(false);
+        }
+
+        let ws_class = objc_getClass(b"NSWorkspace\0".as_ptr() as *const _);
+        if ws_class.is_null() {
+            return Err("NSWorkspace class not found".into());
+        }
+        let sel_shared = sel_registerName(b"sharedWorkspace\0".as_ptr() as *const _);
+        let sel_running = sel_registerName(b"runningApplications\0".as_ptr() as *const _);
+        let sel_loc_name = sel_registerName(b"localizedName\0".as_ptr() as *const _);
+        let sel_utf8 = sel_registerName(b"UTF8String\0".as_ptr() as *const _);
+        type MsgCStr =
+            unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const std::ffi::c_char;
         let msg_cstr: MsgCStr = std::mem::transmute(objc_msgSend as *const ());
-        let msg_cnt:  MsgCnt  = std::mem::transmute(objc_msgSend as *const ());
 
         let shared = msg_id(ws_class, sel_shared);
-        let apps   = msg_id(shared, sel_running);
-        let count  = msg_cnt(apps, sel_count);
+        let apps = msg_id(shared, sel_running);
+        let count = msg_cnt(apps, sel_count);
 
-        let target = app_name.to_lowercase();
         for i in 0..count {
             let app = msg_idx(apps, sel_obj_at, i);
             // localizedName returns NSString*, so we must call [nsString UTF8String]
             // to get a C string pointer. Treating NSString* as *const c_char directly
             // causes a SIGSEGV in strlen.
             let ns_string = msg_id(app, sel_loc_name);
-            if ns_string.is_null() { continue; }
+            if ns_string.is_null() {
+                continue;
+            }
             let name_ptr = msg_cstr(ns_string, sel_utf8);
-            if name_ptr.is_null() { continue; }
+            if name_ptr.is_null() {
+                continue;
+            }
             let name = std::ffi::CStr::from_ptr(name_ptr)
                 .to_string_lossy()
                 .to_lowercase();
-            if name == target || name.contains(&target) || target.contains(&name) {
-                // NSApplicationActivateIgnoringOtherApps = 1 << 1 = 2
+            if name == target {
                 msg_act(app, sel_activate, 2);
                 return Ok(true);
             }

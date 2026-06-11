@@ -111,54 +111,121 @@ mod mac {
     }
 
     fn run_osascript(script: &str) -> Option<String> {
-        std::process::Command::new("osascript")
-            .args(["-e", script])
-            .output()
-            .ok()
-            .and_then(|output| {
-                if !output.status.success() {
-                    return None;
-                }
+        use std::io::Read;
+        use std::process::{Command, Stdio};
+        use std::time::{Duration, Instant};
 
-                Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-            })
-            .filter(|value| !value.is_empty())
+        // Bound how long this can block. Context capture runs synchronously on
+        // the hotkey thread (see hotkey.rs) before the pill transitions to
+        // recording, and a busy/unresponsive browser can stall the AppleScript
+        // bridge for seconds. Cap the wait, kill the child on timeout, and
+        // return None so the field is simply omitted rather than delaying the
+        // rest→recording transition.
+        const OSASCRIPT_TIMEOUT: Duration = Duration::from_millis(400);
+        const POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+        let mut child = Command::new("osascript")
+            .args(["-e", script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .ok()?;
+
+        let start = Instant::now();
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) => {
+                    if start.elapsed() >= OSASCRIPT_TIMEOUT {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return None;
+                    }
+                    std::thread::sleep(POLL_INTERVAL);
+                }
+                Err(_) => return None,
+            }
+        };
+
+        if !status.success() {
+            return None;
+        }
+
+        // osascript output here is a single URL/title line, so the piped buffer
+        // never fills before exit — safe to read after the process has ended.
+        let mut buf = String::new();
+        child.stdout.take()?.read_to_string(&mut buf).ok()?;
+        let trimmed = buf.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
     }
 
-    fn get_browser_site_context(app_name: &str) -> (Option<String>, Option<String>) {
-        let lower = app_name.to_lowercase();
+    fn get_browser_site_context(bundle_id: Option<&str>) -> (Option<String>, Option<String>) {
+        // (bundle id, url script, title script). Every script addresses the app
+        // by a STATIC `application id` literal — the runtime bundle id only
+        // selects a row, it is never interpolated into the script body. This
+        // closes an AppleScript-injection hole: the previous code formatted the
+        // app's `localizedName` (attacker-influenceable via the app's Info.plist
+        // / window chrome) directly into the script with only `"` escaped, so a
+        // crafted name could break out and run arbitrary AppleScript.
+        const BROWSERS: &[(&str, &str, &str)] = &[
+            (
+                "com.apple.Safari",
+                r#"tell application id "com.apple.Safari" to get URL of front document"#,
+                r#"tell application id "com.apple.Safari" to get name of front document"#,
+            ),
+            (
+                "com.google.Chrome",
+                r#"tell application id "com.google.Chrome" to get URL of active tab of front window"#,
+                r#"tell application id "com.google.Chrome" to get title of active tab of front window"#,
+            ),
+            (
+                "company.thebrowser.Browser",
+                r#"tell application id "company.thebrowser.Browser" to get URL of active tab of front window"#,
+                r#"tell application id "company.thebrowser.Browser" to get title of active tab of front window"#,
+            ),
+            (
+                "com.brave.Browser",
+                r#"tell application id "com.brave.Browser" to get URL of active tab of front window"#,
+                r#"tell application id "com.brave.Browser" to get title of active tab of front window"#,
+            ),
+            (
+                "com.microsoft.edgemac",
+                r#"tell application id "com.microsoft.edgemac" to get URL of active tab of front window"#,
+                r#"tell application id "com.microsoft.edgemac" to get title of active tab of front window"#,
+            ),
+            (
+                "com.operasoftware.Opera",
+                r#"tell application id "com.operasoftware.Opera" to get URL of active tab of front window"#,
+                r#"tell application id "com.operasoftware.Opera" to get title of active tab of front window"#,
+            ),
+        ];
 
-        if lower.contains("safari") {
-            let url = run_osascript(
-                r#"tell application "Safari" to get URL of front document"#,
-            );
-            let title = run_osascript(
-                r#"tell application "Safari" to get name of front document"#,
-            );
-            return (
-                url.as_deref().and_then(extract_host_from_url),
-                normalize_optional_string(title),
-            );
-        }
+        let bundle = match bundle_id {
+            Some(value) => value,
+            None => return (None, None),
+        };
 
-        let chromium_like = ["chrome", "arc", "brave", "edge", "opera"];
-        if chromium_like.iter().any(|candidate| lower.contains(candidate)) {
-            let safe_name = app_name.replace('"', "\\\"");
-            let url = run_osascript(&format!(
-                r#"tell application "{}" to get URL of active tab of front window"#,
-                safe_name
-            ));
-            let title = run_osascript(&format!(
-                r#"tell application "{}" to get title of active tab of front window"#,
-                safe_name
-            ));
-            return (
-                url.as_deref().and_then(extract_host_from_url),
-                normalize_optional_string(title),
-            );
-        }
+        let scripts = BROWSERS
+            .iter()
+            .find(|(id, _, _)| *id == bundle)
+            .map(|(_, url_script, title_script)| (*url_script, *title_script));
 
-        (None, None)
+        let (url_script, title_script) = match scripts {
+            Some(pair) => pair,
+            None => return (None, None),
+        };
+
+        let url = run_osascript(url_script);
+        let title = run_osascript(title_script);
+        (
+            url.as_deref().and_then(extract_host_from_url),
+            normalize_optional_string(title),
+        )
     }
 
     pub(super) fn get_frontmost_context_payload() -> FrontmostContextPayload {
@@ -174,7 +241,7 @@ mod mac {
     end tell
 end tell"#,
         );
-        let (site_host, site_title) = get_browser_site_context(&app_name);
+        let (site_host, site_title) = get_browser_site_context(native_app_id.as_deref());
 
         FrontmostContextPayload {
             platform: "macos".to_string(),

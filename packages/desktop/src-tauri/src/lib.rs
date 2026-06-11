@@ -168,6 +168,7 @@ pub fn run() {
             whisper_context: None,
             loaded_model_path: None,
             meeting_system_audio_segments: HashMap::new(),
+            active_meeting_session: 0,
         })))
         .manage(HotkeyState {
             is_recording: is_recording.clone(),
@@ -214,6 +215,7 @@ pub fn run() {
             filesystem::check_file_exists,
             filesystem::delete_file,
             filesystem::append_perf_log,
+            filesystem::clear_perf_log,
             filesystem::get_model_path,
             calendar::get_calendar_events,
             hardware::detect_hardware,
