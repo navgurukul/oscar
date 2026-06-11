@@ -49,6 +49,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "v0.8.2",
+    date: "11 JUN 2026",
+    tag: "DESKTOP",
+    title: "Smoother first launch",
+    lede: "The app now opens instantly and prepares your speech model in the background, instead of waiting on the download.",
+    changes: [
+      { kind: "fixed", area: "DESKTOP", text: "Fixed a blank screen on the first launch after updating — the app now opens immediately and downloads your speech model in the background, with visible progress." },
+      { kind: "improved", area: "DESKTOP", text: "First-time setup downloads the model for your selected language directly, avoiding a redundant second download." },
+    ],
+  },
+  {
     version: "v0.8.1",
     date: "11 JUN 2026",
     tag: "STREAM",
