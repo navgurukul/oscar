@@ -1310,6 +1310,7 @@ function App() {
       const { recommendation, resolved } = await resolveModelForRole(
         role,
         preset,
+        transcriptionLanguageRef.current,
       );
 
       // Track the *currently authoritative* variant through every code path
@@ -1364,7 +1365,11 @@ function App() {
             progress: 0,
           });
 
-          const retry = await resolveModelForRole(role, preset);
+          const retry = await resolveModelForRole(
+            role,
+            preset,
+            transcriptionLanguageRef.current,
+          );
           if (retry.resolved) {
             path = retry.resolved.path;
             resolvedVariant = retry.resolved.variant;
@@ -3077,6 +3082,30 @@ function App() {
                       cleanupStyle: cleanupStyleRef.current,
                       promptMode: promptModeRef.current,
                     }).catch(console.warn);
+                    // Model selection is language-aware: "hi-en" routes to the
+                    // Oriserve Hinglish model, other languages to the general
+                    // ladder. Re-prepare so the right model is fetched now
+                    // rather than mid-recording; reload whichever role is live.
+                    void prepareWhisperModel("dictation", {
+                      load: currentWhisperRoleRef.current === "dictation",
+                      autoDownload: true,
+                    }).catch((err) => {
+                      console.warn(
+                        "[whisper] language-change model prepare failed:",
+                        err,
+                      );
+                    });
+                    if (currentWhisperRoleRef.current === "minutes") {
+                      void prepareWhisperModel("minutes", {
+                        load: true,
+                        autoDownload: true,
+                      }).catch((err) => {
+                        console.warn(
+                          "[whisper] language-change model prepare failed:",
+                          err,
+                        );
+                      });
+                    }
                   }}
                   perfLogTranscripts={perfLogTranscripts}
                   onPerfLogTranscriptsChange={(enabled) => {

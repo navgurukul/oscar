@@ -23,7 +23,20 @@ const LEGACY_FILENAMES = ["ggml-base.bin"];
 // instead of pulling a second, larger one. The actual threshold is
 // min(recommendedQuality, FLOOR) so a weak box (recommended base/tiny) still
 // reuses what it has rather than chasing an unrunnable upgrade.
+// (The Hinglish models share the ordinal scale — Apex=5, Prime=6 — but are
+// partitioned off by isHinglishVariant, so they only ever substitute for each
+// other, never across the general/Hinglish boundary.)
 const REUSE_QUALITY_FLOOR = 3; // "small"
+
+/// The Oriserve Hindi2Hinglish models emit romanized Hinglish and must only
+/// ever serve the "hi-en" language. This guard is used on both sides of model
+/// resolution: a general transcription must never substitute a Hinglish model,
+/// and a Hinglish request must never substitute a general (Devanagari) model.
+export function isHinglishVariant(variant: WhisperModelVariant): boolean {
+  return (
+    variant === "hindi2hinglish-apex" || variant === "hindi2hinglish-prime"
+  );
+}
 
 export interface InstalledModel {
   variant: WhisperModelVariant;
@@ -104,8 +117,15 @@ export async function resolveInstalledPath(
 /// fallback when the preferred variant isn't on disk yet.
 export async function pickInstalledFallback(
   role: WhisperRole,
+  recommendedVariant: WhisperModelVariant,
 ): Promise<InstalledModel | null> {
-  const installed = await listInstalledModels();
+  // Only substitute within the same family as the recommendation: a Hinglish
+  // request falls back among installed Hinglish models, a general request among
+  // installed general models. Never cross the boundary (see isHinglishVariant).
+  const wantHinglish = isHinglishVariant(recommendedVariant);
+  const installed = (await listInstalledModels()).filter(
+    (m) => isHinglishVariant(m.variant) === wantHinglish,
+  );
   if (installed.length === 0) return null;
   installed.sort((a, b) => {
     if (role === "dictation") {
@@ -142,10 +162,12 @@ export interface ResolvedModel {
 export async function resolveModelForRole(
   role: WhisperRole,
   preset: ModelPreset,
+  // Transcription language — routes "hi-en" to the Oriserve Hinglish models.
+  language?: string,
 ): Promise<
   | { recommendation: ModelRecommendation; resolved: ResolvedModel | null }
 > {
-  const recommendation = await recommendWhisperModel(role, preset);
+  const recommendation = await recommendWhisperModel(role, preset, language);
   const preferredPath = await resolveInstalledPath(
     recommendation.spec.variant,
   );
@@ -164,7 +186,10 @@ export async function resolveModelForRole(
     };
   }
 
-  const fallback = await pickInstalledFallback(role);
+  const fallback = await pickInstalledFallback(
+    role,
+    recommendation.spec.variant,
+  );
   if (fallback) {
     // An installed-but-not-recommended model is a sufficient substitute when
     // its quality clears min(recommendedQuality, floor). This is what lets
