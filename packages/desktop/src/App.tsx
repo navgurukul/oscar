@@ -896,15 +896,17 @@ function App() {
         .then((supported) => setSystemAudioSupported(supported))
         .catch(() => setSystemAudioSupported(false));
 
-      // If setup is complete, verify that the Whisper model still loads.
+      // Setup was completed on a previous launch. Render the app immediately
+      // and load the speech model in the BACKGROUND — never block the render on
+      // it. Otherwise a first-launch model download (e.g. the default language
+      // now maps to a model that isn't on disk yet) leaves `setupComplete` at
+      // `null` and the whole UI blank for the entire several-hundred-MB
+      // download. initWhisper surfaces its own load state via `status` and
+      // auto-retries the download, so the app stays usable (settings, scribbles,
+      // meetings) throughout and dictation lights up once the model is ready.
       if (setupDone) {
-        const loaded = await initWhisper();
-        if (!loaded) {
-          await saveSetting("setupComplete", false);
-          setSetupComplete(false);
-          return;
-        }
         setSetupComplete(true);
+        void initWhisper();
       }
     })();
 
@@ -1453,6 +1455,11 @@ function App() {
 
   const initWhisper = async () => {
     try {
+      // Shown on the home screen while the model resolves — this can include a
+      // one-time download of a few hundred MB (e.g. the Hinglish model on first
+      // use), so give feedback instead of a silent wait. The per-model download
+      // progress also surfaces via `dictationModel.downloadState`.
+      setStatus("Preparing speech model…");
       await ensureWhisperModelLoaded("dictation");
       setStatus("Preparing voice engine...");
       void warmVoiceEngine().finally(() => {
@@ -2777,7 +2784,13 @@ function App() {
       />
     );
   if (setupComplete === null) return null;
-  if (!setupComplete) return <SetupScreen onComplete={handleSetupComplete} />;
+  if (!setupComplete)
+    return (
+      <SetupScreen
+        onComplete={handleSetupComplete}
+        transcriptionLanguage={transcriptionLanguage}
+      />
+    );
 
   const headerTitleByTab: Record<TabType, string> = {
     home: "OSCAR · LISTENING SURFACE",
