@@ -15,7 +15,6 @@ import {
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { BillingSection } from "./BillingSection";
 import { VocabularySection } from "./VocabularySection";
-import { VibeCodingPicker } from "./VibeCodingPicker";
 import { getInitials } from "../lib/utils";
 import { isContextAwarePlatform } from "../lib/dictation-context";
 import {
@@ -866,13 +865,6 @@ export function SettingsTab({
                 meetingModel,
                 true,
               )}
-            </Group>
-
-            {/* EXPERIMENTAL */}
-            <Group title="EXPERIMENTAL">
-              <div className="pt-2">
-                <VibeCodingPicker />
-              </div>
             </Group>
           </div>
         )}
