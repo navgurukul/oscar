@@ -1689,13 +1689,22 @@ function App() {
     // enable AI" instead of a normal success toast.
     let aiAuthFailed = false;
 
+    // Shared early-abort exit for the pre-transcription guards below. They
+    // return before the try/finally that resets processing state, so route them
+    // through one place that clears the processing flag, sets the status, and
+    // collapses the pill — keeping every exit path consistent.
+    const endProcessingEarly = (statusMessage: string) => {
+      setIsProcessing(false);
+      setStatus(statusMessage);
+      invoke("hide_recording_pill").catch(console.warn);
+    };
+
     const chunkCount = audioChunksRef.current.length;
     const totalBytes = audioChunksRef.current.reduce((s, b) => s + b.size, 0);
 
     if (chunkCount === 0 || totalBytes === 0) {
       console.warn("[process] ABORT: no audio captured");
-      setStatus("❌ No audio captured. Check microphone permission.");
-      invoke("hide_recording_pill").catch(console.warn);
+      endProcessingEarly("❌ No audio captured. Check microphone permission.");
       return;
     }
 
@@ -1705,8 +1714,7 @@ function App() {
     const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
 
     if (audioBlob.size < 500) {
-      setStatus(`❌ Blob too small (${audioBlob.size}B). Try again.`);
-      invoke("hide_recording_pill").catch(console.warn);
+      endProcessingEarly(`❌ Blob too small (${audioBlob.size}B). Try again.`);
       return;
     }
 
@@ -1727,16 +1735,14 @@ function App() {
       });
       audioData = Float32Array.from(pcm);
     } catch (e) {
-      setStatus(`❌ Decode failed: ${e}`);
-      invoke("hide_recording_pill").catch(console.warn);
+      endProcessingEarly(`❌ Decode failed: ${e}`);
       return;
     }
 
     if (audioData.length < 1600) {
-      setStatus(
+      endProcessingEarly(
         `❌ Too short (${audioData.length} samples). Speak for ≥1 second.`,
       );
-      invoke("hide_recording_pill").catch(console.warn);
       return;
     }
 
@@ -1753,8 +1759,7 @@ function App() {
       console.warn(
         `[process] ABORT: silent audio (rms=${rms.toFixed(4)}, peak=${peak.toFixed(4)})`,
       );
-      setStatus("⚠️ No speech detected. Try speaking louder or closer.");
-      invoke("hide_recording_pill").catch(console.warn);
+      endProcessingEarly("⚠️ No speech detected. Try speaking louder or closer.");
       return;
     }
 
