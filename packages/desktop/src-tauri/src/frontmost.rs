@@ -125,40 +125,68 @@ mod mac {
             .filter(|value| !value.is_empty())
     }
 
-    fn get_browser_site_context(app_name: &str) -> (Option<String>, Option<String>) {
-        let lower = app_name.to_lowercase();
+    fn get_browser_site_context(bundle_id: Option<&str>) -> (Option<String>, Option<String>) {
+        // (bundle id, url script, title script). Every script addresses the app
+        // by a STATIC `application id` literal — the runtime bundle id only
+        // selects a row, it is never interpolated into the script body. This
+        // closes an AppleScript-injection hole: the previous code formatted the
+        // app's `localizedName` (attacker-influenceable via the app's Info.plist
+        // / window chrome) directly into the script with only `"` escaped, so a
+        // crafted name could break out and run arbitrary AppleScript.
+        const BROWSERS: &[(&str, &str, &str)] = &[
+            (
+                "com.apple.Safari",
+                r#"tell application id "com.apple.Safari" to get URL of front document"#,
+                r#"tell application id "com.apple.Safari" to get name of front document"#,
+            ),
+            (
+                "com.google.Chrome",
+                r#"tell application id "com.google.Chrome" to get URL of active tab of front window"#,
+                r#"tell application id "com.google.Chrome" to get title of active tab of front window"#,
+            ),
+            (
+                "company.thebrowser.Browser",
+                r#"tell application id "company.thebrowser.Browser" to get URL of active tab of front window"#,
+                r#"tell application id "company.thebrowser.Browser" to get title of active tab of front window"#,
+            ),
+            (
+                "com.brave.Browser",
+                r#"tell application id "com.brave.Browser" to get URL of active tab of front window"#,
+                r#"tell application id "com.brave.Browser" to get title of active tab of front window"#,
+            ),
+            (
+                "com.microsoft.edgemac",
+                r#"tell application id "com.microsoft.edgemac" to get URL of active tab of front window"#,
+                r#"tell application id "com.microsoft.edgemac" to get title of active tab of front window"#,
+            ),
+            (
+                "com.operasoftware.Opera",
+                r#"tell application id "com.operasoftware.Opera" to get URL of active tab of front window"#,
+                r#"tell application id "com.operasoftware.Opera" to get title of active tab of front window"#,
+            ),
+        ];
 
-        if lower.contains("safari") {
-            let url = run_osascript(
-                r#"tell application "Safari" to get URL of front document"#,
-            );
-            let title = run_osascript(
-                r#"tell application "Safari" to get name of front document"#,
-            );
-            return (
-                url.as_deref().and_then(extract_host_from_url),
-                normalize_optional_string(title),
-            );
-        }
+        let bundle = match bundle_id {
+            Some(value) => value,
+            None => return (None, None),
+        };
 
-        let chromium_like = ["chrome", "arc", "brave", "edge", "opera"];
-        if chromium_like.iter().any(|candidate| lower.contains(candidate)) {
-            let safe_name = app_name.replace('"', "\\\"");
-            let url = run_osascript(&format!(
-                r#"tell application "{}" to get URL of active tab of front window"#,
-                safe_name
-            ));
-            let title = run_osascript(&format!(
-                r#"tell application "{}" to get title of active tab of front window"#,
-                safe_name
-            ));
-            return (
-                url.as_deref().and_then(extract_host_from_url),
-                normalize_optional_string(title),
-            );
-        }
+        let scripts = BROWSERS
+            .iter()
+            .find(|(id, _, _)| *id == bundle)
+            .map(|(_, url_script, title_script)| (*url_script, *title_script));
 
-        (None, None)
+        let (url_script, title_script) = match scripts {
+            Some(pair) => pair,
+            None => return (None, None),
+        };
+
+        let url = run_osascript(url_script);
+        let title = run_osascript(title_script);
+        (
+            url.as_deref().and_then(extract_host_from_url),
+            normalize_optional_string(title),
+        )
     }
 
     pub(super) fn get_frontmost_context_payload() -> FrontmostContextPayload {
@@ -174,7 +202,7 @@ mod mac {
     end tell
 end tell"#,
         );
-        let (site_host, site_title) = get_browser_site_context(&app_name);
+        let (site_host, site_title) = get_browser_site_context(native_app_id.as_deref());
 
         FrontmostContextPayload {
             platform: "macos".to_string(),
