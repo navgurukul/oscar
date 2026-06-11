@@ -49,6 +49,36 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "v0.8.1",
+    date: "11 JUN 2026",
+    tag: "STREAM",
+    title: "Hinglish, in your own words",
+    lede: "Dictation, notes, and meetings now understand Hindi–English code-switching and write it back in plain Roman letters — powered by India-tuned speech models that run fully on your device.",
+    changes: [
+      { kind: "new", area: "STREAM", text: "Pick “Hinglish” as your language and dictation transcribes code-switched Hindi–English straight into readable Roman script — no Devanagari middle step." },
+      { kind: "new", area: "MINUTES", text: "Hinglish meetings use a higher-accuracy on-device model tuned for Indian-accented, code-switched speech." },
+      { kind: "new", area: "SCRIBBLE", text: "Voice notes recorded in Hinglish come out in clean Roman-letter Hinglish too." },
+      { kind: "improved", area: "DESKTOP", text: "The app automatically picks the right on-device speech model for your language and hardware, and falls back gracefully on low-memory machines." },
+    ],
+  },
+  {
+    version: "v0.8.0",
+    date: "11 JUN 2026",
+    tag: "STREAM",
+    title: "Steadier Stream, safer Minutes",
+    lede: "A broad hardening pass: dictation paste and context capture are more reliable and private, meeting notes are tougher against bad input, desktop sign-in is clearer, and the web app reads consistently end to end.",
+    changes: [
+      { kind: "fixed", area: "STREAM", text: "Dictation keeps your raw transcript even when AI cleanup comes back empty — words are never lost." },
+      { kind: "fixed", area: "STREAM", text: "Paste is steadier: Ctrl is always released after the keystroke, Windows paste no longer targets a stale window, and rapid start/stop is handled cleanly." },
+      { kind: "fixed", area: "STREAM", text: "Active-app context capture is hardened — injection-safe app names, a timeout so it can't hang, and transcript PII kept out of local logs." },
+      { kind: "fixed", area: "MINUTES", text: "Meeting enhancement is guarded against PII leaks and prompt injection from org context, and empty-notes cases no longer fall through to the model." },
+      { kind: "fixed", area: "MINUTES", text: "Per-segment transcription failures now surface instead of being dropped, and system-audio buffers are scoped per session to stop cross-session corruption." },
+      { kind: "fixed", area: "MINUTES", text: "Meeting search ignores citation and evidence artifacts for cleaner matches." },
+      { kind: "new", area: "DESKTOP", text: "Redesigned the desktop sign-in hand-off to the browser, with clearer state while you authenticate." },
+      { kind: "improved", area: "WEB", text: "One consistent header and footer across every page, and the changelog is reachable from your account menu — signed in or out." },
+    ],
+  },
+  {
     version: "v0.7.38",
     date: "10 JUN 2026",
     tag: "TEAMS",
