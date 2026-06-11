@@ -8,6 +8,7 @@ import {
   v2Mono,
   V2Caps,
   V2Wordmark,
+  V2Footer,
 } from "@/components/v2/V2Primitives";
 
 type Tab = "PRIVACY" | "TERMS" | "REFUNDS";
@@ -134,6 +135,8 @@ export function V2LegalLayout({
           <div className="mt-12 space-y-12 v2-legal-body">{children}</div>
         </section>
       </article>
+
+      <V2Footer />
 
       <style jsx global>{`
         .v2-legal-body h2 {

@@ -58,11 +58,12 @@ export const UI_STRINGS = {
     "Press the microphone button and start speaking. Oscar will clean up your note and save it as a Scribble.",
 } as const;
 
-// ROUTES — web adds DOWNLOAD, MEETINGS
+// ROUTES — web adds DOWNLOAD, MEETINGS, CHANGELOG
 export const ROUTES = {
   ..._ROUTES,
   MEETINGS: "/meetings",
   DOWNLOAD: "/download",
+  CHANGELOG: "/changelog",
 } as const;
 
 // RATE_LIMITS — web adds AI_TRANSFORM

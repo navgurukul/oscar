@@ -8,7 +8,7 @@ import { Figtree, EB_Garamond, IBM_Plex_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
 import Script from "next/script";
 import { usePathname } from "next/navigation";
-import { Footer } from "@/components/shared/Footer";
+import { V2Footer } from "@/components/v2/V2Primitives";
 import { AuthProvider, useAuth } from "@/lib/contexts/AuthContext";
 import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
 import { QueryProvider } from "@/lib/providers/QueryProvider";
@@ -52,7 +52,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       {children}
       {shouldShowFooter && (
         <div className="mt-auto">
-          <Footer />
+          <V2Footer />
         </div>
       )}
       <Toaster />

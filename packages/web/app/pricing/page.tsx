@@ -18,7 +18,8 @@ import {
   v2Mono,
   V2Caps,
   V2Mono,
-  V2MarketingHeader,
+  V2PublicHeader,
+  V2Footer,
 } from "@/components/v2/V2Primitives";
 
 type Tier = {
@@ -132,7 +133,7 @@ export default function PricingPage() {
 
   return (
     <main style={{ background: v2.cream, color: v2.ink, fontFamily: "var(--font-figtree), system-ui" }}>
-      <V2MarketingHeader active="PRICING" />
+      <V2PublicHeader active="PRICING" />
 
       <section className="px-6 md:px-14 pt-16 md:pt-24 pb-12 md:pb-16 text-center">
         <V2Caps>PRICING · TWO TIERS, NO TRICKS</V2Caps>
@@ -347,6 +348,8 @@ export default function PricingPage() {
           </div>
         </div>
       </section>
+
+      <V2Footer />
     </main>
   );
 }
