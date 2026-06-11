@@ -54,7 +54,6 @@ pub async fn transcribe_meeting_audio(
     let state = Arc::clone(&state);
     // Inference runs for many seconds on meeting-length audio; a sync command
     // would hold the main thread and freeze the UI ("Not Responding").
-    let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Stop system audio capture and retrieve buffered samples
         let backend = system_audio::backend();
