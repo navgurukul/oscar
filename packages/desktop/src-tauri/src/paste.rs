@@ -37,7 +37,11 @@ pub fn get_frontmost_app() -> Result<String, String> {
 /// This is a SYNC command — Tauri 2 runs it on the main thread. This is intentional:
 /// CGEvent posting and NSRunningApplication activation are most reliable from the main thread.
 #[tauri::command]
-pub fn paste_transcription(text: String, target_app: Option<String>) -> Result<String, String> {
+pub fn paste_transcription(
+    text: String,
+    target_app: Option<String>,
+    target_bundle_id: Option<String>,
+) -> Result<String, String> {
     // 1. Set clipboard
     let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
     clipboard.set_text(&text).map_err(|e| e.to_string())?;
@@ -70,19 +74,36 @@ pub fn paste_transcription(text: String, target_app: Option<String>) -> Result<S
         // 2. Re-activate the target app using NSRunningApplication so that
         //    Cmd+V lands in the correct window even if the Tauri IPC call
         //    caused Oscar's process to become active on the main thread.
-        //    We use NSRunningApplication (not `open -a`) because `open -a`
-        //    triggers a Space-switch animation which breaks fullscreen apps.
-        if let Some(ref app_name) = target_app {
-            if !app_name.is_empty() {
-                log::info!("[paste] re-activating '{}' via NSRunningApplication", app_name);
-                match macos_paste::activate_app(app_name) {
-                    Ok(true) => {
-                        // Brief wait for the window manager to finish activating
-                        std::thread::sleep(std::time::Duration::from_millis(120));
-                    }
-                    Ok(false) => log::warn!("[paste] app '{}' not found in running apps", app_name),
-                    Err(e) => log::warn!("[paste] activate_app failed: {}", e),
+        //    We match by bundle identifier when one was captured (unique, and
+        //    immune to two running apps sharing a localized name) and fall back
+        //    to an exact display-name match otherwise. We use
+        //    NSRunningApplication (not `open -a`) because `open -a` triggers a
+        //    Space-switch animation which breaks fullscreen apps.
+        let bundle_id = target_bundle_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        let app_name = target_app
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        if bundle_id.is_some() || app_name.is_some() {
+            log::info!(
+                "[paste] re-activating target (bundle={:?}, name={:?}) via NSRunningApplication",
+                bundle_id,
+                app_name,
+            );
+            match macos_paste::activate_app(bundle_id, app_name.unwrap_or("")) {
+                Ok(true) => {
+                    // Brief wait for the window manager to finish activating
+                    std::thread::sleep(std::time::Duration::from_millis(120));
                 }
+                Ok(false) => log::warn!(
+                    "[paste] target not found in running apps (bundle={:?}, name={:?})",
+                    bundle_id,
+                    app_name,
+                ),
+                Err(e) => log::warn!("[paste] activate_app failed: {}", e),
             }
         }
 

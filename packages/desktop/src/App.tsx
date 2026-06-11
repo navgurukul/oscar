@@ -283,6 +283,12 @@ function App() {
   // promptModeRef drives cleanup; the state value feeds the Settings toggle.
   const [promptMode, setPromptMode] = useState(false);
 
+  // Diagnostics opt-in: when ON, perf.jsonl records the verbatim raw + AI-cleaned
+  // transcript text (PII) alongside the timing/char-count signal. Default OFF —
+  // the char/word counts and deltas are always logged; only the raw strings are
+  // gated. Toggled from Settings → Data & privacy.
+  const [perfLogTranscripts, setPerfLogTranscripts] = useState(false);
+
   // Selected microphone device id ("" = system default)
   const [selectedMicId, setSelectedMicId] = useState("");
   const selectedMicIdRef = useRef("");
@@ -326,6 +332,11 @@ function App() {
   const streamRef = useRef<MediaStream | null>(null);
   const autoPasteRef = useRef(true);
   const targetAppRef = useRef<string>("");
+  // Bundle identifier (macOS) of the frontmost app captured at hotkey press.
+  // Preferred over the display name for re-activation so paste can't land in
+  // the wrong window when two running apps share a localized name. Empty when
+  // unavailable (non-macOS, or the OS didn't report a bundle id).
+  const targetBundleIdRef = useRef<string>("");
   const dictationContextRef = useRef<DictationContextSnapshot | null>(null);
   const pendingStopRef = useRef(false);
   const warmStreamRef = useRef<MediaStream | null>(null);
@@ -338,6 +349,7 @@ function App() {
   const transcriptionLanguageRef = useRef<string>("hi-en");
   const cleanupStyleRef = useRef<CleanupStyle>(DEFAULT_CLEANUP_STYLE);
   const promptModeRef = useRef(false);
+  const perfLogTranscriptsRef = useRef(false);
   const dictWordsRef = useRef<string[]>([]);
   const sessionRef = useRef<Session | null>(null);
   const authInitRef = useRef(false);
@@ -761,6 +773,7 @@ function App() {
         savedMinutesDataResetVersion,
         savedCleanupStyle,
         savedPromptMode,
+        savedPerfLogTranscripts,
       ] = await Promise.all([
         loadSetting<boolean>("aiEditing", false),
         loadSetting<boolean>("autoPaste", true),
@@ -786,6 +799,7 @@ function App() {
         loadSetting<string>("minutesDataResetVersion", ""),
         loadSetting<CleanupStyle>("cleanupStyle", DEFAULT_CLEANUP_STYLE),
         loadSetting<boolean>("promptMode", false),
+        loadSetting<boolean>("perfLogTranscripts", false),
       ]);
 
       const micPermission = await getMicrophonePermissionState().catch(
@@ -847,6 +861,8 @@ function App() {
       cleanupStyleRef.current = savedCleanupStyle;
       setPromptMode(savedPromptMode);
       promptModeRef.current = savedPromptMode;
+      setPerfLogTranscripts(savedPerfLogTranscripts);
+      perfLogTranscriptsRef.current = savedPerfLogTranscripts;
       const hasLegacyCalendarConnection =
         Boolean(savedCalToken || savedCalRefreshToken) && !savedCalConnectedUserId;
       if (hasLegacyCalendarConnection) {
@@ -919,6 +935,9 @@ function App() {
         targetAppRef.current = isSelfApp
           ? ""
           : ev.payload?.targetAppName?.trim() || "";
+        targetBundleIdRef.current = isSelfApp
+          ? ""
+          : ev.payload?.appId?.trim() || "";
         dictationContextRef.current = isSelfApp
           ? null
           : buildDictationContextSnapshot(ev.payload);
@@ -1577,7 +1596,12 @@ function App() {
       if (e.data.size > 0) audioChunksRef.current.push(e.data);
     };
     mediaRecorder.onstop = () => {
-      processAudio(stream, autoPasteRef.current, targetAppRef.current);
+      processAudio(
+        stream,
+        autoPasteRef.current,
+        targetAppRef.current,
+        targetBundleIdRef.current,
+      );
     };
 
     mediaRecorder.start(100);
@@ -1629,6 +1653,7 @@ function App() {
     _stream: MediaStream,
     shouldPaste: boolean,
     _targetApp?: string,   // used in paste_transcription for NSRunningApplication re-focus
+    _targetBundleId?: string, // preferred over _targetApp for re-focus (macOS bundle id)
   ) => {
     // ── Timing instrumentation (stream/dictation flow) ───────────────────────
     // Logs a single summary line at the end so we can spot which stage is slow.
@@ -1638,10 +1663,10 @@ function App() {
     let hadError = false;
     // ── Transcript capture for offline quality analysis ──────────────────────
     // Hoisted out of the try-block so the `finally` can persist them to
-    // perf.jsonl regardless of which exit path the handler takes. WARNING:
-    // raw + final text are PII — perf.jsonl is intended for internal
-    // dogfooding only. Gate or hash these fields before shipping to end
-    // users (eg. via a `perfLogTranscripts` setting).
+    // perf.jsonl regardless of which exit path the handler takes. These are raw
+    // user speech (PII): the verbatim strings are only written to perf.jsonl
+    // when the user opts in via the `perfLogTranscripts` setting — see the gate
+    // in the finally block below.
     let rawWhisperText: string | null = null;
     let finalCleanedText: string | null = null;
     let pasteHappened = false;
@@ -1934,6 +1959,7 @@ function App() {
           const pasteResult = await invoke<string>("paste_transcription", {
             text: finalText,
             targetApp: _targetApp || undefined,
+            targetBundleId: _targetBundleId || undefined,
           });
           timings["paste"] = Math.round(performance.now() - tPaste0);
           // User-felt latency: stop → paste-done. Excludes persistence work
@@ -2051,11 +2077,14 @@ function App() {
       // dir; it logs the resolved path on the first successful append so users
       // know where to grab the file.
       //
-      // PRIVACY: `rawTranscript` and `finalTranscript` are raw user speech.
-      // perf.jsonl is intended for internal dogfooding — gate behind a
-      // setting (eg. `perfLogTranscripts`) or hash before shipping to end
-      // users. Do NOT upload the file to public locations as-is.
+      // PRIVACY: the verbatim `raw`/`final` transcript strings are raw user
+      // speech (PII), so they are only written when the user has explicitly
+      // opted in via the `perfLogTranscripts` setting (Settings → Data &
+      // privacy, default OFF). The char/word counts and deltas — the actual
+      // perf signal — are always logged. Do NOT upload the file to public
+      // locations as-is.
       try {
+        const logTranscripts = perfLogTranscriptsRef.current;
         const rawChars = rawWhisperText ? rawWhisperText.length : 0;
         const finalChars = finalCleanedText ? finalCleanedText.length : 0;
         // Cheap word count — split on whitespace runs. Good enough for
@@ -2075,12 +2104,17 @@ function App() {
           totalMs,
           timings,
           metrics,
+          // Records whether the verbatim transcript strings below were
+          // included, so a reader can tell "opted out" apart from "empty".
+          perfLogTranscripts: logTranscripts,
           // Transcripts + summary stats. `charDelta` < 0 means cleanup
           // shortened the text (filler removal); > 0 means cleanup expanded
-          // it (rare, usually grammar fixes adding words).
+          // it (rare, usually grammar fixes adding words). The verbatim
+          // `raw`/`final` strings are PII — only present when opted in.
           transcripts: {
-            raw: rawWhisperText,
-            final: finalCleanedText,
+            ...(logTranscripts
+              ? { raw: rawWhisperText, final: finalCleanedText }
+              : {}),
             rawChars,
             finalChars,
             charDelta: finalChars - rawChars,
@@ -2992,6 +3026,17 @@ function App() {
                       cleanupStyle: cleanupStyleRef.current,
                       promptMode: promptModeRef.current,
                     }).catch(console.warn);
+                  }}
+                  perfLogTranscripts={perfLogTranscripts}
+                  onPerfLogTranscriptsChange={(enabled) => {
+                    setPerfLogTranscripts(enabled);
+                    perfLogTranscriptsRef.current = enabled;
+                    saveSetting("perfLogTranscripts", enabled);
+                  }}
+                  onClearDiagnostics={() => {
+                    invoke("clear_perf_log").catch((e) =>
+                      console.warn("[perf] clear_perf_log failed:", e),
+                    );
                   }}
                   selectedMicId={selectedMicId}
                   onMicChange={(id) => {
