@@ -259,6 +259,10 @@ pub(crate) fn decode_audio_to_pcm(bytes: &[u8], ext: &str) -> Result<Vec<f32>, S
 /// dead). This routes dictation through the same decoder the meeting-segment path
 /// already uses (`decode_audio_to_pcm`), which is unaffected by the WebKit bug.
 #[tauri::command]
-pub fn decode_audio_blob(bytes: Vec<u8>, ext: String) -> Result<Vec<f32>, String> {
-    decode_audio_to_pcm(&bytes, &ext)
+pub async fn decode_audio_blob(bytes: Vec<u8>, ext: String) -> Result<Vec<f32>, String> {
+    // Symphonia decode + resample is CPU-bound; run on the blocking pool so a
+    // long clip never stalls the main thread's message pump.
+    tauri::async_runtime::spawn_blocking(move || decode_audio_to_pcm(&bytes, &ext))
+        .await
+        .map_err(|e| format!("[decode] worker join error: {e}"))?
 }
