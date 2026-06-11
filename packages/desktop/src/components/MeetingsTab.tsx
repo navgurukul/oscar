@@ -807,9 +807,9 @@ export function MeetingsTab({
 
       const now = new Date().toISOString();
       if (!savedMeetingIdRef.current) {
-        savedMeetingIdRef.current = `meeting_${Date.now()}_${Math.random()
-          .toString(36)
-          .slice(2, 8)}`;
+        // crypto.randomUUID() over Math.random(): collision-free even across
+        // rapid successive meetings (Date.now() alone can repeat within a ms).
+        savedMeetingIdRef.current = `meeting_${Date.now()}_${crypto.randomUUID()}`;
         savedCreatedAtRef.current = now;
       }
 

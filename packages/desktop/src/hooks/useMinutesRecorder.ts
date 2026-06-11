@@ -678,7 +678,17 @@ export function useMinutesRecorder({
       } else {
         systemAudioActiveRef.current = false;
         setSessionUsesSystemAudio(false);
-        setSystemAudioWarning("");
+        if (systemAudioEnabled && !systemAudioSupported) {
+          // Capture is on in settings but this device/build can't capture
+          // system audio. Surface a brief notice so the user knows remote
+          // participants won't be recorded, rather than silently dropping to
+          // mic-only. (A user who turned the setting off gets no notice.)
+          setSystemAudioWarning(
+            "System audio capture isn't supported on this device, so remote participants won't be recorded. Meeting recording will continue with your microphone only.",
+          );
+        } else {
+          setSystemAudioWarning("");
+        }
       }
 
       startVadMonitor(stream);

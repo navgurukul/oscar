@@ -43,16 +43,24 @@ function formatDateCap(iso: string): string {
   return `${wd} · ${time}`;
 }
 
-function formatDuration(segments: SavedMeetingRecord["transcriptSegments"]): string {
-  if (!segments.length) return "—";
-  const last = segments[segments.length - 1];
-  const ms = new Date(last.end_time).getTime() - new Date(segments[0].start_time).getTime();
+function formatDuration(m: SavedMeetingRecord): string {
+  const segments = m.transcriptSegments;
+  let ms: number;
+  if (segments.length) {
+    const last = segments[segments.length - 1];
+    ms = new Date(last.end_time).getTime() - new Date(segments[0].start_time).getTime();
+  } else {
+    // Legacy meetings saved before structured transcript segments existed have
+    // no segments to derive duration from. Fall back to the wall-clock between
+    // recording start and record creation so the cell shows a value, not "—".
+    ms = new Date(m.createdAt).getTime() - new Date(m.startedAt).getTime();
+  }
   if (!isFinite(ms) || ms <= 0) return "—";
   const totalMin = Math.round(ms / 60000);
   if (totalMin < 60) return `${totalMin}m`;
   const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return m === 0 ? `${h}h` : `${h}h${m}m`;
+  const mins = totalMin % 60;
+  return mins === 0 ? `${h}h` : `${h}h${mins}m`;
 }
 
 function attendeeList(m: SavedMeetingRecord): string[] {
@@ -302,7 +310,7 @@ function MeetingRow({
   const decisions = countSection(meeting.notesMarkdown, ["decision"]);
   const actions = countSection(meeting.notesMarkdown, ["action"]);
   const followUps = countSection(meeting.notesMarkdown, ["follow-up", "follow up", "followup"]);
-  const dur = formatDuration(meeting.transcriptSegments);
+  const dur = formatDuration(meeting);
   const summary = previewLine(meeting.notesMarkdown) || previewLine(meeting.myNotesMarkdown);
 
   return (
