@@ -84,9 +84,32 @@ There is no app‑level customization of that teardown for the JS `check()` path
 
 ## Current baseline state — READ THIS
 
-- **`release_Dev` tip**: `useUpdater.ts` is **STOCK** (reverted). `pill_hover::stop()` + `stop_pill_hover` command exist but are **unused** by the stock path. Deep‑link token redaction + Cargo.toml CI injection are in.
-- **Latest *released* tag `v0.7.27`**: still has the **broken split** (install never runs). **Cut a fresh release off `release_Dev` first** to restore "install runs (but hangs in teardown)" as the baseline before debugging.
+- **`release_Dev` tip (June 2026)**: a fix is now in place — see *Implemented fix* below.
 - The "skip pill in debug builds" guard is **dev‑local** (not in the repo).
+
+## Implemented fix (June 2026)
+
+The flow keeps the stock **atomic** `downloadAndInstall` (the split flow from
+v0.7.27 stays dead) but tears the pill down *first*, so the plugin's
+`cleanup_before_exit` has nothing pill‑related left to wedge on:
+
+1. `useUpdater.downloadAndInstall` → after `check()` succeeds, invokes the new
+   `prepare_update_install` command (Windows‑only body; no‑op mac/Linux) before
+   `update.downloadAndInstall()`.
+2. `prepare_update_install` ([`pill.rs`](src-tauri/src/pill.rs)): sets the
+   `UPDATE_TEARDOWN` flag (blocks any pill re‑creation via hotkey/phase
+   commands during the update), stops the hover poller
+   ([`pill_hover.rs`](src-tauri/src/pill_hover.rs) — now generation‑counter
+   based, restartable), waits one poll cycle, **destroys the
+   `recording-pill` window on the main thread**, and polls (≤5 s, logged)
+   until the window has left the manager.
+3. On download/install failure, the JS catch invokes
+   `resume_pill_after_update`: clears the flag, restarts the poller and
+   re‑creates the pill at rest.
+
+Every step logs under `[updater] prepare:` / `[updater] resume:` to
+`%LOCALAPPDATA%\com.souvikdeb.oscar\logs\oscar.log` — if a release still
+hangs, the last `prepare` line pinpoints the dying step.
 
 ## Reproduce + debug locally (Windows)
 
