@@ -1,21 +1,6 @@
 use std::io::Write;
 use tauri::Manager;
 
-#[tauri::command]
-pub fn check_file_exists(path: String) -> bool {
-    std::path::Path::new(&path).exists()
-}
-
-#[tauri::command]
-pub fn delete_file(path: String) -> Result<String, String> {
-    if std::path::Path::new(&path).exists() {
-        std::fs::remove_file(&path).map_err(|e| format!("Failed to delete file: {}", e))?;
-        Ok(format!("Deleted {}", path))
-    } else {
-        Ok(format!("File not found: {}", path))
-    }
-}
-
 /// Roll `perf.jsonl` to a single backup generation once it grows past this
 /// size, so the diagnostics log never grows unbounded on disk.
 const PERF_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;

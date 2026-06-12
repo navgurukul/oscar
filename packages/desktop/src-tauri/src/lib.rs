@@ -216,8 +216,6 @@ pub fn run() {
             permissions::request_system_audio_permission,
             hotkey::ensure_recording_hotkey_registered,
             hotkey::is_recording_hotkey_registered,
-            filesystem::check_file_exists,
-            filesystem::delete_file,
             filesystem::append_perf_log,
             filesystem::clear_perf_log,
             calendar::get_calendar_events,

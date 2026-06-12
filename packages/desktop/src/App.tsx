@@ -6,7 +6,6 @@ import { scribblesService } from "./services/scribbles.service";
 import { streamsService } from "./services/streams.service";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { User, Session } from "@supabase/supabase-js";
@@ -63,8 +62,6 @@ import {
 } from "./lib/cleanup-style";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
 import {
-  FALLBACK_MODELS,
-  relativeModelPath,
   type ModelSpec,
   type ModelPreset as WhisperModelPreset,
   type WhisperModelVariant,
@@ -3337,49 +3334,54 @@ function App() {
                     void warmVoiceEngine(id);
                   }}
                   onClearData={async () => {
-                    try {
-                      // Delete downloaded model files
-                      const home = await homeDir();
-                      const filesToDelete = [
-                        ...Object.values(FALLBACK_MODELS).map(
-                          (spec) => `${home}/${relativeModelPath(spec.variant)}`,
-                        ),
-                        // Legacy local AI model files (removed in favour of cloud AI)
-                        `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
-                        `${home}/.oscar/models/phi-3.5-tokenizer.json`,
-                      ];
-                      for (const f of filesToDelete) {
-                        try {
-                          const exists = await invoke<boolean>(
-                            "check_file_exists",
-                            { path: f },
-                          );
-                          if (exists) await invoke("delete_file", { path: f });
-                        } catch {
-                          // best-effort cleanup
-                        }
-                      }
-                    } catch {
-                      // homeDir or invoke failed — continue with clearing
+                    // WS-F + matrix row 4: never wipe data mid-pipeline.
+                    if (isAnyPipelineBusyRef.current()) {
+                      setStatus("Finish recording before clearing data.");
+                      return;
                     }
-
-                    // Sign out of Supabase locally so the desktop session is
-                    // always cleared even if the network is unavailable.
+                    // Order matters (invariant I9): cancel in-flight downloads
+                    // and unload the resident context BEFORE removing the model
+                    // bytes, so no .partial reappears and Windows holds no file
+                    // lock. Rust owns the bytes, so a single clear_local_models
+                    // recursively removes final files, .partial sidecars, and the
+                    // legacy phi files — replacing the old FE path-string loop
+                    // (which also broke on Windows '/' separators). Each step is
+                    // best-effort; only the reload is unconditional.
+                    try {
+                      await invoke("cancel_model_downloads");
+                    } catch (e) {
+                      console.warn("[clear-data] cancel_model_downloads failed:", e);
+                    }
+                    try {
+                      await invoke("unload_whisper_model");
+                    } catch (e) {
+                      console.warn("[clear-data] unload_whisper_model failed:", e);
+                    }
+                    try {
+                      await invoke("clear_local_models");
+                    } catch (e) {
+                      console.warn("[clear-data] clear_local_models failed:", e);
+                    }
+                    // Privacy: perf.jsonl can hold raw + AI-cleaned transcripts
+                    // when "Log transcripts to diagnostics" is on.
+                    try {
+                      await invoke("clear_perf_log");
+                    } catch (e) {
+                      console.warn("[clear-data] clear_perf_log failed:", e);
+                    }
+                    // Sign out locally so the desktop session clears even offline.
                     try {
                       await signOutLocally();
-                    } catch {
-                      // may already be signed out
+                    } catch (e) {
+                      console.warn("[clear-data] signOutLocally failed:", e);
                     }
-
-                    // Clear all persisted settings
                     try {
                       const store = await getStore();
                       await store.clear();
                       await store.save();
-                    } catch {
-                      // clearing store failed — reload will reset state anyway
+                    } catch (e) {
+                      console.warn("[clear-data] store clear failed:", e);
                     }
-
                     localStorage.clear();
                     window.location.reload();
                   }}
