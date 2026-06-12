@@ -16,21 +16,6 @@ pub fn delete_file(path: String) -> Result<String, String> {
     }
 }
 
-/// Returns the full path to a model file inside `~/.oscar/models/`, creating
-/// the directory if it doesn't exist. Path is resolved via Tauri's home_dir
-/// so it uses the correct OS separator on Windows, macOS, and Linux.
-#[tauri::command]
-pub fn get_model_path(filename: String, app: tauri::AppHandle) -> Result<String, String> {
-    let home = app
-        .path()
-        .home_dir()
-        .map_err(|e| format!("Failed to resolve home directory: {}", e))?;
-    let models_dir = home.join(".oscar").join("models");
-    std::fs::create_dir_all(&models_dir)
-        .map_err(|e| format!("Failed to create models directory: {}", e))?;
-    Ok(models_dir.join(&filename).to_string_lossy().to_string())
-}
-
 /// Roll `perf.jsonl` to a single backup generation once it grows past this
 /// size, so the diagnostics log never grows unbounded on disk.
 const PERF_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;

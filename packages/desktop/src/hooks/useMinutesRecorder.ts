@@ -12,6 +12,7 @@ import type {
   MeetingSegmentJob,
   Transcription,
   WhisperModelRole,
+  WhisperModelVariant,
 } from "../lib/app-types";
 import {
   MEETING_MIN_SEGMENT_DURATION_MS,
@@ -110,6 +111,10 @@ export function useMinutesRecorder({
   const segmentWorkerRunningRef = useRef(false);
   const transcriptRef = useRef("");
   const transcriptSegmentsRef = useRef<MeetingTranscriptSegment[]>([]);
+  // Variant loaded for this meeting (captured at startRecording). Every segment
+  // transcribe declares it so a wrong-model load is a typed error, not a silent
+  // wrong-model transcript (invariant I2).
+  const loadedVariantRef = useRef<WhisperModelVariant | null>(null);
   const startedAtRef = useRef("");
   const sessionUsesSystemAudioRef = useRef(false);
   const systemAudioActiveRef = useRef(false);
@@ -356,6 +361,10 @@ export function useMinutesRecorder({
       }
 
       try {
+        const expectedVariant = loadedVariantRef.current;
+        if (!expectedVariant) {
+          throw new Error("Speech model not loaded for meeting segment");
+        }
         const bytes = Array.from(new Uint8Array(await job.blob.arrayBuffer()));
         const result = await invoke<Transcription>(
           "transcribe_meeting_segment_bytes",
@@ -374,6 +383,7 @@ export function useMinutesRecorder({
             sessionId: job.sessionId,
             segmentIndex: job.segmentIndex,
             previousTailText: getTranscriptTailWords(transcriptRef.current, 30),
+            expectedVariant,
           },
         );
 
@@ -602,7 +612,10 @@ export function useMinutesRecorder({
       resetPipelineState();
 
       try {
-        await ensureWhisperModelLoadedRef.current("minutes");
+        const ensured = (await ensureWhisperModelLoadedRef.current(
+          "minutes",
+        )) as { variant?: WhisperModelVariant | null } | null | undefined;
+        loadedVariantRef.current = ensured?.variant ?? null;
         await warmVoiceEngineRef.current();
       } catch (err) {
         console.error(

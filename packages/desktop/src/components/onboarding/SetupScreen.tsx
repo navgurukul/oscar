@@ -94,7 +94,12 @@ export function SetupScreen({
     setPhase("downloading");
     setError("");
     setRetry(null);
-    setProgress({ downloaded: 0, total: recommendation.spec.sizeBytes, percentage: 0 });
+    setProgress({
+      variant: recommendation.spec.variant,
+      downloaded: 0,
+      total: recommendation.spec.sizeBytes,
+      percentage: 0,
+    });
 
     const unlistenProgress = await listen<DownloadProgress>(
       "download-progress",

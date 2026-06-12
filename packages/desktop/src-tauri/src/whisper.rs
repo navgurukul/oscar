@@ -4,16 +4,34 @@
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::io::Read;
-use std::path::Path;
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, SystemTime};
+use tauri::Manager;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 use crate::events::{DownloadProgress, DownloadRetry, OscarEvent};
 use crate::hardware::HardwareProfile;
+use crate::models::WhisperModelVariant;
 use crate::state::{
-    AppState, TranscriptSegmentResult, TranscriptSpeaker, TranscriptionPerf, TranscriptionResult,
+    DownloadFlag, LoadedModel, TranscriptSegmentResult, TranscriptSpeaker, TranscriptionPerf,
+    TranscriptionResult, WhisperRuntime,
 };
+
+/// Embedded in a transcribe error when the resident context's variant does not
+/// match the variant the caller declared (invariant I2). The frontend detects
+/// this literal token, re-`ensure`s the declared variant, and retries once.
+pub(crate) const MODEL_MISMATCH_TOKEN: &str = "model-mismatch";
+/// Returned as an `Err` when a download is cancelled. The frontend treats a
+/// message carrying this token as an expected stop rather than a failure.
+const DOWNLOAD_CANCELLED_TOKEN: &str = "download-cancelled";
+/// Free-space headroom required on top of the model's own size before a
+/// download is allowed to begin.
+const DISK_HEADROOM_BYTES: u64 = 200 * 1024 * 1024;
+/// `.partial` sidecars older than this are swept by the startup janitor;
+/// younger ones are kept so a download can resume across app launches.
+const STALE_PARTIAL_AGE: Duration = Duration::from_secs(14 * 24 * 60 * 60);
 
 // ── Download tuning ─────────────────────────────────────────────────────────
 //
@@ -47,6 +65,10 @@ const MODEL_SIZE_TOLERANCE_PERCENT: u64 = 25;
 enum DownloadError {
     Transient(String),
     Permanent(String),
+    /// The per-variant cancel flag was observed mid-download. The chunk loop
+    /// stops, the `.partial` is removed, and the command returns the cancelled
+    /// token.
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -88,6 +110,60 @@ impl ModelFileValidation {
 fn hardware_profile() -> &'static HardwareProfile {
     static PROFILE: OnceLock<HardwareProfile> = OnceLock::new();
     PROFILE.get_or_init(HardwareProfile::detect)
+}
+
+/// `~/.oscar/models`, created if missing. The single home for model bytes
+/// (invariant I4) — every model command resolves its paths through here so no
+/// URL or filesystem path ever crosses IPC as input.
+fn models_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|e| format!("Failed to resolve home directory: {}", e))?;
+    let dir = home.join(".oscar").join("models");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create models directory: {}", e))?;
+    Ok(dir)
+}
+
+/// Absolute on-disk path for one variant's model file.
+fn model_path(app: &tauri::AppHandle, variant: WhisperModelVariant) -> Result<PathBuf, String> {
+    Ok(models_dir(app)?.join(variant.spec().filename))
+}
+
+/// Free bytes on the filesystem that contains `path`, picking the mount point
+/// that is the longest prefix of `path`. `None` when no disk matches (e.g. an
+/// exotic mount) — callers then skip the preflight rather than block a download.
+fn free_space_at(path: &Path) -> Option<u64> {
+    use sysinfo::Disks;
+    let disks = Disks::new_with_refreshed_list();
+    let mut best: Option<(usize, u64)> = None;
+    for disk in disks.list() {
+        let mount = disk.mount_point();
+        if path.starts_with(mount) {
+            let len = mount.as_os_str().len();
+            if best.map_or(true, |(blen, _)| len > blen) {
+                best = Some((len, disk.available_space()));
+            }
+        }
+    }
+    best.map(|(_, free)| free)
+}
+
+/// Sum the byte size of every file under `dir` (recursive). Used to report
+/// `bytesFreed` from `clear_local_models`.
+fn dir_size(dir: &Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            match entry.metadata() {
+                Ok(meta) if meta.is_file() => total += meta.len(),
+                Ok(meta) if meta.is_dir() => total += dir_size(&entry.path()),
+                _ => {}
+            }
+        }
+    }
+    total
 }
 
 fn expected_model_size(path: &Path) -> Option<u64> {
@@ -181,46 +257,133 @@ fn validate_whisper_model_file_inner(path: &str) -> ModelFileValidation {
     ModelFileValidation::valid(size_bytes, expected_size_bytes)
 }
 
-#[tauri::command]
-pub fn validate_whisper_model_file(path: String) -> ModelFileValidation {
-    validate_whisper_model_file_inner(&path)
+/// Per-variant installation status, the frontend's window into the registry.
+/// Paths are returned for display/debug only — never accepted back as input
+/// (invariant I1).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ModelStatus {
+    variant: WhisperModelVariant,
+    installed: bool,
+    valid: bool,
+    size_bytes: u64,
+    expected_bytes: u64,
+    path: String,
+}
+
+fn model_status_inner(app: &tauri::AppHandle, variant: WhisperModelVariant) -> ModelStatus {
+    let spec = variant.spec();
+    let path = model_path(app, variant)
+        .unwrap_or_else(|_| PathBuf::from(spec.filename));
+    let path_str = path.to_string_lossy().to_string();
+    let installed = path.exists();
+    let validation = validate_whisper_model_file_inner(&path_str);
+    ModelStatus {
+        variant,
+        installed,
+        valid: validation.valid,
+        size_bytes: validation.size_bytes,
+        expected_bytes: spec.size_bytes,
+        path: path_str,
+    }
 }
 
 #[tauri::command]
-pub async fn download_whisper_model(
-    url: String,
-    path: String,
-    sha256: Option<String>,
+pub fn model_status(variant: WhisperModelVariant, app: tauri::AppHandle) -> ModelStatus {
+    model_status_inner(&app, variant)
+}
+
+/// All variant statuses in one IPC round-trip (replaces the frontend's
+/// per-variant `get_model_path` + `validate` loop).
+#[tauri::command]
+pub fn list_model_statuses(app: tauri::AppHandle) -> Vec<ModelStatus> {
+    WhisperModelVariant::all()
+        .iter()
+        .map(|v| model_status_inner(&app, *v))
+        .collect()
+}
+
+/// Download one model variant. The URL / filename / sha256 are resolved from
+/// the Rust registry internally (invariant I1) and the checksum is **always**
+/// verified (I5). Resumable, cancellable, disk-space-preflighted, and guarded
+/// by a process-wide per-variant in-flight lock.
+#[tauri::command]
+pub async fn download_model(
+    variant: WhisperModelVariant,
     app: tauri::AppHandle,
+    runtime: tauri::State<'_, Arc<WhisperRuntime>>,
 ) -> Result<String, String> {
-    if let Some(parent) = std::path::Path::new(&path).parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
-    }
+    let spec = variant.spec();
+    let path = models_dir(&app)?.join(spec.filename);
+    let path_str = path.to_string_lossy().to_string();
 
-    // Idempotent — if the final file already landed from a previous run,
-    // skip the network entirely. Callers (App.tsx, SetupScreen) check
-    // installed paths before calling, but a concurrent invocation could
-    // race past that check.
-    if std::path::Path::new(&path).exists() {
-        let validation = validate_whisper_model_file_inner(&path);
+    // Idempotent — a valid final file means no network work.
+    if path.exists() {
+        let validation = validate_whisper_model_file_inner(&path_str);
         if validation.valid {
-            return Ok(format!("Model already present at {}", path));
+            return Ok(path_str);
         }
-
         log::warn!(
             "[whisper] Removing invalid existing model at {}: {}",
-            path,
+            path_str,
             validation.reason.as_deref().unwrap_or("failed validation")
         );
-        std::fs::remove_file(&path)
-            .map_err(|e| format!("Failed to remove invalid model: {}", e))?;
+        let _ = std::fs::remove_file(&path);
     }
 
-    // Atomic write: stream to `{path}.partial`, fsync, then rename. Crash or
-    // network drop leaves only the .partial sidecar — the final path is never
-    // half-written. The partial also survives across retries so a failed
-    // attempt resumes from the last byte rather than starting from zero.
+    // Per-variant in-flight lock (invariant I5). A second call for the same
+    // variant gets a typed "already-downloading" the frontend joins onto,
+    // instead of racing a duplicate fetch — a backstop even if the FE dedupe
+    // misses. The cancel flag lets `cancel_model_downloads` / `clear_local_models`
+    // stop this download from the outside.
+    let cancel: DownloadFlag = {
+        let mut downloads = runtime.downloads.lock().map_err(|e| e.to_string())?;
+        if downloads.contains_key(&variant) {
+            return Err(format!("already-downloading: {}", spec.filename));
+        }
+        let flag: DownloadFlag = Arc::new(AtomicBool::new(false));
+        downloads.insert(variant, flag.clone());
+        flag
+    };
+
+    let result = download_model_inner(&app, variant, &path_str, &cancel).await;
+
+    // Always release the in-flight slot, however we exit.
+    if let Ok(mut downloads) = runtime.downloads.lock() {
+        downloads.remove(&variant);
+    }
+
+    result
+}
+
+/// Retry loop + finalisation for one variant download. Separated from the
+/// command so the in-flight lock in `download_model` is always released.
+async fn download_model_inner(
+    app: &tauri::AppHandle,
+    variant: WhisperModelVariant,
+    path: &str,
+    cancel: &AtomicBool,
+) -> Result<String, String> {
+    let spec = variant.spec();
+    // Atomic write: stream to `{path}.partial`, fsync, then rename. A crash or
+    // network drop leaves only the sidecar; the final path is never half
+    // written, and the partial survives retries (and app launches) for resume.
     let partial_path = format!("{}.partial", path);
+
+    // Disk-space preflight — fail fast with an actionable message instead of a
+    // retry storm that ends in a write error.
+    let existing_partial = std::fs::metadata(&partial_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+    let needed = spec.size_bytes.saturating_sub(existing_partial) + DISK_HEADROOM_BYTES;
+    if let Some(free) = free_space_at(Path::new(path)) {
+        if free < needed {
+            return Err(format!(
+                "Not enough disk space: need ~{} MB free",
+                needed / 1_000_000
+            ));
+        }
+    }
 
     let client = reqwest::Client::builder()
         .timeout(TOTAL_TIMEOUT)
@@ -234,31 +397,37 @@ pub async fn download_whisper_model(
     let mut last_error: Option<String> = None;
 
     for attempt in 1..=MAX_ATTEMPTS {
+        if cancel.load(Ordering::Relaxed) {
+            let _ = std::fs::remove_file(&partial_path);
+            return Err(format!("{}: {}", DOWNLOAD_CANCELLED_TOKEN, spec.filename));
+        }
         log::info!(
             "[whisper] Download attempt {}/{} for {}",
             attempt,
             MAX_ATTEMPTS,
-            url
+            spec.url
         );
 
-        match attempt_download(&client, &url, &partial_path, sha256.as_deref(), &app).await {
+        match attempt_download(&client, variant, spec.url, &partial_path, spec.sha256, cancel, app)
+            .await
+        {
             Ok(downloaded) => {
-                std::fs::rename(&partial_path, &path)
+                std::fs::rename(&partial_path, path)
                     .map_err(|e| format!("Failed to finalise download: {}", e))?;
-                let validation = validate_whisper_model_file_inner(&path);
+                let validation = validate_whisper_model_file_inner(path);
                 if !validation.valid {
                     let reason = validation
                         .reason
                         .unwrap_or_else(|| "failed validation".to_string());
-                    let _ = std::fs::remove_file(&path);
+                    let _ = std::fs::remove_file(path);
                     return Err(format!("Downloaded model is invalid: {}", reason));
                 }
-                log::info!(
-                    "[whisper] Download complete: {} bytes → {}",
-                    downloaded,
-                    path
-                );
-                return Ok(format!("Downloaded {} bytes to {}", downloaded, path));
+                log::info!("[whisper] Download complete: {} bytes → {}", downloaded, path);
+                return Ok(path.to_string());
+            }
+            Err(DownloadError::Cancelled) => {
+                let _ = std::fs::remove_file(&partial_path);
+                return Err(format!("{}: {}", DOWNLOAD_CANCELLED_TOKEN, spec.filename));
             }
             Err(DownloadError::Permanent(msg)) => {
                 let _ = std::fs::remove_file(&partial_path);
@@ -277,12 +446,13 @@ pub async fn download_whisper_model(
                 if attempt < MAX_ATTEMPTS {
                     let delay = RETRY_DELAYS[(attempt - 1) as usize];
                     OscarEvent::DownloadRetry(DownloadRetry {
+                        variant,
                         attempt: attempt + 1,
                         max_attempts: MAX_ATTEMPTS,
                         delay_secs: delay.as_secs(),
                         reason: msg,
                     })
-                    .dispatch(&app);
+                    .dispatch(app);
                     tokio::time::sleep(delay).await;
                 }
             }
@@ -302,9 +472,11 @@ pub async fn download_whisper_model(
 /// whether to retry.
 async fn attempt_download(
     client: &reqwest::Client,
+    variant: WhisperModelVariant,
     url: &str,
     partial_path: &str,
-    sha256: Option<&str>,
+    sha256: &str,
+    cancel: &AtomicBool,
     app: &tauri::AppHandle,
 ) -> Result<u64, DownloadError> {
     use futures_util::StreamExt;
@@ -395,6 +567,16 @@ async fn attempt_download(
         response.content_length().unwrap_or(0)
     };
 
+    // Completeness hardening: on a FRESH download a missing Content-Length
+    // means we can't trust the `downloaded == total` guard below, so a
+    // truncated stream would be silently accepted. Refuse it (transient — a
+    // retry may get a sized response).
+    if !resume && total_size == 0 {
+        return Err(DownloadError::Transient(
+            "server did not report file size".to_string(),
+        ));
+    }
+
     let (mut file, mut downloaded, mut hasher) = if resume {
         let file = tokio::fs::OpenOptions::new()
             .append(true)
@@ -403,14 +585,9 @@ async fn attempt_download(
             .map_err(|e| DownloadError::Transient(format!("Open partial: {}", e)))?;
 
         // Replay existing bytes through the hasher so the final digest covers
-        // the whole file, not just the resumed tail. Skipped when no checksum
-        // was requested (the common case from SetupScreen).
-        let hasher = if sha256.is_some() {
-            Some(rehash_partial(partial_path).await?)
-        } else {
-            None
-        };
-
+        // the whole file, not just the resumed tail. The checksum is always
+        // verified now (invariant I5), so this always runs on resume.
+        let hasher = rehash_partial(partial_path).await?;
         (file, existing_size, hasher)
     } else {
         // Either no partial existed, or the server ignored our Range header.
@@ -418,8 +595,7 @@ async fn attempt_download(
         let file = tokio::fs::File::create(partial_path)
             .await
             .map_err(|e| DownloadError::Transient(format!("Create partial: {}", e)))?;
-        let hasher = sha256.map(|_| Sha256::new());
-        (file, 0u64, hasher)
+        (file, 0u64, Sha256::new())
     };
 
     let mut stream = response.bytes_stream();
@@ -433,6 +609,7 @@ async fn attempt_download(
     // immediately rather than appearing to start at 0%.
     if downloaded > 0 && total_size > 0 {
         OscarEvent::DownloadProgress(DownloadProgress {
+            variant,
             downloaded,
             total: total_size,
             percentage: last_emit_pct,
@@ -441,6 +618,12 @@ async fn attempt_download(
     }
 
     loop {
+        // Cooperative cancellation: checked before each chunk wait so a
+        // cancel_model_downloads / clear_local_models takes effect promptly.
+        if cancel.load(Ordering::Relaxed) {
+            return Err(DownloadError::Cancelled);
+        }
+
         // Per-chunk stall guard. reqwest's own timeout is wall-clock for the
         // entire request, which masks a stalled stream — we need to abort
         // any single chunk wait that exceeds CHUNK_TIMEOUT so the retry
@@ -467,9 +650,7 @@ async fn attempt_download(
             .await
             .map_err(|e| DownloadError::Transient(format!("Write: {}", e)))?;
 
-        if let Some(h) = hasher.as_mut() {
-            h.update(&chunk);
-        }
+        hasher.update(&chunk);
 
         downloaded += chunk.len() as u64;
 
@@ -484,6 +665,7 @@ async fn attempt_download(
         if pct != last_emit_pct {
             last_emit_pct = pct;
             OscarEvent::DownloadProgress(DownloadProgress {
+                variant,
                 downloaded,
                 total: total_size,
                 percentage: pct,
@@ -510,15 +692,13 @@ async fn attempt_download(
         )));
     }
 
-    if let (Some(expected), Some(h)) = (sha256, hasher) {
-        let actual = format!("{:x}", h.finalize());
-        if !actual.eq_ignore_ascii_case(expected) {
-            let _ = std::fs::remove_file(partial_path);
-            return Err(DownloadError::Permanent(format!(
-                "Checksum mismatch: expected {}, got {}",
-                expected, actual
-            )));
-        }
+    let actual = format!("{:x}", hasher.finalize());
+    if !actual.eq_ignore_ascii_case(sha256) {
+        let _ = std::fs::remove_file(partial_path);
+        return Err(DownloadError::Permanent(format!(
+            "Checksum mismatch: expected {}, got {}",
+            sha256, actual
+        )));
     }
 
     Ok(downloaded)
@@ -577,32 +757,29 @@ fn parse_content_range_total(header: &str) -> Option<u64> {
     total_str.parse::<u64>().ok()
 }
 
-#[tauri::command]
-pub fn load_whisper_model(
-    path: String,
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
-) -> Result<String, String> {
-    load_whisper_model_inner("dictation", &path, state.inner())
-}
-
-fn load_whisper_model_inner(
+/// Load `variant` (from `path`) into the single resident slot under a write
+/// guard. Idempotent when the same variant+path is already loaded. The old
+/// context is dropped BEFORE the new one is constructed to avoid a 2× RAM
+/// spike; on construction failure the slot is left empty and the error
+/// surfaces.
+fn load_model_inner(
+    runtime: &WhisperRuntime,
     role: &str,
+    variant: WhisperModelVariant,
     path: &str,
-    state: &Arc<Mutex<AppState>>,
-) -> Result<String, String> {
-    let already_loaded = {
-        let app_state = state.lock().map_err(|e| e.to_string())?;
-        app_state.whisper_context.is_some()
-            && app_state.loaded_model_path.as_deref() == Some(path)
-    };
-
-    if already_loaded {
-        log::info!(
-            "[whisper] Model already loaded (role={} path={})",
-            role,
-            path,
-        );
-        return Ok("Whisper model already loaded".to_string());
+) -> Result<(), String> {
+    {
+        let guard = runtime.model.read().map_err(|e| e.to_string())?;
+        if let Some(loaded) = guard.as_ref() {
+            if loaded.variant == variant && loaded.path == path {
+                log::info!(
+                    "[whisper] Model already loaded (role={} variant={:?})",
+                    role,
+                    variant
+                );
+                return Ok(());
+            }
+        }
     }
 
     let validation = validate_whisper_model_file_inner(path);
@@ -617,39 +794,156 @@ fn load_whisper_model_inner(
         ));
     }
 
-    log::info!("[whisper] Loading model from: {}", path);
+    let mut guard = runtime.model.write().map_err(|e| e.to_string())?;
+    // Drop the previous context first (free its RAM) before allocating the new
+    // one, so both are never resident at once.
+    *guard = None;
+    log::info!("[whisper] Loading model from: {} (role={})", path, role);
     let params = WhisperContextParameters::default();
-    let context =
-        WhisperContext::new_with_params(path, params).map_err(|e| {
-            log::error!("[whisper] Failed to load model: {}", e);
-            e.to_string()
-        })?;
-    let mut app_state = state.lock().map_err(|e| e.to_string())?;
-    app_state.whisper_context = Some(Arc::new(context));
-    app_state.loaded_model_path = Some(path.to_string());
+    let context = WhisperContext::new_with_params(path, params).map_err(|e| {
+        log::error!("[whisper] Failed to load model: {}", e);
+        e.to_string()
+    })?;
+    *guard = Some(LoadedModel {
+        variant,
+        path: path.to_string(),
+        context: Arc::new(context),
+    });
     log::info!("[whisper] Model loaded successfully");
-    Ok("Whisper model loaded successfully".to_string())
+    Ok(())
 }
 
-#[tauri::command]
-pub fn ensure_whisper_model_loaded(
-    role: String,
+/// `{variant, path}` returned by `ensure_model_loaded` so the frontend can
+/// confirm what is now resident.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LoadedModelInfo {
+    variant: WhisperModelVariant,
     path: String,
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+}
+
+/// Ensure `variant` is the resident model, downloading nothing (the frontend
+/// downloads first, then calls this). Replaces `ensure_whisper_model_loaded`.
+#[tauri::command]
+pub fn ensure_model_loaded(
+    role: String,
+    variant: WhisperModelVariant,
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, Arc<WhisperRuntime>>,
+) -> Result<LoadedModelInfo, String> {
+    let path = model_path(&app, variant)?;
+    let path_str = path.to_string_lossy().to_string();
+    load_model_inner(runtime.inner(), &role, variant, &path_str)?;
+    Ok(LoadedModelInfo {
+        variant,
+        path: path_str,
+    })
+}
+
+/// Drop the resident context (frees RAM). Needed by clear-data and
+/// `delete_model`. No-op when nothing is loaded.
+#[tauri::command]
+pub fn unload_whisper_model(
+    runtime: tauri::State<'_, Arc<WhisperRuntime>>,
 ) -> Result<String, String> {
-    load_whisper_model_inner(&role, &path, state.inner())
+    let mut guard = runtime.model.write().map_err(|e| e.to_string())?;
+    let had = guard.is_some();
+    *guard = None;
+    log::info!("[whisper] Model unloaded (was_loaded={})", had);
+    Ok(format!("Model unloaded (was_loaded={})", had))
+}
+
+/// Delete one variant's files. Unloads first if it is the resident model so
+/// Windows has no open-file lock, then removes the final file and its
+/// `.partial` sidecar.
+#[tauri::command]
+pub fn delete_model(
+    variant: WhisperModelVariant,
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, Arc<WhisperRuntime>>,
+) -> Result<String, String> {
+    {
+        let mut guard = runtime.model.write().map_err(|e| e.to_string())?;
+        if guard.as_ref().map(|m| m.variant) == Some(variant) {
+            *guard = None;
+            log::info!("[whisper] Unloaded {:?} before delete", variant);
+        }
+    }
+    let path = model_path(&app, variant)?;
+    let partial = PathBuf::from(format!("{}.partial", path.to_string_lossy()));
+    let mut removed = 0u32;
+    for p in [path, partial] {
+        if p.exists() {
+            std::fs::remove_file(&p)
+                .map_err(|e| format!("Failed to delete {}: {}", p.display(), e))?;
+            removed += 1;
+        }
+    }
+    Ok(format!("Deleted {} file(s) for {:?}", removed, variant))
+}
+
+/// Signal every in-flight download to stop. Each download observes its flag,
+/// removes its own `.partial`, and returns the cancelled token.
+#[tauri::command]
+pub fn cancel_model_downloads(
+    runtime: tauri::State<'_, Arc<WhisperRuntime>>,
+) -> Result<String, String> {
+    let downloads = runtime.downloads.lock().map_err(|e| e.to_string())?;
+    let n = downloads.len();
+    for flag in downloads.values() {
+        flag.store(true, Ordering::Relaxed);
+    }
+    log::info!("[whisper] Requested cancel of {} in-flight download(s)", n);
+    Ok(format!("Cancelled {} download(s)", n))
+}
+
+/// Bytes reclaimed by `clear_local_models`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ClearModelsResult {
+    bytes_freed: u64,
+}
+
+/// Wipe all model bytes (invariant I9): cancel downloads → unload context →
+/// remove the entire models dir recursively (covering every final file,
+/// `.partial` sidecar, and the legacy phi files) → recreate it empty.
+#[tauri::command]
+pub fn clear_local_models(
+    app: tauri::AppHandle,
+    runtime: tauri::State<'_, Arc<WhisperRuntime>>,
+) -> Result<ClearModelsResult, String> {
+    {
+        let downloads = runtime.downloads.lock().map_err(|e| e.to_string())?;
+        for flag in downloads.values() {
+            flag.store(true, Ordering::Relaxed);
+        }
+    }
+    {
+        let mut guard = runtime.model.write().map_err(|e| e.to_string())?;
+        *guard = None;
+    }
+    let dir = models_dir(&app)?;
+    let bytes_freed = dir_size(&dir);
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir)
+            .map_err(|e| format!("Failed to remove models dir: {}", e))?;
+    }
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to recreate models dir: {}", e))?;
+    log::info!("[whisper] Cleared local models ({} bytes freed)", bytes_freed);
+    Ok(ClearModelsResult { bytes_freed })
 }
 
 #[tauri::command]
 pub fn warm_whisper_runtime(
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    runtime: tauri::State<'_, Arc<WhisperRuntime>>,
 ) -> Result<String, String> {
     let context = {
-        let locked = state.lock().map_err(|e| e.to_string())?;
-        locked
-            .whisper_context
+        let guard = runtime.model.read().map_err(|e| e.to_string())?;
+        guard
             .as_ref()
             .ok_or_else(|| "Whisper model not loaded".to_string())?
+            .context
             .clone()
     };
 
@@ -819,7 +1113,8 @@ pub(crate) fn transcribe_audio_inner(
     audio_data: &[f32],
     initial_prompt: Option<&str>,
     language: Option<&str>,
-    app_state: &Arc<Mutex<AppState>>,
+    runtime: &WhisperRuntime,
+    expected_variant: WhisperModelVariant,
     source: Option<&str>,
 ) -> Result<TranscriptionResult, String> {
     // Wall-clock for the whole inner call — caller already times the IPC
@@ -862,21 +1157,30 @@ pub(crate) fn transcribe_audio_inner(
     let speech_samples = speech_audio.len() as u64;
     let audio_data: &[f32] = &speech_audio;
 
-    // Lock briefly to grab a handle to the shared context, then release —
-    // otherwise the AppState mutex is held for the whole inference (multiple
-    // seconds on long meetings) and other commands stall behind it.
+    // Hold a read guard for the whole inference: invariant I3 forbids a model
+    // load/unload (write guard) from swapping the context mid-transcription.
+    // Before using it, verify the resident variant matches what the caller
+    // declared (invariant I2) — a mismatch is a typed error, never a silently
+    // wrong-model transcript.
     let t_state = std::time::Instant::now();
-    let context = {
-        let locked = app_state.lock().map_err(|e| e.to_string())?;
-        locked
-            .whisper_context
-            .as_ref()
-            .ok_or_else(|| {
-                log::error!("[whisper] Model not loaded when transcribe was called");
-                "Whisper model not loaded".to_string()
-            })?
-            .clone()
-    };
+    let model_guard = runtime.model.read().map_err(|e| e.to_string())?;
+    let loaded = model_guard.as_ref().ok_or_else(|| {
+        log::error!("[whisper] Model not loaded when transcribe was called");
+        "Whisper model not loaded".to_string()
+    })?;
+    if loaded.variant != expected_variant {
+        log::error!(
+            "[whisper] {}: loaded {:?}, caller expected {:?}",
+            MODEL_MISMATCH_TOKEN,
+            loaded.variant,
+            expected_variant
+        );
+        return Err(format!(
+            "{}: loaded {:?}, expected {:?}",
+            MODEL_MISMATCH_TOKEN, loaded.variant, expected_variant
+        ));
+    }
+    let context = &loaded.context;
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     // "auto" or None → let Whisper auto-detect the language from the audio
@@ -1193,22 +1497,168 @@ pub async fn transcribe_audio(
     audio_data: Vec<f32>,
     initial_prompt: Option<String>,
     language: Option<String>,
-    state: tauri::State<'_, Arc<Mutex<AppState>>>,
+    expected_variant: WhisperModelVariant,
+    runtime: tauri::State<'_, Arc<WhisperRuntime>>,
 ) -> Result<TranscriptionResult, String> {
     // Whisper inference is CPU-bound and can run for many seconds on large
     // models. Run on the blocking thread pool so the Tauri IPC executor stays
     // free to service UI commands (otherwise the webview locks up on long
     // transcripts).
-    let state = state.inner().clone();
+    let runtime = runtime.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         transcribe_audio_inner(
             &audio_data,
             initial_prompt.as_deref(),
             language.as_deref(),
-            &state,
+            &runtime,
+            expected_variant,
             None,
         )
     })
     .await
     .map_err(|e| format!("Transcription task failed: {}", e))?
+}
+
+/// True when a `.partial` of this age is past the resume window and should be
+/// swept. Pure so the rule is unit-testable without touching the filesystem.
+fn partial_is_stale(age: Duration) -> bool {
+    age > STALE_PARTIAL_AGE
+}
+
+/// Best-effort startup cleanup, spawned off the main thread after setup.
+/// Deletes legacy local-AI model files and `.partial` sidecars older than the
+/// resume window. Everything is logged; nothing here can fail the app.
+pub fn run_startup_janitor(app: tauri::AppHandle) {
+    let dir = match models_dir(&app) {
+        Ok(d) => d,
+        Err(e) => {
+            log::warn!("[janitor] skipping — models dir unavailable: {}", e);
+            return;
+        }
+    };
+
+    // Legacy on-device LLM files from the pre-cloud-AI era — never referenced
+    // by the registry, so the recursive clear never knew to target them by name.
+    const LEGACY_FILES: &[&str] = &["phi-3.5-mini-Q4_K_M.gguf", "phi-3.5-tokenizer.json"];
+    for name in LEGACY_FILES {
+        let p = dir.join(name);
+        if p.exists() {
+            match std::fs::remove_file(&p) {
+                Ok(_) => log::info!("[janitor] removed legacy file {}", p.display()),
+                Err(e) => log::warn!("[janitor] could not remove {}: {}", p.display(), e),
+            }
+        }
+    }
+
+    let now = SystemTime::now();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("partial") {
+                continue;
+            }
+            // Keep young partials — they let an interrupted download resume
+            // across launches. Only sweep ones past the window.
+            let stale = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|mtime| now.duration_since(mtime).ok())
+                .map(partial_is_stale)
+                .unwrap_or(false);
+            if stale {
+                match std::fs::remove_file(&path) {
+                    Ok(_) => log::info!("[janitor] removed stale partial {}", path.display()),
+                    Err(e) => log::warn!("[janitor] could not remove {}: {}", path.display(), e),
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn registry_all_lists_every_variant() {
+        use WhisperModelVariant::*;
+        // Exhaustiveness guard: adding a variant without updating this match is
+        // a compile error (no wildcard arm), which is the reminder to extend
+        // `all()` and the array below.
+        fn assert_known(v: WhisperModelVariant) {
+            match v {
+                Tiny | Base | Small | Medium | LargeV3Turbo | LargeV3TurboQ5
+                | Hindi2HinglishApex | Hindi2HinglishPrime => {}
+            }
+        }
+        let every = [
+            Tiny,
+            Base,
+            Small,
+            Medium,
+            LargeV3Turbo,
+            LargeV3TurboQ5,
+            Hindi2HinglishApex,
+            Hindi2HinglishPrime,
+        ];
+        for v in every {
+            assert_known(v);
+            assert!(
+                WhisperModelVariant::all().contains(&v),
+                "all() is missing {:?}",
+                v
+            );
+        }
+        assert_eq!(WhisperModelVariant::all().len(), every.len());
+    }
+
+    #[test]
+    fn registry_specs_are_consistent() {
+        let all = WhisperModelVariant::all();
+        let mut filenames = HashSet::new();
+        for v in all {
+            let spec = v.spec();
+            assert_eq!(spec.variant, *v, "spec().variant mismatch for {:?}", v);
+            assert!(
+                filenames.insert(spec.filename),
+                "duplicate filename {}",
+                spec.filename
+            );
+            assert_eq!(spec.sha256.len(), 64, "sha256 for {:?} not 64 chars", v);
+            assert!(
+                spec.sha256.chars().all(|c| c.is_ascii_hexdigit()),
+                "sha256 for {:?} is not hex",
+                v
+            );
+            assert!(spec.size_bytes > 0, "size_bytes for {:?} is zero", v);
+        }
+    }
+
+    #[test]
+    fn content_range_total_parses() {
+        assert_eq!(parse_content_range_total("bytes 200-1000/1001"), Some(1001));
+        assert_eq!(parse_content_range_total("bytes 0-0/500"), Some(500));
+        assert_eq!(parse_content_range_total("bytes */1234"), Some(1234));
+        assert_eq!(parse_content_range_total("bytes 0-1/*"), None);
+    }
+
+    #[test]
+    fn stale_partial_age_rule() {
+        assert!(!partial_is_stale(Duration::from_secs(0)));
+        // Boundary: exactly the window is still kept (strict greater-than).
+        assert!(!partial_is_stale(STALE_PARTIAL_AGE));
+        assert!(partial_is_stale(STALE_PARTIAL_AGE + Duration::from_secs(1)));
+        assert!(partial_is_stale(Duration::from_secs(30 * 24 * 60 * 60)));
+    }
+
+    #[test]
+    fn mismatch_token_is_stable() {
+        // The frontend detects this exact literal; keep it stable.
+        assert_eq!(MODEL_MISMATCH_TOKEN, "model-mismatch");
+        let v = WhisperModelVariant::Base;
+        let msg = format!("{}: loaded {:?}, expected {:?}", MODEL_MISMATCH_TOKEN, v, v);
+        assert!(msg.contains("model-mismatch"));
+    }
 }

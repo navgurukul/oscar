@@ -1402,7 +1402,16 @@ function App() {
         return { role, path, variant: resolvedVariant };
       }
 
-      await invoke("ensure_whisper_model_loaded", { role, path });
+      // Rust loads by variant and resolves the path itself (invariant I1).
+      // `path` is non-null here (guarded above), so resolvedVariant is too.
+      if (!resolvedVariant) {
+        throw new Error(
+          role === "minutes"
+            ? "Meeting model not found."
+            : "Dictation model not found.",
+        );
+      }
+      await invoke("ensure_model_loaded", { role, variant: resolvedVariant });
       const pathChanged = currentWhisperKeyRef.current !== path;
       if (pathChanged) {
         currentWhisperKeyRef.current = path;
@@ -1421,6 +1430,37 @@ function App() {
     async (preferredRole: WhisperModelRole) =>
       prepareWhisperModel(preferredRole, { load: true, autoDownload: true }),
     [prepareWhisperModel],
+  );
+
+  // Transcribe declaring the variant we expect to be resident. On a typed
+  // `model-mismatch` (a load race), re-ensure that exact variant and retry once
+  // — never a silent wrong-model transcript (invariant I2; matrix row 19).
+  const transcribeWithVariant = useCallback(
+    async (
+      role: WhisperModelRole,
+      expectedVariant: WhisperModelVariant,
+      payload: {
+        audioData: number[];
+        initialPrompt?: string;
+        language?: string;
+      },
+    ): Promise<Transcription> => {
+      const args = { ...payload, expectedVariant };
+      try {
+        return await invoke<Transcription>("transcribe_audio", args);
+      } catch (e) {
+        if (String(e).includes("model-mismatch")) {
+          console.warn(
+            "[whisper] model-mismatch — re-ensuring",
+            expectedVariant,
+          );
+          await invoke("ensure_model_loaded", { role, variant: expectedVariant });
+          return invoke<Transcription>("transcribe_audio", args);
+        }
+        throw e;
+      }
+    },
+    [],
   );
 
   canStartMeetingRecordingRef.current = () =>
@@ -1807,13 +1847,17 @@ function App() {
       timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
       metrics["cold-load"] = wasModelWarm ? "0" : "1";
       const activeVariant = ensured.variant ?? dictationModel.activeVariant ?? null;
+      if (!activeVariant) {
+        endProcessingEarly("Speech model isn't ready yet.");
+        return;
+      }
 
       const tAudioArray0 = performance.now();
       const audioDataForIpc = Array.from(audioData);
       timings["audio-array"] = Math.round(performance.now() - tAudioArray0);
 
       const tWhisper0 = performance.now();
-      const result = await invoke<Transcription>("transcribe_audio", {
+      const result = await transcribeWithVariant("dictation", activeVariant, {
         audioData: audioDataForIpc,
         initialPrompt: buildInitialPrompt(
           transcriptionLanguageRef.current,
@@ -2219,8 +2263,15 @@ function App() {
     }
 
     try {
-      await ensureWhisperModelLoaded("dictation");
-      const result = await invoke<Transcription>("transcribe_audio", {
+      const ensured = await ensureWhisperModelLoaded("dictation");
+      const activeVariant =
+        ensured.variant ?? dictationModel.activeVariant ?? null;
+      if (!activeVariant) {
+        setStatus("Speech model isn't ready yet.");
+        finish("Speech model isn't ready yet.");
+        return;
+      }
+      const result = await transcribeWithVariant("dictation", activeVariant, {
         audioData: Array.from(audioData),
         initialPrompt: buildInitialPrompt(
           transcriptionLanguageRef.current,

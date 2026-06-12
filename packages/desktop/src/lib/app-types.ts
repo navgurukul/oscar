@@ -105,12 +105,16 @@ export interface RoleModelState {
 }
 
 export interface DownloadProgress {
+  /** Which model this progress belongs to — lets listeners route by variant
+   *  instead of guessing from the current recommendation. */
+  variant: WhisperModelVariant;
   downloaded: number;
   total: number;
   percentage: number;
 }
 
 export interface DownloadRetry {
+  variant: WhisperModelVariant;
   attempt: number;
   max_attempts: number;
   delay_secs: number;
