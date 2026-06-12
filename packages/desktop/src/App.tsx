@@ -252,6 +252,17 @@ function App() {
   // Stable getter, re-assigned each render below once all the busy refs exist —
   // true while ANY STT pipeline is active, so a model swap or clear-data holds.
   const isAnyPipelineBusyRef = useRef<() => boolean>(() => false);
+  // Roles with a download in flight — lets a passive inspect (autoDownload:
+  // false) avoid clobbering a live `downloading` state, closing the startup
+  // race where the inspect effect raced initWhisper's download (WS-D).
+  const downloadingRolesRef = useRef<Set<WhisperModelRole>>(new Set());
+  // True when dictation has SOME model to serve right now — the target, a
+  // same-family interim, or a cross-family (degraded) interim. The hotkey gate
+  // reads this: when false (e.g. English selected with only Hinglish installed,
+  // or a fresh download with no interim), it shows the pill's downloading phase
+  // and captures no audio (matrix rows 5, 11) while still recording on a serving
+  // interim (rows 9, 10).
+  const dictationServeableRef = useRef(false);
   const [hotkeyWarning, setHotkeyWarning] = useState("");
   const [dictationConflict, setDictationConflict] = useState(false);
 
@@ -1333,6 +1344,16 @@ function App() {
           ? dictationModelPresetRef.current
           : minutesModelPresetRef.current;
 
+      // Passive inspect (autoDownload:false) must not stomp a live download's
+      // `downloading`/progress state — closes the startup race where the
+      // inspect effect raced initWhisper's in-flight download (WS-D).
+      if (
+        options.autoDownload === false &&
+        downloadingRolesRef.current.has(role)
+      ) {
+        return { role, path: null, variant: null };
+      }
+
       updateRoleModel(role, {
         preset,
         downloadState: "checking",
@@ -1380,6 +1401,7 @@ function App() {
           progress: 0,
           error: null,
         });
+        downloadingRolesRef.current.add(role);
 
         try {
           path = await downloadRecommendedModel(recommendation.spec);
@@ -1443,6 +1465,8 @@ function App() {
               });
             }
           }
+        } finally {
+          downloadingRolesRef.current.delete(role);
         }
       }
 
@@ -1585,7 +1609,9 @@ function App() {
       return true;
     } catch {
       setWhisperLoadedAndRef(false);
-      setStatus("Whisper model not found. Set the path in Settings.");
+      setStatus(
+        "Speech model isn't downloaded yet — check Settings → Speech models or reconnect to the internet.",
+      );
       return false;
     }
   };
@@ -1646,6 +1672,21 @@ function App() {
     minutesTranscriptionStatus,
     minutesSegmentQueue,
   ]);
+
+  // Mirror dictation serveability for the synchronous hotkey gate.
+  useEffect(() => {
+    dictationServeableRef.current = dictationModel.activeVariant != null;
+  }, [dictationModel.activeVariant]);
+
+  // Forward dictation-role download progress to the pill so its downloading
+  // phase shows a live % (WS-D). Minutes progress surfaces in the Meetings tab.
+  useEffect(() => {
+    if (dictationModel.downloadState === "downloading") {
+      void emit("pill-download-progress", {
+        percentage: dictationModel.progress,
+      }).catch(() => {});
+    }
+  }, [dictationModel.downloadState, dictationModel.progress]);
 
   // ── Recording-pill waveform meter ──────────────────────────────────────────
   // Sample the live mic stream and push 15 normalized band levels to the pill
@@ -1722,6 +1763,22 @@ function App() {
     // the hotkey (WS-C rule 4; matrix row 8).
     if (isMeetingPipelineBusyRef.current()) {
       setStatus("Finishing meeting notes…");
+      return;
+    }
+
+    // No usable dictation model yet (downloading with no interim to serve, e.g.
+    // English selected with only Hinglish installed): show the pill's
+    // downloading phase, capture NO audio, kick the prepare, and let the next
+    // press record once a model is serveable (WS-D; matrix rows 5, 11). An
+    // installed interim keeps dictationServeableRef true, so rows 9/10 record.
+    if (!dictationServeableRef.current) {
+      invoke("show_recording_pill").catch(console.warn);
+      invoke("set_pill_phase", { phase: "downloading" }).catch(console.warn);
+      setStatus("Downloading speech model…");
+      void prepareWhisperModel("dictation", {
+        load: true,
+        autoDownload: true,
+      }).catch(() => {});
       return;
     }
 
@@ -2618,6 +2675,17 @@ function App() {
       setStatus("Finishing meeting notes…");
       return;
     }
+    // Scribble shares the dictation role — if no model is serveable yet, give a
+    // downloading state and kick the prepare instead of recording audio that
+    // would only fail to transcribe (WS-D).
+    if (!dictationServeableRef.current) {
+      setStatus("Downloading speech model — try again once it's ready.");
+      void prepareWhisperModel("dictation", {
+        load: true,
+        autoDownload: true,
+      }).catch(() => {});
+      return;
+    }
 
     let stream: MediaStream;
     if (
@@ -3399,6 +3467,14 @@ function App() {
                   dictationModel={dictationModel}
                   meetingModel={meetingModel}
                   onModelPresetChange={handleModelPresetChange}
+                  onModelRetry={(role) => {
+                    void prepareWhisperModel(role, {
+                      load: currentWhisperRoleRef.current === role,
+                      autoDownload: true,
+                    }).catch((err) =>
+                      console.warn(`[whisper] retry ${role} failed:`, err),
+                    );
+                  }}
                   appVersion={appVersion}
                 />
               )}

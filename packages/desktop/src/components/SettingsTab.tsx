@@ -18,7 +18,9 @@ import { VocabularySection } from "./VocabularySection";
 import { getInitials } from "../lib/utils";
 import { isContextAwarePlatform } from "../lib/dictation-context";
 import {
+  FALLBACK_MODELS,
   formatModelSize,
+  modelDisplayName,
   type ModelPreset,
 } from "../lib/whisper-models";
 import type { RoleModelState, WhisperModelRole } from "../lib/app-types";
@@ -435,6 +437,7 @@ interface SettingsTabProps {
   dictationModel: RoleModelState;
   meetingModel: RoleModelState;
   onModelPresetChange: (role: WhisperModelRole, preset: ModelPreset) => void;
+  onModelRetry?: (role: WhisperModelRole) => void;
   appVersion?: string | null;
 }
 
@@ -468,6 +471,7 @@ export function SettingsTab({
   dictationModel,
   meetingModel,
   onModelPresetChange,
+  onModelRetry,
   appVersion,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>(
@@ -570,7 +574,20 @@ export function SettingsTab({
         </span>
       );
     }
-    if (model.activeVariant) return null;
+    if (model.activeVariant) {
+      const sizeBytes = FALLBACK_MODELS[model.activeVariant].sizeBytes;
+      const note = model.crossFamilyInterim
+        ? " · using the general model until the Hinglish model downloads — Hinglish accuracy is reduced"
+        : model.interim
+          ? " · interim — upgrading in the background"
+          : "";
+      return (
+        <span className="font-mono text-[11px] text-ink-faint">
+          {modelDisplayName(model.activeVariant)} · {formatModelSize(sizeBytes)}
+          {note}
+        </span>
+      );
+    }
     if (model.recommendation) {
       return (
         <span className="font-mono text-[11px] text-ink-faint">
@@ -599,6 +616,15 @@ export function SettingsTab({
               <span className="block mt-1 text-[11px] text-[#dc2626]">
                 {model.error}
               </span>
+            )}
+            {model.downloadState === "error" && onModelRetry && (
+              <button
+                type="button"
+                onClick={() => onModelRetry(model.role)}
+                className="mt-1 inline-block font-mono text-[11px] text-cyan-600 underline underline-offset-2 hover:text-cyan-500"
+              >
+                Retry download
+              </button>
             )}
           </>
         }

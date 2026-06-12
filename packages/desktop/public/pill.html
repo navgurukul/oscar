@@ -59,6 +59,7 @@
     body[data-phase="expanded"] .handle,
     body[data-phase="recording"] .handle,
     body[data-phase="processing"] .handle,
+    body[data-phase="downloading"] .handle,
     body[data-phase="inserted"] .handle,
     body[data-phase="copied"] .handle,
     body[data-phase="error"] .handle,
@@ -90,6 +91,7 @@
     body[data-phase="expanded"] .hit-zone,
     body[data-phase="recording"] .hit-zone,
     body[data-phase="processing"] .hit-zone,
+    body[data-phase="downloading"] .hit-zone,
     body[data-phase="inserted"] .hit-zone,
     body[data-phase="copied"] .hit-zone,
     body[data-phase="error"] .hit-zone,
@@ -116,6 +118,7 @@
     body[data-phase="expanded"] .pill-wrap,
     body[data-phase="recording"] .pill-wrap,
     body[data-phase="processing"] .pill-wrap,
+    body[data-phase="downloading"] .pill-wrap,
     body[data-phase="inserted"] .pill-wrap,
     body[data-phase="copied"] .pill-wrap,
     body[data-phase="error"] .pill-wrap,
@@ -357,6 +360,7 @@
     body[data-phase="recording"] .pill-body [data-body="recording"] { display: flex; }
     body[data-phase="expanded"]  .pill-body [data-body="ready"]    { display: flex; }
     body[data-phase="processing"] .pill-body [data-body="processing"] { display: flex; }
+    body[data-phase="downloading"] .pill-body [data-body="downloading"] { display: flex; }
     body[data-phase="inserted"]  .pill-body [data-body="idle"]    { display: flex; }
     body[data-phase="copied"]    .pill-body [data-body="idle"]    { display: flex; }
     body[data-phase="error"]     .pill-body [data-body="error"]   { display: flex; }
@@ -717,6 +721,12 @@
             <span class="spinner" aria-hidden="true"></span>
             <span class="caption-text" id="processing-text">distilling</span>
           </div>
+          <!-- Speech-model download — caption + live %, fed by the host
+               'pill-download-progress' event for the dictation role. -->
+          <div class="processing-caption" data-body="downloading">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="caption-text" id="downloading-text">Downloading speech model…</span>
+          </div>
           <!-- Error -->
           <div class="error-body" data-body="error">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -812,6 +822,7 @@
     let langPage = false;
     let leaveTimer = null;
     let readyHoldTimer = null;
+    let downloadingCollapseTimer = null;
     let contextApp = null;        // { name: string, confidence: 'high' | 'low' } | null
     let settings = {
       language: 'hi-en',
@@ -842,6 +853,7 @@
         case 'expanded':
         case 'recording':
         case 'processing':
+        case 'downloading':
         case 'inserted':
         case 'copied':
         case 'error':
@@ -867,9 +879,19 @@
       // non-hover phase.
       if (next !== 'ready') clearTimeout(readyHoldTimer);
       if (next === 'recording' || next === 'processing' ||
+          next === 'downloading' ||
           next === 'inserted' || next === 'copied' || next === 'error' ||
           next === 'auth') {
         clearTimeout(leaveTimer);
+      }
+      // Downloading is a transient info phase: auto-collapse to the handle
+      // after ~2.5s of inactivity (refreshed on each progress event below) so
+      // it never gets stuck open if the user walks away (WS-D; matrix row 18).
+      clearTimeout(downloadingCollapseTimer);
+      if (next === 'downloading') {
+        downloadingCollapseTimer = setTimeout(() => {
+          if (phase === 'downloading') applyPhase('rest');
+        }, 2500);
       }
       // Closing pill collapses settings too.
       if (next !== 'expanded') {
@@ -1206,6 +1228,25 @@
               const v = Math.max(0, Math.min(1, raw));
               const scale = 0.28 + v * 0.72;
               waveBars[i].style.setProperty('--audio-scale', scale.toFixed(3));
+            }
+          }),
+
+          // Dictation speech-model download progress from the host. Payload:
+          // { percentage: number }. Updates the caption text and, while the
+          // pill is showing the downloading phase, refreshes its auto-collapse
+          // window so it stays open as long as bytes keep arriving.
+          ev.listen('pill-download-progress', (evt) => {
+            const p = evt.payload || {};
+            const pct = typeof p.percentage === 'number'
+              ? Math.max(0, Math.min(100, Math.round(p.percentage)))
+              : 0;
+            const el = document.getElementById('downloading-text');
+            if (el) el.textContent = 'Downloading speech model — ' + pct + '%';
+            if (phase === 'downloading') {
+              clearTimeout(downloadingCollapseTimer);
+              downloadingCollapseTimer = setTimeout(() => {
+                if (phase === 'downloading') applyPhase('rest');
+              }, 2500);
             }
           }),
         ]);
