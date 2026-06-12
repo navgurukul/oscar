@@ -3041,6 +3041,13 @@ function App() {
       <SetupScreen
         onComplete={handleSetupComplete}
         transcriptionLanguage={transcriptionLanguage}
+        onLanguageChange={(lang) => {
+          // A language picked during onboarding: mirror it into state + ref so
+          // initWhisper (post-setup) loads the model SetupScreen just fetched,
+          // not the old default (WS-E).
+          setTranscriptionLanguage(lang);
+          transcriptionLanguageRef.current = lang;
+        }}
       />
     );
 
