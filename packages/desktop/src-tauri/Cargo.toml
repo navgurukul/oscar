@@ -40,7 +40,9 @@ symphonia = { version = "0.5", features = ["aac", "isomp4", "mkv", "pcm"] }
 rubato = "0.16"
 base64 = "0.22"
 opus = "0.3"
-sysinfo = { version = "0.32", default-features = false, features = ["system"] }
+# `disk` powers the pre-download free-space preflight in whisper.rs; `system`
+# powers hardware detection in hardware.rs.
+sysinfo = { version = "0.32", default-features = false, features = ["system", "disk"] }
 sha2 = "0.10"
 num_cpus = "1.16"
 voice_activity_detector = { version = "0.2", optional = true }

@@ -12,6 +12,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Runtime};
 
+use crate::models::WhisperModelVariant;
 use crate::state::FrontmostContextPayload;
 
 /// Frontend window labels that receive targeted emits. Anything that goes to
@@ -36,9 +37,12 @@ pub(crate) enum OscarEvent {
 }
 
 /// Download progress for the Whisper model download command. Lives here so
-/// other model downloads can reuse it.
+/// other model downloads can reuse it. The `variant` tag lets the frontend
+/// route progress to the correct role without guessing from the current
+/// recommendation (which races during preset/language flips).
 #[derive(Clone, Serialize, Debug)]
 pub(crate) struct DownloadProgress {
+    pub variant: WhisperModelVariant,
     pub downloaded: u64,
     pub total: u64,
     pub percentage: u8,
@@ -49,6 +53,7 @@ pub(crate) struct DownloadProgress {
 /// this to surface "retrying… (N/M)" instead of a frozen progress bar.
 #[derive(Clone, Serialize, Debug)]
 pub(crate) struct DownloadRetry {
+    pub variant: WhisperModelVariant,
     pub attempt: u32,
     pub max_attempts: u32,
     pub delay_secs: u64,

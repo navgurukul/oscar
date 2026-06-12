@@ -273,7 +273,8 @@
 .auth-fallback {
   display: flex;
   align-items: center;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 10px 16px;
   margin-top: 4px;
   padding: 14px 18px;
   background: var(--cream-50);
@@ -293,7 +294,8 @@
 .auth-fallback-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 10px 14px;
 }
 
 .auth-fallback-divider {

@@ -76,9 +76,13 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="apple-touch-icon" href="/OSCAR_AVATAR.png" />
 
-        {/* Load ONNX Runtime Web from CDN to avoid bundling issues and fix 'onnxruntime' missing error */}
+        {/* Load ONNX Runtime Web from CDN to avoid bundling issues and fix 'onnxruntime' missing error.
+            Pinned to the exact version resolved in pnpm-lock (onnxruntime-web 1.24.3) and locked with an
+            SRI hash so a mutated/compromised CDN object can't execute (WS-I). crossOrigin is required for
+            the browser to enforce integrity. */}
         <Script
-          src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"
+          src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.js"
+          integrity="sha384-09HTvetYSJEPi/TX/YYkdYV65QeZNB3CkUjX70KjHf7+fnGTtmBbzCkrX9jq57cF"
           strategy="beforeInteractive"
           crossOrigin="anonymous"
         />

@@ -6,7 +6,6 @@ import { scribblesService } from "./services/scribbles.service";
 import { streamsService } from "./services/streams.service";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { User, Session } from "@supabase/supabase-js";
@@ -62,14 +61,13 @@ import {
 } from "./lib/cleanup-style";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
 import {
-  FALLBACK_MODELS,
-  relativeModelPath,
   type ModelSpec,
   type ModelPreset as WhisperModelPreset,
   type WhisperModelVariant,
 } from "./lib/whisper-models";
 import {
   downloadModel,
+  pickCrossFamilyInterim,
   resolveModelForRole,
 } from "./lib/whisper-model-manager";
 import { getStore, loadSetting, saveSetting } from "./lib/store";
@@ -244,6 +242,33 @@ function App() {
     "idle" | "loading" | "warming" | "ready" | "error"
   >("idle");
   const [_isProcessing, setIsProcessing] = useState(false);
+  // Ref mirror of the dictation/scribble processing state so the synchronous
+  // meeting-start gate can read it without a stale closure (WS-C rule 4).
+  const isProcessingRef = useRef(false);
+  useEffect(() => {
+    isProcessingRef.current = _isProcessing;
+  }, [_isProcessing]);
+  // Deferred model load (WS-C rule 3 / I3): when a swap is requested while a
+  // pipeline is busy, the download proceeds eagerly but the load is queued here
+  // and applied once idle, so the resident context never changes under an
+  // in-flight transcription (matrix row 7).
+  const pendingLoadRef = useRef<
+    Partial<Record<WhisperModelRole, WhisperModelVariant>>
+  >({});
+  // Stable getter, re-assigned each render below once all the busy refs exist —
+  // true while ANY STT pipeline is active, so a model swap or clear-data holds.
+  const isAnyPipelineBusyRef = useRef<() => boolean>(() => false);
+  // Roles with a download in flight — lets a passive inspect (autoDownload:
+  // false) avoid clobbering a live `downloading` state, closing the startup
+  // race where the inspect effect raced initWhisper's download (WS-D).
+  const downloadingRolesRef = useRef<Set<WhisperModelRole>>(new Set());
+  // True when dictation has SOME model to serve right now — the target, a
+  // same-family interim, or a cross-family (degraded) interim. The hotkey gate
+  // reads this: when false (e.g. English selected with only Hinglish installed,
+  // or a fresh download with no interim), it shows the pill's downloading phase
+  // and captures no audio (matrix rows 5, 11) while still recording on a serving
+  // interim (rows 9, 10).
+  const dictationServeableRef = useRef(false);
   const [hotkeyWarning, setHotkeyWarning] = useState("");
   const [dictationConflict, setDictationConflict] = useState(false);
 
@@ -386,6 +411,7 @@ function App() {
   const {
     isRecording: isMeetingRecording,
     isRecordingRef: isMeetingRecordingRef,
+    isPipelineBusyRef: isMeetingPipelineBusyRef,
     isPreparing: isMeetingPreparing,
     isMuted: isMeetingMuted,
     toggleMute: toggleMeetingMute,
@@ -405,6 +431,16 @@ function App() {
     stopRecording: stopMeetingRecording,
     clearTranscript: clearMeetingTranscript,
   } = minutesRecorder;
+
+  // True while ANY speech pipeline is active — hotkey/scribble dictation, its
+  // post-record processing, or a meeting recording/draining/finalizing. Read by
+  // the deferred-swap and clear-data gates (WS-C rules 3 & 4; invariant I3).
+  isAnyPipelineBusyRef.current = () =>
+    isRecordingRef.current ||
+    isScribbleRecordingRef.current ||
+    isScribbleProcessingRef.current ||
+    isProcessingRef.current ||
+    isMeetingPipelineBusyRef.current();
 
   // Auto-updater
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -1244,7 +1280,13 @@ function App() {
         const unlistenProgress = await listen<DownloadProgress>(
           "download-progress",
           (event) => {
-            syncDownloadProgress(spec.variant, event.payload.percentage);
+            // Route by the event's own variant tag rather than matching the
+            // current recommendation (WS-C rule 7) — correct even if a stale
+            // recommendation lingers during a preset/language flip.
+            syncDownloadProgress(
+              event.payload.variant,
+              event.payload.percentage,
+            );
           },
         );
         const unlistenRetry = await listen<DownloadRetry>(
@@ -1291,6 +1333,16 @@ function App() {
           ? dictationModelPresetRef.current
           : minutesModelPresetRef.current;
 
+      // Passive inspect (autoDownload:false) must not stomp a live download's
+      // `downloading`/progress state — closes the startup race where the
+      // inspect effect raced initWhisper's in-flight download (WS-D).
+      if (
+        options.autoDownload === false &&
+        downloadingRolesRef.current.has(role)
+      ) {
+        return { role, path: null, variant: null };
+      }
+
       updateRoleModel(role, {
         preset,
         downloadState: "checking",
@@ -1316,6 +1368,8 @@ function App() {
         activeVariant: resolvedVariant,
         resolvedPath: resolved?.path ?? null,
         fallbackUsed: resolved?.fallbackUsed ?? false,
+        interim: resolved?.interim ?? false,
+        crossFamilyInterim: resolved?.crossFamilyInterim ?? false,
         downloadState: resolved ? "ready" : "idle",
       });
 
@@ -1336,6 +1390,7 @@ function App() {
           progress: 0,
           error: null,
         });
+        downloadingRolesRef.current.add(role);
 
         try {
           path = await downloadRecommendedModel(recommendation.spec);
@@ -1344,6 +1399,8 @@ function App() {
             activeVariant: resolvedVariant,
             resolvedPath: path,
             fallbackUsed: false,
+            interim: false,
+            crossFamilyInterim: false,
             downloadState: "ready",
             progress: 100,
           });
@@ -1356,6 +1413,10 @@ function App() {
             progress: 0,
           });
 
+          // Keep serving if we can. First a same-family installed model, then —
+          // only for a hi-en target, only as an offline degrade — a general
+          // model (I10 one-way valve). Either way the role stays in `error` so
+          // the `online` retry re-attempts the real download and upgrades.
           const retry = await resolveModelForRole(
             role,
             preset,
@@ -1369,10 +1430,32 @@ function App() {
               activeVariant: resolvedVariant,
               resolvedPath: retry.resolved.path,
               fallbackUsed: retry.resolved.fallbackUsed,
+              interim: true,
+              crossFamilyInterim: false,
               downloadState: "ready",
               error: message,
             });
+          } else {
+            const cross = await pickCrossFamilyInterim(
+              role,
+              recommendation.spec.variant,
+            );
+            if (cross) {
+              path = cross.path;
+              resolvedVariant = cross.variant;
+              updateRoleModel(role, {
+                activeVariant: resolvedVariant,
+                resolvedPath: cross.path,
+                fallbackUsed: true,
+                interim: true,
+                crossFamilyInterim: true,
+                downloadState: "ready",
+                error: message,
+              });
+            }
           }
+        } finally {
+          downloadingRolesRef.current.delete(role);
         }
       }
 
@@ -1391,7 +1474,32 @@ function App() {
         return { role, path, variant: resolvedVariant };
       }
 
-      await invoke("ensure_whisper_model_loaded", { role, path });
+      // Rust loads by variant and resolves the path itself (invariant I1).
+      // `path` is non-null here (guarded above), so resolvedVariant is too.
+      if (!resolvedVariant) {
+        throw new Error(
+          role === "minutes"
+            ? "Meeting model not found."
+            : "Dictation model not found.",
+        );
+      }
+
+      // Deferred swap (WS-C rule 3; I3; matrix row 7): if loading would CHANGE
+      // the resident model while a pipeline is busy, queue it and apply once
+      // idle so we never tear the context out from under an in-flight
+      // transcription. The download already happened — only the in-RAM swap
+      // waits. A re-load of the same resident model never defers.
+      const wouldSwap = currentWhisperKeyRef.current !== path;
+      if (wouldSwap && isAnyPipelineBusyRef.current()) {
+        pendingLoadRef.current[role] = resolvedVariant;
+        console.info(
+          `[whisper] deferring ${role} swap to ${resolvedVariant} until idle`,
+        );
+        return { role, path, variant: resolvedVariant };
+      }
+      delete pendingLoadRef.current[role];
+
+      await invoke("ensure_model_loaded", { role, variant: resolvedVariant });
       const pathChanged = currentWhisperKeyRef.current !== path;
       if (pathChanged) {
         currentWhisperKeyRef.current = path;
@@ -1412,10 +1520,43 @@ function App() {
     [prepareWhisperModel],
   );
 
+  // Transcribe declaring the variant we expect to be resident. On a typed
+  // `model-mismatch` (a load race), re-ensure that exact variant and retry once
+  // — never a silent wrong-model transcript (invariant I2; matrix row 19).
+  const transcribeWithVariant = useCallback(
+    async (
+      role: WhisperModelRole,
+      expectedVariant: WhisperModelVariant,
+      payload: {
+        audioData: number[];
+        initialPrompt?: string;
+        language?: string;
+      },
+    ): Promise<Transcription> => {
+      const args = { ...payload, expectedVariant };
+      try {
+        return await invoke<Transcription>("transcribe_audio", args);
+      } catch (e) {
+        if (String(e).includes("model-mismatch")) {
+          console.warn(
+            "[whisper] model-mismatch — re-ensuring",
+            expectedVariant,
+          );
+          await invoke("ensure_model_loaded", { role, variant: expectedVariant });
+          return invoke<Transcription>("transcribe_audio", args);
+        }
+        throw e;
+      }
+    },
+    [],
+  );
+
   canStartMeetingRecordingRef.current = () =>
     !isRecordingRef.current &&
     !isScribbleRecordingRef.current &&
-    !isScribbleProcessingRef.current;
+    !isScribbleProcessingRef.current &&
+    // Block while a dictation transcription is still processing (WS-C rule 4).
+    !isProcessingRef.current;
   ensureMinutesWhisperModelLoadedRef.current = ensureWhisperModelLoaded;
   warmMinutesVoiceEngineRef.current = () => warmVoiceEngine();
   getMinutesAudioConstraintsRef.current = () => getAudioConstraints();
@@ -1461,7 +1602,9 @@ function App() {
     } catch {
       setWhisperLoadedAndRef(false);
       setEngineBootPhase("error");
-      setStatus("Whisper model not found. Set the path in Settings.");
+      setStatus(
+        "Speech model isn't downloaded yet — check Settings → Speech models or reconnect to the internet.",
+      );
       return false;
     }
   };
@@ -1474,6 +1617,69 @@ function App() {
     void prepareWhisperModel("minutes", { autoDownload: false })
       .catch((err) => console.warn("[whisper] failed to inspect meeting model:", err));
   }, [prepareWhisperModel, setupComplete]);
+
+  // Auto-retry model downloads when connectivity returns (WS-C rule 5; matrix
+  // rows 1, 10). Debounced so a link that flaps `online` repeatedly can't storm
+  // the network: re-resolving a ready role is a cheap no-op, an errored one
+  // retries its download, and a hi-en cross-family interim upgrades to Apex.
+  const onlineRetryAtRef = useRef(0);
+  useEffect(() => {
+    const onOnline = () => {
+      const now = Date.now();
+      if (now - onlineRetryAtRef.current < 10_000) return;
+      onlineRetryAtRef.current = now;
+      void prepareWhisperModel("dictation", {
+        load: currentWhisperRoleRef.current === "dictation",
+        autoDownload: true,
+      }).catch(() => {});
+      void prepareWhisperModel("minutes", {
+        load: currentWhisperRoleRef.current === "minutes",
+        autoDownload: true,
+      }).catch(() => {});
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [prepareWhisperModel]);
+
+  // Apply any deferred model swap once every pipeline goes idle (WS-C rule 3;
+  // matrix row 7). Runs whenever a pipeline transitions; no-ops while busy.
+  useEffect(() => {
+    if (isAnyPipelineBusyRef.current()) return;
+    const pending = pendingLoadRef.current;
+    (["dictation", "minutes"] as WhisperModelRole[]).forEach((role) => {
+      if (!pending[role]) return;
+      delete pending[role];
+      void prepareWhisperModel(role, {
+        load: true,
+        autoDownload: false,
+      }).catch((err) =>
+        console.warn(`[whisper] deferred ${role} swap failed:`, err),
+      );
+    });
+  }, [
+    prepareWhisperModel,
+    isMeetingRecording,
+    _isProcessing,
+    isScribbleRecording,
+    isScribbleProcessing,
+    minutesTranscriptionStatus,
+    minutesSegmentQueue,
+  ]);
+
+  // Mirror dictation serveability for the synchronous hotkey gate.
+  useEffect(() => {
+    dictationServeableRef.current = dictationModel.activeVariant != null;
+  }, [dictationModel.activeVariant]);
+
+  // Forward dictation-role download progress to the pill so its downloading
+  // phase shows a live % (WS-D). Minutes progress surfaces in the Meetings tab.
+  useEffect(() => {
+    if (dictationModel.downloadState === "downloading") {
+      void emit("pill-download-progress", {
+        percentage: dictationModel.progress,
+      }).catch(() => {});
+    }
+  }, [dictationModel.downloadState, dictationModel.progress]);
 
   // ── Recording-pill waveform meter ──────────────────────────────────────────
   // Sample the live mic stream and push 15 normalized band levels to the pill
@@ -1541,11 +1747,31 @@ function App() {
   // ── Hotkey recording ───────────────────────────────────────────────────────
 
   const startHotkeyRecording = async () => {
-    if (
-      isScribbleRecordingRef.current ||
-      isScribbleProcessingRef.current ||
-      isMeetingRecordingRef.current
-    ) {
+    if (isScribbleRecordingRef.current || isScribbleProcessingRef.current) {
+      return;
+    }
+    // Block while a meeting is recording OR still finalizing — stopRecording
+    // flips isMeetingRecordingRef false while segments are still draining, so
+    // gate on the full pipeline and give feedback instead of silently ignoring
+    // the hotkey (WS-C rule 4; matrix row 8).
+    if (isMeetingPipelineBusyRef.current()) {
+      setStatus("Finishing meeting notes…");
+      return;
+    }
+
+    // No usable dictation model yet (downloading with no interim to serve, e.g.
+    // English selected with only Hinglish installed): show the pill's
+    // downloading phase, capture NO audio, kick the prepare, and let the next
+    // press record once a model is serveable (WS-D; matrix rows 5, 11). An
+    // installed interim keeps dictationServeableRef true, so rows 9/10 record.
+    if (!dictationServeableRef.current) {
+      invoke("show_recording_pill").catch(console.warn);
+      invoke("set_pill_phase", { phase: "downloading" }).catch(console.warn);
+      setStatus("Downloading speech model…");
+      void prepareWhisperModel("dictation", {
+        load: true,
+        autoDownload: true,
+      }).catch(() => {});
       return;
     }
 
@@ -1800,13 +2026,17 @@ function App() {
       timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
       metrics["cold-load"] = wasModelWarm ? "0" : "1";
       const activeVariant = ensured.variant ?? dictationModel.activeVariant ?? null;
+      if (!activeVariant) {
+        endProcessingEarly("Speech model isn't ready yet.");
+        return;
+      }
 
       const tAudioArray0 = performance.now();
       const audioDataForIpc = Array.from(audioData);
       timings["audio-array"] = Math.round(performance.now() - tAudioArray0);
 
       const tWhisper0 = performance.now();
-      const result = await invoke<Transcription>("transcribe_audio", {
+      const result = await transcribeWithVariant("dictation", activeVariant, {
         audioData: audioDataForIpc,
         initialPrompt: buildInitialPrompt(
           transcriptionLanguageRef.current,
@@ -2212,8 +2442,15 @@ function App() {
     }
 
     try {
-      await ensureWhisperModelLoaded("dictation");
-      const result = await invoke<Transcription>("transcribe_audio", {
+      const ensured = await ensureWhisperModelLoaded("dictation");
+      const activeVariant =
+        ensured.variant ?? dictationModel.activeVariant ?? null;
+      if (!activeVariant) {
+        setStatus("Speech model isn't ready yet.");
+        finish("Speech model isn't ready yet.");
+        return;
+      }
+      const result = await transcribeWithVariant("dictation", activeVariant, {
         audioData: Array.from(audioData),
         initialPrompt: buildInitialPrompt(
           transcriptionLanguageRef.current,
@@ -2421,10 +2658,25 @@ function App() {
   const startScribbleRecording = async () => {
     if (
       isRecordingRef.current ||
-      isMeetingRecordingRef.current ||
       isScribbleRecordingRef.current ||
       isScribbleProcessingRef.current
     ) {
+      return;
+    }
+    // Block while a meeting is recording or finalizing (WS-C rule 4).
+    if (isMeetingPipelineBusyRef.current()) {
+      setStatus("Finishing meeting notes…");
+      return;
+    }
+    // Scribble shares the dictation role — if no model is serveable yet, give a
+    // downloading state and kick the prepare instead of recording audio that
+    // would only fail to transcribe (WS-D).
+    if (!dictationServeableRef.current) {
+      setStatus("Downloading speech model — try again once it's ready.");
+      void prepareWhisperModel("dictation", {
+        load: true,
+        autoDownload: true,
+      }).catch(() => {});
       return;
     }
 
@@ -2782,6 +3034,13 @@ function App() {
       <SetupScreen
         onComplete={handleSetupComplete}
         transcriptionLanguage={transcriptionLanguage}
+        onLanguageChange={(lang) => {
+          // A language picked during onboarding: mirror it into state + ref so
+          // initWhisper (post-setup) loads the model SetupScreen just fetched,
+          // not the old default (WS-E).
+          setTranscriptionLanguage(lang);
+          transcriptionLanguageRef.current = lang;
+        }}
       />
     );
 
@@ -3116,28 +3375,31 @@ function App() {
                     }).catch(console.warn);
                     // Model selection is language-aware: "hi-en" routes to the
                     // Oriserve Hinglish model, other languages to the general
-                    // ladder. Re-prepare so the right model is fetched now
-                    // rather than mid-recording; reload whichever role is live.
+                    // ladder. Prepare BOTH roles now so neither downloads the
+                    // wrong model mid-recording (WS-C rule 2); reload whichever
+                    // role is live, just download the other. Re-arm the
+                    // Meetings-tab pre-download so it re-resolves for the new
+                    // language on the next visit. Downloads stay serialized
+                    // (dictation first) via modelDownloadQueueRef.
+                    minutesPredownloadStartedRef.current = false;
                     void prepareWhisperModel("dictation", {
                       load: currentWhisperRoleRef.current === "dictation",
                       autoDownload: true,
                     }).catch((err) => {
                       console.warn(
-                        "[whisper] language-change model prepare failed:",
+                        "[whisper] language-change dictation prepare failed:",
                         err,
                       );
                     });
-                    if (currentWhisperRoleRef.current === "minutes") {
-                      void prepareWhisperModel("minutes", {
-                        load: true,
-                        autoDownload: true,
-                      }).catch((err) => {
-                        console.warn(
-                          "[whisper] language-change model prepare failed:",
-                          err,
-                        );
-                      });
-                    }
+                    void prepareWhisperModel("minutes", {
+                      load: currentWhisperRoleRef.current === "minutes",
+                      autoDownload: true,
+                    }).catch((err) => {
+                      console.warn(
+                        "[whisper] language-change minutes prepare failed:",
+                        err,
+                      );
+                    });
                   }}
                   perfLogTranscripts={perfLogTranscripts}
                   onPerfLogTranscriptsChange={(enabled) => {
@@ -3166,49 +3428,54 @@ function App() {
                     void warmVoiceEngine(id);
                   }}
                   onClearData={async () => {
-                    try {
-                      // Delete downloaded model files
-                      const home = await homeDir();
-                      const filesToDelete = [
-                        ...Object.values(FALLBACK_MODELS).map(
-                          (spec) => `${home}/${relativeModelPath(spec.variant)}`,
-                        ),
-                        // Legacy local AI model files (removed in favour of cloud AI)
-                        `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
-                        `${home}/.oscar/models/phi-3.5-tokenizer.json`,
-                      ];
-                      for (const f of filesToDelete) {
-                        try {
-                          const exists = await invoke<boolean>(
-                            "check_file_exists",
-                            { path: f },
-                          );
-                          if (exists) await invoke("delete_file", { path: f });
-                        } catch {
-                          // best-effort cleanup
-                        }
-                      }
-                    } catch {
-                      // homeDir or invoke failed — continue with clearing
+                    // WS-F + matrix row 4: never wipe data mid-pipeline.
+                    if (isAnyPipelineBusyRef.current()) {
+                      setStatus("Finish recording before clearing data.");
+                      return;
                     }
-
-                    // Sign out of Supabase locally so the desktop session is
-                    // always cleared even if the network is unavailable.
+                    // Order matters (invariant I9): cancel in-flight downloads
+                    // and unload the resident context BEFORE removing the model
+                    // bytes, so no .partial reappears and Windows holds no file
+                    // lock. Rust owns the bytes, so a single clear_local_models
+                    // recursively removes final files, .partial sidecars, and the
+                    // legacy phi files — replacing the old FE path-string loop
+                    // (which also broke on Windows '/' separators). Each step is
+                    // best-effort; only the reload is unconditional.
+                    try {
+                      await invoke("cancel_model_downloads");
+                    } catch (e) {
+                      console.warn("[clear-data] cancel_model_downloads failed:", e);
+                    }
+                    try {
+                      await invoke("unload_whisper_model");
+                    } catch (e) {
+                      console.warn("[clear-data] unload_whisper_model failed:", e);
+                    }
+                    try {
+                      await invoke("clear_local_models");
+                    } catch (e) {
+                      console.warn("[clear-data] clear_local_models failed:", e);
+                    }
+                    // Privacy: perf.jsonl can hold raw + AI-cleaned transcripts
+                    // when "Log transcripts to diagnostics" is on.
+                    try {
+                      await invoke("clear_perf_log");
+                    } catch (e) {
+                      console.warn("[clear-data] clear_perf_log failed:", e);
+                    }
+                    // Sign out locally so the desktop session clears even offline.
                     try {
                       await signOutLocally();
-                    } catch {
-                      // may already be signed out
+                    } catch (e) {
+                      console.warn("[clear-data] signOutLocally failed:", e);
                     }
-
-                    // Clear all persisted settings
                     try {
                       const store = await getStore();
                       await store.clear();
                       await store.save();
-                    } catch {
-                      // clearing store failed — reload will reset state anyway
+                    } catch (e) {
+                      console.warn("[clear-data] store clear failed:", e);
                     }
-
                     localStorage.clear();
                     window.location.reload();
                   }}
@@ -3226,6 +3493,14 @@ function App() {
                   dictationModel={dictationModel}
                   meetingModel={meetingModel}
                   onModelPresetChange={handleModelPresetChange}
+                  onModelRetry={(role) => {
+                    void prepareWhisperModel(role, {
+                      load: currentWhisperRoleRef.current === role,
+                      autoDownload: true,
+                    }).catch((err) =>
+                      console.warn(`[whisper] retry ${role} failed:`, err),
+                    );
+                  }}
                   appVersion={appVersion}
                 />
               )}

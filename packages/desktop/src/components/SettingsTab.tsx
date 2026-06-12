@@ -18,9 +18,12 @@ import { VocabularySection } from "./VocabularySection";
 import { getInitials } from "../lib/utils";
 import { isContextAwarePlatform } from "../lib/dictation-context";
 import {
+  FALLBACK_MODELS,
   formatModelSize,
+  modelDisplayName,
   type ModelPreset,
 } from "../lib/whisper-models";
+import { LANGUAGES } from "../lib/languages";
 import type { RoleModelState, WhisperModelRole } from "../lib/app-types";
 import {
   CLEANUP_STYLE_OPTIONS,
@@ -58,43 +61,6 @@ function resolveTab(section?: SettingsSectionId): ActiveTab {
   return "general";
 }
 
-/* ── Languages ── */
-
-const LANGUAGES = [
-  { code: "hi-en", flag: "🇮🇳", name: "Hinglish", native: "Hindi + English" },
-  { code: "en", flag: "🇺🇸", name: "English", native: "English" },
-  { code: "hi", flag: "🇮🇳", name: "Hindi", native: "हिन्दी" },
-  { code: "es", flag: "🇪🇸", name: "Spanish", native: "Español" },
-  { code: "fr", flag: "🇫🇷", name: "French", native: "Français" },
-  { code: "de", flag: "🇩🇪", name: "German", native: "Deutsch" },
-  { code: "zh", flag: "🇨🇳", name: "Chinese", native: "中文" },
-  { code: "ja", flag: "🇯🇵", name: "Japanese", native: "日本語" },
-  { code: "ar", flag: "🇸🇦", name: "Arabic", native: "العربية" },
-  { code: "pt", flag: "🇧🇷", name: "Portuguese", native: "Português" },
-  { code: "ru", flag: "🇷🇺", name: "Russian", native: "Русский" },
-  { code: "ko", flag: "🇰🇷", name: "Korean", native: "한국어" },
-  { code: "it", flag: "🇮🇹", name: "Italian", native: "Italiano" },
-  { code: "nl", flag: "🇳🇱", name: "Dutch", native: "Nederlands" },
-  { code: "pl", flag: "🇵🇱", name: "Polish", native: "Polski" },
-  { code: "tr", flag: "🇹🇷", name: "Turkish", native: "Türkçe" },
-  { code: "vi", flag: "🇻🇳", name: "Vietnamese", native: "Tiếng Việt" },
-  { code: "id", flag: "🇮🇩", name: "Indonesian", native: "Bahasa Indonesia" },
-  { code: "uk", flag: "🇺🇦", name: "Ukrainian", native: "Українська" },
-  { code: "sv", flag: "🇸🇪", name: "Swedish", native: "Svenska" },
-  { code: "cs", flag: "🇨🇿", name: "Czech", native: "Čeština" },
-  { code: "el", flag: "🇬🇷", name: "Greek", native: "Ελληνικά" },
-  { code: "fi", flag: "🇫🇮", name: "Finnish", native: "Suomi" },
-  { code: "ro", flag: "🇷🇴", name: "Romanian", native: "Română" },
-  { code: "hu", flag: "🇭🇺", name: "Hungarian", native: "Magyar" },
-  { code: "he", flag: "🇮🇱", name: "Hebrew", native: "עברית" },
-  { code: "ur", flag: "🇵🇰", name: "Urdu", native: "اردو" },
-  { code: "bn", flag: "🇧🇩", name: "Bengali", native: "বাংলা" },
-  { code: "ta", flag: "🇮🇳", name: "Tamil", native: "தமிழ்" },
-  { code: "te", flag: "🇮🇳", name: "Telugu", native: "తెలుగు" },
-  { code: "ms", flag: "🇲🇾", name: "Malay", native: "Bahasa Melayu" },
-  { code: "th", flag: "🇹🇭", name: "Thai", native: "ภาษาไทย" },
-  { code: "da", flag: "🇩🇰", name: "Danish", native: "Dansk" },
-];
 
 const WEB_APP_URL =
   import.meta.env.VITE_WEB_APP_URL ?? "https://oscar.samyarth.org";
@@ -435,6 +401,7 @@ interface SettingsTabProps {
   dictationModel: RoleModelState;
   meetingModel: RoleModelState;
   onModelPresetChange: (role: WhisperModelRole, preset: ModelPreset) => void;
+  onModelRetry?: (role: WhisperModelRole) => void;
   appVersion?: string | null;
 }
 
@@ -468,6 +435,7 @@ export function SettingsTab({
   dictationModel,
   meetingModel,
   onModelPresetChange,
+  onModelRetry,
   appVersion,
 }: SettingsTabProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>(
@@ -570,7 +538,20 @@ export function SettingsTab({
         </span>
       );
     }
-    if (model.activeVariant) return null;
+    if (model.activeVariant) {
+      const sizeBytes = FALLBACK_MODELS[model.activeVariant].sizeBytes;
+      const note = model.crossFamilyInterim
+        ? " · using the general model until the Hinglish model downloads — Hinglish accuracy is reduced"
+        : model.interim
+          ? " · interim — upgrading in the background"
+          : "";
+      return (
+        <span className="font-mono text-[11px] text-ink-faint">
+          {modelDisplayName(model.activeVariant)} · {formatModelSize(sizeBytes)}
+          {note}
+        </span>
+      );
+    }
     if (model.recommendation) {
       return (
         <span className="font-mono text-[11px] text-ink-faint">
@@ -599,6 +580,15 @@ export function SettingsTab({
               <span className="block mt-1 text-[11px] text-[#dc2626]">
                 {model.error}
               </span>
+            )}
+            {model.downloadState === "error" && onModelRetry && (
+              <button
+                type="button"
+                onClick={() => onModelRetry(model.role)}
+                className="mt-1 inline-block font-mono text-[11px] text-cyan-600 underline underline-offset-2 hover:text-cyan-500"
+              >
+                Retry download
+              </button>
             )}
           </>
         }
