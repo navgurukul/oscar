@@ -117,11 +117,24 @@ export interface ResolvedModel {
   fallbackUsed: boolean;
   /**
    * True when this resolved model is an acceptable substitute for the role's
-   * recommendation — either it IS the recommendation, or it's an installed
-   * model whose quality meets the reuse floor. Callers use this to decide
-   * whether a `fallbackUsed` model still warrants an upgrade download.
+   * recommendation — either it IS the recommendation, or (Auto only) it's an
+   * installed model whose quality meets the reuse floor. Explicit presets
+   * (Fast/Balanced/Best) are NEVER sufficient on a non-target install, so they
+   * always converge to their exact recommended variant (I7). Callers use this
+   * to decide whether a `fallbackUsed` model still warrants a download.
    */
   sufficient: boolean;
+  /**
+   * True when this is a stop-gap model serving NOW while the target variant
+   * downloads in the background (then swaps at idle — WS-C rule 1/3).
+   */
+  interim: boolean;
+  /**
+   * True when a hi-en (Hinglish) request is being served by a general,
+   * non-Hinglish model as an offline degrade. The UI shows the reduced-accuracy
+   * notice; the proper model auto-upgrades once downloaded (I10).
+   */
+  crossFamilyInterim: boolean;
 }
 
 /// Resolve which model to load for a given role, factoring in user preset,
@@ -151,6 +164,8 @@ export async function resolveModelForRole(
         recommendation,
         fallbackUsed: false,
         sufficient: true,
+        interim: false,
+        crossFamilyInterim: false,
       },
     };
   }
@@ -160,15 +175,21 @@ export async function resolveModelForRole(
     recommendation.spec.variant,
   );
   if (fallback) {
-    // An installed-but-not-recommended model is a sufficient substitute when
-    // its quality clears min(recommendedQuality, floor). This is what lets
-    // Minutes reuse the shared dictation model instead of downloading a larger
-    // one; an insufficient model (e.g. base when small is needed) still
-    // upgrades.
+    // Auto: an installed same-family model is a sufficient substitute when its
+    // quality clears min(recommendedQuality, floor) — this lets Minutes reuse
+    // the shared dictation model instead of pulling a second, larger one.
+    // Explicit presets (Fast/Balanced/Best) must CONVERGE to their exact
+    // recommended variant, so a non-target install is never sufficient — it
+    // serves only as an interim while the target downloads, then swaps at idle
+    // (I7; fixes "Fast/Balanced are no-ops when a bigger model is installed").
+    const isExplicit = preset !== "auto";
     const reuseThreshold = Math.min(
       recommendation.spec.quality,
       REUSE_QUALITY_FLOOR,
     );
+    const sufficient = isExplicit
+      ? false
+      : fallback.spec.quality >= reuseThreshold;
     return {
       recommendation,
       resolved: {
@@ -177,7 +198,10 @@ export async function resolveModelForRole(
         spec: fallback.spec,
         recommendation,
         fallbackUsed: true,
-        sufficient: fallback.spec.quality >= reuseThreshold,
+        sufficient,
+        // A not-sufficient fallback is being served while the target downloads.
+        interim: !sufficient,
+        crossFamilyInterim: false,
       },
     };
   }
@@ -240,11 +264,25 @@ export async function deleteInstalledModel(
   await invoke("delete_model", { variant });
 }
 
-/// Legacy-model cleanup is now owned by the Rust startup janitor and
-/// `clear_local_models`. Kept as a no-op so existing call sites don't break;
-/// the export is removed in WS-C once those call sites are migrated.
-export async function cleanupLegacyModels(
-  _keepVariants: WhisperModelVariant[],
-): Promise<void> {
-  /* no-op — see Rust run_startup_janitor */
+/// For a Hinglish target that failed to download (offline), pick the best
+/// installed GENERAL model to serve as a cross-family interim. The Hinglish
+/// one-way valve (I10): only hi-en may degrade to a general model, never the
+/// reverse, and only as an offline stop-gap that auto-upgrades once the proper
+/// model downloads. Returns null for a general target (no cross-family) or when
+/// no general model is installed.
+export async function pickCrossFamilyInterim(
+  role: WhisperRole,
+  targetVariant: WhisperModelVariant,
+): Promise<InstalledModel | null> {
+  if (!isHinglishVariant(targetVariant)) return null;
+  const general = (await listInstalledModels()).filter(
+    (m) => !isHinglishVariant(m.variant),
+  );
+  if (general.length === 0) return null;
+  general.sort((a, b) =>
+    role === "dictation"
+      ? a.spec.quality - b.spec.quality
+      : b.spec.quality - a.spec.quality,
+  );
+  return general[0];
 }

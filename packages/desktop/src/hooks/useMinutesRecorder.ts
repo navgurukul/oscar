@@ -115,6 +115,11 @@ export function useMinutesRecorder({
   // transcribe declares it so a wrong-model load is a typed error, not a silent
   // wrong-model transcript (invariant I2).
   const loadedVariantRef = useRef<WhisperModelVariant | null>(null);
+  // True for the WHOLE pipeline lifetime — not just while `isRecording`, which
+  // stopRecording flips false immediately while segments are still draining.
+  // Other surfaces (hotkey/scribble start, clear-data) read this to block until
+  // the meeting fully finalizes (invariant I3; matrix rows 4, 8).
+  const isPipelineBusyRef = useRef<() => boolean>(() => false);
   const startedAtRef = useRef("");
   const sessionUsesSystemAudioRef = useRef(false);
   const systemAudioActiveRef = useRef(false);
@@ -825,9 +830,19 @@ export function useMinutesRecorder({
     };
   }, [stopVadMonitor, warmStreamRef]);
 
+  // Re-assigned every render so the closure reads live refs. Busy = recording,
+  // OR segments still queued/being-worked, OR a stop was requested and the
+  // finalize tail hasn't completed.
+  isPipelineBusyRef.current = () =>
+    isRecordingRef.current ||
+    segmentQueueRef.current.length > 0 ||
+    segmentWorkerRunningRef.current ||
+    stopRequestedRef.current;
+
   return {
     isRecording,
     isRecordingRef,
+    isPipelineBusyRef,
     isPreparing,
     isMuted,
     toggleMute,

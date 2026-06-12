@@ -8,7 +8,6 @@ import {
   type ModelRecommendation,
 } from "../../lib/whisper-models";
 import {
-  cleanupLegacyModels,
   downloadModel,
   resolveModelForRole,
 } from "../../lib/whisper-model-manager";
@@ -119,8 +118,6 @@ export function SetupScreen({
 
     try {
       await downloadModel(recommendation.spec, recommendation.spec.sha256);
-      // Opportunistic — never block setup on cleanup.
-      void cleanupLegacyModels([recommendation.spec.variant]);
       await onCompleteRef.current();
     } catch (downloadError) {
       setError(`Download failed: ${downloadError}`);

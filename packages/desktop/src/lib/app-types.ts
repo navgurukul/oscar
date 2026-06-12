@@ -102,6 +102,11 @@ export interface RoleModelState {
   downloadState: RoleModelDownloadState;
   progress: number;
   error: string | null;
+  /** Serving a stop-gap model while the target variant downloads (WS-C). */
+  interim?: boolean;
+  /** hi-en being served by a general model as an offline degrade (I10) — UI
+   *  shows the reduced-Hinglish-accuracy notice. */
+  crossFamilyInterim?: boolean;
 }
 
 export interface DownloadProgress {
