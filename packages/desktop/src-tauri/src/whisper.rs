@@ -825,7 +825,7 @@ pub(crate) struct LoadedModelInfo {
 /// Ensure `variant` is the resident model, downloading nothing (the frontend
 /// downloads first, then calls this). Replaces `ensure_whisper_model_loaded`.
 #[tauri::command]
-pub fn ensure_model_loaded(
+pub async fn ensure_model_loaded(
     role: String,
     variant: WhisperModelVariant,
     app: tauri::AppHandle,
@@ -833,7 +833,15 @@ pub fn ensure_model_loaded(
 ) -> Result<LoadedModelInfo, String> {
     let path = model_path(&app, variant)?;
     let path_str = path.to_string_lossy().to_string();
-    load_model_inner(runtime.inner(), &role, variant, &path_str)?;
+    // Loading a 0.5–1.6 GB GGML model takes seconds — run it on the blocking
+    // pool so the Tauri IPC executor (main thread) stays responsive (I8).
+    let runtime = runtime.inner().clone();
+    let path_for_load = path_str.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        load_model_inner(&runtime, &role, variant, &path_for_load)
+    })
+    .await
+    .map_err(|e| format!("Model load task failed: {}", e))??;
     Ok(LoadedModelInfo {
         variant,
         path: path_str,
@@ -934,10 +942,7 @@ pub fn clear_local_models(
     Ok(ClearModelsResult { bytes_freed })
 }
 
-#[tauri::command]
-pub fn warm_whisper_runtime(
-    runtime: tauri::State<'_, Arc<WhisperRuntime>>,
-) -> Result<String, String> {
+fn warm_whisper_runtime_inner(runtime: &WhisperRuntime) -> Result<String, String> {
     let context = {
         let guard = runtime.model.read().map_err(|e| e.to_string())?;
         guard
@@ -962,6 +967,18 @@ pub fn warm_whisper_runtime(
         .map_err(|e| e.to_string())?;
 
     Ok("Whisper runtime warmed".to_string())
+}
+
+#[tauri::command]
+pub async fn warm_whisper_runtime(
+    runtime: tauri::State<'_, Arc<WhisperRuntime>>,
+) -> Result<String, String> {
+    // Warmup runs a real (silent) inference — seconds of CPU — so keep it off
+    // the main thread (I8).
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || warm_whisper_runtime_inner(&runtime))
+        .await
+        .map_err(|e| format!("Warm task failed: {}", e))?
 }
 
 /// Known Whisper hallucination phrases that surface on silence, music,
