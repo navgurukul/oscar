@@ -56,7 +56,12 @@ windows = { version = "0.58", features = [
 # the "tauri.localhost wants to use your microphone" Edge dialog — the in-app
 # onboarding screen is the source of truth instead.
 webview2-com = "0.38"
-whisper-rs = "0.15"
+# Vulkan GPU acceleration on Windows. Mirrors the macOS `metal` setup below —
+# without this, Whisper falls back to CPU inference and is 5–10× slower on
+# typical hardware. Requires the Vulkan SDK at build time (LunarG); runtime
+# uses the standard Vulkan driver shipped with modern Windows GPUs (Intel,
+# AMD, NVIDIA).
+whisper-rs = { version = "0.15", features = ["vulkan"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 whisper-rs = "0.15"
