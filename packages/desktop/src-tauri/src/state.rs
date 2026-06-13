@@ -172,4 +172,9 @@ pub(crate) struct FrontmostContextPayload {
     pub(crate) site_host: Option<String>,
     pub(crate) site_title: Option<String>,
     pub(crate) target_app_name: Option<String>,
+    /// Monotonic id stamped at hotkey/pill press. Lets the frontend ignore a
+    /// late async context-enrichment event whose session no longer matches the
+    /// active dictation. 0 for non-press callers (paste/tray) that don't enrich.
+    #[serde(default)]
+    pub(crate) session_id: u64,
 }

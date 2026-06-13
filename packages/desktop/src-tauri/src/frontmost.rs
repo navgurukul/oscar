@@ -228,8 +228,35 @@ mod mac {
         )
     }
 
-    pub(super) fn get_frontmost_context_payload() -> FrontmostContextPayload {
+    /// Fast, subprocess-free identity capture (pure NSWorkspace). Safe to run
+    /// synchronously on the hotkey/pill press thread — no AppleScript, so it
+    /// never stalls the rest→recording transition. The osascript-derived
+    /// window title and browser site are filled in later by `get_enrichment`.
+    fn build_identity(session_id: u64) -> FrontmostContextPayload {
         let (app_name, native_app_id) = get_frontmost_macos_app_identity();
+        FrontmostContextPayload {
+            platform: "macos".to_string(),
+            app_name: app_name.clone(),
+            app_id: normalize_optional_string(native_app_id),
+            process_name: None,
+            window_title: None,
+            site_host: None,
+            site_title: None,
+            target_app_name: normalize_optional_string(Some(app_name)),
+            session_id,
+        }
+    }
+
+    pub(super) fn get_frontmost_identity_payload(session_id: u64) -> FrontmostContextPayload {
+        build_identity(session_id)
+    }
+
+    /// Slow part: the AppleScript window-title + browser-tab capture. Runs off
+    /// the press path (background thread) so it can't delay recording start.
+    /// Returns `(window_title, site_host, site_title)`.
+    pub(super) fn get_enrichment(
+        app_id: Option<&str>,
+    ) -> (Option<String>, Option<String>, Option<String>) {
         let window_title = run_osascript(
             r#"tell application "System Events"
     tell (first application process whose frontmost is true)
@@ -241,18 +268,20 @@ mod mac {
     end tell
 end tell"#,
         );
-        let (site_host, site_title) = get_browser_site_context(native_app_id.as_deref());
+        let (site_host, site_title) = get_browser_site_context(app_id);
+        (normalize_optional_string(window_title), site_host, site_title)
+    }
 
-        FrontmostContextPayload {
-            platform: "macos".to_string(),
-            app_name: app_name.clone(),
-            app_id: normalize_optional_string(native_app_id),
-            process_name: None,
-            window_title: normalize_optional_string(window_title),
-            site_host,
-            site_title,
-            target_app_name: normalize_optional_string(Some(app_name)),
-        }
+    /// Full synchronous capture (identity + enrichment) for callers that are
+    /// not on the press hot-path: clipboard paste targeting, the tray, and the
+    /// pill's own paste step. These already tolerate the AppleScript latency.
+    pub(super) fn get_frontmost_context_payload() -> FrontmostContextPayload {
+        let mut payload = build_identity(0);
+        let (window_title, site_host, site_title) = get_enrichment(payload.app_id.as_deref());
+        payload.window_title = window_title;
+        payload.site_host = site_host;
+        payload.site_title = site_title;
+        payload
     }
 }
 
@@ -274,7 +303,17 @@ mod win {
             .to_string()
     }
 
+    // Windows capture is pure Win32 (no subprocess), so it's already fast
+    // enough for the press path — identity and full capture are the same call.
+    pub(super) fn get_frontmost_identity_payload(session_id: u64) -> FrontmostContextPayload {
+        build_full(session_id)
+    }
+
     pub(super) fn get_frontmost_context_payload() -> FrontmostContextPayload {
+        build_full(0)
+    }
+
+    fn build_full(session_id: u64) -> FrontmostContextPayload {
         let hwnd = unsafe { GetForegroundWindow() };
         let window_title = if hwnd == 0 {
             None
@@ -337,6 +376,7 @@ mod win {
             site_host: None,
             site_title: None,
             target_app_name: None,
+            session_id,
         }
     }
 }
@@ -365,4 +405,44 @@ pub(crate) fn get_frontmost_context_payload() -> FrontmostContextPayload {
         platform: "unknown".to_string(),
         ..FrontmostContextPayload::default()
     }
+}
+
+/// Fast, subprocess-free identity capture for the press path. Stamps the given
+/// session id. On macOS the AppleScript-derived fields are deferred to
+/// `get_frontmost_enrichment`; on Windows the full (fast) capture is returned.
+#[cfg(target_os = "macos")]
+pub(crate) fn get_frontmost_identity_payload(session_id: u64) -> FrontmostContextPayload {
+    mac::get_frontmost_identity_payload(session_id)
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn get_frontmost_identity_payload(session_id: u64) -> FrontmostContextPayload {
+    win::get_frontmost_identity_payload(session_id)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn get_frontmost_identity_payload(session_id: u64) -> FrontmostContextPayload {
+    FrontmostContextPayload {
+        platform: "linux".to_string(),
+        session_id,
+        ..FrontmostContextPayload::default()
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+pub(crate) fn get_frontmost_identity_payload(session_id: u64) -> FrontmostContextPayload {
+    FrontmostContextPayload {
+        platform: "unknown".to_string(),
+        session_id,
+        ..FrontmostContextPayload::default()
+    }
+}
+
+/// Slow AppleScript enrichment (macOS only). Runs on a background thread off the
+/// press path. Returns `(window_title, site_host, site_title)`.
+#[cfg(target_os = "macos")]
+pub(crate) fn get_frontmost_enrichment(
+    app_id: Option<&str>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    mac::get_enrichment(app_id)
 }

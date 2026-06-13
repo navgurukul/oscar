@@ -76,6 +76,20 @@ export interface HotkeyContextEventPayload {
   siteHost?: string | null;
   siteTitle?: string | null;
   targetAppName?: string | null;
+  // Monotonic id stamped at press; pairs the start event with its later
+  // async context-enrichment event (see HotkeyContextEnrichPayload).
+  sessionId?: number;
+}
+
+// Late, session-tagged context delivered after recording has already started:
+// the AppleScript-derived window title + browser site that were deferred off
+// the press path so the pill arms instantly. Applied only if sessionId still
+// matches the active dictation.
+export interface HotkeyContextEnrichPayload {
+  sessionId: number;
+  windowTitle?: string | null;
+  siteHost?: string | null;
+  siteTitle?: string | null;
 }
 
 export type MicrophonePermissionState = "granted" | "denied" | "prompt" | "unknown";
