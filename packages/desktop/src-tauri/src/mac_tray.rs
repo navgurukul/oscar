@@ -15,7 +15,6 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{image::Image, Manager};
 
 use crate::events::OscarEvent;
-use crate::frontmost::get_frontmost_context_payload;
 use crate::state::{HotkeyState, MAC_TRAY};
 
 const ID_OPEN: &str = "tray:open";
@@ -113,13 +112,10 @@ fn start_recording(app: &tauri::AppHandle) {
         return;
     }
 
-    let payload = get_frontmost_context_payload();
-    log::info!(
-        "[mac-tray] Start Recording — frontmost='{}' site_host={:?}",
-        payload.app_name,
-        payload.site_host.as_deref()
-    );
-    OscarEvent::HotkeyRecordingStart(payload).dispatch(app);
+    // Same fast-dispatch + deferred-AppleScript path the hotkey and pill use, so
+    // the tray Start Recording arms without the synchronous osascript wait too.
+    log::info!("[mac-tray] Start Recording");
+    crate::hotkey::dispatch_recording_start(app);
 }
 
 fn stop_recording(app: &tauri::AppHandle) {

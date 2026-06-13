@@ -40,6 +40,7 @@ import type {
   DownloadProgress,
   DownloadRetry,
   HotkeyContextEventPayload,
+  HotkeyContextEnrichPayload,
   MicrophonePermissionState,
   RoleModelState,
   TabType,
@@ -369,6 +370,11 @@ function App() {
   // unavailable (non-macOS, or the OS didn't report a bundle id).
   const targetBundleIdRef = useRef<string>("");
   const dictationContextRef = useRef<DictationContextSnapshot | null>(null);
+  // Active dictation session id (from the press event) + the raw start payload,
+  // so a late `hotkey-context-enrich` can be matched to the right dictation and
+  // merged onto its context. A stale enrich (session moved on) is dropped.
+  const currentDictationSessionRef = useRef<number | null>(null);
+  const lastHotkeyPayloadRef = useRef<HotkeyContextEventPayload | null>(null);
   const pendingStopRef = useRef(false);
   const warmStreamRef = useRef<MediaStream | null>(null);
   const voiceEngineWarmupRef = useRef(false);
@@ -968,6 +974,12 @@ function App() {
         dictationContextRef.current = isSelfApp
           ? null
           : buildDictationContextSnapshot(ev.payload);
+        // Record the session so a later context-enrich event can be matched (or
+        // dropped if a newer press has superseded it). Keep the raw payload to
+        // merge the deferred AppleScript fields onto. Self-app gets no base, so
+        // its enrich is ignored.
+        currentDictationSessionRef.current = ev.payload?.sessionId ?? null;
+        lastHotkeyPayloadRef.current = isSelfApp ? null : ev.payload ?? null;
         pendingStopRef.current = false;
 
         // Push the captured context to the always-on pill so its label can read
@@ -999,6 +1011,48 @@ function App() {
         }
       },
     );
+
+    // Late context enrichment: the AppleScript-derived window title + browser
+    // site, captured off the press path so recording arms instantly. Apply it
+    // only if the session still matches the active dictation — a result for a
+    // dictation the user already moved on from must not clobber the new one.
+    const unlistenEnrich = listen<HotkeyContextEnrichPayload>(
+      "hotkey-context-enrich",
+      (ev) => {
+        const sid = ev.payload?.sessionId;
+        if (sid == null || sid !== currentDictationSessionRef.current) return;
+        const base = lastHotkeyPayloadRef.current;
+        if (!base) return; // self-app or no base — nothing to enrich.
+
+        const merged: HotkeyContextEventPayload = {
+          ...base,
+          windowTitle: ev.payload?.windowTitle ?? base.windowTitle ?? null,
+          siteHost: ev.payload?.siteHost ?? base.siteHost ?? null,
+          siteTitle: ev.payload?.siteTitle ?? base.siteTitle ?? null,
+        };
+        lastHotkeyPayloadRef.current = merged;
+        const snap = buildDictationContextSnapshot(merged);
+        if (!snap) return;
+        dictationContextRef.current = snap;
+
+        // Refresh the pill label only while still recording — the site/host may
+        // now upgrade confidence (e.g. a recognized browser tab). Skip if the
+        // flow already ended so a late result can't flash a label on the idle
+        // handle (processAudio clears it on finish).
+        const pillContextEnabled =
+          contextAwareDictationEnabledRef.current &&
+          isContextAwarePlatform(getDesktopPlatform());
+        if (pillContextEnabled && isRecordingRef.current) {
+          const pillRouting = routeDictationContext(snap);
+          const known = pillRouting.confidence !== "low";
+          emit("pill-context-app", {
+            name: known ? pillRouting.appKey : snap.appName,
+            confidence: known ? "high" : "low",
+          }).catch(() => {});
+        }
+      },
+    );
+
     const unlistenStop = listen("hotkey-recording-stop", () => {
       // ALWAYS set pending stop — this is the safety net for the race condition
       // where STOP arrives before getUserMedia resolves in startHotkeyRecording
@@ -1115,6 +1169,7 @@ function App() {
         mediaRecorderRef.current.stop();
       }
       unlistenStart.then((f) => f());
+      unlistenEnrich.then((f) => f());
       unlistenStop.then((f) => f());
       unlistenErr.then((f) => f());
       unlistenReg.then((f) => f());
