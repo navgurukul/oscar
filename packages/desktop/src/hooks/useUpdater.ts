@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
@@ -77,6 +78,12 @@ export function useUpdater() {
         throw new Error("No update available");
       }
 
+     try {
+        await invoke("prepare_update_install");
+      } catch {
+        // ignore — proceed with the stock flow
+      }
+
       let downloaded = 0;
       let contentLength = 0;
 
@@ -101,6 +108,11 @@ export function useUpdater() {
         }
       });
     } catch (error) {
+     try {
+        await invoke("resume_pill_after_update");
+      } catch {
+        // ignore
+      }
       setState((prev) => ({
         ...prev,
         downloading: false,

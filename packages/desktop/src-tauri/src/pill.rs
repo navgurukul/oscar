@@ -39,6 +39,9 @@ pub(crate) fn pill_enabled() -> bool {
     PILL_ENABLED.load(Ordering::SeqCst)
 }
 
+/// download would resurrect the window we just destroyed.
+static UPDATE_TEARDOWN: AtomicBool = AtomicBool::new(false);
+
 fn normalize_phase(phase: &str) -> &'static str {
     match phase {
         "rest" => "rest",
@@ -46,7 +49,6 @@ fn normalize_phase(phase: &str) -> &'static str {
         "expanded" => "expanded",
         "recording" => "recording",
         "processing" => "processing",
-        "downloading" => "downloading",
         "inserted" => "inserted",
         "copied" => "copied",
         "error" => "error",
@@ -162,6 +164,10 @@ fn reposition_flush_bottom<R: tauri::Runtime>(
 /// thin bottom-flush strip so clicks above the handle pass through.
 pub(crate) fn create_pill_window(app: &tauri::AppHandle) {
     use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    if UPDATE_TEARDOWN.load(Ordering::SeqCst) {
+        return;
+    }
 
     if app.get_webview_window("recording-pill").is_some() {
         return;
@@ -432,6 +438,69 @@ pub fn set_pill_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), Stri
 pub fn stop_pill_hover() {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     crate::pill_hover::stop();
+}
+
+
+#[tauri::command]
+pub async fn prepare_update_install(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        UPDATE_TEARDOWN.store(true, Ordering::SeqCst);
+        log::info!("[updater] prepare: stopping pill hover poller");
+        crate::pill_hover::stop();
+        // Let any in-flight poll finish (one 45 ms cycle + margin).
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+        let app_clone = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            if let Some(w) = app_clone.get_webview_window("recording-pill") {
+                log::info!("[updater] prepare: destroying recording-pill window");
+                match w.destroy() {
+                    Ok(()) => log::info!("[updater] prepare: pill destroy dispatched"),
+                    Err(e) => log::warn!("[updater] prepare: pill destroy failed: {e}"),
+                }
+            } else {
+                log::info!("[updater] prepare: no pill window present");
+            }
+        });
+
+       let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while app.get_webview_window("recording-pill").is_some() {
+            if std::time::Instant::now() >= deadline {
+                log::warn!(
+                    "[updater] prepare: pill window still present after 5s — proceeding anyway"
+                );
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        log::info!("[updater] prepare: teardown complete");
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+    }
+    Ok(())
+}
+
+
+#[tauri::command]
+pub fn resume_pill_after_update(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        log::info!("[updater] resume: restoring pill after failed update");
+        UPDATE_TEARDOWN.store(false, Ordering::SeqCst);
+        crate::pill_hover::start(app.clone());
+        let app_clone = app.clone();
+        let _ = app.run_on_main_thread(move || {
+           sync_pill_phase(&app_clone, "rest");
+        });
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+    }
+    Ok(())
 }
 
 /// User clicked the pill to start recording. Mirrors the hotkey-press path so
