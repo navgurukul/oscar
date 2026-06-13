@@ -76,6 +76,12 @@ import "./App.css";
 
 const STREAM_TAIL_BUFFER_MS = 200;
 
+// Hard ceiling on the silent AI cleanup before a dictation pastes anyway. The
+// cleanup median is ~1.8s; this only fires on a hung/slow Mercury call (the
+// perf-log tail reaches tens of seconds). On timeout the controller aborts the
+// fetch and the raw Whisper transcript is pasted, so the pill never freezes.
+const STREAM_CLEANUP_DEADLINE_MS = 7000;
+
 function buildFallbackScribbleTitle(text: string): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   const firstSentence = normalized.split(/[.!?\n]/)[0]?.trim() || normalized;
@@ -2115,6 +2121,15 @@ function App() {
       if (aiCleanupEnabled) {
         setStatus("Improving with AI...");
         const tAi0 = performance.now();
+        // Deadline so a hung/slow Mercury cleanup never freezes the pill. When
+        // it fires, the abort cancels the in-flight fetch and the catch below
+        // falls through to pasting the raw Whisper transcript. Cleared in the
+        // `finally` on the normal (fast) path.
+        const cleanupController = new AbortController();
+        const cleanupDeadline = setTimeout(
+          () => cleanupController.abort(),
+          STREAM_CLEANUP_DEADLINE_MS,
+        );
         try {
           const cleaned = await aiService.processText(
             finalText,
@@ -2129,6 +2144,8 @@ function App() {
               // or do standard English cleanup for "en". Missing/auto = let
               // the cleanup detect from text content.
               language: transcriptionLanguageRef.current,
+              // Deadline signal — aborting cancels the underlying fetch.
+              signal: cleanupController.signal,
               // Capture wire-level breakdown so perf.jsonl can distinguish
               // "server is slow" (ttfb dominates) from "network is slow"
               // (dns/tcp/tls dominate) for the ai-cleanup stage.
@@ -2166,7 +2183,15 @@ function App() {
           }
         } catch (aiErr) {
           timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
-          if (isAuthSessionError(aiErr)) {
+          if (cleanupController.signal.aborted) {
+            // Deadline hit: cleanup was too slow. Keep the raw transcript (set
+            // above) so the user gets their words now instead of waiting on a
+            // stalled call. Recorded so perf.jsonl can show how often this fires.
+            metrics["cleanup-timed-out"] = "1";
+            console.warn(
+              `[ai] cleanup exceeded ${STREAM_CLEANUP_DEADLINE_MS}ms — pasting raw transcript`,
+            );
+          } else if (isAuthSessionError(aiErr)) {
             // Dead session: don't fail silently — the raw transcript still
             // pastes, but flag it so the pill prompts re-auth and the main
             // window is raised to the sign-in screen. promptReauth returns true
@@ -2184,6 +2209,8 @@ function App() {
               aiErr,
             );
           }
+        } finally {
+          clearTimeout(cleanupDeadline);
         }
       }
 
