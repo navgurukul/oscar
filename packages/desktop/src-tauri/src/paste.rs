@@ -42,14 +42,27 @@ pub fn paste_transcription(
     target_app: Option<String>,
     target_bundle_id: Option<String>,
 ) -> Result<String, String> {
+    let paste_started = std::time::Instant::now();
+
     // 1. Set clipboard
+    let clipboard_started = std::time::Instant::now();
     let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
     clipboard.set_text(&text).map_err(|e| e.to_string())?;
+    let clipboard_ms = clipboard_started.elapsed().as_millis() as u64;
     log::info!("[paste] clipboard set ({} chars)", text.len());
 
     #[cfg(target_os = "macos")]
     {
         use crate::macos_paste;
+
+        let bundle_id = target_bundle_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        let app_name = target_app
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
 
         // Check Accessibility permission.
         // AXIsProcessTrusted() can return false after a new build because macOS
@@ -59,16 +72,39 @@ pub fn paste_transcription(
         // re-register the new binary hash silently, then re-check once.  If it
         // is still false, fall back to CLIPBOARD_ONLY and let the frontend guide
         // the user.
+        let accessibility_started = std::time::Instant::now();
         let mut trusted = macos_paste::is_accessibility_trusted();
         if !trusted {
             // Re-register current binary with TCC (no dialog shown)
             trusted = macos_paste::reregister_without_prompt();
-            log::info!("[paste] re-registered binary, AXIsProcessTrusted = {}", trusted);
+            log::info!(
+                "[paste] re-registered binary, AXIsProcessTrusted = {}",
+                trusted
+            );
         }
+        let accessibility_ms = accessibility_started.elapsed().as_millis() as u64;
         log::info!("[paste] AXIsProcessTrusted = {}", trusted);
 
         if !trusted {
-            return Ok("CLIPBOARD_ONLY".into());
+            let payload = serde_json::json!({
+                "kind": "paste-metrics",
+                "status": "clipboard_only",
+                "trusted": trusted,
+                "targetBundleId": bundle_id,
+                "targetApp": app_name,
+                "activated": false,
+                "targetFound": false,
+                "timings": {
+                    "clipboardMs": clipboard_ms,
+                    "accessibilityMs": accessibility_ms,
+                    "activateMs": 0,
+                    "activationSleepMs": 0,
+                    "cmdVMs": 0,
+                    "rustTotalMs": paste_started.elapsed().as_millis() as u64,
+                },
+            });
+            log::info!("[paste-perf] {}", payload);
+            return Ok(payload.to_string());
         }
 
         // 2. Re-activate the target app using NSRunningApplication so that
@@ -79,39 +115,104 @@ pub fn paste_transcription(
         //    to an exact display-name match otherwise. We use
         //    NSRunningApplication (not `open -a`) because `open -a` triggers a
         //    Space-switch animation which breaks fullscreen apps.
-        let bundle_id = target_bundle_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
-        let app_name = target_app
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
+        let mut activate_ms = 0;
+        let mut activation_sleep_ms = 0;
+        let mut activated = false;
+        let mut target_found = false;
+        let mut activation_skipped = false;
         if bundle_id.is_some() || app_name.is_some() {
-            log::info!(
-                "[paste] re-activating target (bundle={:?}, name={:?}) via NSRunningApplication",
-                bundle_id,
-                app_name,
-            );
-            match macos_paste::activate_app(bundle_id, app_name.unwrap_or("")) {
-                Ok(true) => {
-                    // Brief wait for the window manager to finish activating
-                    std::thread::sleep(std::time::Duration::from_millis(120));
-                }
-                Ok(false) => log::warn!(
-                    "[paste] target not found in running apps (bundle={:?}, name={:?})",
+            // Skip activation when the target is ALREADY frontmost. The
+            // NSRunningApplication activation (and its 120ms settle sleep) is the
+            // dominant, highly variable paste cost — measured 1ms–2.5s for the
+            // same target — and it's pure overhead when the app the user dictated
+            // into never lost focus, which is the common case (the pill is a
+            // non-activating NSPanel). The frontmost check is a cheap NSWorkspace
+            // read; we only activate + pay the sleep on a real mismatch.
+            //
+            // Bundle id is authoritative (matches activate_app's own rule): when
+            // one was captured, only skip on a confirmed bundle match and never
+            // fall back to a name match — a name fallback could mis-skip when two
+            // apps share a localized name. With no bundle id, match on name.
+            let current = crate::frontmost::get_frontmost_identity_payload(0);
+            let already_frontmost = if let Some(want) = bundle_id {
+                current
+                    .app_id
+                    .as_deref()
+                    .is_some_and(|have| want.eq_ignore_ascii_case(have))
+            } else if let Some(want) = app_name {
+                !current.app_name.is_empty() && want.eq_ignore_ascii_case(&current.app_name)
+            } else {
+                false
+            };
+
+            if already_frontmost {
+                activation_skipped = true;
+                target_found = true;
+                log::info!(
+                    "[paste] target already frontmost (bundle={:?}, name={:?}) — skipping activation",
                     bundle_id,
                     app_name,
-                ),
-                Err(e) => log::warn!("[paste] activate_app failed: {}", e),
+                );
+            } else {
+                log::info!(
+                    "[paste] re-activating target (bundle={:?}, name={:?}) via NSRunningApplication",
+                    bundle_id,
+                    app_name,
+                );
+                let activate_started = std::time::Instant::now();
+                match macos_paste::activate_app(bundle_id, app_name.unwrap_or("")) {
+                    Ok(true) => {
+                        target_found = true;
+                        activated = true;
+                        activate_ms = activate_started.elapsed().as_millis() as u64;
+
+                        // Brief wait for the window manager to finish activating
+                        let activation_sleep_started = std::time::Instant::now();
+                        std::thread::sleep(std::time::Duration::from_millis(120));
+                        activation_sleep_ms = activation_sleep_started.elapsed().as_millis() as u64;
+                    }
+                    Ok(false) => {
+                        activate_ms = activate_started.elapsed().as_millis() as u64;
+                        log::warn!(
+                            "[paste] target not found in running apps (bundle={:?}, name={:?})",
+                            bundle_id,
+                            app_name,
+                        );
+                    }
+                    Err(e) => {
+                        activate_ms = activate_started.elapsed().as_millis() as u64;
+                        log::warn!("[paste] activate_app failed: {}", e);
+                    }
+                }
             }
         }
 
         // 3. Post Cmd+V via CGEvent (from main thread)
+        let cmd_v_started = std::time::Instant::now();
         macos_paste::post_cmd_v()?;
+        let cmd_v_ms = cmd_v_started.elapsed().as_millis() as u64;
         log::info!("[paste] CGEvent Cmd+V posted");
 
-        return Ok(format!("paste OK: trusted=true, target={:?}", target_app));
+        let payload = serde_json::json!({
+            "kind": "paste-metrics",
+            "status": "pasted",
+            "trusted": trusted,
+            "targetBundleId": bundle_id,
+            "targetApp": app_name,
+            "activated": activated,
+            "activationSkipped": activation_skipped,
+            "targetFound": target_found,
+            "timings": {
+                "clipboardMs": clipboard_ms,
+                "accessibilityMs": accessibility_ms,
+                "activateMs": activate_ms,
+                "activationSleepMs": activation_sleep_ms,
+                "cmdVMs": cmd_v_ms,
+                "rustTotalMs": paste_started.elapsed().as_millis() as u64,
+            },
+        });
+        log::info!("[paste-perf] {}", payload);
+        return Ok(payload.to_string());
     }
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -156,8 +257,8 @@ pub fn paste_transcription(
 
         use enigo::{Direction, Enigo, Key, Keyboard, Settings};
         std::thread::sleep(std::time::Duration::from_millis(150));
-        let mut enigo = Enigo::new(&Settings::default())
-            .map_err(|e| format!("enigo init failed: {e}"))?;
+        let mut enigo =
+            Enigo::new(&Settings::default()).map_err(|e| format!("enigo init failed: {e}"))?;
         enigo
             .key(Key::Control, Direction::Press)
             .map_err(|e| format!("ctrl down failed: {e}"))?;

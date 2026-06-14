@@ -107,6 +107,30 @@ function looksAlreadyCleanForPaste(text: string): boolean {
   return true;
 }
 
+interface PasteMetricsResponse {
+  kind?: string;
+  status?: string;
+  trusted?: boolean;
+  targetBundleId?: string | null;
+  targetApp?: string | null;
+  activated?: boolean;
+  targetFound?: boolean;
+  timings?: Record<string, number>;
+}
+
+function parsePasteMetricsResponse(value: string): PasteMetricsResponse | null {
+  try {
+    const parsed = JSON.parse(value) as PasteMetricsResponse;
+    return parsed && parsed.kind === "paste-metrics" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizePasteTimingKey(key: string): string {
+  return key.replace(/Ms$/, "").replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+}
+
 function buildFallbackScribbleTitle(text: string): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   const firstSentence = normalized.split(/[.!?\n]/)[0]?.trim() || normalized;
@@ -2195,19 +2219,25 @@ function App() {
       }
       let cleanupReturnedEmpty = false;
 
-      // Local fast-path: when the user wants only faithful cleanup — no style
-      // transform, prompt mode, or context rewrite — and the raw transcript
-      // already reads clean, skip the Mercury round-trip and paste as-is. This
-      // attacks the ~1.8s median for short, well-formed English dictations. The
-      // `effectiveStylePreset === "faithful"` check already excludes prompt mode
-      // (which forces "prompt-engineer"); the explicit promptMode guard is kept
-      // as insurance against future changes to that mapping.
+      // Local fast-path: when the user wants only faithful cleanup and the raw
+      // transcript already reads clean, skip the Mercury round-trip and paste
+      // as-is. Context-aware dictation is allowed only when routing has no
+      // reliable category-specific behavior (default / low confidence), so the
+      // skip remains equivalent to faithful cleanup for generic targets.
+      const cleanupFastPathContextAllowed =
+        !effectiveContextAwareDictation ||
+        !dictationRouting ||
+        dictationRouting.category === "default" ||
+        dictationRouting.confidence === "low";
+      const cleanupFastPathLanguageAllowed =
+        transcriptionLanguageRef.current === "en" ||
+        transcriptionLanguageRef.current === "auto";
       const cleanupFastPath =
         aiCleanupEnabled &&
         effectiveStylePreset === "faithful" &&
         !promptModeRef.current &&
-        !effectiveContextAwareDictation &&
-        transcriptionLanguageRef.current === "en" &&
+        cleanupFastPathContextAllowed &&
+        cleanupFastPathLanguageAllowed &&
         looksAlreadyCleanForPaste(finalText);
       if (cleanupFastPath) {
         // Apply the same deterministic post-processing the cleanup path runs on
@@ -2216,6 +2246,9 @@ function App() {
         // "living come dining" -> "living-cum-dining"). Pure, idempotent regex.
         finalText = applyTranscriptPostProcessing(finalText);
         metrics["cleanup-skipped"] = "already-clean";
+        metrics["cleanup-skip-routing"] = dictationRouting
+          ? `${dictationRouting.category}/${dictationRouting.confidence}`
+          : "none";
       }
 
       // Silent AI cleanup via the backend AI function.
@@ -2377,11 +2410,36 @@ function App() {
             targetBundleId: _targetBundleId || undefined,
           });
           timings["paste"] = Math.round(performance.now() - tPaste0);
+          const pasteMetrics = parsePasteMetricsResponse(pasteResult);
+          if (pasteMetrics?.timings) {
+            Object.entries(pasteMetrics.timings).forEach(([key, value]) => {
+              if (Number.isFinite(value)) {
+                timings[`paste-${normalizePasteTimingKey(key)}`] =
+                  Math.round(value);
+              }
+            });
+          }
+          if (pasteMetrics?.status) {
+            metrics["paste-status"] = pasteMetrics.status;
+          }
+          if (pasteMetrics?.targetBundleId) {
+            metrics["paste-target-bundle-id"] = pasteMetrics.targetBundleId;
+          }
+          if (pasteMetrics?.targetApp) {
+            metrics["paste-target-app"] = pasteMetrics.targetApp;
+          }
+          if (typeof pasteMetrics?.activated === "boolean") {
+            metrics["paste-activated"] = pasteMetrics.activated ? "1" : "0";
+          }
+          if (typeof pasteMetrics?.targetFound === "boolean") {
+            metrics["paste-target-found"] = pasteMetrics.targetFound ? "1" : "0";
+          }
           // User-felt latency: stop → paste-done. Excludes persistence work
           // that runs afterwards. This is the number that matches "how long
           // until my text shows up" for the user.
           metrics["paste-felt-ms"] = Math.round(performance.now() - tStart);
-          if (pasteResult === "CLIPBOARD_ONLY") {
+          const pasteStatus = pasteMetrics?.status ?? pasteResult;
+          if (pasteStatus === "CLIPBOARD_ONLY" || pasteStatus === "clipboard_only") {
             // Accessibility not granted — text is in clipboard, guide user
             setStatus(
               isMac
