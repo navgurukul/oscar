@@ -542,6 +542,7 @@ async function invokeAIProcess(
   accessToken: string,
   request: AIProcessRequest,
   onTiming?: (timing: AIProcessTiming) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   const tStart = performance.now();
   // Capture the boundary just before the network call — anything before this
@@ -557,6 +558,10 @@ async function invokeAIProcess(
       body: {
         ...request,
       },
+      // When the caller passes a deadline signal (stream dictation), aborting it
+      // cancels the underlying fetch — the request actually stops instead of the
+      // client merely giving up on a Promise that keeps the socket open.
+      ...(signal ? { signal } : {}),
     },
   );
   const tAfterInvoke = performance.now();
@@ -751,6 +756,13 @@ export const aiService = {
        * swallowed and never affect the caller.
        */
       onTiming?: (timing: AIProcessTiming) => void;
+      /**
+       * Optional deadline signal. The stream dictation flow passes one so a
+       * hung cleanup call is aborted after a fixed budget and the raw transcript
+       * is pasted instead of the user staring at a frozen pill. Aborting cancels
+       * the underlying fetch (see invokeAIProcess).
+       */
+      signal?: AbortSignal;
     },
   ): Promise<string> {
     if (!text.trim()) {
@@ -765,6 +777,11 @@ export const aiService = {
     const orgContext = await orgContextService.getBlock({
       rawTranscript: text,
       profile,
+      // Share the caller's deadline so a hung context fetch is aborted by the
+      // same timer that bounds the Mercury call — both network legs of cleanup
+      // are covered. (Token retrieval runs first and is local/cached, so it is
+      // not on the signal.)
+      signal: options?.signal,
     });
     return invokeAIProcess(
       accessToken,
@@ -779,6 +796,7 @@ export const aiService = {
         language: options?.language,
       },
       options?.onTiming,
+      options?.signal,
     );
   },
 

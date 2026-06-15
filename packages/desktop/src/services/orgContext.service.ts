@@ -44,6 +44,15 @@ export const orgContextService = {
   async getBlock(options: {
     rawTranscript?: string;
     profile?: "stream" | "scribble" | "minutes";
+    /**
+     * Optional deadline signal. The stream dictation flow shares one signal
+     * across both cleanup network legs so a hung `/api/ai/context` is aborted by
+     * the same timer that bounds the Mercury call — without it, the context
+     * fetch (no timeout of its own) could stall past the deadline. The preceding
+     * token retrieval is local/cached and not on the signal. An abort is caught
+     * below and returns an empty block, so cleanup degrades gracefully.
+     */
+    signal?: AbortSignal;
   } = {}): Promise<{
     block: string;
     organizationId: string | null;
@@ -78,6 +87,7 @@ export const orgContextService = {
           rawTranscript,
           profile,
         }),
+        signal: options.signal,
       });
 
       if (!response.ok) {
