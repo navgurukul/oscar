@@ -523,8 +523,10 @@ pub fn pill_request_record_start(app: tauri::AppHandle) -> Result<(), String> {
         crate::state::FOCUSED_WIN_HWND.store(hwnd as usize, Ordering::SeqCst);
     }
 
-    let payload = crate::frontmost::get_frontmost_context_payload();
-    OscarEvent::HotkeyRecordingStart(payload).dispatch(&app);
+    // Same fast-dispatch + deferred-AppleScript path the global hotkey uses, so
+    // clicking the pill to record arms just as quickly (no synchronous osascript
+    // on the press path).
+    crate::hotkey::dispatch_recording_start(&app);
     Ok(())
 }
 
