@@ -205,6 +205,8 @@ pub fn run() {
             pill::set_pill_phase,
             pill::get_pill_phase,
             pill::stop_pill_hover,
+            pill::prepare_update_install,
+            pill::resume_pill_after_update,
             pill::pill_push_settings,
             pill::pill_request_record_start,
             pill::pill_request_record_stop,

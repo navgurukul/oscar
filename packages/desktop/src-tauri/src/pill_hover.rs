@@ -20,20 +20,20 @@
 //! bottom-edge hot zone we hop to the main thread and drive the pill phase
 //! directly.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager};
 
-/// Set to false to make the poller thread exit. Must be called before the pill
-/// window is torn down (e.g. before an updater install): the poller touches the
-/// pill window every `POLL_INTERVAL`, and destroying the window while a poll is
-/// in flight deadlocks the app. Stop the poller, wait one poll cycle, then tear
-/// down.
-static POLLER_RUNNING: AtomicBool = AtomicBool::new(true);
+ 
+/// Must be stopped before the pill window is torn down (e.g. before an updater
+/// install): the poller touches the pill window every `POLL_INTERVAL`, and
+/// destroying the window while a poll is in flight deadlocks the app. Stop the
+/// poller, wait one poll cycle, then tear down.
+static POLLER_GEN: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn stop() {
-    POLLER_RUNNING.store(false, Ordering::SeqCst);
+    POLLER_GEN.fetch_add(1, Ordering::SeqCst);
 }
 
 const POLL_INTERVAL: Duration = Duration::from_millis(45);
@@ -50,7 +50,8 @@ const TRIGGER_HEIGHT_LOGICAL: f64 = 16.0;
 const KEEP_WIDTH_LOGICAL: f64 = 360.0;
 const KEEP_HEIGHT_LOGICAL: f64 = 80.0;
 
-pub(crate) fn start(app: AppHandle) {
+pub(crate) fn start(app: AppHandle) { 
+    let generation = POLLER_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     std::thread::spawn(move || {
         let mut last_in_zone = false;
         let mut leave_started: Option<Instant> = None;
@@ -58,7 +59,7 @@ pub(crate) fn start(app: AppHandle) {
         loop {
             std::thread::sleep(POLL_INTERVAL);
 
-            if !POLLER_RUNNING.load(Ordering::SeqCst) {
+            if POLLER_GEN.load(Ordering::SeqCst) != generation {
                 return;
             }
 
