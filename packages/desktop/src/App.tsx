@@ -72,9 +72,39 @@ import {
 } from "./lib/whisper-model-manager";
 import { getStore, loadSetting, saveSetting } from "./lib/store";
 import { getSubscriptionEntitlement } from "@oscar/shared/constants";
+import { applyTranscriptPostProcessing } from "@oscar/shared/prompts";
 import "./App.css";
 
 const STREAM_TAIL_BUFFER_MS = 200;
+
+// Hard ceiling on the silent AI cleanup before a dictation pastes anyway. The
+// cleanup median is ~1.8s; this only fires on a hung/slow Mercury call (the
+// perf-log tail reaches tens of seconds). On timeout the controller aborts the
+// fetch and the raw Whisper transcript is pasted, so the pill never freezes.
+const STREAM_CLEANUP_DEADLINE_MS = 7000;
+
+// Local "already-clean" fast-path. Returns true only when the raw Whisper text
+// already reads as a clean, complete, short English utterance that "faithful"
+// cleanup would leave essentially unchanged — letting the dictation paste it
+// directly and skip the ~1.8s Mercury round-trip. Strict by design: ASCII-only
+// (non-English defers to cleanup), capitalized start, terminal punctuation,
+// short, and free of filler/stutter/spacing damage. Any doubt → false → cleanup
+// runs. A pure-punctuation hallucination fails the capitalized-start gate, so it
+// never fast-paths (it still reaches the server, which suppresses it).
+const STREAM_FASTPATH_MAX_WORDS = 12;
+const STREAM_FILLER_RE = /\b(?:u+m+|u+h+|e+r+|h+m+|mhm|mmm)\b/i;
+function looksAlreadyCleanForPaste(text: string): boolean {
+  const t = text.trim();
+  if (!t || /[\n\r]/.test(t)) return false;
+  if (!/^[\x20-\x7E]+$/.test(t)) return false; // ASCII only
+  if (!/^[A-Z0-9"']/.test(t)) return false; // capitalized / quoted start
+  if (!/[.!?]["')]?$/.test(t)) return false; // terminal punctuation
+  if (t.split(/\s+/).length > STREAM_FASTPATH_MAX_WORDS) return false;
+  if (STREAM_FILLER_RE.test(t)) return false; // disfluency
+  if (/\s{2,}/.test(t) || /\s[,.;:!?]/.test(t)) return false; // spacing damage
+  if (/\b(\w+)\s+\1\b/i.test(t)) return false; // repeated-word stutter
+  return true;
+}
 
 function buildFallbackScribbleTitle(text: string): string {
   const normalized = text.replace(/\s+/g, " ").trim();
@@ -2110,11 +2140,43 @@ function App() {
       }
       let cleanupReturnedEmpty = false;
 
+      // Local fast-path: when the user wants only faithful cleanup — no style
+      // transform, prompt mode, or context rewrite — and the raw transcript
+      // already reads clean, skip the Mercury round-trip and paste as-is. This
+      // attacks the ~1.8s median for short, well-formed English dictations. The
+      // `effectiveStylePreset === "faithful"` check already excludes prompt mode
+      // (which forces "prompt-engineer"); the explicit promptMode guard is kept
+      // as insurance against future changes to that mapping.
+      const cleanupFastPath =
+        aiCleanupEnabled &&
+        effectiveStylePreset === "faithful" &&
+        !promptModeRef.current &&
+        !effectiveContextAwareDictation &&
+        transcriptionLanguageRef.current === "en" &&
+        looksAlreadyCleanForPaste(finalText);
+      if (cleanupFastPath) {
+        // Apply the same deterministic post-processing the cleanup path runs on
+        // Mercury's output (ai.service.ts -> applyTranscriptPostProcessing), so
+        // skipping Mercury never drops a known local correction (e.g.
+        // "living come dining" -> "living-cum-dining"). Pure, idempotent regex.
+        finalText = applyTranscriptPostProcessing(finalText);
+        metrics["cleanup-skipped"] = "already-clean";
+      }
+
       // Silent AI cleanup via the backend AI function.
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
-      if (aiCleanupEnabled) {
+      if (aiCleanupEnabled && !cleanupFastPath) {
         setStatus("Improving with AI...");
         const tAi0 = performance.now();
+        // Deadline so a hung/slow Mercury cleanup never freezes the pill. When
+        // it fires, the abort cancels the in-flight fetch and the catch below
+        // falls through to pasting the raw Whisper transcript. Cleared in the
+        // `finally` on the normal (fast) path.
+        const cleanupController = new AbortController();
+        const cleanupDeadline = setTimeout(
+          () => cleanupController.abort(),
+          STREAM_CLEANUP_DEADLINE_MS,
+        );
         try {
           const cleaned = await aiService.processText(
             finalText,
@@ -2129,6 +2191,8 @@ function App() {
               // or do standard English cleanup for "en". Missing/auto = let
               // the cleanup detect from text content.
               language: transcriptionLanguageRef.current,
+              // Deadline signal — aborting cancels the underlying fetch.
+              signal: cleanupController.signal,
               // Capture wire-level breakdown so perf.jsonl can distinguish
               // "server is slow" (ttfb dominates) from "network is slow"
               // (dns/tcp/tls dominate) for the ai-cleanup stage.
@@ -2166,7 +2230,15 @@ function App() {
           }
         } catch (aiErr) {
           timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
-          if (isAuthSessionError(aiErr)) {
+          if (cleanupController.signal.aborted) {
+            // Deadline hit: cleanup was too slow. Keep the raw transcript (set
+            // above) so the user gets their words now instead of waiting on a
+            // stalled call. Recorded so perf.jsonl can show how often this fires.
+            metrics["cleanup-timed-out"] = "1";
+            console.warn(
+              `[ai] cleanup exceeded ${STREAM_CLEANUP_DEADLINE_MS}ms — pasting raw transcript`,
+            );
+          } else if (isAuthSessionError(aiErr)) {
             // Dead session: don't fail silently — the raw transcript still
             // pastes, but flag it so the pill prompts re-auth and the main
             // window is raised to the sign-in screen. promptReauth returns true
@@ -2184,6 +2256,8 @@ function App() {
               aiErr,
             );
           }
+        } finally {
+          clearTimeout(cleanupDeadline);
         }
       }
 
