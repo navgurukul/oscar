@@ -2058,6 +2058,17 @@ function App() {
       return;
     }
 
+    // Prewarm the cleanup edge function NOW, at the very start of the ~1.5s
+    // decode+load+transcribe window, so Supabase isolate cold-start + the
+    // FE↔edge connection are paid in parallel with Whisper instead of serially
+    // before Mercury. perf data shows the cleanup roundtrip (~1.8s) is ~69%
+    // platform/network overhead and only ~31% Mercury generation; this hides a
+    // chunk of that overhead. Fire-and-forget, gated on cleanup being enabled
+    // at all — a wasted ping when the fast-path later skips cleanup is harmless.
+    if (aiImprovementEnabledRef.current) {
+      void aiService.warmUp();
+    }
+
     setStatus(`Decoding ${(audioBlob.size / 1024).toFixed(0)}KB audio...`);
     const tDecode0 = performance.now();
     // Decode in Rust (symphonia), NOT WebAudio. WKWebView on macOS 26/27 throws
@@ -2297,6 +2308,23 @@ function App() {
                   metrics["cleanup-resource-matched"] = "1";
                 } else {
                   metrics["cleanup-resource-matched"] = "0";
+                }
+                // Server-reported split (cleanup success path). Subtracting
+                // edge-total from the observed roundtrip isolates the Supabase
+                // platform/cold-start + FE↔edge network slice — the ~69% the
+                // local wire timing couldn't attribute. Drives whether the next
+                // lever is prewarm (cold-start), region (Mumbai→Mercury), or the
+                // hop itself.
+                if (t.server) {
+                  timings["cleanup-edge-total"] = t.server.edgeTotalMs;
+                  timings["cleanup-mercury"] = t.server.mercuryMs;
+                  timings["cleanup-mercury-headers"] =
+                    t.server.mercuryHeadersMs;
+                  metrics["cleanup-cache-hit-pct"] = t.server.cacheHitPct;
+                  timings["cleanup-platform-net"] = Math.max(
+                    0,
+                    Math.round(t.roundtripMs - t.server.edgeTotalMs),
+                  );
                 }
               },
               ...(activeDictationContext && dictationRouting

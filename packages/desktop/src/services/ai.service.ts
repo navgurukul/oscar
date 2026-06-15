@@ -24,9 +24,19 @@ export type DesktopAIMode =
   | "meeting_notes";
 type AIProcessPromptProfile = "stream";
 
+/** Server-side latency split returned by ai-process on the Mercury success
+ *  path. Mirrors `AIProcessServerTiming` in the edge function. */
+export interface AIProcessServerTiming {
+  edgeTotalMs: number;
+  mercuryMs: number;
+  mercuryHeadersMs: number;
+  cacheHitPct: number;
+}
+
 interface AIProcessResponse {
   text?: string;
   error?: string;
+  timing?: AIProcessServerTiming;
 }
 
 interface AIProcessRequest {
@@ -52,6 +62,10 @@ interface AIProcessRequest {
   // still required for the web app (browser STT) and the low-RAM desktop
   // fallback, which emit Devanagari — so this contract is unchanged.
   language?: string;
+  // Prewarm ping. The edge function boots its isolate + warms the connection,
+  // then returns immediately without Mercury/DB work. Fired at record-stop so
+  // Supabase cold-start is paid during the Whisper window, not after it.
+  warmup?: boolean;
 }
 
 /**
@@ -83,6 +97,14 @@ export interface AIProcessTiming {
   downloadMs?: number;
   /** True when a PerformanceResourceTiming entry was matched. */
   matchedResource: boolean;
+  /**
+   * Server-reported split from the edge function body (cleanup success path
+   * only). When present, `roundtripMs - server.edgeTotalMs` isolates Supabase
+   * platform/cold-start + FE↔edge network — the slice the FE can't see
+   * locally. `undefined` on early returns (silence, refusal) and non-cleanup
+   * errors.
+   */
+  server?: AIProcessServerTiming;
 }
 
 const EDGE_FUNCTION_FETCH_ERROR = "Failed to send a request to the Edge Function";
@@ -577,6 +599,13 @@ async function invokeAIProcess(
         tAfterInvoke,
         "/functions/v1/ai-process",
       );
+      // Attach the server-side split when the edge function returned it
+      // (cleanup success path). Lets the caller subtract edge compute from the
+      // observed roundtrip to expose platform/cold-start + network.
+      const serverTiming = result.data?.timing;
+      if (serverTiming) {
+        timing.server = serverTiming;
+      }
       onTiming(timing);
     } catch (timingErr) {
       // Timing is purely diagnostic; never let it affect the call result.
@@ -735,6 +764,26 @@ async function buildFallbackMeetingMarkdown(
 }
 
 export const aiService = {
+  /**
+   * Fire-and-forget prewarm of the ai-process edge function. Called at
+   * record-stop so the Supabase isolate cold-start + FE↔edge connection are
+   * paid during the ~1.5s Whisper window instead of on the cleanup critical
+   * path. Best-effort: any failure (no session, offline, abort) is swallowed —
+   * a cold cleanup call still works, it's just slower. Never throws.
+   */
+  async warmUp(signal?: AbortSignal): Promise<void> {
+    try {
+      const accessToken = await getSessionAccessToken();
+      await supabase.functions.invoke<AIProcessResponse>("ai-process", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: { warmup: true },
+        ...(signal ? { signal } : {}),
+      });
+    } catch {
+      // Intentionally ignored — warmup is an optimization, not a requirement.
+    }
+  },
+
   async processText(
     text: string,
     mode: DesktopAIMode,

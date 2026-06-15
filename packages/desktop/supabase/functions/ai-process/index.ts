@@ -65,10 +65,33 @@ interface AIProcessRequest {
   // Roman Whisper output if needed); "hi-en" forces plain ASCII Roman
   // (never IAST diacritics); "en" is English. Missing / "auto" = detect.
   language?: "en" | "hi" | "hi-en" | "auto";
+  /** Prewarm ping. When true the handler boots the isolate + establishes the
+   *  connection, then returns immediately WITHOUT calling Mercury or touching
+   *  the DB. The client fires this at record-stop (during the ~1.5s Whisper
+   *  window) so Supabase cold-start is paid off the critical path. */
+  warmup?: boolean;
+}
+
+interface AIProcessServerTiming {
+  /** Edge handler total: Mercury-done minus handler-start. Excludes isolate
+   *  cold-start, which precedes the handler — so `clientRoundtrip - edgeTotalMs`
+   *  surfaces Supabase platform/cold-start + FE↔edge network. */
+  edgeTotalMs: number;
+  /** Mercury call total (request sent → body parsed). `edgeTotalMs - mercuryMs`
+   *  ≈ edge pre-work (auth, prompt build, org-context fallback fetch). */
+  mercuryMs: number;
+  /** Mercury time-to-headers (≈ generation time for a non-stream completion). */
+  mercuryHeadersMs: number;
+  /** Mercury prompt prefix-cache hit %, 0-100. */
+  cacheHitPct: number;
 }
 
 interface AIProcessResponse {
   text: string;
+  /** Server-side latency split, returned on the cleanup success path so the
+   *  client can decompose its observed roundtrip into platform/network vs edge
+   *  pre-work vs Mercury. Absent on early-return paths (no Mercury call). */
+  timing?: AIProcessServerTiming;
 }
 
 interface OrgRewriteRule {
@@ -721,7 +744,19 @@ Deno.serve(async (req: Request) => {
       stylePreset,
       orgContextBlock,
       language,
+      warmup,
     }: AIProcessRequest = await req.json();
+
+    // Prewarm short-circuit: the isolate is now booted and the connection is
+    // established (the whole point), so return before any DB / Mercury work.
+    // The bearer header is still required (checked above) but deliberately not
+    // validated — a warmup carries no user data and only keeps the function hot.
+    if (warmup === true) {
+      return new Response(JSON.stringify({ text: "" } satisfies AIProcessResponse), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (Deno.env.get("AI_PROCESS_DEBUG") === "1") {
       const langForLog = sanitizeOneLine(language) || "MISSING";
       console.info(
@@ -864,16 +899,26 @@ Deno.serve(async (req: Request) => {
       promptTokens > 0
         ? Math.round((cachedInputTokens / promptTokens) * 100)
         : 0;
+    // Single source of truth for the latency split — logged AND returned to the
+    // client so perf.jsonl can attribute the observed roundtrip to platform /
+    // network (client roundtrip − edgeTotal) vs edge pre-work (edgeTotal −
+    // mercuryMs) vs Mercury generation (mercuryHeaders).
+    const serverTiming: AIProcessServerTiming = {
+      edgeTotalMs: Math.round(tMercuryDone - tRequest0),
+      mercuryMs: Math.round(tMercuryDone - tMercury0),
+      mercuryHeadersMs: Math.round(tMercuryFirstByte - tMercury0),
+      cacheHitPct,
+    };
     console.info(
       `[ai-process-timing] mode=${mode} inputChars=${text.length} ` +
         `profile=${effectivePromptProfile ?? "default"} ` +
         `orgCtxChars=${trimmedOrgContext.length} ` +
         `maxOut=${maxOutputTokens} ` +
         `outChars=${correctedOutput.length} ` +
-        `mercuryHeaders=${Math.round(tMercuryFirstByte - tMercury0)}ms ` +
+        `mercuryHeaders=${serverTiming.mercuryHeadersMs}ms ` +
         `mercuryBody=${Math.round(tMercuryDone - tMercuryFirstByte)}ms ` +
-        `total=${Math.round(tMercuryDone - tMercury0)}ms ` +
-        `edgeTotal=${Math.round(tMercuryDone - tRequest0)}ms ` +
+        `total=${serverTiming.mercuryMs}ms ` +
+        `edgeTotal=${serverTiming.edgeTotalMs}ms ` +
         `finish=${finishReason} ` +
         `promptTokens=${promptTokens} ` +
         `cachedInputTokens=${cachedInputTokens} ` +
@@ -897,9 +942,14 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    return new Response(JSON.stringify({ text: correctedOutput } satisfies AIProcessResponse), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify(
+        { text: correctedOutput, timing: serverTiming } satisfies AIProcessResponse,
+      ),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (err) {
     console.error("[ai-process] unhandled error:", err);
     return new Response(JSON.stringify({ error: `Internal error: ${(err as Error).message}` }), {
