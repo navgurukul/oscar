@@ -799,7 +799,10 @@ fn load_model_inner(
     // one, so both are never resident at once.
     *guard = None;
     log::info!("[whisper] Loading model from: {} (role={})", path, role);
-    let params = WhisperContextParameters::default();
+    let mut params = WhisperContextParameters::default();
+    // Flash attention: fused, memory-efficient attention — same output, faster
+    // encode on Metal (no-op-ish on CPU). Safe: we don't use DTW token timestamps.
+    params.flash_attn(true);
     let context = WhisperContext::new_with_params(path, params).map_err(|e| {
         log::error!("[whisper] Failed to load model: {}", e);
         e.to_string()
