@@ -21,6 +21,10 @@ const SECTION_PATTERNS: Record<Exclude<Section, "other">, RegExp> = {
   followups: /^(follow[\s-]*ups?|next\s+steps?|open\s+(items?|questions?)|parking\s+lot)\b/i,
 };
 
+
+const NON_SUBSTANTIVE_BULLET_RE =
+  /^(none captured|no (specific )?.*captured|not captured|n\/a)\.?$/i;
+
 function detectSection(heading: string): Section {
   const cleaned = heading.replace(/[·:\-—]+.*$/, "").trim();
   for (const [name, pattern] of Object.entries(SECTION_PATTERNS) as [
@@ -68,7 +72,7 @@ export function parseMinutes(markdown: string): ParsedMinutes {
     const item = bullet[1]
       .replace(/^\s*\[[ xX]\]\s*/, "") // strip task checkbox
       .trim();
-    if (!item) continue;
+    if (!item || NON_SUBSTANTIVE_BULLET_RE.test(item)) continue;
     if (current === "decisions") decisions.push(item);
     else if (current === "actions") actions.push(parseActionItem(item));
     else if (current === "followups") followups.push(item);
