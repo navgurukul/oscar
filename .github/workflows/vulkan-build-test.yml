@@ -93,18 +93,19 @@ jobs:
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
         run: pnpm build
 
-      # The probe. Two fixes stacked:
-      #   - CMAKE_GENERATOR=Ninja: makes the ggml-vulkan ExternalProject sub-build
-      #     inherit the MSVC env (the original v0.5.26 blocker). CONFIRMED working
-      #     — configuration now completes.
-      #   - CARGO_TARGET_DIR=C:\t: the vulkan-shaders-gen ExternalProject nests a
-      #     TryCompile dir ~290 chars deep under cargo's target/, over Windows
-      #     MAX_PATH (260) → cl.exe C1083 "cannot open testCCompiler.c". A short
-      #     target root drops it to ~215 chars.
-      - name: cargo build --features vulkan
+      # The probe. Three fixes stacked, each confirmed by a prior run:
+      #   - CMAKE_GENERATOR=Ninja: ggml-vulkan ExternalProject inherits the MSVC
+      #     env (the original v0.5.26 blocker). CONFIRMED — configure completes.
+      #   - CARGO_TARGET_DIR=C:\t: vulkan-shaders-gen TryCompile path was ~290
+      #     chars (>260 MAX_PATH) → cl.exe C1083. CONFIRMED — Vulkan + shaders
+      #     now compile fully.
+      #   - --release: a debug build mixes CRTs (audiopus_sys references the
+      #     debug-only __CrtDbgReportW → LNK2019/LNK1120). Release mode uses one
+      #     consistent CRT and matches what release.yml actually ships.
+      - name: cargo build --release --features vulkan
         working-directory: packages/desktop/src-tauri
         env:
           CMAKE_GENERATOR: Ninja
           CARGO_TARGET_DIR: 'C:\t'
           RUST_BACKTRACE: "1"
-        run: cargo build --features vulkan --target x86_64-pc-windows-msvc
+        run: cargo build --release --features vulkan --target x86_64-pc-windows-msvc
