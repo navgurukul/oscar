@@ -93,12 +93,18 @@ jobs:
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
         run: pnpm build
 
-      # The probe. CMAKE_GENERATOR=Ninja is the fix under test. Enabling the
-      # oscar `vulkan` feature pulls in whisper-rs/vulkan → triggers the
-      # ggml-vulkan vulkan-shaders-gen sub-build.
+      # The probe. Two fixes stacked:
+      #   - CMAKE_GENERATOR=Ninja: makes the ggml-vulkan ExternalProject sub-build
+      #     inherit the MSVC env (the original v0.5.26 blocker). CONFIRMED working
+      #     — configuration now completes.
+      #   - CARGO_TARGET_DIR=C:\t: the vulkan-shaders-gen ExternalProject nests a
+      #     TryCompile dir ~290 chars deep under cargo's target/, over Windows
+      #     MAX_PATH (260) → cl.exe C1083 "cannot open testCCompiler.c". A short
+      #     target root drops it to ~215 chars.
       - name: cargo build --features vulkan
         working-directory: packages/desktop/src-tauri
         env:
           CMAKE_GENERATOR: Ninja
+          CARGO_TARGET_DIR: 'C:\t'
           RUST_BACKTRACE: "1"
         run: cargo build --features vulkan --target x86_64-pc-windows-msvc
