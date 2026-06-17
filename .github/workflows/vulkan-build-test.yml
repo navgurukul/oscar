@@ -16,11 +16,13 @@
 # inherit it. The `cmake` crate (whisper-rs-sys) honors CMAKE_GENERATOR and
 # forwards it to ExternalProject_Add.
 #
-# Scope: builds ONLY whisper-rs + whisper-rs-sys with the vulkan feature — that
-# is exactly the failing sub-build, with no tauri/frontend noise, so it is the
-# fastest possible signal. GitHub runners have no GPU, so this proves the build
-# COMPILES, not that Vulkan accelerates (that needs a physical Windows GPU box).
-# macOS is never involved.
+# Scope: enables the vulkan feature on the `oscar` workspace member (which turns
+# on whisper-rs/vulkan transitively) and runs `cargo build`. whisper-rs-sys —
+# the failing ggml-vulkan sub-build — compiles during the dependency phase. The
+# frontend is built first so the later `generate_context!` step doesn't error
+# after Vulkan already compiled, making a green run unambiguous. GitHub runners
+# have no GPU, so this proves the build COMPILES, not that Vulkan accelerates
+# (that needs a physical Windows GPU box). macOS is never involved.
 
 name: vulkan-build-test
 
@@ -67,11 +69,36 @@ jobs:
           workspaces: "./packages/desktop/src-tauri -> target"
           key: vulkan-probe
 
-      # The probe. CMAKE_GENERATOR=Ninja is the fix under test. Building just the
-      # whisper-rs package triggers the ggml-vulkan sub-build with no other deps.
-      - name: cargo build whisper-rs --features vulkan
+      # pnpm/node + frontend build so the Rust `generate_context!` (which embeds
+      # the built frontend dist) compiles. Bare action-setup@v6 — version comes
+      # from package.json `packageManager` (don't re-spec it; that double-spec is
+      # the known quality.yml failure).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build frontend
+        working-directory: packages/desktop
+        env:
+          VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
+          VITE_WEB_APP_URL: "https://oscar.samyarth.org"
+        run: pnpm build
+
+      # The probe. CMAKE_GENERATOR=Ninja is the fix under test. Enabling the
+      # oscar `vulkan` feature pulls in whisper-rs/vulkan → triggers the
+      # ggml-vulkan vulkan-shaders-gen sub-build.
+      - name: cargo build --features vulkan
         working-directory: packages/desktop/src-tauri
         env:
           CMAKE_GENERATOR: Ninja
           RUST_BACKTRACE: "1"
-        run: cargo build -p whisper-rs --features vulkan --target x86_64-pc-windows-msvc
+        run: cargo build --features vulkan --target x86_64-pc-windows-msvc
