@@ -1,0 +1,77 @@
+# Standalone Vulkan build probe — NOT part of the release pipeline.
+#
+# Purpose: iterate the Windows ggml-vulkan compile in isolation so an unverified
+# CMake fix never lands in release.yml (which only runs on v* tags and ships
+# artifacts). Runs on every push to `feat/windows-vulkan` (fast iteration) and
+# can also be dispatched manually.
+#
+# The documented blocker (release.yml): ggml-vulkan builds a `vulkan-shaders-gen`
+# helper via CMake ExternalProject_Add, and that sub-build did NOT inherit
+# cl.exe / INCLUDE / LIB "regardless of job-scope MSVC env activation".
+#
+# Fix hypothesis under test: force the **Ninja** CMake generator. The Visual
+# Studio generator makes the ExternalProject sub-build re-run VS toolchain
+# detection and lose the ambient MSVC env; Ninja invokes cl.exe directly from
+# the shell env (set by ilammy/msvc-dev-cmd), and ExternalProject sub-builds
+# inherit it. The `cmake` crate (whisper-rs-sys) honors CMAKE_GENERATOR and
+# forwards it to ExternalProject_Add.
+#
+# Scope: builds ONLY whisper-rs + whisper-rs-sys with the vulkan feature — that
+# is exactly the failing sub-build, with no tauri/frontend noise, so it is the
+# fastest possible signal. GitHub runners have no GPU, so this proves the build
+# COMPILES, not that Vulkan accelerates (that needs a physical Windows GPU box).
+# macOS is never involved.
+
+name: vulkan-build-test
+
+on:
+  push:
+    branches: ["feat/windows-vulkan"]
+  workflow_dispatch: {}
+
+jobs:
+  vulkan-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust stable (windows-msvc)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # Puts cl.exe + INCLUDE + LIB into the job env — the env Ninja forwards to
+      # the ggml-vulkan ExternalProject sub-build.
+      - name: Setup MSVC dev environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      # vulkan/vulkan.h + glslc/shaderc that ggml-vulkan needs at build time;
+      # sets VULKAN_SDK. Confirm the action ref if it fails to resolve —
+      # alternative: humbletim/install-vulkan-sdk.
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: 1.3.290.0
+          install_runtime: true
+          cache: true
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./packages/desktop/src-tauri -> target"
+          key: vulkan-probe
+
+      # The probe. CMAKE_GENERATOR=Ninja is the fix under test. Building just the
+      # whisper-rs package triggers the ggml-vulkan sub-build with no other deps.
+      - name: cargo build whisper-rs --features vulkan
+        working-directory: packages/desktop/src-tauri
+        env:
+          CMAKE_GENERATOR: Ninja
+          RUST_BACKTRACE: "1"
+        run: cargo build -p whisper-rs --features vulkan --target x86_64-pc-windows-msvc

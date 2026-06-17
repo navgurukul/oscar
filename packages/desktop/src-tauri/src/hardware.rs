@@ -37,6 +37,14 @@ impl GpuBackend {
         {
             return GpuBackend::Cuda;
         }
+        // Windows Vulkan path: broad GPU coverage (NVIDIA/AMD/Intel Arc) once
+        // the ggml-vulkan CMake `vulkan-shaders-gen` sub-build is fixed in CI
+        // and `--features vulkan` is enabled for the Windows release row. Inert
+        // until then (feature off) and never compiled on macOS.
+        #[cfg(all(target_os = "windows", feature = "vulkan"))]
+        {
+            return GpuBackend::Vulkan;
+        }
         #[cfg(all(target_os = "linux", feature = "vulkan"))]
         {
             return GpuBackend::Vulkan;
