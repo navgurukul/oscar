@@ -21,7 +21,9 @@ import {
   FALLBACK_MODELS,
   formatModelSize,
   modelDisplayName,
+  detectHardware,
   type ModelPreset,
+  type HardwareProfile,
 } from "../lib/whisper-models";
 import { LANGUAGES } from "../lib/languages";
 import type { RoleModelState, WhisperModelRole } from "../lib/app-types";
@@ -448,8 +450,22 @@ export function SettingsTab({
   const [micPermission, setMicPermission] = useState<
     "granted" | "denied" | "unknown"
   >("unknown");
+  // Compute backend baked in at build time (`GpuBackend::detect()` is
+  // compile-time, not a runtime GPU probe). Surfaced here so the backend is
+  // visible after onboarding — the SetupScreen "acceleration" line is one-time.
+  const [hardware, setHardware] = useState<HardwareProfile | null>(null);
 
   const autoDetect = transcriptionLanguage === "auto";
+
+  useEffect(() => {
+    detectHardware().then(setHardware).catch(() => setHardware(null));
+  }, []);
+
+  const backendLabel = hardware
+    ? hardware.gpuBackend === "none"
+      ? "CPU"
+      : `${hardware.gpuBackend.toUpperCase()} GPU`
+    : null;
 
   useEffect(() => {
     if (initialSection) setActiveTab(resolveTab(initialSection));
@@ -639,6 +655,13 @@ export function SettingsTab({
             <Check size={11} className="text-ink-faint shrink-0" strokeWidth={1.8} />
             <span className="font-mono text-[10px] tracking-[0.06em] text-ink-faint">
               v{appVersion} · UP TO DATE
+            </span>
+          </div>
+        )}
+        {backendLabel && (
+          <div className="px-2.5 pt-1.5">
+            <span className="font-mono text-[10px] tracking-[0.06em] text-ink-faint">
+              ENGINE · {backendLabel}
             </span>
           </div>
         )}
