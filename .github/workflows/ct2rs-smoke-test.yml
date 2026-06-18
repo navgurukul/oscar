@@ -1,0 +1,71 @@
+name: ct2rs smoke test (Windows MSVC)
+
+# Stage 2 KILL SWITCH for the Faster-Whisper feasibility spike. Runs on any
+# `spike/ct2rs-smoke-*` branch push and via manual dispatch. If this build
+# fails, the spike is over and we fall back to whisper.cpp + Silero VAD.
+
+on:
+  push:
+    branches:
+      - "spike/ct2rs-smoke-*"
+    paths:
+      - "experiments/ct2rs-smoke-test/**"
+      - ".github/workflows/ct2rs-smoke-test.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build + link on windows-latest (MSVC)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    env:
+      # ct2rs's vendored CTranslate2 static lib is built with /MT (static
+      # C runtime). Rust defaults to /MD on MSVC; mixing the two causes
+      # LNK2038 + LNK1169 at link time. Belt-and-suspenders with the
+      # .cargo/config.toml in the crate.
+      RUSTFLAGS: "-C target-feature=+crt-static"
+
+    defaults:
+      run:
+        working-directory: experiments/ct2rs-smoke-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (stable, MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            experiments/ct2rs-smoke-test/target
+          key: ${{ runner.os }}-ct2rs-smoke-${{ hashFiles('experiments/ct2rs-smoke-test/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-ct2rs-smoke-
+
+      - name: Print toolchain info
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Build (release)
+        run: cargo build --release --verbose
+
+      - name: Run smoke test (no model — verifies build + link only)
+        run: cargo run --release
+
+      - name: Surface build + link result
+        if: always()
+        run: |
+          if (Test-Path target/release/ct2rs-smoke-test.exe) {
+            Write-Host "::notice::ct2rs build + link succeeded on windows-latest MSVC. Stage 2 KILL SWITCH PASSED."
+          } else {
+            Write-Host "::error::ct2rs failed to build on windows-latest MSVC. Stage 2 KILL SWITCH FIRED — Faster-Whisper is not feasible on Windows. Pivot to whisper.cpp + Silero VAD."
+          }

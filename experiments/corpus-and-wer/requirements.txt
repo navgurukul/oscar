@@ -1,0 +1,11 @@
+# Stage 1 WER calculation
+jiwer==3.0.4
+
+# Stage 3 CT2 conversion + inference (Faster-Whisper)
+# ctranslate2 brings the `ct2-transformers-converter` CLI.
+ctranslate2>=4.4.0
+faster-whisper>=1.0.0
+# Needed by ct2-transformers-converter to load HF/safetensors weights
+transformers>=4.40.0
+huggingface-hub>=0.20.0
+torch>=2.0.0

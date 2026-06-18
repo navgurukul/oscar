@@ -1,0 +1,10 @@
+# Required for ct2rs on Windows MSVC: ct2rs's vendored CTranslate2 static
+# library is built with the static C runtime (/MT) but Rust defaults to
+# dynamic (/MD). Mixing the two triggers LNK2038 RuntimeLibrary mismatch
+# + LNK1169 multiply-defined-symbols at link time. Forcing +crt-static
+# here lines Rust up with ct2rs.
+#
+# Documented in ct2rs README: see https://docs.rs/ct2rs
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

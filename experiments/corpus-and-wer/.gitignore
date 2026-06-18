@@ -1,0 +1,8 @@
+# Audio recordings are personal voice samples — keep them out of git.
+corpus/audio/
+
+# Python cruft
+__pycache__/
+*.pyc
+.venv/
+venv/

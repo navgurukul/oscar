@@ -1,0 +1,34 @@
+{
+  "_schema": {
+    "samples[].id": "Stable identifier (e.g. en-01). Used in the report.",
+    "samples[].audio": "Relative path under corpus/ to the audio file (m4a or wav both work).",
+    "samples[].language": "One of: en | hi | hi-en. Drives the per-language WER buckets.",
+    "samples[].ground_truth": "The EXACT text spoken during the recording. Multiple sentences are concatenated with single spaces.",
+    "samples[].transcripts.baseline": "Oscar's current whisper.cpp transcript. Paste in by hand after running through Oscar.",
+    "samples[].transcripts.ct2_int8": "(Stage 3) Faster-Whisper int8 transcript. Filled in after running CT2 model.",
+    "samples[].transcripts.ct2_int8_float16": "(Stage 3, optional) Faster-Whisper int8_float16 fallback if int8 craters Hinglish quality."
+  },
+  "samples": [
+    {
+      "id": "en-01",
+      "audio": "audio/en-01.m4a",
+      "language": "en",
+      "ground_truth": "I will send you the meeting notes by tomorrow. Let me share my screen so you can see the dashboard. We need to ship the release before Friday. The API integration is working correctly. I have reviewed the pull request.",
+      "transcripts": {}
+    },
+    {
+      "id": "hi-01",
+      "audio": "audio/hi-01.m4a",
+      "language": "hi",
+      "ground_truth": "मुझे कल की मीटिंग के नोट्स चाहिए। आज मेरा बहुत व्यस्त दिन है। मैं शाम तक यह काम पूरा कर दूँगा।",
+      "transcripts": {}
+    },
+    {
+      "id": "hi-en-01",
+      "audio": "audio/hi-en-01.m4a",
+      "language": "hi-en",
+      "ground_truth": "Mujhe coffee chahiye, phir meeting karte hain. Aaj ka project deadline tight hai. Apeksha ne kaha hai ki demo Friday ko hoga. Backend ready hai, ab frontend integrate karna hai.",
+      "transcripts": {}
+    }
+  ]
+}

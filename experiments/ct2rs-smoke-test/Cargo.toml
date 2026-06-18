@@ -1,0 +1,11 @@
+[package]
+name = "ct2rs-smoke-test"
+version = "0.1.0"
+edition = "2021"
+description = "Stage 2 KILL SWITCH for Faster-Whisper feasibility spike. Verifies ct2rs builds + links on Windows MSVC CI runner."
+
+[dependencies]
+ct2rs = { version = "0.9", features = ["whisper"] }
+
+[profile.release]
+opt-level = 3
