@@ -112,6 +112,11 @@ jobs:
           CMAKE_GENERATOR: Ninja
           CARGO_TARGET_DIR: 'C:\t'
           RUST_BACKTRACE: "1"
+          # tauri.conf.json carries an updater pubkey, so `tauri build` insists on
+          # signing the .nsis.zip updater artifact — without these it errors out
+          # AFTER the installer .exe is already built (the v0.8.4 probe failure).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
           VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
@@ -120,6 +125,7 @@ jobs:
       # Hand the dev a downloadable installer. NO public release, NO auto-updater
       # push — the GPU runtime test happens on this artifact before any v* tag.
       - name: Upload Vulkan NSIS installer
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: oscar-windows-vulkan-nsis
