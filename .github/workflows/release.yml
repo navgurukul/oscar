@@ -115,19 +115,18 @@ jobs:
             bundles: "app"
             extra_cargo_args: ""
           # ── Windows ──
-          # Vulkan compute backend was reverted in v0.5.26: whisper.cpp's
-          # ggml-vulkan uses CMake ExternalProject_Add to build the
-          # vulkan-shaders-gen helper, and that sub-build does not inherit
-          # cl.exe / INCLUDE / LIB from the parent cargo build regardless of
-          # job-scope MSVC env activation. Tracked separately; CPU + CUDA
-          # paths still work on Windows.
+          # Vulkan compute backend (re-enabled). The v0.5.26 revert blocker was
+          # ggml-vulkan's `vulkan-shaders-gen` CMake ExternalProject sub-build not
+          # inheriting cl.exe / INCLUDE / LIB. Fix: force the Ninja generator (see
+          # the Windows-only setup steps below) so the sub-build inherits the
+          # ambient MSVC env. Validated in CI by vulkan-build-test.yml.
           - target: x86_64-pc-windows-msvc
             label: windows-x64
             os: windows-latest
             cflags: ""
             macosx_deployment_target: ""
             bundles: "nsis"
-            extra_cargo_args: ""
+            extra_cargo_args: "--features vulkan"
           # ── Linux ──
           - target: x86_64-unknown-linux-gnu
             label: linux-x64
@@ -225,6 +224,42 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      # ── Windows Vulkan toolchain ──
+      # The Windows row builds whisper-rs with `--features vulkan`. ggml-vulkan
+      # compiles a `vulkan-shaders-gen` helper via CMake ExternalProject_Add; that
+      # sub-build only inherits cl.exe / INCLUDE / LIB when the **Ninja** generator
+      # is forced (the VS generator re-runs toolchain detection and loses the
+      # ambient MSVC env — the v0.5.26 blocker). msvc-dev-cmd puts cl.exe on PATH,
+      # the Vulkan SDK provides vulkan.h + glslc/shaderc, and CMAKE_GENERATOR=Ninja
+      # makes the sub-build inherit them. Recipe validated by vulkan-build-test.yml.
+      - name: Setup MSVC dev environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      - name: Install Vulkan SDK (Windows)
+        if: runner.os == 'Windows'
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: 1.3.290.0
+          install_runtime: true
+          cache: true
+
+      # Scope the Ninja generator to the Windows job via GITHUB_ENV so macOS/Linux
+      # builds are untouched. CARGO_TARGET_DIR is deliberately NOT shortened here
+      # (the probe used C:\t for MAX_PATH) because the sign/bundle/upload steps
+      # reference src-tauri/target/$TARGET/release/bundle — moving the target root
+      # would break them. MAX_PATH on the default target path is the risk to watch.
+      - name: Force Ninja CMake generator (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "CMAKE_GENERATOR=Ninja" >> "$GITHUB_ENV"
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2

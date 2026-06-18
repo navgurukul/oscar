@@ -93,19 +93,35 @@ jobs:
           VITE_WEB_APP_URL: "https://oscar.samyarth.org"
         run: pnpm build
 
-      # The probe. Three fixes stacked, each confirmed by a prior run:
+      # The probe → now bundles a real NSIS installer so the dev can test the
+      # Vulkan build on a physical Windows GPU box (the pending runtime gate).
+      # Three fixes stacked, each confirmed by a prior run:
       #   - CMAKE_GENERATOR=Ninja: ggml-vulkan ExternalProject inherits the MSVC
       #     env (the original v0.5.26 blocker). CONFIRMED — configure completes.
       #   - CARGO_TARGET_DIR=C:\t: vulkan-shaders-gen TryCompile path was ~290
       #     chars (>260 MAX_PATH) → cl.exe C1083. CONFIRMED — Vulkan + shaders
-      #     now compile fully.
+      #     now compile fully. NOTE: release.yml CANNOT use this (its sign/upload
+      #     steps hardcode src-tauri/target) — so the release job carries the
+      #     MAX_PATH risk this short root sidesteps here.
       #   - --release: a debug build mixes CRTs (audiopus_sys references the
       #     debug-only __CrtDbgReportW → LNK2019/LNK1120). Release mode uses one
       #     consistent CRT and matches what release.yml actually ships.
-      - name: cargo build --release --features vulkan
-        working-directory: packages/desktop/src-tauri
+      - name: tauri build --release --features vulkan (NSIS installer)
+        working-directory: packages/desktop
         env:
           CMAKE_GENERATOR: Ninja
           CARGO_TARGET_DIR: 'C:\t'
           RUST_BACKTRACE: "1"
-        run: cargo build --release --features vulkan --target x86_64-pc-windows-msvc
+          VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
+          VITE_WEB_APP_URL: "https://oscar.samyarth.org"
+        run: ../../node_modules/.bin/tauri build --target x86_64-pc-windows-msvc --bundles nsis --features vulkan
+
+      # Hand the dev a downloadable installer. NO public release, NO auto-updater
+      # push — the GPU runtime test happens on this artifact before any v* tag.
+      - name: Upload Vulkan NSIS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: oscar-windows-vulkan-nsis
+          path: 'C:\t\x86_64-pc-windows-msvc\release\bundle\nsis\*.exe'
+          if-no-files-found: error
