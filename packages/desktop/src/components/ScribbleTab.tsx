@@ -384,6 +384,68 @@ function FolderPopover({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ADD-TAG popover (bulk organize)
+// ═══════════════════════════════════════════════════════════════════════════
+function TagInputPopover({
+  onAdd,
+  onClose,
+}: {
+  onAdd: (tag: string) => void;
+  onClose: () => void;
+}) {
+  const [val, setVal] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [onClose]);
+
+  const submit = () => {
+    const t = val.trim();
+    if (!t) return;
+    onAdd(t);
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="absolute right-0 top-full mt-1.5 z-30 w-56 rounded-xl bg-cream border border-cream-300 overflow-hidden"
+      style={{ boxShadow: "0 16px 44px rgba(26,24,22,0.18)" }}
+    >
+      <div className="px-3.5 py-2.5 border-b border-cream-300">
+        <Caps>ADD A TAG</Caps>
+      </div>
+      <div className="px-3.5 py-2.5 flex items-center gap-2">
+        <span className="text-ink-faint text-[13px]">#</span>
+        <input
+          autoFocus
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+          }}
+          placeholder="tag name…"
+          className="flex-1 bg-transparent outline-none border-none text-[13px] text-ink placeholder-ink-faint font-sans min-w-0"
+        />
+        {val.trim() && (
+          <button
+            type="button"
+            onClick={submit}
+            className="font-mono text-[10px] tracking-[0.14em] uppercase text-terracotta bg-transparent border-none cursor-pointer hover:opacity-80"
+          >
+            ADD
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // LIST ROW
 // ═══════════════════════════════════════════════════════════════════════════
 function ScribbleRow({
@@ -444,13 +506,22 @@ function ScribbleRow({
           <p className="mt-1 text-[12px] text-ink-soft leading-relaxed line-clamp-2">
             {preview}
           </p>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
             {scribble.folder && scribble.folder.trim() && (
               <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-cream-200 border border-cream-300 text-[10.5px] text-ink-soft">
                 <span className="inline-block h-1.5 w-1.5 rounded-sm bg-terracotta" />
                 {scribble.folder}
               </span>
             )}
+            {(scribble.tags ?? []).slice(0, 3).map((t) => (
+              <span
+                key={t}
+                className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 bg-cream-200 border border-cream-300 text-[10.5px] text-ink-soft"
+              >
+                <span className="text-ink-faint">#</span>
+                {t}
+              </span>
+            ))}
             {scribble.is_starred && (
               <Star size={10} className="text-terracotta" fill="currentColor" />
             )}
@@ -947,6 +1018,7 @@ export function ScribbleTab({
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkFolderOpen, setBulkFolderOpen] = useState(false);
+  const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -1035,7 +1107,8 @@ export function ScribbleTab({
       result = result.filter((s) => {
         const title = (s.title || "").toLowerCase();
         const content = cleanBody(s).toLowerCase();
-        return title.includes(q) || content.includes(q);
+        const tags = (s.tags ?? []).join(" ").toLowerCase();
+        return title.includes(q) || content.includes(q) || tags.includes(q);
       });
     }
     result.sort((a, b) => {
@@ -1260,12 +1333,35 @@ export function ScribbleTab({
     setSelectMode(false);
     setSelectedIds(new Set());
     setBulkFolderOpen(false);
+    setBulkTagOpen(false);
     setPendingBulkDelete(false);
   };
 
   const bulkMove = async (folder: string | null) => {
     const targets = allScribbles.filter((s) => selectedIds.has(s.id));
     for (const s of targets) await handleMoveToFolder(s, folder);
+    exitSelectMode();
+  };
+
+  const bulkAddTag = async (tag: string) => {
+    const t = tag.trim();
+    if (!t) return;
+    const targets = allScribbles.filter((s) => selectedIds.has(s.id));
+    for (const s of targets) {
+      const existing = s.tags ?? [];
+      if (existing.includes(t)) continue;
+      const next = [...existing, t];
+      // Optimistic, with rollback on failure (mirrors handleMoveToFolder).
+      setAllScribbles((prev) =>
+        prev.map((n) => (n.id === s.id ? { ...n, tags: next } : n)),
+      );
+      const ok = await persist(s.id, { tags: next });
+      if (!ok) {
+        setAllScribbles((prev) =>
+          prev.map((n) => (n.id === s.id ? { ...n, tags: existing } : n)),
+        );
+      }
+    }
     exitSelectMode();
   };
 
@@ -1532,14 +1628,21 @@ export function ScribbleTab({
                       />
                     )}
                   </div>
-                  <button
-                    type="button"
-                    disabled
-                    title="Add tag — coming soon"
-                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] border border-cream-300 text-ink-faint bg-transparent cursor-not-allowed opacity-60"
-                  >
-                    <Plus size={11} /> Add tag
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setBulkTagOpen((v) => !v)}
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] border border-cream-300 text-ink-soft bg-transparent hover:text-terracotta hover:border-terracotta/50 cursor-pointer transition-colors"
+                    >
+                      <Plus size={11} /> Add tag
+                    </button>
+                    {bulkTagOpen && (
+                      <TagInputPopover
+                        onAdd={(t) => void bulkAddTag(t)}
+                        onClose={() => setBulkTagOpen(false)}
+                      />
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => setPendingBulkDelete(true)}
