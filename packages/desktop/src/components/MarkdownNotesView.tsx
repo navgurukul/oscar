@@ -1,5 +1,20 @@
 import type { ReactNode } from "react";
 
+
+export function renderInlineMarkdown(text: string): ReactNode {
+  if (!text.includes("**")) return text;
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => {
+    const bold = part.match(/^\*\*([^*]+)\*\*$/);
+    return bold ? (
+      <strong key={index} className="font-semibold text-ink">
+        {bold[1]}
+      </strong>
+    ) : (
+      part
+    );
+  });
+}
+
 export function stripEvidenceComments(markdown: string): string {
   return markdown
     .replace(/<!--[\s\S]*?-->/g, "")
@@ -62,7 +77,7 @@ export function MarkdownNotesView({
                 aria-label={item.task === "done" ? "Done" : "To do"}
               />
             )}
-            <span>{item.text}</span>
+            <span>{renderInlineMarkdown(item.text)}</span>
           </li>
         ))}
       </ul>,
@@ -128,7 +143,7 @@ export function MarkdownNotesView({
         className="font-serif leading-[1.65] text-ink"
         style={{ fontSize: 16, letterSpacing: "-0.005em" }}
       >
-        {line}
+        {renderInlineMarkdown(line)}
       </p>,
     );
   }
