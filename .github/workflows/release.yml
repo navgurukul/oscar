@@ -7,6 +7,14 @@ on:
 
 jobs:
   # Create the GitHub release once, before the parallel matrix builds start.
+  #
+  # STAGED RELEASES: a v* tag builds into a PRERELEASE, not the latest release.
+  # Prereleases are excluded from /releases/latest (the Tauri updater endpoint),
+  # so pushing a tag NO LONGER auto-updates users — it stages artifacts for
+  # validation. To ship: verify the build, then flip prerelease=false (GitHub UI
+  # or API) to promote it to latest and begin the auto-update rollout. This is
+  # the safety gate that prevents an unvalidated build reaching every user the
+  # moment a tag lands.
   create-release:
     permissions:
       contents: write
@@ -72,15 +80,22 @@ jobs:
               -d @- "https://api.github.com/repos/$REPO/releases/$RELEASE_ID" >/dev/null
             echo "Patched existing release body with generated notes."
           else
+            # Created as PRERELEASE (staged), NOT as the latest release. A
+            # prerelease is excluded from /releases/latest, which is the updater
+            # endpoint (tauri.conf.json) — so building a tag NO LONGER auto-ships
+            # to users. Validate the artifacts, then flip prerelease=false in the
+            # GitHub UI (or via API) to promote it to latest and start the rollout.
+            # Escape hatch for an immediate ship: pre-create the release WITH a
+            # body on GitHub (the manual-override above keeps it untouched).
             RELEASE_ID=$(jq -n \
               --arg tag "$TAG" --arg name "OSCAR $TAG" --arg body "$NOTES" \
-              '{tag_name: $tag, name: $name, body: $body, draft: false, prerelease: false}' \
+              '{tag_name: $tag, name: $name, body: $body, draft: false, prerelease: true}' \
               | curl -sL -X POST \
                   -H "Authorization: Bearer $GITHUB_TOKEN" \
                   -H "Content-Type: application/json" \
                   -d @- "https://api.github.com/repos/$REPO/releases" \
               | jq -r '.id')
-            echo "Created release with generated notes."
+            echo "Created PRERELEASE with generated notes — promote to latest to ship to users."
           fi
 
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
