@@ -323,17 +323,6 @@ html.text-size-lg {
   }
 }
 
-@keyframes meet-ripple {
-  0% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 0.8;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(2);
-    opacity: 0;
-  }
-}
-
 /* Waveform animation for login screen */
 @keyframes waveform {
   0%, 100% {

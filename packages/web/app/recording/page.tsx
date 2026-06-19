@@ -10,6 +10,7 @@ import { useAIFormatting } from "@/lib/hooks/useAIFormatting";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useSubscriptionContext } from "@/lib/contexts/SubscriptionContext";
 import { PermissionErrorModal } from "@/components/recording/PermissionErrorModal";
+import { RecordingWaveform } from "@/components/recording/RecordingWaveform";
 import { UpgradePrompt } from "@/components/subscription/UpgradePrompt";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
@@ -451,27 +452,8 @@ function RecordingPageInner() {
               : "Speak naturally — Oscar removes filler, fixes grammar, and titles it for you."}
           </p>
 
-          <div className="mt-14 flex items-center justify-center gap-1.5" style={{ height: 140 }}>
-            {Array.from({ length: 28 }).map((_, i) => {
-              const baseH = 14 + Math.abs(Math.sin(i * 0.42 + (isRecording ? Date.now() * 0.0001 : 0))) * 92;
-              const h = isRecording ? baseH : 6 + Math.abs(Math.sin(i * 0.4)) * 16;
-              const opacity = isRecording
-                ? 0.5 + Math.abs(Math.sin(i * 0.3)) * 0.4
-                : 0.3 + Math.abs(Math.sin(i * 0.3)) * 0.2;
-              return (
-                <span
-                  key={i}
-                  className="rounded-full"
-                  style={{
-                    width: 4,
-                    height: h,
-                    background: isRecording ? v2.accent : v2.ruleHard,
-                    opacity,
-                    transition: "height 0.2s ease",
-                  }}
-                />
-              );
-            })}
+          <div className="mt-14">
+            <RecordingWaveform active={isRecording} />
           </div>
 
           <div className="mt-12 flex items-center justify-center gap-4 flex-wrap">
