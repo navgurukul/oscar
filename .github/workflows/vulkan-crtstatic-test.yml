@@ -1,0 +1,110 @@
+# CRT-coexistence probe — does the Vulkan stack survive CT2's `+crt-static`?
+#
+# Context: two Windows acceleration tracks are in flight.
+#   - Vulkan (whisper-rs/ggml-vulkan): VALIDATED with the DYNAMIC CRT (the
+#     `--release` build in vulkan-build-test.yml; runtime-proven ~40x on AMD).
+#   - CT2 (ct2rs, the no-GPU lane): needed `-C target-feature=+crt-static` to
+#     fix LNK2038 at link.
+#
+# `+crt-static` is a GLOBAL, whole-binary rustflag. If ONE shipped Windows
+# binary links both ggml-vulkan AND ct2rs, the CRT choice must be unified or the
+# final link dies with LNK2038. This probe answers the prerequisite question:
+# can the Vulkan stack ITSELF be built under `+crt-static` at all?
+#
+# It is the validated Vulkan recipe (Ninja + C:\t MAX_PATH + --release) with ONE
+# change: `RUSTFLAGS=-C target-feature=+crt-static` on the build step — exactly
+# the flag the dev applied to CT2, imposed globally here. The `cmake` crate
+# propagates crt-static to CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded, so ggml's
+# CMake build should follow the Rust CRT automatically; the vulkan-shaders-gen
+# host tool's CRT is irrelevant (build-time codegen, not linked into the app).
+#
+#   GREEN  → Vulkan compiles + links static → both tracks CAN share one binary.
+#   RED    → read the link error; LNK2038 = a dep stayed dynamic; next probe
+#            forces CMAKE_MSVC_RUNTIME_LIBRARY explicitly or splits the binaries.
+#
+# Runners have no GPU → this proves the BUILD/LINK, same as the sibling probe.
+
+name: vulkan-crtstatic-test
+
+on:
+  push:
+    branches: ["feat/vulkan-crtstatic-probe"]
+  workflow_dispatch: {}
+
+jobs:
+  vulkan-crtstatic-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust stable (windows-msvc)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup MSVC dev environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: 1.3.290.0
+          install_runtime: true
+          cache: true
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./packages/desktop/src-tauri -> target"
+          key: vulkan-crtstatic-probe
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build frontend
+        working-directory: packages/desktop
+        env:
+          VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
+          VITE_WEB_APP_URL: "https://oscar.samyarth.org"
+        run: pnpm build
+
+      # SAME validated Vulkan recipe — the ONLY addition is RUSTFLAGS=+crt-static
+      # (CT2's CRT, imposed on the whole Vulkan build). If this links clean, the
+      # two tracks can coexist; if it throws LNK2038, they cannot (yet).
+      - name: tauri build --release --features vulkan (+crt-static)
+        working-directory: packages/desktop
+        env:
+          CMAKE_GENERATOR: Ninja
+          CARGO_TARGET_DIR: 'C:\t'
+          RUSTFLAGS: "-C target-feature=+crt-static"
+          RUST_BACKTRACE: "1"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
+          VITE_WEB_APP_URL: "https://oscar.samyarth.org"
+        run: ../../node_modules/.bin/tauri build --target x86_64-pc-windows-msvc --bundles nsis --features vulkan
+
+      - name: Upload static-CRT NSIS installer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oscar-windows-vulkan-crtstatic-nsis
+          path: 'C:\t\x86_64-pc-windows-msvc\release\bundle\nsis\*.exe'
+          if-no-files-found: error
