@@ -20,17 +20,24 @@ import {
   ArrowLeft,
   Upload,
   RotateCcw,
+  Wand2,
+  Languages,
+  Share2,
 } from "lucide-react";
-import { motion } from "framer-motion";
 import { AIPanel, type AIMode } from "./AIPanel";
 import { ContextLabel } from "./ContextLabel";
 import { TrashPanel } from "./TrashPanel";
+import { CaptureTakeover } from "./scribble/CaptureTakeover";
+import { ProcessingScreen } from "./scribble/ProcessingScreen";
+import { TransformView } from "./scribble/TransformView";
+import { TranslateView } from "./scribble/TranslateView";
+import { ShareModal } from "./scribble/ShareModal";
 import { scribblesService } from "../services/scribbles.service";
 import { formatScribbleDate } from "../lib/utils";
 import type { DBScribble } from "../types/scribble.types";
 
 type SortOption = "created" | "updated" | "length";
-type DetailMode = "read" | "edit";
+type DetailMode = "read" | "edit" | "transform" | "translate";
 type SaveState = "idle" | "saving" | "saved";
 
 interface ScribbleTabProps {
@@ -51,12 +58,6 @@ interface FolderSummary {
 }
 
 const ITEMS_PER_PAGE = 30;
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-}
 
 function wordCount(text: string | null | undefined): number {
   if (!text) return 0;
@@ -389,10 +390,16 @@ function ScribbleRow({
   scribble,
   isActive,
   onClick,
+  selectable = false,
+  checked = false,
+  onToggleCheck,
 }: {
   scribble: DBScribble;
   isActive: boolean;
   onClick: () => void;
+  selectable?: boolean;
+  checked?: boolean;
+  onToggleCheck?: () => void;
 }) {
   const preview = (() => {
     const text = cleanBody(scribble);
@@ -402,40 +409,53 @@ function ScribbleRow({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={selectable ? onToggleCheck : onClick}
       className={`w-full text-left px-5 py-4 border-b border-cream-300 transition-colors cursor-pointer bg-transparent border-l-0 border-r-0 border-t-0 ${
-        isActive ? "bg-cream-200" : "hover:bg-cream-100"
+        (selectable ? checked : isActive) ? "bg-cream-200" : "hover:bg-cream-100"
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10px] tracking-[0.04em] text-ink">
-          {formatScribbleDate(scribble.created_at)}
-        </span>
-        <ContextLabel
-          appKey={scribble.dictation_app_key}
-          source={scribble.dictation_context_source}
-          variant="compact"
-        />
-      </div>
-      <h3
-        className="mt-1.5 font-serif text-[16px] font-medium text-ink leading-[1.2]"
-        style={{ letterSpacing: "-0.005em" }}
-      >
-        {scribble.title || "Untitled Scribble"}
-      </h3>
-      <p className="mt-1 text-[12px] text-ink-soft leading-relaxed line-clamp-2">
-        {preview}
-      </p>
-      <div className="mt-2 flex items-center gap-2">
-        {scribble.folder && scribble.folder.trim() && (
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-cream-200 border border-cream-300 text-[10.5px] text-ink-soft">
-            <span className="inline-block h-1.5 w-1.5 rounded-sm bg-terracotta" />
-            {scribble.folder}
+      <div className="flex items-start gap-3">
+        {selectable && (
+          <span
+            className={`mt-0.5 h-4 w-4 rounded inline-flex items-center justify-center shrink-0 border-[1.6px] ${
+              checked ? "bg-terracotta border-terracotta" : "border-cream-400"
+            }`}
+          >
+            {checked && <Check size={10} className="text-cream" />}
           </span>
         )}
-        {scribble.is_starred && (
-          <Star size={10} className="text-terracotta" fill="currentColor" />
-        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-mono text-[10px] tracking-[0.04em] text-ink">
+              {formatScribbleDate(scribble.created_at)}
+            </span>
+            <ContextLabel
+              appKey={scribble.dictation_app_key}
+              source={scribble.dictation_context_source}
+              variant="compact"
+            />
+          </div>
+          <h3
+            className="mt-1.5 font-serif text-[16px] font-medium text-ink leading-[1.2]"
+            style={{ letterSpacing: "-0.005em" }}
+          >
+            {scribble.title || "Untitled Scribble"}
+          </h3>
+          <p className="mt-1 text-[12px] text-ink-soft leading-relaxed line-clamp-2">
+            {preview}
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            {scribble.folder && scribble.folder.trim() && (
+              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-cream-200 border border-cream-300 text-[10.5px] text-ink-soft">
+                <span className="inline-block h-1.5 w-1.5 rounded-sm bg-terracotta" />
+                {scribble.folder}
+              </span>
+            )}
+            {scribble.is_starred && (
+              <Star size={10} className="text-terracotta" fill="currentColor" />
+            )}
+          </div>
+        </div>
       </div>
     </button>
   );
@@ -451,6 +471,9 @@ interface ReadingViewProps {
   copyState: "idle" | "clean" | "raw";
   isDeleting: boolean;
   onEdit: () => void;
+  onTransform: () => void;
+  onTranslate: () => void;
+  onShare: () => void;
   onToggleAI: () => void;
   onReshape: (mode: AIMode) => void;
   onCopyClean: () => void;
@@ -475,6 +498,9 @@ function ReadingView({
   copyState,
   isDeleting,
   onEdit,
+  onTransform,
+  onTranslate,
+  onShare,
   onToggleAI,
   onReshape,
   onCopyClean,
@@ -498,13 +524,34 @@ function ReadingView({
           <ArrowLeft size={11} className="text-ink-faint" />
           {scribble.folder ? `SCRIBBLES · ${scribble.folder.toUpperCase()}` : "SCRIBBLES"}
         </Caps>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <button
             type="button"
             onClick={onEdit}
             className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-medium bg-ink text-cream border-none cursor-pointer transition-opacity hover:opacity-90"
           >
             <Pencil size={11} /> Edit
+          </button>
+          <button
+            type="button"
+            onClick={onTransform}
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] border border-cream-300 text-ink-soft bg-transparent hover:text-terracotta hover:border-terracotta/50 cursor-pointer transition-colors"
+          >
+            <Wand2 size={11} /> Transform
+          </button>
+          <button
+            type="button"
+            onClick={onTranslate}
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] border border-cream-300 text-ink-soft bg-transparent hover:text-terracotta hover:border-terracotta/50 cursor-pointer transition-colors"
+          >
+            <Languages size={11} /> Translate
+          </button>
+          <button
+            type="button"
+            onClick={onShare}
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] border border-cream-300 text-ink-soft bg-transparent hover:text-terracotta hover:border-terracotta/50 cursor-pointer transition-colors"
+          >
+            <Share2 size={11} /> Share
           </button>
           <button
             type="button"
@@ -894,6 +941,13 @@ export function ScribbleTab({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isAIOpen, setIsAIOpen] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "clean" | "raw">("idle");
+  const [shareOpen, setShareOpen] = useState(false);
+
+  // Bulk organize (design screen 07): multi-select + bulk move/delete.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkFolderOpen, setBulkFolderOpen] = useState(false);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("created");
@@ -1173,6 +1227,54 @@ export function ScribbleTab({
     }
   };
 
+  // Save a transformed result as a brand-new Scribble (Transform screen).
+  const handleSaveAsNew = async (title: string, body: string) => {
+    const { data, error } = await scribblesService.createScribble({
+      user_id: userId,
+      title: title.trim() || "Untitled Scribble",
+      raw_text: "",
+      original_formatted_text: body,
+      edited_text: body,
+    });
+    if (error || !data) {
+      setError("Failed to save the new Scribble. Please try again.");
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    await loadScribbles();
+    setSelectedId(data.id);
+    setMode("read");
+  };
+
+  // ── bulk organize ───────────────────────────────────────────────────────
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setBulkFolderOpen(false);
+    setPendingBulkDelete(false);
+  };
+
+  const bulkMove = async (folder: string | null) => {
+    const targets = allScribbles.filter((s) => selectedIds.has(s.id));
+    for (const s of targets) await handleMoveToFolder(s, folder);
+    exitSelectMode();
+  };
+
+  const bulkDelete = async () => {
+    const targets = allScribbles.filter((s) => selectedIds.has(s.id));
+    for (const s of targets) await handleDelete(s);
+    exitSelectMode();
+  };
+
   const triggerDownload = (content: string, filename: string, mime: string) => {
     const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
@@ -1238,10 +1340,35 @@ export function ScribbleTab({
   // with Retry rather than the first-run "Start a Scribble" empty screen.
   const hasLoadError = !isLoading && !!error && allScribbles.length === 0;
   const isEmpty = !isLoading && !error && allScribbles.length === 0;
-  const showAI = isAIOpen && selected && !isEmpty && !hasLoadError;
-  // FAB sits over the detail region: nav (240) + list (360) when the list is
-  // shown; just past the nav when the editorial empty state takes over.
-  const fabLeft = isEmpty ? 240 : 600;
+  // AI panel only coexists with the reading view — the Transform/Translate
+  // screens are themselves AI surfaces, and suppressing it keeps the detail
+  // pane above the 960px compact floor.
+  const showAI = isAIOpen && selected && !isEmpty && !hasLoadError && mode === "read";
+  // Status toast sits over the detail region: nav (240) + list (360) when the
+  // list is shown; just past the nav when the editorial empty state takes over.
+  const toastLeft = isEmpty ? 240 : 600;
+
+  // Capture + processing take over the whole tab (design screens 02 / 03) —
+  // full-screen, no sidebar. Driven by the global recording props; the detail
+  // mode underneath is preserved and restored when the capture ends.
+  if (isRecording) {
+    return (
+      <div className="flex-1 flex bg-cream overflow-hidden">
+        <CaptureTakeover
+          recordingTime={recordingTime}
+          caption={statusMessage || undefined}
+          onStop={onToggleRecording}
+        />
+      </div>
+    );
+  }
+  if (isProcessing) {
+    return (
+      <div className="flex-1 flex bg-cream overflow-hidden">
+        <ProcessingScreen statusMessage={statusMessage} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex bg-cream overflow-hidden relative">
@@ -1362,6 +1489,15 @@ export function ScribbleTab({
                 </button>
                 <button
                   type="button"
+                  onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+                  className={`inline-flex items-center gap-1.5 bg-transparent border-none font-mono text-[10px] tracking-[0.16em] uppercase cursor-pointer ${
+                    selectMode ? "text-terracotta" : "text-ink-soft hover:text-ink"
+                  }`}
+                >
+                  {selectMode ? "DONE" : "SELECT"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => setIsTrashOpen(true)}
                   className="ml-auto inline-flex items-center gap-1.5 bg-transparent border-none font-mono text-[10px] tracking-[0.16em] uppercase text-ink-soft cursor-pointer hover:text-ink"
                 >
@@ -1370,6 +1506,50 @@ export function ScribbleTab({
                 </button>
               </div>
             </div>
+
+            {/* Bulk action bar (design screen 07) — shown while selecting. */}
+            {selectMode && selectedIds.size > 0 && (
+              <div className="px-5 py-2.5 border-b border-cream-300 bg-cream-200 flex items-center gap-2">
+                <Caps tone="ink">{selectedIds.size} SELECTED</Caps>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setBulkFolderOpen((v) => !v)}
+                      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] bg-ink text-cream border-none cursor-pointer"
+                    >
+                      <Folder size={11} /> Move to…
+                    </button>
+                    {bulkFolderOpen && (
+                      <FolderPopover
+                        folders={folders}
+                        current={null}
+                        onMove={(f) => {
+                          setBulkFolderOpen(false);
+                          void bulkMove(f);
+                        }}
+                        onClose={() => setBulkFolderOpen(false)}
+                      />
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled
+                    title="Add tag — coming soon"
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] border border-cream-300 text-ink-faint bg-transparent cursor-not-allowed opacity-60"
+                  >
+                    <Plus size={11} /> Add tag
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendingBulkDelete(true)}
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] border border-cream-300 text-ink-faint bg-transparent hover:text-[#8c2f25] hover:border-[#8c2f25] cursor-pointer transition-colors"
+                  >
+                    <Trash2 size={11} /> Delete
+                  </button>
+                </div>
+              </div>
+            )}
 
             {error && (
               <div className="px-5 py-3 bg-[#fbe9e7] text-[12px] text-[#8c2f25] border-b border-cream-300">
@@ -1404,6 +1584,9 @@ export function ScribbleTab({
                     scribble={s}
                     isActive={s.id === selectedId}
                     onClick={() => setSelectedId(s.id)}
+                    selectable={selectMode}
+                    checked={selectedIds.has(s.id)}
+                    onToggleCheck={() => toggleSelect(s.id)}
                   />
                 ))
               )}
@@ -1448,6 +1631,14 @@ export function ScribbleTab({
               onDone={() => void finishEdit()}
               onDiscard={() => void discardEdit()}
             />
+          ) : mode === "transform" ? (
+            <TransformView
+              scribble={selected}
+              onBack={() => setMode("read")}
+              onSaveAsNew={handleSaveAsNew}
+            />
+          ) : mode === "translate" ? (
+            <TranslateView scribble={selected} onBack={() => setMode("read")} />
           ) : (
             <ReadingView
               scribble={selected}
@@ -1456,6 +1647,9 @@ export function ScribbleTab({
               copyState={copyState}
               isDeleting={!!(selected && deletingId === selected.id)}
               onEdit={enterEdit}
+              onTransform={() => setMode("transform")}
+              onTranslate={() => setMode("translate")}
+              onShare={() => setShareOpen(true)}
               onToggleAI={() => setIsAIOpen((v) => !v)}
               onReshape={openReshape}
               onCopyClean={() => void handleCopyClean(selected)}
@@ -1550,83 +1744,97 @@ export function ScribbleTab({
         </div>
       )}
 
-      {/* Floating recording control — live timer / stop / status. Shown only
-          for the populated three-pane while a capture is in flight; on the
-          empty screen the hero button is the single control, so suppress it. */}
-      {!isEmpty && (isRecording || isProcessing || statusMessage) && (
-      <div
-        className="fixed bottom-8 z-40 flex justify-center pointer-events-none"
-        style={{ left: fabLeft, right: showAI ? 340 : 0 }}
-      >
-        <div className="pointer-events-auto">
-          <motion.div
-            whileHover={isProcessing ? undefined : { y: -3 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="flex flex-col items-center gap-2"
+      {/* Share / Publish dialog over the dimmed reading view. */}
+      {shareOpen && selected && (
+        <ShareModal
+          scribble={selected}
+          onClose={() => setShareOpen(false)}
+          onShared={(state) =>
+            setAllScribbles((prev) =>
+              prev.map((s) =>
+                s.id === selected.id
+                  ? {
+                      ...s,
+                      visibility: state.visibility,
+                      public_share_token: state.public_share_token,
+                    }
+                  : s,
+              ),
+            )
+          }
+        />
+      )}
+
+      {/* Confirm bulk trash. */}
+      {pendingBulkDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[2000] flex items-center justify-center p-10"
+          style={{ background: "rgba(15,13,10,0.55)" }}
+          onClick={() => setPendingBulkDelete(false)}
+        >
+          <div
+            className="w-[420px] max-w-full rounded-2xl bg-cream text-ink overflow-hidden"
+            style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}
+            onClick={(e) => e.stopPropagation()}
           >
-            {isRecording && !isProcessing && (
-              <div className="font-mono text-[12px] text-terracotta font-medium tabular-nums">
-                {formatTime(recordingTime)}
-              </div>
-            )}
-            {(isProcessing || (statusMessage && !isRecording)) && (
-              <div
-                className={`text-[11px] font-medium px-3 py-1 rounded-full shadow-sm border font-mono tracking-[0.04em] ${
-                  isProcessing
-                    ? "bg-cream-50 text-terracotta border-terracotta/30"
-                    : statusMessage?.toLowerCase().startsWith("failed") ||
-                        statusMessage?.toLowerCase().includes("too short") ||
-                        statusMessage?.toLowerCase().includes("no audio") ||
-                        statusMessage?.toLowerCase().includes("no speech") ||
-                        statusMessage?.toLowerCase().startsWith("sign in")
-                      ? "bg-[#fbe9e7] text-[#8c2f25] border-[#e8c9b8]"
-                      : "bg-cream-200 text-ink border-cream-300"
-                }`}
+            <div className="px-8 pt-8 pb-7">
+              <h1
+                className="font-serif font-medium tracking-[-0.025em] leading-[1.05] text-ink"
+                style={{ fontSize: 26 }}
               >
-                <span className="inline-flex items-center gap-1.5">
-                  {isProcessing && <Loader2 size={11} className="animate-spin" />}
-                  {statusMessage ?? "processing"}
-                </span>
+                Move {selectedIds.size} to trash?
+              </h1>
+              <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">
+                {selectedIds.size} Scribble{selectedIds.size === 1 ? "" : "s"} will be
+                moved to trash. You can restore them from the trash later.
+              </p>
+              <div className="mt-7 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPendingBulkDelete(false)}
+                  className="rounded-full px-5 py-2.5 text-[13px] font-medium text-ink-soft bg-transparent border border-cream-300 cursor-pointer transition-colors hover:text-ink"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void bulkDelete()}
+                  className="rounded-full px-5 py-2.5 text-[13px] font-medium text-cream cursor-pointer transition-opacity hover:opacity-90 border-none"
+                  style={{ background: "#8c2f25" }}
+                >
+                  Move to trash
+                </button>
               </div>
-            )}
-            <div className="relative">
-              {isRecording && !isProcessing && (
-                <>
-                  <span className="absolute inset-0 rounded-full bg-terracotta/40 animate-ping" aria-hidden />
-                  <span className="absolute -inset-1 rounded-full ring-2 ring-terracotta/60" aria-hidden />
-                </>
-              )}
-              <button
-                type="button"
-                onClick={onToggleRecording}
-                disabled={isProcessing}
-                title={
-                  isProcessing
-                    ? "Processing Scribble…"
-                    : isRecording
-                      ? "Stop Scribble recording"
-                      : "Record a new Scribble"
-                }
-                className={`relative w-16 h-16 flex items-center justify-center sm:w-20 sm:h-20 rounded-full text-cream shadow-lg transition-colors duration-200 border-none cursor-pointer ${
-                  isProcessing
-                    ? "bg-ink-faint cursor-wait"
-                    : isRecording
-                      ? "bg-terracotta-700 hover:bg-terracotta"
-                      : "bg-terracotta hover:bg-terracotta-600"
-                }`}
-              >
-                {isProcessing ? (
-                  <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 animate-spin" />
-                ) : isRecording ? (
-                  <Square className="w-6 h-6 sm:w-8 sm:h-8" fill="currentColor" />
-                ) : (
-                  <Mic className="w-6 h-6 sm:w-8 sm:h-8" />
-                )}
-              </button>
             </div>
-          </motion.div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Status toast — surfaces a post-capture message (error / info) once a
+          recording finishes or fails. Recording + processing themselves take
+          over the whole tab (see the early returns above), so this is just the
+          quiet after-the-fact feedback. */}
+      {!isEmpty && statusMessage && (
+        <div
+          className="fixed bottom-8 z-40 flex justify-center pointer-events-none"
+          style={{ left: toastLeft, right: showAI ? 340 : 0 }}
+        >
+          <div
+            className={`pointer-events-auto text-[11px] font-medium px-3 py-1.5 rounded-full shadow-sm border font-mono tracking-[0.04em] ${
+              statusMessage.toLowerCase().startsWith("failed") ||
+              statusMessage.toLowerCase().includes("too short") ||
+              statusMessage.toLowerCase().includes("no audio") ||
+              statusMessage.toLowerCase().includes("no speech") ||
+              statusMessage.toLowerCase().startsWith("sign in")
+                ? "bg-[#fbe9e7] text-[#8c2f25] border-[#e8c9b8]"
+                : "bg-cream-200 text-ink border-cream-300"
+            }`}
+          >
+            {statusMessage}
+          </div>
+        </div>
       )}
     </div>
   );

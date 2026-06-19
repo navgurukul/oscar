@@ -12,6 +12,7 @@ import type {
 import type {
   DictationContextSnapshot,
   DictationRoutingResult,
+  Visibility,
 } from "../types/scribble.types";
 import type { CleanupStyleWire } from "../lib/cleanup-style";
 
@@ -880,6 +881,74 @@ export const aiService = {
         return title;
       },
     );
+  },
+
+  // Reshape the clean text via the web app's /api/ai/transform (Bearer). The
+  // route streams plain text, which we read whole. tone/length/audience are
+  // optional reshape modifiers the route folds into the system prompt.
+  async transformScribble(
+    text: string,
+    opts: {
+      mode: "summary" | "bullets";
+      tone?: string;
+      length?: string;
+      audience?: string;
+      title?: string;
+    },
+  ): Promise<string> {
+    if (!text.trim()) throw new Error("No text provided to transform.");
+    return callWebAiRoute(
+      API_CONFIG.TRANSFORM_ENDPOINT,
+      { text, ...opts },
+      async (response) => (await response.text()).trim(),
+    );
+  },
+
+  // Translate the clean text via /api/ai/translate (Bearer). en | hi only.
+  async translateScribble(
+    text: string,
+    targetLanguage: "en" | "hi",
+  ): Promise<string> {
+    if (!text.trim()) throw new Error("No text provided to translate.");
+    return callWebAiRoute(
+      API_CONFIG.TRANSLATE_ENDPOINT,
+      { text, targetLanguage },
+      async (response) => {
+        const data = (await response.json()) as { translatedText?: string };
+        const out = data.translatedText?.trim();
+        if (!out) throw new Error("Empty translation response.");
+        return out;
+      },
+    );
+  },
+
+  // Set a scribble's sharing visibility via PATCH /api/scribbles/:id/share
+  // (Bearer). Returns the new share state, including the public token, which
+  // the route rotates on each (re)publish.
+  async setScribbleSharing(
+    id: string,
+    visibility: Visibility,
+  ): Promise<{
+    id: string;
+    visibility: Visibility;
+    public_share_token: string | null;
+    shared_with_org: boolean;
+    organization_id: string | null;
+    shared_at: string | null;
+  }> {
+    const accessToken = await getSessionAccessToken();
+    const response = await fetch(`${WEB_APP_URL}/api/scribbles/${id}/share`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ visibility }),
+    });
+    if (!response.ok) {
+      throw new Error(await extractWebRouteError(response));
+    }
+    return response.json();
   },
 
   async generateEnhancedMeetingNote(

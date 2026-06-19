@@ -4,6 +4,7 @@ export const API_CONFIG = {
   FORMAT_EMAIL_ENDPOINT: "/api/ai/format-email",
   TITLE_ENDPOINT: "/api/ai/title",
   TRANSLATE_ENDPOINT: "/api/ai/translate",
+  TRANSFORM_ENDPOINT: "/api/ai/transform",
 
   // External APIs (Google Gemini, native API)
   GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1beta",
