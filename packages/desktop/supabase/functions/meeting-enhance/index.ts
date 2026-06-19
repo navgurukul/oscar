@@ -270,6 +270,7 @@ function defaultSectionsForType(
   switch (meetingType) {
     case "discovery":
       return [
+        "Purpose",
         "About them",
         "Current situation / Current provider (if applicable)",
         "Key takeaways",
@@ -280,6 +281,7 @@ function defaultSectionsForType(
       ];
     case "1on1":
       return [
+        "Purpose",
         "Wins",
         "Priorities",
         "Blockers",
@@ -289,6 +291,7 @@ function defaultSectionsForType(
       ];
     case "standup":
       return [
+        "Purpose",
         "Progress since last standup",
         "Today's plan",
         "Blockers",
@@ -300,6 +303,8 @@ function defaultSectionsForType(
       if (isTestingOrDebugMeeting(request)) {
         return [
           "Action items",
+          "Purpose",
+          "Test content",
           "Confirmed issues",
           "Suspected issues",
           "Needs verification",
@@ -311,8 +316,9 @@ function defaultSectionsForType(
       }
       return [
         "Action items",
-        "Decisions",
+        "Purpose",
         "Key topics",
+        "Decisions",
         "Open questions",
         "Next steps",
       ];
@@ -1107,7 +1113,9 @@ async function generateUncitedFallbackMarkdown(
     "Prefer concrete action items, technical details, decisions, open questions, numeric values, branch names, testing needs, and design follow-ups only when they appear in the transcript or manual notes. " +
     "The transcript may mix English, Hindi, Hinglish, and speech-recognition errors. Recover likely meaning when several nearby words support it, but never import details from examples or prior meetings. " +
     "Never write blank sections. If a section truly has no evidence, write one bullet: None captured. " +
-    "For Action items, use '- [ ] <action> — <Owner>' with the owner if identifiable, or 'Owner: unassigned'.";
+    "For Action items, use '- [ ] <action> — <Owner>' with the owner if identifiable, or 'Owner: unassigned'. " +
+    "For a Purpose section, write 1-3 plain bullets summarizing why the session happened and what was being attempted or discussed. " +
+    "For a Test content section, summarize the substance of the material that was presented or tested and its key points, grouping related points under a bold inline label prefix when helpful.";
 
   const userPrompt = [
     formatMeetingContext(request, sections, meetingType),
@@ -1146,9 +1154,17 @@ function buildTranscriptExcerptFallbackMarkdown(
     "",
   ];
 
+  const excerptHeadingKey = expectedSections.orderedHeadings
+    .map((heading) => normalizeHeadingKey(heading))
+    .find((key) => key === "key topics" || key === "test content");
+
   for (const heading of expectedSections.orderedHeadings) {
     lines.push(`### ${heading}`);
-    if (normalizeHeadingKey(heading) === "key topics" && transcriptExcerpt) {
+    if (
+      excerptHeadingKey &&
+      normalizeHeadingKey(heading) === excerptHeadingKey &&
+      transcriptExcerpt
+    ) {
       lines.push(`- Transcript captured, but structured extraction failed. Excerpt: ${transcriptExcerpt}`);
     } else {
       lines.push("- None captured.");
@@ -1200,9 +1216,11 @@ async function generateFinalMarkdown(
     "ANTI-ECHO: do not echo malformed, garbled, or low-coherence transcript fragments as bullets. A bullet must represent a complete, coherent claim, question, or action. If a candidate bullet would read as garbled, surreal, self-referential, a one-off unverified feature/name, or a Whisper-style closing, omit it. When omitting leaves a section empty, write 'None captured'. " +
     "PRESERVE VERBATIM: people's names, product/feature names from transcript or context pack, tool names, file names, URLs, project IDs, numbers, durations, dates, error messages, and exact technical terms. Never paraphrase a named entity. " +
     "ACTION ITEMS section (when present): format each bullet as '- [ ] <action> — <Owner>' with the owner's name when identifiable, or 'Owner: unassigned' otherwise. Include a deadline only if explicitly stated. " +
-    "DECISIONS section (when present): include explicit decisions ('we decided X'), deferrals ('X will be fixed later', 'parked for now'), ownership assignments ('X owns Y', 'Y will be added by X'), and process conventions agreed during the meeting ('use replies not edits'). One bullet per item, naming who decided or owns the action when identifiable. " +
+    "PURPOSE section (when present): 1-3 plain bullets that state why this meeting or session happened, what was being attempted, evaluated, or discussed, and any framing or setup context (e.g., a test run started a few minutes early, a planning sync, a demo, an evaluation of a tool's output). Summarize intent and framing as a short briefing; do not use checkboxes here and do not duplicate action items or decisions. " +
+    "TEST CONTENT section (when present): summarize the substance of the material that was presented, tested, demonstrated, or used as a sample — the topic and its key points — not merely the fact that something was shared. When 2 or more related points share a theme, group them under a bold inline label prefix ('- **Sample speech:** <bullet>', '- **Key points:** <bullet>'). Aim for 2-5 bullets. " +
     "CONFIRMED ISSUES / SUSPECTED ISSUES / NEEDS VERIFICATION sections (when present): place facts by evidence level, not importance. Keep cause claims in Needs verification unless backed by timing, logs, or explicit transcript evidence. " +
     "KEY TOPICS / TESTING ISSUES sections: when the section contains 4 or more bullets that cluster into 2 or more themes (e.g., audio/data format, UI/display, performance, network, attribution), group bullets by theme using a bold inline label prefix: '- **Audio data:** <bullet>'. Aim for 2-4 themes when content warrants. Skip grouping when fewer than 4 bullets total. " +
+    "EMPHASIS: bold (**term**) the single most important topic, product, feature, or entity name inside a bullet when it aids scanning (e.g., a sample's subject like **continuous learning**). Use it sparingly — at most once per bullet — and never bold a whole sentence. " +
     "Use 1-4 bullets per section by default. Action items and Decisions may have up to 8 bullets each if the meeting warrants it. " +
     "Never invent facts. Never restate the section name inside its bullets. Preserve the structure and intent of any manual notes. " +
     "If a required section truly has no content from the transcript or manual notes, write exactly one bullet: None captured.";

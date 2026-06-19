@@ -1,5 +1,9 @@
 import { useMemo } from "react";
-import { MarkdownNotesView, stripEvidenceComments } from "./MarkdownNotesView";
+import {
+  MarkdownNotesView,
+  renderInlineMarkdown,
+  stripEvidenceComments,
+} from "./MarkdownNotesView";
 
 type Section = "decisions" | "actions" | "followups" | "other";
 
@@ -12,6 +16,7 @@ export interface ParsedMinutes {
   decisions: string[];
   actions: ActionItem[];
   followups: string[];
+  purpose: string[];
   hasStructure: boolean;
 }
 
@@ -20,6 +25,12 @@ const SECTION_PATTERNS: Record<Exclude<Section, "other">, RegExp> = {
   actions: /^(action\s*items?|actions?|to[\s-]*dos?|next\s+actions?|owners?(\s+and\s+tasks)?)\b/i,
   followups: /^(follow[\s-]*ups?|next\s+steps?|open\s+(items?|questions?)|parking\s+lot)\b/i,
 };
+
+// Purpose is rendered as a lead-in above the commitment grid. It is tracked
+// separately from the three buckets so it never influences the structured-
+// layout gate (`hasStructure`) — a meeting with only a Purpose section should
+// still fall back to the full markdown view.
+const PURPOSE_PATTERN = /^(purpose|context|overview|objective|goal|background)\b/i;
 
 
 const NON_SUBSTANTIVE_BULLET_RE =
@@ -52,7 +63,9 @@ export function parseMinutes(markdown: string): ParsedMinutes {
   const decisions: string[] = [];
   const actions: ActionItem[] = [];
   const followups: string[] = [];
+  const purpose: string[] = [];
   let current: Section = "other";
+  let inPurpose = false;
   let hits = 0;
 
   const lines = stripEvidenceComments(markdown).split(/\r?\n/);
@@ -60,12 +73,18 @@ export function parseMinutes(markdown: string): ParsedMinutes {
     const line = rawLine.replace(/\s+$/g, "");
     const heading = line.match(/^#{1,6}\s+(.+?)\s*$/);
     if (heading) {
+      const cleaned = heading[1].replace(/[·:\-—]+.*$/, "").trim();
+      if (PURPOSE_PATTERN.test(cleaned)) {
+        current = "other";
+        inPurpose = true;
+        continue;
+      }
+      inPurpose = false;
       const next = detectSection(heading[1]);
       current = next;
       if (next !== "other") hits++;
       continue;
     }
-    if (current === "other") continue;
     // Bullet or numbered list item.
     const bullet = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.+)$/);
     if (!bullet) continue;
@@ -73,6 +92,10 @@ export function parseMinutes(markdown: string): ParsedMinutes {
       .replace(/^\s*\[[ xX]\]\s*/, "") // strip task checkbox
       .trim();
     if (!item || NON_SUBSTANTIVE_BULLET_RE.test(item)) continue;
+    if (inPurpose) {
+      purpose.push(item);
+      continue;
+    }
     if (current === "decisions") decisions.push(item);
     else if (current === "actions") actions.push(parseActionItem(item));
     else if (current === "followups") followups.push(item);
@@ -87,6 +110,7 @@ export function parseMinutes(markdown: string): ParsedMinutes {
     decisions,
     actions,
     followups,
+    purpose,
     hasStructure: hits >= 2 && populated >= 2,
   };
 }
@@ -122,6 +146,23 @@ export function MinutesDistillView({ markdown, className }: MinutesDistillViewPr
 
   return (
     <div className={`grid grid-cols-12 gap-8 ${className ?? ""}`}>
+      {parsed.purpose.length > 0 && (
+        <section className="col-span-12">
+          <Caps accent>PURPOSE</Caps>
+          <ul className="mt-4 space-y-2 list-none">
+            {parsed.purpose.map((p, i) => (
+              <li
+                key={i}
+                className="flex gap-3 font-serif text-[15px] leading-[1.5] text-ink"
+              >
+                <span className="text-terracotta shrink-0 mt-0.5">·</span>
+                <span>{renderInlineMarkdown(p)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {parsed.decisions.length > 0 && (
         <section className="col-span-12 min-[1040px]:col-span-4 pr-2">
           <Caps accent>{`DECISIONS · ${parsed.decisions.length}`}</Caps>
@@ -132,7 +173,7 @@ export function MinutesDistillView({ markdown, className }: MinutesDistillViewPr
                   {String(i + 1).padStart(2, "0")}
                 </span>
                 <span className="font-serif text-[15px] leading-[1.45] text-ink">
-                  {d}
+                  {renderInlineMarkdown(d)}
                 </span>
               </li>
             ))}
@@ -159,7 +200,7 @@ export function MinutesDistillView({ markdown, className }: MinutesDistillViewPr
                     </div>
                   )}
                   <div className="text-[13px] leading-[1.4] text-ink mt-0.5">
-                    {a.task}
+                    {renderInlineMarkdown(a.task)}
                   </div>
                 </div>
               </li>
@@ -173,7 +214,7 @@ export function MinutesDistillView({ markdown, className }: MinutesDistillViewPr
           <Caps>FOLLOW-UPS</Caps>
           <ul className="mt-4 space-y-3 text-[12px] leading-relaxed text-ink-soft list-none">
             {parsed.followups.map((f, i) => (
-              <li key={i}>· {f}</li>
+              <li key={i}>· {renderInlineMarkdown(f)}</li>
             ))}
           </ul>
         </aside>
