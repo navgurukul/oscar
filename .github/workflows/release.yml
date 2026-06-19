@@ -267,23 +267,26 @@ jobs:
           cache: true
 
       # Windows-only build env, scoped via GITHUB_ENV so macOS/Linux are untouched.
-      # Three settings, each validated by a CI probe before landing here:
       #   - CMAKE_GENERATOR=Ninja — ggml-vulkan's vulkan-shaders-gen ExternalProject
       #     inherits the ambient MSVC env (the v0.5.26 blocker). [vulkan-build-test]
       #   - CARGO_TARGET_DIR=C:/t — the DEFAULT target path is ~290 chars > 260
       #     MAX_PATH → vulkan-shaders-gen TryCompile dies with cl.exe C1083. A short
       #     root fixes it. The Windows sign + upload steps below are repointed to
       #     C:/t to match (they no longer read src-tauri/target on Windows).
-      #   - RUSTFLAGS=+crt-static — unify the CRT so the Vulkan stack and the
-      #     (future) CT2/ct2rs engine, which REQUIRES static CRT, can link into one
-      #     binary. Vulkan-under-static proven green by [vulkan-crtstatic-test].
-      - name: Configure Windows build env (Ninja + short target + static CRT)
+      #
+      # DELIBERATELY DYNAMIC CRT (do NOT add `RUSTFLAGS=-C target-feature=+crt-static`).
+      # Static CRT *compiled* fine (vulkan-crtstatic-test was green) but CRASHES at
+      # RUNTIME: the app exits right after model load because ggml's statically-linked
+      # CRT heap collides with the dynamic-CRT vulkan-1.dll / GPU-driver ICDs on the
+      # first GPU allocation. The byte-identical dynamic-CRT build runs fine (~40x on
+      # AMD). The CT2 engine (which needs static CRT) must therefore NOT share this
+      # binary — solve that coexistence separately if/when CT2 ships on Windows.
+      - name: Configure Windows build env (Ninja + short target)
         if: runner.os == 'Windows'
         shell: bash
         run: |
           echo "CMAKE_GENERATOR=Ninja" >> "$GITHUB_ENV"
           echo "CARGO_TARGET_DIR=C:/t" >> "$GITHUB_ENV"
-          echo "RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV"
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
