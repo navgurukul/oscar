@@ -243,8 +243,6 @@ export function SetupScreen({
             style={{ marginTop: 8, opacity: 0.7, fontSize: "0.85rem" }}
           >
             Detected: {hardware.ramGb} GB RAM · {hardware.cpuCores} CPU cores
-            {hardware.gpuBackend !== "none" &&
-              ` · ${hardware.gpuBackend.toUpperCase()} acceleration`}
           </p>
         )}
         {error && <p className="setup-error">{error}</p>}
