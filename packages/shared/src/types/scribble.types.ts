@@ -67,6 +67,9 @@ export interface DBScribble extends DictationScribbleMetadata {
   // Public share link (Phase 6)
   visibility?: Visibility;
   public_share_token?: string | null;
+  // Tags — denormalized text[] (migration 018). Optional: the legacy `notes`
+  // fallback table has no tags column, so rows from there omit it.
+  tags?: string[] | null;
 }
 
 export type Visibility = "private" | "org" | "public";
@@ -101,6 +104,8 @@ export interface DBScribbleUpdate extends DictationScribbleMetadata {
   is_starred?: boolean;
   // Folder/category name
   folder?: string | null;
+  // Tags (migration 018)
+  tags?: string[] | null;
 }
 
 export interface FormattingResult {
