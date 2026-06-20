@@ -6,6 +6,7 @@ export type {
   DBScribble,
   DBScribbleInsert,
   DBScribbleUpdate,
+  Visibility,
   FormattingResult,
   TitleGenerationResult,
   FeedbackSubmission,
