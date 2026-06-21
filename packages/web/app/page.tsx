@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { scribblesService } from "@/lib/services/scribbles.service";
 import { meetingsService } from "@/lib/services/meetings.service";
+import { useScribbles } from "@/lib/hooks/queries/useScribbles";
+import { useMeetings } from "@/lib/hooks/queries/useMeetings";
 import type { DBScribble } from "@/lib/types/scribble.types";
 import type { SavedMeetingRecord } from "@oscar/shared/types";
 import { ROUTES, UI_STRINGS } from "@/lib/constants";
@@ -19,6 +21,8 @@ import {
   V2MarketingHeader,
   V2Footer,
 } from "@/components/v2/V2Primitives";
+
+const LISTENING_BARS = [6, 11, 8, 14, 7, 12, 9, 15, 10, 13, 8, 11];
 
 const TESTIMONIALS: Array<[string, string]> = [
   ["It's the only writing tool I open before I start writing.", "MIRA PATEL · DESIGNER"],
@@ -110,6 +114,20 @@ function scribblePreview(s: DBScribble): string {
   return text.length > 280 ? `${text.slice(0, 280).trim()}…` : text;
 }
 
+function useListeningSeconds() {
+  const [listeningSeconds, setListeningSeconds] = useState(1);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setListeningSeconds((current) => (current >= 50 ? 1 : current + 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return listeningSeconds;
+}
+
 function SignedInHome({
   scribbles,
   meetings,
@@ -179,7 +197,7 @@ function SignedInHome({
     <main style={{ background: v2.cream, color: v2.ink, fontFamily: "var(--font-figtree), system-ui" }}>
       <V2WebHeader active="TODAY" />
 
-      <section className="px-6 md:px-14 pt-16 md:pt-20 pb-10 md:pb-12">
+      <section className="px-6 md:px-14 pt-10 md:pt-12 pb-10 md:pb-12">
         <V2Caps>
           {new Date()
             .toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
@@ -187,7 +205,7 @@ function SignedInHome({
           · WELCOME BACK
         </V2Caps>
         <h1
-          className="mt-4"
+          className="mt-2"
           style={{
             fontFamily: v2Serif,
             fontSize: "clamp(48px, 9vw, 92px)",
@@ -448,14 +466,16 @@ function EmptyTodayState({
 }
 
 function MarketingLanding({ onStart }: { onStart: () => void }) {
+  const listeningSeconds = useListeningSeconds();
+
   return (
     <main style={{ background: v2.cream, color: v2.ink, fontFamily: "var(--font-figtree), system-ui" }}>
       <V2MarketingHeader active="PRODUCT" />
 
-      <section className="px-6 md:px-14 pt-20 md:pt-32 pb-20 md:pb-24 text-center">
+      <section className="px-6 md:px-14 pt-10 md:pt-14 pb-20 md:pb-24 text-center">
         <V2Caps>VOICE-FIRST WRITING · FOR PEOPLE WHO TYPE TOO MUCH</V2Caps>
         <h1
-          className="mt-6 mx-auto"
+          className="mt-0 mx-auto"
           style={{
             fontFamily: v2Serif,
             fontSize: "clamp(56px, 11vw, 132px)",
@@ -470,11 +490,11 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
           shapes it,<br />
           hands it back.
         </h1>
-        <p className="mt-10 mx-auto max-w-xl text-[17px] leading-relaxed" style={{ color: v2.inkSoft }}>
+        <p className="mt-4 mx-auto max-w-xl text-[17px] leading-relaxed" style={{ color: v2.inkSoft }}>
           A dictation tool that knows what app you&rsquo;re in and writes the way that app deserves. Slack
           reads like Slack. Code reads like code. Letters read like letters.
         </p>
-        <div className="mt-10 flex items-center justify-center gap-5 flex-wrap">
+        <div className="mt-5 flex items-center justify-center gap-5 flex-wrap">
           <button
             onClick={onStart}
             className="inline-flex items-center gap-3 rounded-full px-6 py-3 text-[14px] font-medium"
@@ -517,7 +537,7 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
         </div>
 
         <div
-          className="mt-16 md:mt-20 inline-flex items-center gap-3 rounded-full"
+          className="mt-8 md:mt-10 inline-flex items-center gap-3 rounded-full"
           style={{
             background: v2.ink,
             color: v2.cream,
@@ -529,16 +549,25 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
             className="inline-block rounded-full"
             style={{ height: 8, width: 8, background: v2.accent, boxShadow: `0 0 14px ${v2.accent}` }}
           />
-          <span className="inline-flex items-end gap-0.5" style={{ height: 14 }}>
-            {[3, 7, 5, 10, 4, 8, 6, 9, 5, 7, 4, 8].map((h, i) => (
+          <span className="inline-flex items-end gap-0.5 overflow-hidden" style={{ height: 16 }}>
+            {LISTENING_BARS.map((h, i) => (
               <span
                 key={i}
-                className="rounded-full"
-                style={{ background: v2.accent, width: 2, height: h }}
+                className="rounded-full animate-listening-wave"
+                style={{
+                  background: v2.accent,
+                  width: 2,
+                  height: h,
+                  animationDelay: `${i * 0.08}s`,
+                }}
               />
             ))}
           </span>
-          <span style={{ fontSize: 13, color: v2.cream2 }}>· listening · 0:08</span>
+          <span
+            style={{ fontSize: 13, color: v2.cream2, fontVariantNumeric: "tabular-nums" }}
+          >
+            · listening · 0:{listeningSeconds.toString().padStart(2, "0")}
+          </span>
         </div>
       </section>
 
@@ -659,25 +688,11 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
 export default function Home() {
   const { session, user, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const [scribbles, setScribbles] = useState<DBScribble[]>([]);
-  const [meetings, setMeetings] = useState<SavedMeetingRecord[]>([]);
-
-  useEffect(() => {
-    if (!session) return;
-    let cancelled = false;
-    (async () => {
-      const [scribblesResult, meetingsResult] = await Promise.all([
-        scribblesService.getScribbles(),
-        meetingsService.getMeetings(),
-      ]);
-      if (cancelled) return;
-      if (!scribblesResult.error && scribblesResult.data) setScribbles(scribblesResult.data);
-      if (!meetingsResult.error && meetingsResult.data) setMeetings(meetingsResult.data);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [session]);
+  // Use React Query hooks that already scope results to the active organization
+  // (show personal items + current org items). Enabled only once auth is ready.
+  const queriesEnabled = !authLoading && !!user;
+  const { data: scribbles = [] } = useScribbles(queriesEnabled);
+  const { data: meetings = [] } = useMeetings(queriesEnabled);
 
   const handleStart = () => {
     if (session) router.push(ROUTES.RECORDING);

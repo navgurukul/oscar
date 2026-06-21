@@ -239,31 +239,66 @@ export default function MeetingDetailPage() {
       meetingTypeHint: MeetingTypeHint;
     }) => {
       if (!meeting) return;
-      await updateMutation.mutateAsync({ id: meeting.id, updates: data });
-      setEditingMetadata(false);
-      toast({ title: "Saved", description: "Meeting details updated." });
+      try {
+        await updateMutation.mutateAsync({ id: meeting.id, updates: data });
+        // Refetch meetings to ensure UI reflects the update
+        await queryClient.invalidateQueries({ queryKey: [queryKeys.meetings] });
+        setEditingMetadata(false);
+        toast({ title: "Saved", description: "Meeting details updated." });
+      } catch (error) {
+        console.error("Failed to save meeting metadata:", error);
+        toast({ 
+          title: "Save failed", 
+          description: "Could not update meeting details.", 
+          variant: "destructive" 
+        });
+      }
     },
-    [meeting, updateMutation, toast]
+    [meeting, updateMutation, toast, queryClient]
   );
 
   const handleSaveNotes = useCallback(
     async (value: string) => {
       if (!meeting) return;
-      await updateMutation.mutateAsync({ id: meeting.id, updates: { notesMarkdown: value } });
-      setEditingNotes(false);
-      toast({ title: "Saved", description: "Meeting notes updated." });
+      try {
+        await updateMutation.mutateAsync({ id: meeting.id, updates: { notesMarkdown: value } });
+        // Refetch meetings to ensure UI reflects the update
+        await queryClient.invalidateQueries({ queryKey: [queryKeys.meetings] });
+        setEditingNotes(false);
+        toast({ title: "Saved", description: "Meeting notes updated." });
+      } catch (error) {
+        console.error("Failed to save meeting notes:", error);
+        const message = error instanceof Error ? error.message : JSON.stringify(error);
+        toast({ 
+          title: "Save failed", 
+          description: message && message !== "{}" ? message : "Could not update meeting notes.", 
+          variant: "destructive" 
+        });
+      }
     },
-    [meeting, updateMutation, toast]
+    [meeting, updateMutation, toast, queryClient]
   );
 
   const handleSaveRough = useCallback(
     async (value: string) => {
       if (!meeting) return;
-      await updateMutation.mutateAsync({ id: meeting.id, updates: { myNotesMarkdown: value } });
-      setEditingRough(false);
-      toast({ title: "Saved", description: "Personal notes updated." });
+      try {
+        await updateMutation.mutateAsync({ id: meeting.id, updates: { myNotesMarkdown: value } });
+        // Refetch meetings to ensure UI reflects the update
+        await queryClient.invalidateQueries({ queryKey: [queryKeys.meetings] });
+        setEditingRough(false);
+        toast({ title: "Saved", description: "Personal notes updated." });
+      } catch (error) {
+        console.error("Failed to save personal notes:", error);
+        const message = error instanceof Error ? error.message : JSON.stringify(error);
+        toast({ 
+          title: "Save failed", 
+          description: message && message !== "{}" ? message : "Could not update personal notes.", 
+          variant: "destructive" 
+        });
+      }
     },
-    [meeting, updateMutation, toast]
+    [meeting, updateMutation, toast, queryClient]
   );
 
   const handleDelete = useCallback(async () => {

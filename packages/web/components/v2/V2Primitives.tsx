@@ -91,7 +91,7 @@ export function V2Source({ name, kind }: { name: string; kind?: string }) {
 }
 
 export function V2OscarMark({
-  size = 22,
+  size = 36,
   light = false,
 }: {
   size?: number;

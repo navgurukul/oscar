@@ -9,18 +9,42 @@ import { meetingsService } from "@/lib/services/meetings.service";
 import type {
   MeetingUpdate,
   SavedMeetingRecord,
+  ActiveOrganization,
 } from "@oscar/shared/types";
 import { queryKeys } from "./keys";
 
+export function useActiveOrg(enabled = true) {
+  return useQuery<ActiveOrganization | null>({
+    queryKey: queryKeys.activeOrg,
+    queryFn: async () => {
+      const response = await fetch("/api/org/current");
+      if (!response.ok) return null;
+      return response.json();
+    },
+    enabled,
+    staleTime: Infinity, // Active org rarely changes
+  });
+}
+
 export function useMeetings(enabled = true) {
+  const { data: activeOrg } = useActiveOrg(enabled);
+
   return useQuery<SavedMeetingRecord[]>({
-    queryKey: queryKeys.meetings,
+    queryKey: [queryKeys.meetings, activeOrg?.organization.id] as const,
     queryFn: async () => {
       const { data, error } = await meetingsService.getMeetings();
       if (error) throw error;
-      return data ?? [];
+      
+      // Filter meetings to only show those from the current organization
+      // Personal meetings (organization_id is null) are always shown
+      // Organization meetings must match the current active org
+      const currentOrgId = activeOrg?.organization.id;
+      const filtered = (data ?? []).filter(
+        (m) => !m.organizationId || m.organizationId === currentOrgId
+      );
+      return filtered;
     },
-    enabled,
+    enabled: enabled && !!activeOrg,
     // Meetings are distilled on the desktop app and written to Supabase out of
     // band, so the web list goes stale silently. Refetch when the window
     // regains focus (overrides the global default) so a freshly distilled
@@ -31,22 +55,26 @@ export function useMeetings(enabled = true) {
 
 export function useUpdateMeeting() {
   const qc = useQueryClient();
+
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: MeetingUpdate }) => {
       const { data, error } = await meetingsService.updateMeeting(id, updates);
       if (error) throw error;
-      return data!;
+      if (!data) {
+        throw new Error("Meeting update returned no data");
+      }
+      return data;
     },
-    onSuccess: (updated) => {
-      qc.setQueryData<SavedMeetingRecord[]>(queryKeys.meetings, (prev) =>
-        prev ? prev.map((m) => (m.id === updated.id ? updated : m)) : prev,
-      );
+    onSuccess: () => {
+      // Invalidate all meeting query variations (with or without org filtering)
+      qc.invalidateQueries({ queryKey: [queryKeys.meetings] });
     },
   });
 }
 
 export function useDeleteMeeting() {
   const qc = useQueryClient();
+
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await meetingsService.deleteMeeting(id);
@@ -54,9 +82,8 @@ export function useDeleteMeeting() {
       return id;
     },
     onSuccess: (id) => {
-      qc.setQueryData<SavedMeetingRecord[]>(queryKeys.meetings, (prev) =>
-        prev ? prev.filter((m) => m.id !== id) : prev,
-      );
+      // Invalidate all meeting query variations
+      qc.invalidateQueries({ queryKey: [queryKeys.meetings] });
     },
   });
 }
