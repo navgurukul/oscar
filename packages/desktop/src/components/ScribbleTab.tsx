@@ -17,7 +17,6 @@ import {
   Pencil,
   Folder,
   Plus,
-  ArrowLeft,
   Upload,
   RotateCcw,
   Wand2,
@@ -592,7 +591,6 @@ function ReadingView({
       {/* Action bar */}
       <div className="flex items-center justify-between gap-3 px-8 py-3 border-b border-cream-300 shrink-0">
         <Caps className="flex items-center gap-1.5">
-          <ArrowLeft size={11} className="text-ink-faint" />
           {scribble.folder ? `SCRIBBLES · ${scribble.folder.toUpperCase()}` : "SCRIBBLES"}
         </Caps>
         <div className="flex items-center gap-2 flex-wrap justify-end">
