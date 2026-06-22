@@ -2,7 +2,11 @@
 //!
 //! Detection is best-effort, cross-platform via `sysinfo`. GPU presence is
 //! determined at compile-time from the feature flags whisper-rs was built
-//! with (macOS = Metal, optional Windows = CUDA, optional Linux = Vulkan).
+//! with. SHIPPED REALITY: only macOS (Metal) is GPU-accelerated. Windows and
+//! Linux release builds compile WITHOUT `cuda`/`vulkan` (`release.yml` passes
+//! `extra_cargo_args: ""`), so `GpuBackend::detect()` returns `None` there —
+//! Vulkan was deliberately reverted, CUDA is unintentionally unshipped. Treat
+//! the `gpu && ram >= 8` recommendation tier as macOS-only in practice.
 //! Recommendation is a pure function — easy to unit-test, easy to override.
 
 use serde::{Deserialize, Serialize};
@@ -22,7 +26,9 @@ pub enum GpuBackend {
 impl GpuBackend {
     pub fn detect() -> Self {
         // Backend is baked in at build time. We pick the strongest enabled
-        // backend for the current platform.
+        // backend for the current platform. NOTE: the `cuda`/`vulkan` features
+        // are off in release CI, so the Windows/Linux arms below are dead in
+        // shipped builds and this returns `None` there — macOS/Metal only.
         #[cfg(all(target_os = "macos"))]
         {
             return GpuBackend::Metal;
@@ -30,6 +36,14 @@ impl GpuBackend {
         #[cfg(all(target_os = "windows", feature = "cuda"))]
         {
             return GpuBackend::Cuda;
+        }
+        // Windows Vulkan path: broad GPU coverage (NVIDIA/AMD/Intel Arc) once
+        // the ggml-vulkan CMake `vulkan-shaders-gen` sub-build is fixed in CI
+        // and `--features vulkan` is enabled for the Windows release row. Inert
+        // until then (feature off) and never compiled on macOS.
+        #[cfg(all(target_os = "windows", feature = "vulkan"))]
+        {
+            return GpuBackend::Vulkan;
         }
         #[cfg(all(target_os = "linux", feature = "vulkan"))]
         {
@@ -126,6 +140,10 @@ pub struct ModelRecommendation {
 ///   and GPU allow.
 /// - `min_ram_gb` is enforced strictly — never recommend a model that won't
 ///   fit, regardless of preset.
+/// - The `gpu && ram >= 8` arms only fire where `GpuBackend::detect()` is not
+///   `None` — in shipped builds that's macOS only (Windows/Linux are CPU-only;
+///   see the module doc). On those the `ram >= 16 && cores >= 8` / `ram >= 8`
+///   CPU tiers are what actually run.
 pub fn recommend(
     role: WhisperRole,
     preset: ModelPreset,

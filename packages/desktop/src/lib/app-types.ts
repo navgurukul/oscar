@@ -76,6 +76,20 @@ export interface HotkeyContextEventPayload {
   siteHost?: string | null;
   siteTitle?: string | null;
   targetAppName?: string | null;
+  // Monotonic id stamped at press; pairs the start event with its later
+  // async context-enrichment event (see HotkeyContextEnrichPayload).
+  sessionId?: number;
+}
+
+// Late, session-tagged context delivered after recording has already started:
+// the AppleScript-derived window title + browser site that were deferred off
+// the press path so the pill arms instantly. Applied only if sessionId still
+// matches the active dictation.
+export interface HotkeyContextEnrichPayload {
+  sessionId: number;
+  windowTitle?: string | null;
+  siteHost?: string | null;
+  siteTitle?: string | null;
 }
 
 export type MicrophonePermissionState = "granted" | "denied" | "prompt" | "unknown";
@@ -102,15 +116,24 @@ export interface RoleModelState {
   downloadState: RoleModelDownloadState;
   progress: number;
   error: string | null;
+  /** Serving a stop-gap model while the target variant downloads (WS-C). */
+  interim?: boolean;
+  /** hi-en being served by a general model as an offline degrade (I10) — UI
+   *  shows the reduced-Hinglish-accuracy notice. */
+  crossFamilyInterim?: boolean;
 }
 
 export interface DownloadProgress {
+  /** Which model this progress belongs to — lets listeners route by variant
+   *  instead of guessing from the current recommendation. */
+  variant: WhisperModelVariant;
   downloaded: number;
   total: number;
   percentage: number;
 }
 
 export interface DownloadRetry {
+  variant: WhisperModelVariant;
   attempt: number;
   max_attempts: number;
   delay_secs: number;

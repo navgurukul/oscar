@@ -4,12 +4,19 @@ Overview of AI agents and services in OSCAR.
 
 ## Overview
 
-OSCAR uses Google Gemini AI agents to transform voice recordings into clean formatted text. Two primary agents process and organize Stream transcripts into Scribbles.
+OSCAR uses AI agents to transform voice recordings into clean formatted text. **Two providers, split by feature:**
+
+- **Mercury 2 (Inception Labs)** — all Scribble + Stream/dictation text agents: format, title, transform, format-email, translate, publish, and desktop dictation cleanup. Endpoint is OpenAI-compatible (`https://api.inceptionlabs.ai/v1`, model `mercury-2`). Requires `MERCURY_API_KEY` (web `.env` + Supabase secret for the `ai-process` Edge Function).
+- **Google Gemini 2.5 Flash** — Minutes (meeting enhance, via the `meeting-enhance` Edge Function) and embeddings (`text-embedding-004`) **only**. Requires `GEMINI_API_KEY`.
+
+> Migrated to Mercury 2 for Scribble in v0.7.30 (this doc previously described an all-Gemini pipeline). Gemini now powers Minutes + embeddings exclusively.
 
 ## Architecture
 
 ```
 Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent → Formatted Scribble
+              (Whisper desktop /        (Mercury 2)         (Mercury 2)
+               Web Speech API web)
 ```
 
 ## AI Agents
@@ -18,7 +25,7 @@ Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent �
 
 **Purpose**: Converts raw speech-to-text transcripts into clean, well-formatted text.
 
-**Location**: [`/app/api/ai/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/format/route.ts)
+**Location**: [`packages/web/app/api/ai/format/route.ts`](./packages/web/app/api/ai/format/route.ts) (streams via `packages/web/lib/server/mercury.ts`)
 
 **Key Responsibilities**:
 
@@ -37,10 +44,8 @@ Voice Input → Speech Recognition → AI Formatting Agent → AI Title Agent �
 
 **Configuration**:
 
-- Model: Google Gemini (configured in `API_CONFIG.GEMINI_MODEL`)
-- Temperature: Configured via `API_CONFIG.FORMAT_TEMPERATURE`
-- Top P: Configured via `API_CONFIG.FORMAT_TOP_P`
-- Max Tokens: Configured via `API_CONFIG.FORMAT_MAX_TOKENS`
+- Model: **Mercury 2** (`mercury-2`) via `packages/web/lib/server/mercury.ts`
+- Temperature / top-p / max-tokens tuned in the route + Mercury helper
 
 **Example**:
 
@@ -49,11 +54,21 @@ Input:  "um so like how to create a react app you know"
 Output: "How to create a React app."
 ```
 
+### 1a. Other Scribble / Stream text agents (all Mercury 2)
+
+Beyond format + title, the same Mercury 2 backend powers:
+
+- [`packages/web/app/api/ai/transform/route.ts`](./packages/web/app/api/ai/transform/route.ts) — custom text transforms (summary, bullets, etc.), streaming
+- [`packages/web/app/api/ai/format-email/route.ts`](./packages/web/app/api/ai/format-email/route.ts) — email-shaped formatting, streaming
+- [`packages/web/app/api/ai/translate/route.ts`](./packages/web/app/api/ai/translate/route.ts) — EN/Hi translation
+- [`packages/web/app/api/ai/publish/route.ts`](./packages/web/app/api/ai/publish/route.ts) — publish-ready rewrite
+- Desktop dictation cleanup — `transcribe_cleanup` mode via the `ai-process` Edge Function (see Desktop Stream Pill below)
+
 ### 2. Title Generation Agent
 
 **Purpose**: Generates concise, descriptive titles for formatted Scribbles.
 
-**Location**: [`/app/api/ai/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/title/route.ts)
+**Location**: [`packages/web/app/api/ai/title/route.ts`](./packages/web/app/api/ai/title/route.ts)
 
 **Key Responsibilities**:
 
@@ -71,16 +86,14 @@ If AI title generation fails, system uses heuristic:
 
 **Configuration**:
 
-- Model: Google Gemini (configured in `API_CONFIG.GEMINI_MODEL`)
-- Temperature: Configured via `API_CONFIG.TITLE_TEMPERATURE`
-- Top P: Configured via `API_CONFIG.TITLE_TOP_P`
-- Max Tokens: Configured via `API_CONFIG.TITLE_MAX_TOKENS`
+- Model: **Mercury 2** (`mercury-2`) via `packages/web/lib/server/mercury.ts`
+- Max title length: 60 chars (heuristic fallback truncates here)
 
 ## Service Layer
 
 ### AI Service
 
-**Location**: [`/lib/services/ai.service.ts`](file:///Users/souvik/Desktop/oscar/lib/services/ai.service.ts)
+**Location**: [`packages/web/lib/services/ai.service.ts`](./packages/web/lib/services/ai.service.ts)
 
 Clean interface for interacting with AI agents.
 
@@ -101,7 +114,7 @@ Clean interface for interacting with AI agents.
 
 ### Format Agent Prompt
 
-**Location**: [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) - `SYSTEM_PROMPTS.FORMAT`
+**Location**: [`packages/web/lib/prompts.ts`](./packages/web/lib/prompts.ts) - `SYSTEM_PROMPTS.FORMAT`
 
 Formatting prompt designed to:
 
@@ -113,7 +126,7 @@ Formatting prompt designed to:
 
 ### Title Agent Prompt
 
-**Location**: [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) - `SYSTEM_PROMPTS.TITLE`
+**Location**: [`packages/web/lib/prompts.ts`](./packages/web/lib/prompts.ts) - `SYSTEM_PROMPTS.TITLE`
 
 Focused on:
 
@@ -126,7 +139,7 @@ Focused on:
 
 ### useAIFormatting Hook
 
-**Location**: [`/lib/hooks/useAIFormatting.ts`](file:///Users/souvik/Desktop/oscar/lib/hooks/useAIFormatting.ts)
+**Location**: [`packages/web/lib/hooks/useAIFormatting.ts`](./packages/web/lib/hooks/useAIFormatting.ts)
 
 Provides React components AI formatting capabilities:
 
@@ -138,30 +151,24 @@ Provides React components AI formatting capabilities:
 
 ### API Configuration
 
-All AI agent configs centralized in [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts):
+Scribble/Stream text agents call **Mercury 2** through the server helper [`packages/web/lib/server/mercury.ts`](./packages/web/lib/server/mercury.ts):
 
-```typescript
-API_CONFIG = {
-  GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1beta",
-  GEMINI_MODEL: "gemini-2.5-flash",
-  FORMAT_TEMPERATURE: // Configured value
-  FORMAT_TOP_P: // Configured value
-  FORMAT_MAX_TOKENS: // Configured value
-  TITLE_TEMPERATURE: // Configured value
-  TITLE_TOP_P: // Configured value
-  TITLE_MAX_TOKENS: // Configured value
-  TITLE_MAX_LENGTH: 60,
-}
+```
+MERCURY_API_BASE_URL = "https://api.inceptionlabs.ai/v1"   // OpenAI-compatible
+MERCURY_MODEL        = "mercury-2"
 ```
 
-Desktop dictation cleanup (the `ai-process` Edge Function, used by the Stream pill) does not use Gemini — it calls Inception Labs Mercury 2 via the OpenAI-compatible endpoint and requires `MERCURY_API_KEY` set as a Supabase secret.
+Gemini config (Minutes + embeddings only) lives in [`packages/shared/src/constants/api.ts`](./packages/shared/src/constants/api.ts) (`gemini-2.5-flash`) and `packages/web/lib/server/embeddings.ts` (`text-embedding-004`).
+
+Desktop dictation cleanup (the `ai-process` Edge Function, used by the Stream pill) also calls Mercury 2 via the OpenAI-compatible endpoint and requires `MERCURY_API_KEY` set as a Supabase secret.
 
 ### Environment Variables
 
 Required:
 
 ```
-GEMINI_API_KEY=your_api_key_here
+MERCURY_API_KEY=your_inception_labs_key   # Scribble + Stream agents (web + ai-process Edge Function)
+GEMINI_API_KEY=your_google_key            # Minutes (meeting-enhance) + embeddings only
 ```
 
 ## Error Handling
@@ -174,12 +181,12 @@ AI agents implement comprehensive error handling:
 4. **Response Validation**: Verifies API response structure
 5. **Graceful Degradation**: Falls back to local heuristics when AI fails
 
-Error messages defined in [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts) under `ERROR_MESSAGES`.
+Error messages defined in [`packages/web/lib/constants.ts`](./packages/web/lib/constants.ts) under `ERROR_MESSAGES`.
 
 ## Processing Pipeline
 
 1. **Voice Recording**: User speaks into microphone
-2. **Speech-to-Text**: Browser API or stt-tts-lib converts audio to text
+2. **Speech-to-Text**: web uses the browser Web Speech API (`SpeechRecognition`, wrapped by `speech-to-speech` for VAD/continuity); desktop uses local whisper-rs (Whisper / Oriserve Hinglish models)
 3. **AI Formatting**: Raw transcript sent to formatting agent
 4. **AI Title Generation**: Formatted text sent to title agent
 5. **Storage**: Results saved to sessionStorage, and to Supabase when saved as a Scribble
@@ -192,7 +199,7 @@ On desktop, the stream / dictation flow has its own dedicated entry point — th
 
 **Entry points**:
 
-- **Edge handle (hover/click)**: a 72×5 px handle docked flush to the bottom of the primary monitor. Cursor enters the bottom 56 px hit zone → handle widens with a cyan glow and shows "Click to dictate" → click starts recording. The full Paper pill is reserved for active feedback states so idle hover never covers the user's app.
+- **Edge handle (hover/click)**: a 72×5 px handle docked flush to the bottom of the primary monitor. Cursor enters the bottom 56 px hit zone → handle widens with a terracotta glow and shows "Click to dictate" → click starts recording. The full Paper pill is reserved for active feedback states so idle hover never covers the user's app.
 - **Global hotkey `Ctrl+Space`** ([`packages/desktop/src-tauri/src/hotkey.rs`](./packages/desktop/src-tauri/src/hotkey.rs)): hold to record, release to stop. Captures frontmost-app context at press time.
 
 **Pipeline (different from the Scribble/Minutes path)**:
@@ -212,15 +219,18 @@ The AI cleanup uses the `transcribe_cleanup` mode in [`packages/desktop/src/serv
 
 **Pill state machine** (driven by `set_pill_phase` Tauri command + `pill-set-phase` event in [`packages/desktop/public/pill.html`](./packages/desktop/public/pill.html)):
 
-| Phase | Visual | Window height |
+| Phase | Visual | Window size (W×H) |
 |---|---|---|
-| `rest` | 72×5 handle flush at edge | 56 px |
-| `ready` | 96×6 handle, cyan-400 glow, "Click to dictate" hint | 56 px |
-| `recording` | 15-bar cyan waveform | 200 px |
-| `processing` | 13 pulsing dots (1.1 s stagger × 0.07 s) | 200 px |
-| `inserted` | cyan-500 "Inserted into document" toast (1500 ms dwell) | 200 px |
-| `error` | rose-700 triangle + "no input" (1500 ms) | 200 px |
-| `settings` | popover open above the pill | 380 px |
+| `rest` | 72×5 handle flush at edge | 140×16 px |
+| `ready` | 96×6 handle, terracotta glow, "Click to dictate" hint | 140×16 px |
+| `recording` | 15-bar terracotta-500 (`#B8623D`) waveform, live audio levels | 280×200 px |
+| `processing` | 13 pulsing dots (1.1 s `mm-pulse`, 0.07 s stagger); caption cycles transcribing → removing filler → formatting → finalizing | 280×200 px |
+| `downloading` | caption + live % while the dictation model downloads (no audio captured; auto-collapses ~2.5 s after progress stops) | 280×200 px |
+| `inserted` | terracotta "Inserted into document" toast (1500 ms dwell) | 280×200 px |
+| `copied` | terracotta "Copied to clipboard" toast | 280×200 px |
+| `error` | rose-700 (`#BE123C`) triangle + "no input" (1500 ms) | 280×200 px |
+| `auth` | terracotta "Sign in to enable AI" (gated; not error-red) | 280×200 px |
+| `settings` | popover open above the pill | 280×380 px |
 
 The pill's settings popover (Polish / Prompt Engineer / Email Reply transforms, Language, Auto-apply) is wired to the same persisted settings the Settings tab writes (`tonePreset`, `transcriptionLanguage`, `autoPaste`). The pill emits `pill-settings-update` events; the host in [`packages/desktop/src/App.tsx`](./packages/desktop/src/App.tsx) listens and calls `saveSetting`.
 
@@ -247,7 +257,7 @@ On each formatted Scribble, users see:
 
 ### Data Storage
 
-**Location**: [`/lib/types/scribble.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/scribble.types.ts)
+**Location**: [`packages/web/lib/types/scribble.types.ts`](./packages/web/lib/types/scribble.types.ts)
 
 Each Scribble stores:
 
@@ -259,7 +269,7 @@ feedback_timestamp: string | null;        // When feedback was given
 
 ### Feedback Service
 
-**Location**: [`/lib/services/feedback.service.ts`](file:///Users/souvik/Desktop/oscar/lib/services/feedback.service.ts)
+**Location**: [`packages/web/lib/services/feedback.service.ts`](./packages/web/lib/services/feedback.service.ts)
 
 **Methods**:
 
@@ -273,7 +283,7 @@ feedback_timestamp: string | null;        // When feedback was given
 
 ### Using Feedback for Prompt Improvement
 
-**Documentation**: [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) (see FEEDBACK-DRIVEN PROMPT OPTIMIZATION GUIDE)
+**Documentation**: [`packages/web/lib/prompts.ts`](./packages/web/lib/prompts.ts) (see FEEDBACK-DRIVEN PROMPT OPTIMIZATION GUIDE)
 
 **Iterative Process**:
 
@@ -315,7 +325,7 @@ cases.forEach((scribble) => {
 
 ### Components
 
-**FeedbackWidget**: [`/components/results/FeedbackWidget.tsx`](file:///Users/souvik/Desktop/oscar/components/results/FeedbackWidget.tsx)
+**FeedbackWidget**: [`packages/web/components/results/FeedbackWidget.tsx`](./packages/web/components/results/FeedbackWidget.tsx)
 
 - Displays Yes/No buttons
 - Shows reason tag selection on "No"
@@ -384,15 +394,15 @@ Potential improvements:
 
 ## Related Files
 
-- [`/lib/services/ai.service.ts`](file:///Users/souvik/Desktop/oscar/lib/services/ai.service.ts) - AI service implementation
-- [`/lib/services/feedback.service.ts`](file:///Users/souvik/Desktop/oscar/lib/services/feedback.service.ts) - Feedback collection and analytics
-- [`/lib/prompts.ts`](file:///Users/souvik/Desktop/oscar/lib/prompts.ts) - Agent prompts and optimization guide
-- [`/lib/constants.ts`](file:///Users/souvik/Desktop/oscar/lib/constants.ts) - Configuration constants
-- [`/lib/types/scribble.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/scribble.types.ts) - Type definitions
-- [`/lib/types/api.types.ts`](file:///Users/souvik/Desktop/oscar/lib/types/api.types.ts) - API type definitions
-- [`/app/api/ai/format/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/format/route.ts) - Format endpoint
-- [`/app/api/ai/title/route.ts`](file:///Users/souvik/Desktop/oscar/app/api/ai/title/route.ts) - Title endpoint
-- [`/components/results/FeedbackWidget.tsx`](file:///Users/souvik/Desktop/oscar/components/results/FeedbackWidget.tsx) - Feedback UI component
+- [`packages/web/lib/services/ai.service.ts`](./packages/web/lib/services/ai.service.ts) - AI service implementation
+- [`packages/web/lib/services/feedback.service.ts`](./packages/web/lib/services/feedback.service.ts) - Feedback collection and analytics
+- [`packages/web/lib/prompts.ts`](./packages/web/lib/prompts.ts) - Agent prompts and optimization guide
+- [`packages/web/lib/constants.ts`](./packages/web/lib/constants.ts) - Configuration constants
+- [`packages/web/lib/types/scribble.types.ts`](./packages/web/lib/types/scribble.types.ts) - Type definitions
+- [`packages/web/lib/types/api.types.ts`](./packages/web/lib/types/api.types.ts) - API type definitions
+- [`packages/web/app/api/ai/format/route.ts`](./packages/web/app/api/ai/format/route.ts) - Format endpoint
+- [`packages/web/app/api/ai/title/route.ts`](./packages/web/app/api/ai/title/route.ts) - Title endpoint
+- [`packages/web/components/results/FeedbackWidget.tsx`](./packages/web/components/results/FeedbackWidget.tsx) - Feedback UI component
 
 ## Support
 

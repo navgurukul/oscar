@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { API_CONFIG, ERROR_MESSAGES, RATE_LIMITS } from "@/lib/constants";
 import { SYSTEM_PROMPTS } from "@/lib/prompts";
 import {
@@ -7,6 +6,9 @@ import {
   getClientIdentifier,
 } from "@/lib/middleware/rate-limit";
 import {
+  applyCors,
+  authenticateRequest,
+  corsPreflightResponse,
   enforceRecordingQuota,
   parseJsonBody,
   validateAndWrapInput,
@@ -20,36 +22,40 @@ type TranslateRequestBody = {
   targetLanguage?: unknown;
 };
 
+export function OPTIONS() {
+  return corsPreflightResponse();
+}
+
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
-  }
+  const authResult = await authenticateRequest(req);
+  if (!authResult.success) return authResult.response;
+  const { user } = authResult;
 
   const clientId = getClientIdentifier(user.id, req);
   const rateLimitResult = await applyRateLimit(clientId, "ai-translate", RATE_LIMITS.AI_TRANSLATE);
-  if (rateLimitResult) return rateLimitResult;
+  if (rateLimitResult) return applyCors(rateLimitResult);
 
   let apiKey: string;
   try {
     apiKey = getMercuryApiKey();
   } catch {
-    return NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 });
+    return applyCors(
+      NextResponse.json({ error: ERROR_MESSAGES.SERVER_MISSING_API_KEY }, { status: 500 })
+    );
   }
 
   const bodyResult = await parseJsonBody<TranslateRequestBody>(req);
-  if (!bodyResult.success) return bodyResult.response;
+  if (!bodyResult.success) return applyCors(bodyResult.response);
 
   const inputResult = validateAndWrapInput(bodyResult.data.text, {
     requiredError: ERROR_MESSAGES.NO_TEXT_PROVIDED_FOR_TRANSLATION,
     tagName: "text",
   });
-  if (!inputResult.success) return inputResult.response;
+  if (!inputResult.success) return applyCors(inputResult.response);
 
   // Block further AI spend once the org is over its free monthly quota.
   const quotaResponse = await enforceRecordingQuota(user.id);
-  if (quotaResponse) return quotaResponse;
+  if (quotaResponse) return applyCors(quotaResponse);
 
   const rawTargetLanguage = bodyResult.data.targetLanguage;
   const targetLanguage = rawTargetLanguage === undefined ? "en" : rawTargetLanguage;
@@ -57,9 +63,11 @@ export async function POST(req: NextRequest) {
     typeof targetLanguage !== "string" ||
     (targetLanguage !== "en" && targetLanguage !== "hi")
   ) {
-    return NextResponse.json(
-      { error: "targetLanguage must be 'en' or 'hi'" },
-      { status: 400 }
+    return applyCors(
+      NextResponse.json(
+        { error: "targetLanguage must be 'en' or 'hi'" },
+        { status: 400 }
+      )
     );
   }
 
@@ -76,12 +84,14 @@ export async function POST(req: NextRequest) {
       maxTokens: API_CONFIG.TRANSLATE_MAX_TOKENS,
       timeoutMs: REQUEST_TIMEOUT_MS,
     });
-    return NextResponse.json({ translatedText });
+    return applyCors(NextResponse.json({ translatedText }));
   } catch (err: unknown) {
     const error = err as Error;
-    return NextResponse.json(
-      { error: ERROR_MESSAGES.AI_REQUEST_FAILED, details: error?.message || String(err) },
-      { status: 500 }
+    return applyCors(
+      NextResponse.json(
+        { error: ERROR_MESSAGES.AI_REQUEST_FAILED, details: error?.message || String(err) },
+        { status: 500 }
+      )
     );
   }
 }

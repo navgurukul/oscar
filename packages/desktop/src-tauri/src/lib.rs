@@ -38,7 +38,7 @@ mod whisper;
 use crate::events::OscarEvent;
 use crate::hotkey::register_recording_hotkey;
 use crate::pill::create_pill_window;
-use crate::state::{set_pending_deep_link, AppState, HotkeyState};
+use crate::state::{set_pending_deep_link, AppState, HotkeyState, WhisperRuntime};
 
 #[cfg(target_os = "linux")]
 use crate::state::LINUX_TRAY;
@@ -165,28 +165,32 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(Arc::new(Mutex::new(AppState {
-            whisper_context: None,
-            loaded_model_path: None,
             meeting_system_audio_segments: HashMap::new(),
             active_meeting_session: 0,
         })))
+        // The Whisper model + per-variant download registry live in their own
+        // managed state so a multi-second inference (read guard) never contends
+        // with the AppState mutex used by meeting capture buffers.
+        .manage(Arc::new(WhisperRuntime::new()))
         .manage(HotkeyState {
             is_recording: is_recording.clone(),
             last_error: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
-            whisper::download_whisper_model,
-            whisper::load_whisper_model,
-            whisper::ensure_whisper_model_loaded,
-            whisper::validate_whisper_model_file,
+            whisper::download_model,
+            whisper::ensure_model_loaded,
+            whisper::unload_whisper_model,
+            whisper::model_status,
+            whisper::list_model_statuses,
+            whisper::cancel_model_downloads,
+            whisper::delete_model,
+            whisper::clear_local_models,
             whisper::warm_whisper_runtime,
             whisper::transcribe_audio,
             audio_decode::decode_audio_blob,
-            meeting::transcribe_meeting_audio,
             meeting::clear_meeting_segment_buffers,
             meeting::rotate_meeting_system_audio_segment,
             meeting::transcribe_meeting_segment_bytes,
-            meeting::transcribe_meeting_audio_b64,
             meeting::is_system_audio_supported,
             meeting::start_system_audio_capture,
             meeting::stop_system_audio_capture,
@@ -201,6 +205,8 @@ pub fn run() {
             pill::set_pill_phase,
             pill::get_pill_phase,
             pill::stop_pill_hover,
+            pill::prepare_update_install,
+            pill::resume_pill_after_update,
             pill::pill_push_settings,
             pill::pill_request_record_start,
             pill::pill_request_record_stop,
@@ -212,11 +218,8 @@ pub fn run() {
             permissions::request_system_audio_permission,
             hotkey::ensure_recording_hotkey_registered,
             hotkey::is_recording_hotkey_registered,
-            filesystem::check_file_exists,
-            filesystem::delete_file,
             filesystem::append_perf_log,
             filesystem::clear_perf_log,
-            filesystem::get_model_path,
             calendar::get_calendar_events,
             hardware::detect_hardware,
             hardware::recommend_whisper_model,
@@ -350,6 +353,15 @@ pub fn run() {
                     }
                     Err(e) => log::warn!("[setup] Could not create tray icon on Linux: {}", e),
                 }
+            }
+
+            // Best-effort disk hygiene off the main thread: sweep legacy phi
+            // files and stale (>14d) download partials. Never fails the app.
+            {
+                let janitor_handle = app.handle().clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    whisper::run_startup_janitor(janitor_handle);
+                });
             }
 
             log::info!("[setup] ✓ Setup complete — app ready");

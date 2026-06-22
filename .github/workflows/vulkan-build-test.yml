@@ -1,0 +1,133 @@
+# Standalone Vulkan build probe — NOT part of the release pipeline.
+#
+# Purpose: iterate the Windows ggml-vulkan compile in isolation so an unverified
+# CMake fix never lands in release.yml (which only runs on v* tags and ships
+# artifacts). Runs on every push to `feat/windows-vulkan` (fast iteration) and
+# can also be dispatched manually.
+#
+# The documented blocker (release.yml): ggml-vulkan builds a `vulkan-shaders-gen`
+# helper via CMake ExternalProject_Add, and that sub-build did NOT inherit
+# cl.exe / INCLUDE / LIB "regardless of job-scope MSVC env activation".
+#
+# Fix hypothesis under test: force the **Ninja** CMake generator. The Visual
+# Studio generator makes the ExternalProject sub-build re-run VS toolchain
+# detection and lose the ambient MSVC env; Ninja invokes cl.exe directly from
+# the shell env (set by ilammy/msvc-dev-cmd), and ExternalProject sub-builds
+# inherit it. The `cmake` crate (whisper-rs-sys) honors CMAKE_GENERATOR and
+# forwards it to ExternalProject_Add.
+#
+# Scope: enables the vulkan feature on the `oscar` workspace member (which turns
+# on whisper-rs/vulkan transitively) and runs `cargo build`. whisper-rs-sys —
+# the failing ggml-vulkan sub-build — compiles during the dependency phase. The
+# frontend is built first so the later `generate_context!` step doesn't error
+# after Vulkan already compiled, making a green run unambiguous. GitHub runners
+# have no GPU, so this proves the build COMPILES, not that Vulkan accelerates
+# (that needs a physical Windows GPU box). macOS is never involved.
+
+name: vulkan-build-test
+
+on:
+  push:
+    branches: ["feat/windows-vulkan"]
+  workflow_dispatch: {}
+
+jobs:
+  vulkan-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust stable (windows-msvc)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # Puts cl.exe + INCLUDE + LIB into the job env — the env Ninja forwards to
+      # the ggml-vulkan ExternalProject sub-build.
+      - name: Setup MSVC dev environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      # vulkan/vulkan.h + glslc/shaderc that ggml-vulkan needs at build time;
+      # sets VULKAN_SDK. Confirm the action ref if it fails to resolve —
+      # alternative: humbletim/install-vulkan-sdk.
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: 1.3.290.0
+          install_runtime: true
+          cache: true
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./packages/desktop/src-tauri -> target"
+          key: vulkan-probe
+
+      # pnpm/node + frontend build so the Rust `generate_context!` (which embeds
+      # the built frontend dist) compiles. Bare action-setup@v6 — version comes
+      # from package.json `packageManager` (don't re-spec it; that double-spec is
+      # the known quality.yml failure).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build frontend
+        working-directory: packages/desktop
+        env:
+          VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
+          VITE_WEB_APP_URL: "https://oscar.samyarth.org"
+        run: pnpm build
+
+      # The probe → now bundles a real NSIS installer so the dev can test the
+      # Vulkan build on a physical Windows GPU box (the pending runtime gate).
+      # Three fixes stacked, each confirmed by a prior run:
+      #   - CMAKE_GENERATOR=Ninja: ggml-vulkan ExternalProject inherits the MSVC
+      #     env (the original v0.5.26 blocker). CONFIRMED — configure completes.
+      #   - CARGO_TARGET_DIR=C:\t: vulkan-shaders-gen TryCompile path was ~290
+      #     chars (>260 MAX_PATH) → cl.exe C1083. CONFIRMED — Vulkan + shaders
+      #     now compile fully. NOTE: release.yml CANNOT use this (its sign/upload
+      #     steps hardcode src-tauri/target) — so the release job carries the
+      #     MAX_PATH risk this short root sidesteps here.
+      #   - --release: a debug build mixes CRTs (audiopus_sys references the
+      #     debug-only __CrtDbgReportW → LNK2019/LNK1120). Release mode uses one
+      #     consistent CRT and matches what release.yml actually ships.
+      - name: tauri build --release --features vulkan (NSIS installer)
+        working-directory: packages/desktop
+        env:
+          CMAKE_GENERATOR: Ninja
+          CARGO_TARGET_DIR: 'C:\t'
+          RUST_BACKTRACE: "1"
+          # tauri.conf.json carries an updater pubkey, so `tauri build` insists on
+          # signing the .nsis.zip updater artifact — without these it errors out
+          # AFTER the installer .exe is already built (the v0.8.4 probe failure).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_SUPABASE_URL: "https://gxioxrtbjwlyhqyvsjxw.supabase.co"
+          VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aW94cnRiandseWhxeXZzanh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0NzA1OTUsImV4cCI6MjA4NDA0NjU5NX0.kqOYYdEhGvPTnqlzDXp1XiFyE9d1HOLwQt33htyM3Lk"
+          VITE_WEB_APP_URL: "https://oscar.samyarth.org"
+        run: ../../node_modules/.bin/tauri build --target x86_64-pc-windows-msvc --bundles nsis --features vulkan
+
+      # Hand the dev a downloadable installer. NO public release, NO auto-updater
+      # push — the GPU runtime test happens on this artifact before any v* tag.
+      - name: Upload Vulkan NSIS installer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oscar-windows-vulkan-nsis
+          path: 'C:\t\x86_64-pc-windows-msvc\release\bundle\nsis\*.exe'
+          if-no-files-found: error

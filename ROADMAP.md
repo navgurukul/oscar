@@ -5,7 +5,7 @@ Product ideas, planned features. Not prioritized — ordering loose.
 ## Plan Status Snapshot
 
 - **Context-aware dictation**: In progress. Desktop capture, routing, prompt versioning, settings toggle, Stream cleanup wiring, and saved-note metadata persistence exist. Remaining work: feedback analytics by context, and user-facing context labels on web.
-- **Vibe Coding Mode**: Planned. Design mocks exist; no dedicated API route, hook, or mode selector shipped yet.
+- **Vibe Coding Mode**: Planned. Design mocks exist; no dedicated API route, hook, or mode selector shipped. The unwired settings stub was **removed** (commit `d5448aa`) — only the pill's `prompt-engineer` cleanup-style preset exists today as a partial stand-in. Note: Mercury 2, not Gemini, would back this.
 - **VAD for hands-free dictation**: Partly shipped. Whisper now has a VAD pre-filter to strip silence before inference, and Stream has a 200 ms release tail buffer. Hands-free auto-arm / auto-finalize is still planned.
 - **Littlebird.ai-style work memory clone**: Added below as a product-flow bet. Scope should stay Oscar-native: voice-first, explicit privacy controls, no invisible capture by default.
 - **Observability**: Planned. No error tracking, no analytics, no AI-quality telemetry wired today. Production runs blind. Detail below.
@@ -53,7 +53,7 @@ Record → [active app / tab context captured] → STT → Format Agent (context
 - Shared context type in `@oscar/shared/types`
 - `AI_CONFIG` / prompt selection logic in `lib/services/ai.service.ts`
 - New prompt variants in `lib/prompts.ts` keyed by app category (ide, browser, email, docs, chat)
-- Pass context through recording hook → format API route → Gemini call
+- Pass context through recording hook → format API route → Mercury 2 call (Gemini is Minutes/embeddings only)
 
 ---
 
@@ -168,7 +168,7 @@ Pill ready / hotkey toggle on
 
 ```
 User hits Ctrl+Space once (toggle), or hovers the edge handle
-  → pill expands, sits in "armed" with a soft cyan ring
+  → pill expands, sits in "armed" with a soft terracotta ring
   → user speaks: "draft a reply to that email about the demo"
   → pill flips to recording on first detected speech frame
   → user pauses 1 s past their last word
@@ -353,7 +353,7 @@ From `Agents.md` future enhancements, consolidated here:
 
 - [ ] A/B testing prompt variants using feedback data
 - [ ] Automated prompt optimization triggered by feedback trends
-- [ ] Multi-language support tuning (Hindi, Hinglish edge cases)
+- [~] Multi-language support tuning (Hindi, Hinglish edge cases) — Hinglish landed v0.8.1 via on-device Oriserve Whisper-Hindi2Hinglish models (Apex/Prime), language-gated on `hi-en`; further edge-case tuning ongoing
 - [ ] Custom formatting styles per user preference
 - [ ] Streaming responses for real-time formatting preview
 - [ ] Agent performance monitoring and analytics dashboard

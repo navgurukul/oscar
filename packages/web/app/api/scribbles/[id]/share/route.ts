@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/server/orgRoutes";
 import { getActiveOrg } from "@/lib/server/organization";
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin";
 import {
@@ -12,6 +11,11 @@ import {
   getClientIdentifier,
 } from "@/lib/middleware/rate-limit";
 import { RATE_LIMITS } from "@/lib/constants";
+import {
+  applyCors,
+  authenticateRequest,
+  corsPreflightResponse,
+} from "@/lib/server/ai-route";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -30,9 +34,14 @@ function deriveVisibility(body: ShareBody): Visibility | null {
   return null;
 }
 
+export function OPTIONS() {
+  return corsPreflightResponse();
+}
+
 export async function PATCH(request: NextRequest, context: Ctx) {
-  const auth = await requireAuth();
-  if (!auth.ok) return auth.response;
+  // Bearer (desktop) or cookie (web) — both resolve to the owning user.
+  const auth = await authenticateRequest(request);
+  if (!auth.success) return auth.response;
   const { id } = await context.params;
 
   const rateLimitResult = await applyRateLimit(
@@ -40,19 +49,21 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     "scribble-share",
     RATE_LIMITS.SHARE_LINK
   );
-  if (rateLimitResult) return rateLimitResult;
+  if (rateLimitResult) return applyCors(rateLimitResult);
 
   let body: ShareBody;
   try {
     body = (await request.json()) as ShareBody;
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return applyCors(NextResponse.json({ error: "Invalid JSON" }, { status: 400 }));
   }
   const visibility = deriveVisibility(body);
   if (!visibility) {
-    return NextResponse.json(
-      { error: "visibility ('private'|'org'|'public') or shared_with_org required" },
-      { status: 400 }
+    return applyCors(
+      NextResponse.json(
+        { error: "visibility ('private'|'org'|'public') or shared_with_org required" },
+        { status: 400 }
+      )
     );
   }
 
@@ -63,10 +74,10 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     .eq("id", id)
     .maybeSingle();
   if (fetchErr) {
-    return NextResponse.json({ error: fetchErr.message }, { status: 500 });
+    return applyCors(NextResponse.json({ error: fetchErr.message }, { status: 500 }));
   }
   if (!scribble || scribble.user_id !== auth.user.id) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return applyCors(NextResponse.json({ error: "Not found" }, { status: 404 }));
   }
 
   // Resolve organization_id when the new visibility implies workspace
@@ -77,7 +88,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     if (!organizationId) {
       const active = await getActiveOrg(auth.user.id);
       if (!active) {
-        return NextResponse.json({ error: "No active workspace" }, { status: 400 });
+        return applyCors(NextResponse.json({ error: "No active workspace" }, { status: 400 }));
       }
       organizationId = active.organization.id;
     }
@@ -114,7 +125,7 @@ export async function PATCH(request: NextRequest, context: Ctx) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return applyCors(NextResponse.json({ error: error.message }, { status: 500 }));
   }
-  return NextResponse.json(data);
+  return applyCors(NextResponse.json(data));
 }

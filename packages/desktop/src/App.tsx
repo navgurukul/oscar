@@ -6,7 +6,6 @@ import { scribblesService } from "./services/scribbles.service";
 import { streamsService } from "./services/streams.service";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { homeDir } from "@tauri-apps/api/path";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { User, Session } from "@supabase/supabase-js";
@@ -27,7 +26,6 @@ import { AuthScreen } from "./components/onboarding/AuthScreen";
 import { PermissionsScreen } from "./components/onboarding/PermissionsScreen";
 import { SetupScreen } from "./components/onboarding/SetupScreen";
 import { isAuthSessionError, revalidateSession } from "./lib/auth-session";
-import { clearAuthFlow, isAuthCallbackTrusted } from "./lib/auth-flow";
 import {
   isContextAwarePlatform,
   routeDictationContext,
@@ -42,6 +40,7 @@ import type {
   DownloadProgress,
   DownloadRetry,
   HotkeyContextEventPayload,
+  HotkeyContextEnrichPayload,
   MicrophonePermissionState,
   RoleModelState,
   TabType,
@@ -63,21 +62,74 @@ import {
 } from "./lib/cleanup-style";
 import { buildInitialPrompt, getWhisperLanguage } from "./lib/whisper";
 import {
-  FALLBACK_MODELS,
-  relativeModelPath,
   type ModelSpec,
   type ModelPreset as WhisperModelPreset,
   type WhisperModelVariant,
 } from "./lib/whisper-models";
 import {
   downloadModel,
+  pickCrossFamilyInterim,
   resolveModelForRole,
 } from "./lib/whisper-model-manager";
 import { getStore, loadSetting, saveSetting } from "./lib/store";
 import { getSubscriptionEntitlement } from "@oscar/shared/constants";
+import { applyTranscriptPostProcessing } from "@oscar/shared/prompts";
 import "./App.css";
 
 const STREAM_TAIL_BUFFER_MS = 200;
+
+// Hard ceiling on the silent AI cleanup before a dictation pastes anyway. The
+// cleanup median is ~1.8s; this only fires on a hung/slow Mercury call (the
+// perf-log tail reaches tens of seconds). On timeout the controller aborts the
+// fetch and the raw Whisper transcript is pasted, so the pill never freezes.
+const STREAM_CLEANUP_DEADLINE_MS = 7000;
+
+// Local "already-clean" fast-path. Returns true only when the raw Whisper text
+// already reads as a clean, complete, short English utterance that "faithful"
+// cleanup would leave essentially unchanged — letting the dictation paste it
+// directly and skip the ~1.8s Mercury round-trip. Strict by design: ASCII-only
+// (non-English defers to cleanup), capitalized start, terminal punctuation,
+// short, and free of filler/stutter/spacing damage. Any doubt → false → cleanup
+// runs. A pure-punctuation hallucination fails the capitalized-start gate, so it
+// never fast-paths (it still reaches the server, which suppresses it).
+const STREAM_FASTPATH_MAX_WORDS = 12;
+const STREAM_FILLER_RE = /\b(?:u+m+|u+h+|e+r+|h+m+|mhm|mmm)\b/i;
+function looksAlreadyCleanForPaste(text: string): boolean {
+  const t = text.trim();
+  if (!t || /[\n\r]/.test(t)) return false;
+  if (!/^[\x20-\x7E]+$/.test(t)) return false; // ASCII only
+  if (!/^[A-Z0-9"']/.test(t)) return false; // capitalized / quoted start
+  if (!/[.!?]["')]?$/.test(t)) return false; // terminal punctuation
+  if (t.split(/\s+/).length > STREAM_FASTPATH_MAX_WORDS) return false;
+  if (STREAM_FILLER_RE.test(t)) return false; // disfluency
+  if (/\s{2,}/.test(t) || /\s[,.;:!?]/.test(t)) return false; // spacing damage
+  if (/\b(\w+)\s+\1\b/i.test(t)) return false; // repeated-word stutter
+  return true;
+}
+
+interface PasteMetricsResponse {
+  kind?: string;
+  status?: string;
+  trusted?: boolean;
+  targetBundleId?: string | null;
+  targetApp?: string | null;
+  activated?: boolean;
+  targetFound?: boolean;
+  timings?: Record<string, number>;
+}
+
+function parsePasteMetricsResponse(value: string): PasteMetricsResponse | null {
+  try {
+    const parsed = JSON.parse(value) as PasteMetricsResponse;
+    return parsed && parsed.kind === "paste-metrics" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizePasteTimingKey(key: string): string {
+  return key.replace(/Ms$/, "").replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+}
 
 function buildFallbackScribbleTitle(text: string): string {
   const normalized = text.replace(/\s+/g, " ").trim();
@@ -237,7 +289,41 @@ function App() {
   const [scribbleStatus, setScribbleStatus] = useState<string | null>(null);
   const [_whisperLoaded, setWhisperLoaded] = useState(false);
   const [_status, setStatus] = useState("Initializing...");
+  // Boot progress of the local voice engine (model load + warm-up). Drives the
+  // banner in the main shell so the first launch after install — when the
+  // model load and warm-up can take minutes — reads as visible progress
+  // instead of a hang.
+  const [engineBootPhase, setEngineBootPhase] = useState<
+    "idle" | "loading" | "warming" | "ready" | "error"
+  >("idle");
   const [_isProcessing, setIsProcessing] = useState(false);
+  // Ref mirror of the dictation/scribble processing state so the synchronous
+  // meeting-start gate can read it without a stale closure (WS-C rule 4).
+  const isProcessingRef = useRef(false);
+  useEffect(() => {
+    isProcessingRef.current = _isProcessing;
+  }, [_isProcessing]);
+  // Deferred model load (WS-C rule 3 / I3): when a swap is requested while a
+  // pipeline is busy, the download proceeds eagerly but the load is queued here
+  // and applied once idle, so the resident context never changes under an
+  // in-flight transcription (matrix row 7).
+  const pendingLoadRef = useRef<
+    Partial<Record<WhisperModelRole, WhisperModelVariant>>
+  >({});
+  // Stable getter, re-assigned each render below once all the busy refs exist —
+  // true while ANY STT pipeline is active, so a model swap or clear-data holds.
+  const isAnyPipelineBusyRef = useRef<() => boolean>(() => false);
+  // Roles with a download in flight — lets a passive inspect (autoDownload:
+  // false) avoid clobbering a live `downloading` state, closing the startup
+  // race where the inspect effect raced initWhisper's download (WS-D).
+  const downloadingRolesRef = useRef<Set<WhisperModelRole>>(new Set());
+  // True when dictation has SOME model to serve right now — the target, a
+  // same-family interim, or a cross-family (degraded) interim. The hotkey gate
+  // reads this: when false (e.g. English selected with only Hinglish installed,
+  // or a fresh download with no interim), it shows the pill's downloading phase
+  // and captures no audio (matrix rows 5, 11) while still recording on a serving
+  // interim (rows 9, 10).
+  const dictationServeableRef = useRef(false);
   const [hotkeyWarning, setHotkeyWarning] = useState("");
   const [dictationConflict, setDictationConflict] = useState(false);
 
@@ -338,6 +424,11 @@ function App() {
   // unavailable (non-macOS, or the OS didn't report a bundle id).
   const targetBundleIdRef = useRef<string>("");
   const dictationContextRef = useRef<DictationContextSnapshot | null>(null);
+  // Active dictation session id (from the press event) + the raw start payload,
+  // so a late `hotkey-context-enrich` can be matched to the right dictation and
+  // merged onto its context. A stale enrich (session moved on) is dropped.
+  const currentDictationSessionRef = useRef<number | null>(null);
+  const lastHotkeyPayloadRef = useRef<HotkeyContextEventPayload | null>(null);
   const pendingStopRef = useRef(false);
   const warmStreamRef = useRef<MediaStream | null>(null);
   const voiceEngineWarmupRef = useRef(false);
@@ -380,6 +471,7 @@ function App() {
   const {
     isRecording: isMeetingRecording,
     isRecordingRef: isMeetingRecordingRef,
+    isPipelineBusyRef: isMeetingPipelineBusyRef,
     isPreparing: isMeetingPreparing,
     isMuted: isMeetingMuted,
     toggleMute: toggleMeetingMute,
@@ -399,6 +491,16 @@ function App() {
     stopRecording: stopMeetingRecording,
     clearTranscript: clearMeetingTranscript,
   } = minutesRecorder;
+
+  // True while ANY speech pipeline is active — hotkey/scribble dictation, its
+  // post-record processing, or a meeting recording/draining/finalizing. Read by
+  // the deferred-swap and clear-data gates (WS-C rules 3 & 4; invariant I3).
+  isAnyPipelineBusyRef.current = () =>
+    isRecordingRef.current ||
+    isScribbleRecordingRef.current ||
+    isScribbleProcessingRef.current ||
+    isProcessingRef.current ||
+    isMeetingPipelineBusyRef.current();
 
   // Auto-updater
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -537,13 +639,9 @@ function App() {
       setAuthLoading(false);
       // Proactively validate a restored session. A hard restart (e.g.
       // auto-update relaunch) can leave a stale/rotated refresh token that
-      // getSession() still hands back; force a real refresh so a dead token is
-      // detected and cleared now → AuthScreen, instead of sitting under a
-      // not-yet-expired access token until the first pill dictation hits it and
-      // fails AI cleanup ("Sign in to enable AI"). A non-forced check returns
-      // early while the access token looks valid and never probes the refresh
-      // token, so the dead-session state stays hidden — that was the bug.
-      if (s) void revalidateSession({ force: true });
+      // getSession() still hands back; revalidate clears it now → AuthScreen,
+      // instead of letting the first dictation fail AI cleanup silently.
+      if (s) void revalidateSession();
     });
 
     const {
@@ -667,19 +765,6 @@ function App() {
         }
 
         if (accessToken && refreshToken) {
-          // Reject auth callbacks that don't correspond to a sign-in this app
-          // started. Without this, any local process or web page could fire
-          // oscar://auth/callback with an attacker's tokens and silently switch
-          // the app into the attacker's account. See lib/auth-flow.ts.
-          if (!isAuthCallbackTrusted(urlObj.searchParams.get("state"))) {
-            console.error(
-              "[deep-link] Rejected auth callback: no matching in-flight sign-in",
-            );
-            clearAuthFlow();
-            return;
-          }
-          clearAuthFlow();
-
           // Set the session using the tokens from the web app
           const { data, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
@@ -943,6 +1028,12 @@ function App() {
         dictationContextRef.current = isSelfApp
           ? null
           : buildDictationContextSnapshot(ev.payload);
+        // Record the session so a later context-enrich event can be matched (or
+        // dropped if a newer press has superseded it). Keep the raw payload to
+        // merge the deferred AppleScript fields onto. Self-app gets no base, so
+        // its enrich is ignored.
+        currentDictationSessionRef.current = ev.payload?.sessionId ?? null;
+        lastHotkeyPayloadRef.current = isSelfApp ? null : ev.payload ?? null;
         pendingStopRef.current = false;
 
         // Push the captured context to the always-on pill so its label can read
@@ -974,6 +1065,48 @@ function App() {
         }
       },
     );
+
+    // Late context enrichment: the AppleScript-derived window title + browser
+    // site, captured off the press path so recording arms instantly. Apply it
+    // only if the session still matches the active dictation — a result for a
+    // dictation the user already moved on from must not clobber the new one.
+    const unlistenEnrich = listen<HotkeyContextEnrichPayload>(
+      "hotkey-context-enrich",
+      (ev) => {
+        const sid = ev.payload?.sessionId;
+        if (sid == null || sid !== currentDictationSessionRef.current) return;
+        const base = lastHotkeyPayloadRef.current;
+        if (!base) return; // self-app or no base — nothing to enrich.
+
+        const merged: HotkeyContextEventPayload = {
+          ...base,
+          windowTitle: ev.payload?.windowTitle ?? base.windowTitle ?? null,
+          siteHost: ev.payload?.siteHost ?? base.siteHost ?? null,
+          siteTitle: ev.payload?.siteTitle ?? base.siteTitle ?? null,
+        };
+        lastHotkeyPayloadRef.current = merged;
+        const snap = buildDictationContextSnapshot(merged);
+        if (!snap) return;
+        dictationContextRef.current = snap;
+
+        // Refresh the pill label only while still recording — the site/host may
+        // now upgrade confidence (e.g. a recognized browser tab). Skip if the
+        // flow already ended so a late result can't flash a label on the idle
+        // handle (processAudio clears it on finish).
+        const pillContextEnabled =
+          contextAwareDictationEnabledRef.current &&
+          isContextAwarePlatform(getDesktopPlatform());
+        if (pillContextEnabled && isRecordingRef.current) {
+          const pillRouting = routeDictationContext(snap);
+          const known = pillRouting.confidence !== "low";
+          emit("pill-context-app", {
+            name: known ? pillRouting.appKey : snap.appName,
+            confidence: known ? "high" : "low",
+          }).catch(() => {});
+        }
+      },
+    );
+
     const unlistenStop = listen("hotkey-recording-stop", () => {
       // ALWAYS set pending stop — this is the safety net for the race condition
       // where STOP arrives before getUserMedia resolves in startHotkeyRecording
@@ -1090,6 +1223,7 @@ function App() {
         mediaRecorderRef.current.stop();
       }
       unlistenStart.then((f) => f());
+      unlistenEnrich.then((f) => f());
       unlistenStop.then((f) => f());
       unlistenErr.then((f) => f());
       unlistenReg.then((f) => f());
@@ -1255,7 +1389,13 @@ function App() {
         const unlistenProgress = await listen<DownloadProgress>(
           "download-progress",
           (event) => {
-            syncDownloadProgress(spec.variant, event.payload.percentage);
+            // Route by the event's own variant tag rather than matching the
+            // current recommendation (WS-C rule 7) — correct even if a stale
+            // recommendation lingers during a preset/language flip.
+            syncDownloadProgress(
+              event.payload.variant,
+              event.payload.percentage,
+            );
           },
         );
         const unlistenRetry = await listen<DownloadRetry>(
@@ -1302,6 +1442,16 @@ function App() {
           ? dictationModelPresetRef.current
           : minutesModelPresetRef.current;
 
+      // Passive inspect (autoDownload:false) must not stomp a live download's
+      // `downloading`/progress state — closes the startup race where the
+      // inspect effect raced initWhisper's in-flight download (WS-D).
+      if (
+        options.autoDownload === false &&
+        downloadingRolesRef.current.has(role)
+      ) {
+        return { role, path: null, variant: null };
+      }
+
       updateRoleModel(role, {
         preset,
         downloadState: "checking",
@@ -1327,6 +1477,8 @@ function App() {
         activeVariant: resolvedVariant,
         resolvedPath: resolved?.path ?? null,
         fallbackUsed: resolved?.fallbackUsed ?? false,
+        interim: resolved?.interim ?? false,
+        crossFamilyInterim: resolved?.crossFamilyInterim ?? false,
         downloadState: resolved ? "ready" : "idle",
       });
 
@@ -1347,6 +1499,7 @@ function App() {
           progress: 0,
           error: null,
         });
+        downloadingRolesRef.current.add(role);
 
         try {
           path = await downloadRecommendedModel(recommendation.spec);
@@ -1355,6 +1508,8 @@ function App() {
             activeVariant: resolvedVariant,
             resolvedPath: path,
             fallbackUsed: false,
+            interim: false,
+            crossFamilyInterim: false,
             downloadState: "ready",
             progress: 100,
           });
@@ -1367,6 +1522,10 @@ function App() {
             progress: 0,
           });
 
+          // Keep serving if we can. First a same-family installed model, then —
+          // only for a hi-en target, only as an offline degrade — a general
+          // model (I10 one-way valve). Either way the role stays in `error` so
+          // the `online` retry re-attempts the real download and upgrades.
           const retry = await resolveModelForRole(
             role,
             preset,
@@ -1380,10 +1539,32 @@ function App() {
               activeVariant: resolvedVariant,
               resolvedPath: retry.resolved.path,
               fallbackUsed: retry.resolved.fallbackUsed,
+              interim: true,
+              crossFamilyInterim: false,
               downloadState: "ready",
               error: message,
             });
+          } else {
+            const cross = await pickCrossFamilyInterim(
+              role,
+              recommendation.spec.variant,
+            );
+            if (cross) {
+              path = cross.path;
+              resolvedVariant = cross.variant;
+              updateRoleModel(role, {
+                activeVariant: resolvedVariant,
+                resolvedPath: cross.path,
+                fallbackUsed: true,
+                interim: true,
+                crossFamilyInterim: true,
+                downloadState: "ready",
+                error: message,
+              });
+            }
           }
+        } finally {
+          downloadingRolesRef.current.delete(role);
         }
       }
 
@@ -1402,7 +1583,32 @@ function App() {
         return { role, path, variant: resolvedVariant };
       }
 
-      await invoke("ensure_whisper_model_loaded", { role, path });
+      // Rust loads by variant and resolves the path itself (invariant I1).
+      // `path` is non-null here (guarded above), so resolvedVariant is too.
+      if (!resolvedVariant) {
+        throw new Error(
+          role === "minutes"
+            ? "Meeting model not found."
+            : "Dictation model not found.",
+        );
+      }
+
+      // Deferred swap (WS-C rule 3; I3; matrix row 7): if loading would CHANGE
+      // the resident model while a pipeline is busy, queue it and apply once
+      // idle so we never tear the context out from under an in-flight
+      // transcription. The download already happened — only the in-RAM swap
+      // waits. A re-load of the same resident model never defers.
+      const wouldSwap = currentWhisperKeyRef.current !== path;
+      if (wouldSwap && isAnyPipelineBusyRef.current()) {
+        pendingLoadRef.current[role] = resolvedVariant;
+        console.info(
+          `[whisper] deferring ${role} swap to ${resolvedVariant} until idle`,
+        );
+        return { role, path, variant: resolvedVariant };
+      }
+      delete pendingLoadRef.current[role];
+
+      await invoke("ensure_model_loaded", { role, variant: resolvedVariant });
       const pathChanged = currentWhisperKeyRef.current !== path;
       if (pathChanged) {
         currentWhisperKeyRef.current = path;
@@ -1423,10 +1629,43 @@ function App() {
     [prepareWhisperModel],
   );
 
+  // Transcribe declaring the variant we expect to be resident. On a typed
+  // `model-mismatch` (a load race), re-ensure that exact variant and retry once
+  // — never a silent wrong-model transcript (invariant I2; matrix row 19).
+  const transcribeWithVariant = useCallback(
+    async (
+      role: WhisperModelRole,
+      expectedVariant: WhisperModelVariant,
+      payload: {
+        audioData: number[];
+        initialPrompt?: string;
+        language?: string;
+      },
+    ): Promise<Transcription> => {
+      const args = { ...payload, expectedVariant };
+      try {
+        return await invoke<Transcription>("transcribe_audio", args);
+      } catch (e) {
+        if (String(e).includes("model-mismatch")) {
+          console.warn(
+            "[whisper] model-mismatch — re-ensuring",
+            expectedVariant,
+          );
+          await invoke("ensure_model_loaded", { role, variant: expectedVariant });
+          return invoke<Transcription>("transcribe_audio", args);
+        }
+        throw e;
+      }
+    },
+    [],
+  );
+
   canStartMeetingRecordingRef.current = () =>
     !isRecordingRef.current &&
     !isScribbleRecordingRef.current &&
-    !isScribbleProcessingRef.current;
+    !isScribbleProcessingRef.current &&
+    // Block while a dictation transcription is still processing (WS-C rule 4).
+    !isProcessingRef.current;
   ensureMinutesWhisperModelLoadedRef.current = ensureWhisperModelLoaded;
   warmMinutesVoiceEngineRef.current = () => warmVoiceEngine();
   getMinutesAudioConstraintsRef.current = () => getAudioConstraints();
@@ -1455,6 +1694,7 @@ function App() {
 
   const initWhisper = async () => {
     try {
+      setEngineBootPhase("loading");
       // Shown on the home screen while the model resolves — this can include a
       // one-time download of a few hundred MB (e.g. the Hinglish model on first
       // use), so give feedback instead of a silent wait. The per-model download
@@ -1462,13 +1702,18 @@ function App() {
       setStatus("Preparing speech model…");
       await ensureWhisperModelLoaded("dictation");
       setStatus("Preparing voice engine...");
+      setEngineBootPhase("warming");
       void warmVoiceEngine().finally(() => {
         setStatus("Ready! Hold Ctrl+Space anywhere to record.");
+        setEngineBootPhase("ready");
       });
       return true;
     } catch {
       setWhisperLoadedAndRef(false);
-      setStatus("Whisper model not found. Set the path in Settings.");
+      setEngineBootPhase("error");
+      setStatus(
+        "Speech model isn't downloaded yet — check Settings → Speech models or reconnect to the internet.",
+      );
       return false;
     }
   };
@@ -1481,6 +1726,69 @@ function App() {
     void prepareWhisperModel("minutes", { autoDownload: false })
       .catch((err) => console.warn("[whisper] failed to inspect meeting model:", err));
   }, [prepareWhisperModel, setupComplete]);
+
+  // Auto-retry model downloads when connectivity returns (WS-C rule 5; matrix
+  // rows 1, 10). Debounced so a link that flaps `online` repeatedly can't storm
+  // the network: re-resolving a ready role is a cheap no-op, an errored one
+  // retries its download, and a hi-en cross-family interim upgrades to Apex.
+  const onlineRetryAtRef = useRef(0);
+  useEffect(() => {
+    const onOnline = () => {
+      const now = Date.now();
+      if (now - onlineRetryAtRef.current < 10_000) return;
+      onlineRetryAtRef.current = now;
+      void prepareWhisperModel("dictation", {
+        load: currentWhisperRoleRef.current === "dictation",
+        autoDownload: true,
+      }).catch(() => {});
+      void prepareWhisperModel("minutes", {
+        load: currentWhisperRoleRef.current === "minutes",
+        autoDownload: true,
+      }).catch(() => {});
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [prepareWhisperModel]);
+
+  // Apply any deferred model swap once every pipeline goes idle (WS-C rule 3;
+  // matrix row 7). Runs whenever a pipeline transitions; no-ops while busy.
+  useEffect(() => {
+    if (isAnyPipelineBusyRef.current()) return;
+    const pending = pendingLoadRef.current;
+    (["dictation", "minutes"] as WhisperModelRole[]).forEach((role) => {
+      if (!pending[role]) return;
+      delete pending[role];
+      void prepareWhisperModel(role, {
+        load: true,
+        autoDownload: false,
+      }).catch((err) =>
+        console.warn(`[whisper] deferred ${role} swap failed:`, err),
+      );
+    });
+  }, [
+    prepareWhisperModel,
+    isMeetingRecording,
+    _isProcessing,
+    isScribbleRecording,
+    isScribbleProcessing,
+    minutesTranscriptionStatus,
+    minutesSegmentQueue,
+  ]);
+
+  // Mirror dictation serveability for the synchronous hotkey gate.
+  useEffect(() => {
+    dictationServeableRef.current = dictationModel.activeVariant != null;
+  }, [dictationModel.activeVariant]);
+
+  // Forward dictation-role download progress to the pill so its downloading
+  // phase shows a live % (WS-D). Minutes progress surfaces in the Meetings tab.
+  useEffect(() => {
+    if (dictationModel.downloadState === "downloading") {
+      void emit("pill-download-progress", {
+        percentage: dictationModel.progress,
+      }).catch(() => {});
+    }
+  }, [dictationModel.downloadState, dictationModel.progress]);
 
   // ── Recording-pill waveform meter ──────────────────────────────────────────
   // Sample the live mic stream and push 15 normalized band levels to the pill
@@ -1548,11 +1856,31 @@ function App() {
   // ── Hotkey recording ───────────────────────────────────────────────────────
 
   const startHotkeyRecording = async () => {
-    if (
-      isScribbleRecordingRef.current ||
-      isScribbleProcessingRef.current ||
-      isMeetingRecordingRef.current
-    ) {
+    if (isScribbleRecordingRef.current || isScribbleProcessingRef.current) {
+      return;
+    }
+    // Block while a meeting is recording OR still finalizing — stopRecording
+    // flips isMeetingRecordingRef false while segments are still draining, so
+    // gate on the full pipeline and give feedback instead of silently ignoring
+    // the hotkey (WS-C rule 4; matrix row 8).
+    if (isMeetingPipelineBusyRef.current()) {
+      setStatus("Finishing meeting notes…");
+      return;
+    }
+
+    // No usable dictation model yet (downloading with no interim to serve, e.g.
+    // English selected with only Hinglish installed): show the pill's
+    // downloading phase, capture NO audio, kick the prepare, and let the next
+    // press record once a model is serveable (WS-D; matrix rows 5, 11). An
+    // installed interim keeps dictationServeableRef true, so rows 9/10 record.
+    if (!dictationServeableRef.current) {
+      invoke("show_recording_pill").catch(console.warn);
+      invoke("set_pill_phase", { phase: "downloading" }).catch(console.warn);
+      setStatus("Downloading speech model…");
+      void prepareWhisperModel("dictation", {
+        load: true,
+        autoDownload: true,
+      }).catch(() => {});
       return;
     }
 
@@ -1730,6 +2058,17 @@ function App() {
       return;
     }
 
+    // Prewarm the cleanup edge function NOW, at the very start of the ~1.5s
+    // decode+load+transcribe window, so Supabase isolate cold-start + the
+    // FE↔edge connection are paid in parallel with Whisper instead of serially
+    // before Mercury. perf data shows the cleanup roundtrip (~1.8s) is ~69%
+    // platform/network overhead and only ~31% Mercury generation; this hides a
+    // chunk of that overhead. Fire-and-forget, gated on cleanup being enabled
+    // at all — a wasted ping when the fast-path later skips cleanup is harmless.
+    if (aiImprovementEnabledRef.current) {
+      void aiService.warmUp();
+    }
+
     setStatus(`Decoding ${(audioBlob.size / 1024).toFixed(0)}KB audio...`);
     const tDecode0 = performance.now();
     // Decode in Rust (symphonia), NOT WebAudio. WKWebView on macOS 26/27 throws
@@ -1807,13 +2146,17 @@ function App() {
       timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
       metrics["cold-load"] = wasModelWarm ? "0" : "1";
       const activeVariant = ensured.variant ?? dictationModel.activeVariant ?? null;
+      if (!activeVariant) {
+        endProcessingEarly("Speech model isn't ready yet.");
+        return;
+      }
 
       const tAudioArray0 = performance.now();
       const audioDataForIpc = Array.from(audioData);
       timings["audio-array"] = Math.round(performance.now() - tAudioArray0);
 
       const tWhisper0 = performance.now();
-      const result = await invoke<Transcription>("transcribe_audio", {
+      const result = await transcribeWithVariant("dictation", activeVariant, {
         audioData: audioDataForIpc,
         initialPrompt: buildInitialPrompt(
           transcriptionLanguageRef.current,
@@ -1887,11 +2230,52 @@ function App() {
       }
       let cleanupReturnedEmpty = false;
 
+      // Local fast-path: when the user wants only faithful cleanup and the raw
+      // transcript already reads clean, skip the Mercury round-trip and paste
+      // as-is. Context-aware dictation is allowed only when routing has no
+      // reliable category-specific behavior (default / low confidence), so the
+      // skip remains equivalent to faithful cleanup for generic targets.
+      const cleanupFastPathContextAllowed =
+        !effectiveContextAwareDictation ||
+        !dictationRouting ||
+        dictationRouting.category === "default" ||
+        dictationRouting.confidence === "low";
+      const cleanupFastPathLanguageAllowed =
+        transcriptionLanguageRef.current === "en" ||
+        transcriptionLanguageRef.current === "auto";
+      const cleanupFastPath =
+        aiCleanupEnabled &&
+        effectiveStylePreset === "faithful" &&
+        !promptModeRef.current &&
+        cleanupFastPathContextAllowed &&
+        cleanupFastPathLanguageAllowed &&
+        looksAlreadyCleanForPaste(finalText);
+      if (cleanupFastPath) {
+        // Apply the same deterministic post-processing the cleanup path runs on
+        // Mercury's output (ai.service.ts -> applyTranscriptPostProcessing), so
+        // skipping Mercury never drops a known local correction (e.g.
+        // "living come dining" -> "living-cum-dining"). Pure, idempotent regex.
+        finalText = applyTranscriptPostProcessing(finalText);
+        metrics["cleanup-skipped"] = "already-clean";
+        metrics["cleanup-skip-routing"] = dictationRouting
+          ? `${dictationRouting.category}/${dictationRouting.confidence}`
+          : "none";
+      }
+
       // Silent AI cleanup via the backend AI function.
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
-      if (aiCleanupEnabled) {
+      if (aiCleanupEnabled && !cleanupFastPath) {
         setStatus("Improving with AI...");
         const tAi0 = performance.now();
+        // Deadline so a hung/slow Mercury cleanup never freezes the pill. When
+        // it fires, the abort cancels the in-flight fetch and the catch below
+        // falls through to pasting the raw Whisper transcript. Cleared in the
+        // `finally` on the normal (fast) path.
+        const cleanupController = new AbortController();
+        const cleanupDeadline = setTimeout(
+          () => cleanupController.abort(),
+          STREAM_CLEANUP_DEADLINE_MS,
+        );
         try {
           const cleaned = await aiService.processText(
             finalText,
@@ -1906,6 +2290,8 @@ function App() {
               // or do standard English cleanup for "en". Missing/auto = let
               // the cleanup detect from text content.
               language: transcriptionLanguageRef.current,
+              // Deadline signal — aborting cancels the underlying fetch.
+              signal: cleanupController.signal,
               // Capture wire-level breakdown so perf.jsonl can distinguish
               // "server is slow" (ttfb dominates) from "network is slow"
               // (dns/tcp/tls dominate) for the ai-cleanup stage.
@@ -1922,6 +2308,23 @@ function App() {
                   metrics["cleanup-resource-matched"] = "1";
                 } else {
                   metrics["cleanup-resource-matched"] = "0";
+                }
+                // Server-reported split (cleanup success path). Subtracting
+                // edge-total from the observed roundtrip isolates the Supabase
+                // platform/cold-start + FE↔edge network slice — the ~69% the
+                // local wire timing couldn't attribute. Drives whether the next
+                // lever is prewarm (cold-start), region (Mumbai→Mercury), or the
+                // hop itself.
+                if (t.server) {
+                  timings["cleanup-edge-total"] = t.server.edgeTotalMs;
+                  timings["cleanup-mercury"] = t.server.mercuryMs;
+                  timings["cleanup-mercury-headers"] =
+                    t.server.mercuryHeadersMs;
+                  metrics["cleanup-cache-hit-pct"] = t.server.cacheHitPct;
+                  timings["cleanup-platform-net"] = Math.max(
+                    0,
+                    Math.round(t.roundtripMs - t.server.edgeTotalMs),
+                  );
                 }
               },
               ...(activeDictationContext && dictationRouting
@@ -1943,7 +2346,15 @@ function App() {
           }
         } catch (aiErr) {
           timings["ai-cleanup"] = Math.round(performance.now() - tAi0);
-          if (isAuthSessionError(aiErr)) {
+          if (cleanupController.signal.aborted) {
+            // Deadline hit: cleanup was too slow. Keep the raw transcript (set
+            // above) so the user gets their words now instead of waiting on a
+            // stalled call. Recorded so perf.jsonl can show how often this fires.
+            metrics["cleanup-timed-out"] = "1";
+            console.warn(
+              `[ai] cleanup exceeded ${STREAM_CLEANUP_DEADLINE_MS}ms — pasting raw transcript`,
+            );
+          } else if (isAuthSessionError(aiErr)) {
             // Dead session: don't fail silently — the raw transcript still
             // pastes, but flag it so the pill prompts re-auth and the main
             // window is raised to the sign-in screen. promptReauth returns true
@@ -1961,6 +2372,8 @@ function App() {
               aiErr,
             );
           }
+        } finally {
+          clearTimeout(cleanupDeadline);
         }
       }
 
@@ -2025,11 +2438,36 @@ function App() {
             targetBundleId: _targetBundleId || undefined,
           });
           timings["paste"] = Math.round(performance.now() - tPaste0);
+          const pasteMetrics = parsePasteMetricsResponse(pasteResult);
+          if (pasteMetrics?.timings) {
+            Object.entries(pasteMetrics.timings).forEach(([key, value]) => {
+              if (Number.isFinite(value)) {
+                timings[`paste-${normalizePasteTimingKey(key)}`] =
+                  Math.round(value);
+              }
+            });
+          }
+          if (pasteMetrics?.status) {
+            metrics["paste-status"] = pasteMetrics.status;
+          }
+          if (pasteMetrics?.targetBundleId) {
+            metrics["paste-target-bundle-id"] = pasteMetrics.targetBundleId;
+          }
+          if (pasteMetrics?.targetApp) {
+            metrics["paste-target-app"] = pasteMetrics.targetApp;
+          }
+          if (typeof pasteMetrics?.activated === "boolean") {
+            metrics["paste-activated"] = pasteMetrics.activated ? "1" : "0";
+          }
+          if (typeof pasteMetrics?.targetFound === "boolean") {
+            metrics["paste-target-found"] = pasteMetrics.targetFound ? "1" : "0";
+          }
           // User-felt latency: stop → paste-done. Excludes persistence work
           // that runs afterwards. This is the number that matches "how long
           // until my text shows up" for the user.
           metrics["paste-felt-ms"] = Math.round(performance.now() - tStart);
-          if (pasteResult === "CLIPBOARD_ONLY") {
+          const pasteStatus = pasteMetrics?.status ?? pasteResult;
+          if (pasteStatus === "CLIPBOARD_ONLY" || pasteStatus === "clipboard_only") {
             // Accessibility not granted — text is in clipboard, guide user
             setStatus(
               isMac
@@ -2219,8 +2657,15 @@ function App() {
     }
 
     try {
-      await ensureWhisperModelLoaded("dictation");
-      const result = await invoke<Transcription>("transcribe_audio", {
+      const ensured = await ensureWhisperModelLoaded("dictation");
+      const activeVariant =
+        ensured.variant ?? dictationModel.activeVariant ?? null;
+      if (!activeVariant) {
+        setStatus("Speech model isn't ready yet.");
+        finish("Speech model isn't ready yet.");
+        return;
+      }
+      const result = await transcribeWithVariant("dictation", activeVariant, {
         audioData: Array.from(audioData),
         initialPrompt: buildInitialPrompt(
           transcriptionLanguageRef.current,
@@ -2428,10 +2873,25 @@ function App() {
   const startScribbleRecording = async () => {
     if (
       isRecordingRef.current ||
-      isMeetingRecordingRef.current ||
       isScribbleRecordingRef.current ||
       isScribbleProcessingRef.current
     ) {
+      return;
+    }
+    // Block while a meeting is recording or finalizing (WS-C rule 4).
+    if (isMeetingPipelineBusyRef.current()) {
+      setStatus("Finishing meeting notes…");
+      return;
+    }
+    // Scribble shares the dictation role — if no model is serveable yet, give a
+    // downloading state and kick the prepare instead of recording audio that
+    // would only fail to transcribe (WS-D).
+    if (!dictationServeableRef.current) {
+      setStatus("Downloading speech model — try again once it's ready.");
+      void prepareWhisperModel("dictation", {
+        load: true,
+        autoDownload: true,
+      }).catch(() => {});
       return;
     }
 
@@ -2789,6 +3249,13 @@ function App() {
       <SetupScreen
         onComplete={handleSetupComplete}
         transcriptionLanguage={transcriptionLanguage}
+        onLanguageChange={(lang) => {
+          // A language picked during onboarding: mirror it into state + ref so
+          // initWhisper (post-setup) loads the model SetupScreen just fetched,
+          // not the old default (WS-E).
+          setTranscriptionLanguage(lang);
+          transcriptionLanguageRef.current = lang;
+        }}
       />
     );
 
@@ -2852,6 +3319,32 @@ function App() {
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {(engineBootPhase === "loading" || engineBootPhase === "warming") && (
+        <div className="px-6 py-4 border-b border-cream-300 bg-cream-200 flex items-center gap-4">
+          <div
+            className="shrink-0 h-5 w-5 rounded-full border-2 border-ink/20 border-t-terracotta animate-spin"
+            aria-hidden
+          />
+          <div className="flex-1 min-w-0">
+            <span className="font-mono text-[10px] tracking-[0.18em] uppercase text-terracotta">
+              {engineBootPhase === "loading"
+                ? "Setting up voice engine"
+                : "Warming up"}
+            </span>
+            <p className="mt-1 font-serif text-[16px] leading-snug tracking-[-0.005em] text-ink">
+              {engineBootPhase === "loading"
+                ? "Loading the on-device speech model…"
+                : "Almost ready — warming up the transcriber…"}
+            </p>
+            <p className="mt-1 text-[12px] text-ink-soft">
+              The first launch after installing can take a few minutes. You can
+              keep using the app — dictation unlocks automatically when this
+              finishes.
+            </p>
+          </div>
         </div>
       )}
 
@@ -3097,28 +3590,31 @@ function App() {
                     }).catch(console.warn);
                     // Model selection is language-aware: "hi-en" routes to the
                     // Oriserve Hinglish model, other languages to the general
-                    // ladder. Re-prepare so the right model is fetched now
-                    // rather than mid-recording; reload whichever role is live.
+                    // ladder. Prepare BOTH roles now so neither downloads the
+                    // wrong model mid-recording (WS-C rule 2); reload whichever
+                    // role is live, just download the other. Re-arm the
+                    // Meetings-tab pre-download so it re-resolves for the new
+                    // language on the next visit. Downloads stay serialized
+                    // (dictation first) via modelDownloadQueueRef.
+                    minutesPredownloadStartedRef.current = false;
                     void prepareWhisperModel("dictation", {
                       load: currentWhisperRoleRef.current === "dictation",
                       autoDownload: true,
                     }).catch((err) => {
                       console.warn(
-                        "[whisper] language-change model prepare failed:",
+                        "[whisper] language-change dictation prepare failed:",
                         err,
                       );
                     });
-                    if (currentWhisperRoleRef.current === "minutes") {
-                      void prepareWhisperModel("minutes", {
-                        load: true,
-                        autoDownload: true,
-                      }).catch((err) => {
-                        console.warn(
-                          "[whisper] language-change model prepare failed:",
-                          err,
-                        );
-                      });
-                    }
+                    void prepareWhisperModel("minutes", {
+                      load: currentWhisperRoleRef.current === "minutes",
+                      autoDownload: true,
+                    }).catch((err) => {
+                      console.warn(
+                        "[whisper] language-change minutes prepare failed:",
+                        err,
+                      );
+                    });
                   }}
                   perfLogTranscripts={perfLogTranscripts}
                   onPerfLogTranscriptsChange={(enabled) => {
@@ -3147,49 +3643,54 @@ function App() {
                     void warmVoiceEngine(id);
                   }}
                   onClearData={async () => {
-                    try {
-                      // Delete downloaded model files
-                      const home = await homeDir();
-                      const filesToDelete = [
-                        ...Object.values(FALLBACK_MODELS).map(
-                          (spec) => `${home}/${relativeModelPath(spec.variant)}`,
-                        ),
-                        // Legacy local AI model files (removed in favour of cloud AI)
-                        `${home}/.oscar/models/phi-3.5-mini-Q4_K_M.gguf`,
-                        `${home}/.oscar/models/phi-3.5-tokenizer.json`,
-                      ];
-                      for (const f of filesToDelete) {
-                        try {
-                          const exists = await invoke<boolean>(
-                            "check_file_exists",
-                            { path: f },
-                          );
-                          if (exists) await invoke("delete_file", { path: f });
-                        } catch {
-                          // best-effort cleanup
-                        }
-                      }
-                    } catch {
-                      // homeDir or invoke failed — continue with clearing
+                    // WS-F + matrix row 4: never wipe data mid-pipeline.
+                    if (isAnyPipelineBusyRef.current()) {
+                      setStatus("Finish recording before clearing data.");
+                      return;
                     }
-
-                    // Sign out of Supabase locally so the desktop session is
-                    // always cleared even if the network is unavailable.
+                    // Order matters (invariant I9): cancel in-flight downloads
+                    // and unload the resident context BEFORE removing the model
+                    // bytes, so no .partial reappears and Windows holds no file
+                    // lock. Rust owns the bytes, so a single clear_local_models
+                    // recursively removes final files, .partial sidecars, and the
+                    // legacy phi files — replacing the old FE path-string loop
+                    // (which also broke on Windows '/' separators). Each step is
+                    // best-effort; only the reload is unconditional.
+                    try {
+                      await invoke("cancel_model_downloads");
+                    } catch (e) {
+                      console.warn("[clear-data] cancel_model_downloads failed:", e);
+                    }
+                    try {
+                      await invoke("unload_whisper_model");
+                    } catch (e) {
+                      console.warn("[clear-data] unload_whisper_model failed:", e);
+                    }
+                    try {
+                      await invoke("clear_local_models");
+                    } catch (e) {
+                      console.warn("[clear-data] clear_local_models failed:", e);
+                    }
+                    // Privacy: perf.jsonl can hold raw + AI-cleaned transcripts
+                    // when "Log transcripts to diagnostics" is on.
+                    try {
+                      await invoke("clear_perf_log");
+                    } catch (e) {
+                      console.warn("[clear-data] clear_perf_log failed:", e);
+                    }
+                    // Sign out locally so the desktop session clears even offline.
                     try {
                       await signOutLocally();
-                    } catch {
-                      // may already be signed out
+                    } catch (e) {
+                      console.warn("[clear-data] signOutLocally failed:", e);
                     }
-
-                    // Clear all persisted settings
                     try {
                       const store = await getStore();
                       await store.clear();
                       await store.save();
-                    } catch {
-                      // clearing store failed — reload will reset state anyway
+                    } catch (e) {
+                      console.warn("[clear-data] store clear failed:", e);
                     }
-
                     localStorage.clear();
                     window.location.reload();
                   }}
@@ -3207,6 +3708,14 @@ function App() {
                   dictationModel={dictationModel}
                   meetingModel={meetingModel}
                   onModelPresetChange={handleModelPresetChange}
+                  onModelRetry={(role) => {
+                    void prepareWhisperModel(role, {
+                      load: currentWhisperRoleRef.current === role,
+                      autoDownload: true,
+                    }).catch((err) =>
+                      console.warn(`[whisper] retry ${role} failed:`, err),
+                    );
+                  }}
                   appVersion={appVersion}
                 />
               )}

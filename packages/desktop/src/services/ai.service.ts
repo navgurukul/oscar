@@ -12,6 +12,7 @@ import type {
 import type {
   DictationContextSnapshot,
   DictationRoutingResult,
+  Visibility,
 } from "../types/scribble.types";
 import type { CleanupStyleWire } from "../lib/cleanup-style";
 
@@ -24,9 +25,19 @@ export type DesktopAIMode =
   | "meeting_notes";
 type AIProcessPromptProfile = "stream";
 
+/** Server-side latency split returned by ai-process on the Mercury success
+ *  path. Mirrors `AIProcessServerTiming` in the edge function. */
+export interface AIProcessServerTiming {
+  edgeTotalMs: number;
+  mercuryMs: number;
+  mercuryHeadersMs: number;
+  cacheHitPct: number;
+}
+
 interface AIProcessResponse {
   text?: string;
   error?: string;
+  timing?: AIProcessServerTiming;
 }
 
 interface AIProcessRequest {
@@ -52,6 +63,10 @@ interface AIProcessRequest {
   // still required for the web app (browser STT) and the low-RAM desktop
   // fallback, which emit Devanagari — so this contract is unchanged.
   language?: string;
+  // Prewarm ping. The edge function boots its isolate + warms the connection,
+  // then returns immediately without Mercury/DB work. Fired at record-stop so
+  // Supabase cold-start is paid during the Whisper window, not after it.
+  warmup?: boolean;
 }
 
 /**
@@ -83,6 +98,14 @@ export interface AIProcessTiming {
   downloadMs?: number;
   /** True when a PerformanceResourceTiming entry was matched. */
   matchedResource: boolean;
+  /**
+   * Server-reported split from the edge function body (cleanup success path
+   * only). When present, `roundtripMs - server.edgeTotalMs` isolates Supabase
+   * platform/cold-start + FE↔edge network — the slice the FE can't see
+   * locally. `undefined` on early returns (silence, refusal) and non-cleanup
+   * errors.
+   */
+  server?: AIProcessServerTiming;
 }
 
 const EDGE_FUNCTION_FETCH_ERROR = "Failed to send a request to the Edge Function";
@@ -542,6 +565,7 @@ async function invokeAIProcess(
   accessToken: string,
   request: AIProcessRequest,
   onTiming?: (timing: AIProcessTiming) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   const tStart = performance.now();
   // Capture the boundary just before the network call — anything before this
@@ -557,6 +581,10 @@ async function invokeAIProcess(
       body: {
         ...request,
       },
+      // When the caller passes a deadline signal (stream dictation), aborting it
+      // cancels the underlying fetch — the request actually stops instead of the
+      // client merely giving up on a Promise that keeps the socket open.
+      ...(signal ? { signal } : {}),
     },
   );
   const tAfterInvoke = performance.now();
@@ -572,6 +600,13 @@ async function invokeAIProcess(
         tAfterInvoke,
         "/functions/v1/ai-process",
       );
+      // Attach the server-side split when the edge function returned it
+      // (cleanup success path). Lets the caller subtract edge compute from the
+      // observed roundtrip to expose platform/cold-start + network.
+      const serverTiming = result.data?.timing;
+      if (serverTiming) {
+        timing.server = serverTiming;
+      }
       onTiming(timing);
     } catch (timingErr) {
       // Timing is purely diagnostic; never let it affect the call result.
@@ -730,6 +765,26 @@ async function buildFallbackMeetingMarkdown(
 }
 
 export const aiService = {
+  /**
+   * Fire-and-forget prewarm of the ai-process edge function. Called at
+   * record-stop so the Supabase isolate cold-start + FE↔edge connection are
+   * paid during the ~1.5s Whisper window instead of on the cleanup critical
+   * path. Best-effort: any failure (no session, offline, abort) is swallowed —
+   * a cold cleanup call still works, it's just slower. Never throws.
+   */
+  async warmUp(signal?: AbortSignal): Promise<void> {
+    try {
+      const accessToken = await getSessionAccessToken();
+      await supabase.functions.invoke<AIProcessResponse>("ai-process", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: { warmup: true },
+        ...(signal ? { signal } : {}),
+      });
+    } catch {
+      // Intentionally ignored — warmup is an optimization, not a requirement.
+    }
+  },
+
   async processText(
     text: string,
     mode: DesktopAIMode,
@@ -751,6 +806,13 @@ export const aiService = {
        * swallowed and never affect the caller.
        */
       onTiming?: (timing: AIProcessTiming) => void;
+      /**
+       * Optional deadline signal. The stream dictation flow passes one so a
+       * hung cleanup call is aborted after a fixed budget and the raw transcript
+       * is pasted instead of the user staring at a frozen pill. Aborting cancels
+       * the underlying fetch (see invokeAIProcess).
+       */
+      signal?: AbortSignal;
     },
   ): Promise<string> {
     if (!text.trim()) {
@@ -765,6 +827,11 @@ export const aiService = {
     const orgContext = await orgContextService.getBlock({
       rawTranscript: text,
       profile,
+      // Share the caller's deadline so a hung context fetch is aborted by the
+      // same timer that bounds the Mercury call — both network legs of cleanup
+      // are covered. (Token retrieval runs first and is local/cached, so it is
+      // not on the signal.)
+      signal: options?.signal,
     });
     return invokeAIProcess(
       accessToken,
@@ -779,6 +846,7 @@ export const aiService = {
         language: options?.language,
       },
       options?.onTiming,
+      options?.signal,
     );
   },
 
@@ -813,6 +881,74 @@ export const aiService = {
         return title;
       },
     );
+  },
+
+  // Reshape the clean text via the web app's /api/ai/transform (Bearer). The
+  // route streams plain text, which we read whole. tone/length/audience are
+  // optional reshape modifiers the route folds into the system prompt.
+  async transformScribble(
+    text: string,
+    opts: {
+      mode: "summary" | "bullets";
+      tone?: string;
+      length?: string;
+      audience?: string;
+      title?: string;
+    },
+  ): Promise<string> {
+    if (!text.trim()) throw new Error("No text provided to transform.");
+    return callWebAiRoute(
+      API_CONFIG.TRANSFORM_ENDPOINT,
+      { text, ...opts },
+      async (response) => (await response.text()).trim(),
+    );
+  },
+
+  // Translate the clean text via /api/ai/translate (Bearer). en | hi only.
+  async translateScribble(
+    text: string,
+    targetLanguage: "en" | "hi",
+  ): Promise<string> {
+    if (!text.trim()) throw new Error("No text provided to translate.");
+    return callWebAiRoute(
+      API_CONFIG.TRANSLATE_ENDPOINT,
+      { text, targetLanguage },
+      async (response) => {
+        const data = (await response.json()) as { translatedText?: string };
+        const out = data.translatedText?.trim();
+        if (!out) throw new Error("Empty translation response.");
+        return out;
+      },
+    );
+  },
+
+  // Set a scribble's sharing visibility via PATCH /api/scribbles/:id/share
+  // (Bearer). Returns the new share state, including the public token, which
+  // the route rotates on each (re)publish.
+  async setScribbleSharing(
+    id: string,
+    visibility: Visibility,
+  ): Promise<{
+    id: string;
+    visibility: Visibility;
+    public_share_token: string | null;
+    shared_with_org: boolean;
+    organization_id: string | null;
+    shared_at: string | null;
+  }> {
+    const accessToken = await getSessionAccessToken();
+    const response = await fetch(`${WEB_APP_URL}/api/scribbles/${id}/share`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ visibility }),
+    });
+    if (!response.ok) {
+      throw new Error(await extractWebRouteError(response));
+    }
+    return response.json();
   },
 
   async generateEnhancedMeetingNote(

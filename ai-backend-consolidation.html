@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oscar AI Backend Split — Consolidation Proposal</title>
+<style>
+  :root{
+    --cream:#f7f4ee; --cream2:#efe9df; --cream3:#e3dccc;
+    --ink:#1a1816; --soft:#5a5852; --faint:#8b8780;
+    --terra:#b8623d; --terra600:#a25234; --terra50:#f7e6dd; --terra100:#e8c9b8;
+    --green:#3f7d54; --amber:#9a6a1e; --red:#8c2f25;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);color:var(--ink);
+    font-family:"Figtree",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto;padding:48px 24px 96px}
+  h1,h2,h3{font-family:"EB Garamond",Georgia,serif;font-weight:600;line-height:1.15;letter-spacing:-.01em}
+  h1{font-size:clamp(30px,5vw,46px);margin:0 0 8px}
+  .sub{color:var(--soft);font-size:18px;margin:0 0 6px}
+  .meta{color:var(--faint);font-size:13px;font-family:"IBM Plex Mono",ui-monospace,monospace;margin-bottom:40px}
+  h2{font-size:26px;margin:48px 0 14px;padding-top:18px;border-top:1px solid var(--cream3)}
+  h3{font-size:19px;margin:26px 0 8px}
+  p{margin:0 0 14px}
+  .lede{font-size:18px;color:var(--ink)}
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.86em}
+  code{background:var(--cream2);padding:1px 5px;border-radius:4px}
+  .card{background:#fff;border:1px solid var(--cream3);border-radius:14px;padding:22px 24px;margin:18px 0;
+    box-shadow:0 1px 0 rgba(26,24,22,.03)}
+  .tldr{background:var(--terra50);border:1px solid var(--terra100);border-left:4px solid var(--terra)}
+  .tldr b{color:var(--terra600)}
+  table{width:100%;border-collapse:collapse;margin:8px 0 4px;font-size:14.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--cream3);vertical-align:top}
+  th{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  td.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .pill{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;letter-spacing:.02em}
+  .p-keep{background:#e6f0e9;color:var(--green)}
+  .p-risk{background:#f6ead2;color:var(--amber)}
+  .p-bad{background:#f3ddd9;color:var(--red)}
+  .bar{height:26px;border-radius:6px;display:flex;overflow:hidden;font-size:11px;font-weight:600;color:#fff;font-family:"IBM Plex Mono",monospace}
+  .bar span{display:flex;align-items:center;justify-content:center;min-width:0;padding:0 4px;white-space:nowrap}
+  .s-merc{background:var(--terra)}
+  .s-edge{background:var(--amber)}
+  .s-net{background:var(--faint)}
+  .legend{font-size:13px;color:var(--soft);margin-top:8px;display:flex;gap:18px;flex-wrap:wrap}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:middle}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:640px){.two{grid-template-columns:1fr}}
+  ul{margin:6px 0 14px;padding-left:22px}
+  li{margin:5px 0}
+  .rec{background:var(--ink);color:var(--cream);border-radius:14px;padding:24px 26px;margin:22px 0}
+  .rec h3{color:#fff;margin-top:0}
+  .rec code{background:rgba(255,255,255,.12);color:var(--terra100)}
+  .foot{color:var(--faint);font-size:13px;margin-top:8px}
+  .src{font-size:12.5px;color:var(--faint);font-family:"IBM Plex Mono",monospace}
+  .check{color:var(--green);font-weight:700}
+  .warn{color:var(--amber);font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Oscar AI Backend Split</h1>
+  <p class="sub">Why Scribble runs on Amplify and Stream runs on Supabase — and whether to consolidate.</p>
+  <p class="meta">Design memo · 2026-06-22 · data: 1,163 perf.jsonl records (May 27 – Jun 22), 200 with server-side timing split</p>
+
+  <div class="card tldr">
+    <p style="margin:0 0 8px"><b>TL;DR</b></p>
+    <p style="margin:0 0 8px">The split is <b>half deliberate, half accreted</b>. Scribble→Amplify is a sound, intentional decision (single prompt + rate-limit + quota source of truth, shared web/desktop). Stream→Supabase-edge is the older path that grew on its own — it carries the dual-key footgun (the bug you just hit) and a duplicated Mercury client.</p>
+    <p style="margin:0">Recommendation: <b>consolidate onto the web routes (Amplify), retire the edge AI path.</b> Measured data shows it's latency-neutral-to-better when warm; the one real risk is Lambda cold-starts, which you already have prewarm tooling for.</p>
+  </div>
+
+  <h2>The two paths today</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>Feature</th><th>Backend</th><th>Key read</th><th>Why it's there</th><th>Verdict</th></tr>
+    <tr>
+      <td><b>Scribble</b><br><span class="src">format · title · transform · translate · email · publish</span></td>
+      <td>Web API routes<br>(Amplify)</td>
+      <td class="mono">process.env<br>.MERCURY_API_KEY</td>
+      <td>Commit <code>b8fdb6d</code> "desktop parity via web AI routes" — one prompt, one rate-limit bucket, one quota path for web + desktop.</td>
+      <td><span class="pill p-keep">Intended · keep</span></td>
+    </tr>
+    <tr>
+      <td><b>Stream / dictation</b><br><span class="src">desktop pill cleanup only</span></td>
+      <td>Supabase Edge Fn<br><code>ai-process</code></td>
+      <td class="mono">Deno.env.get(<br>"MERCURY_API_KEY")</td>
+      <td>Older desktop-only path. Supabase client carries the session automatically; edge "looks" globally low-latency for a native client.</td>
+      <td><span class="pill p-risk">Accreted · revisit</span></td>
+    </tr>
+  </table>
+  </div>
+  <p class="foot">Two <b>independent</b> copies of the same secret. Set one, forget the other → half the AI silently falls back. That's the operational footgun baked into the split — and exactly the title/format bug.</p>
+
+  <h2>What the latency data actually says</h2>
+  <p>The memory note claimed "~69% is the Supabase edge double-hop." Measured against 200 instrumented records, that framing is <b>imprecise</b>. The cleanup roundtrip decomposes as:</p>
+
+  <div class="card">
+    <div class="bar">
+      <span class="s-merc" style="flex:581">Mercury 581ms · 43%</span>
+      <span class="s-edge" style="flex:530">edge-internal ~530ms</span>
+      <span class="s-net" style="flex:289">wire 289ms</span>
+    </div>
+    <div class="legend">
+      <span><i class="s-merc"></i>Mercury inference (real model work)</span>
+      <span><i class="s-edge"></i>Edge function non-Mercury work (org-context Supabase lookups, prompt assembly)</span>
+      <span><i class="s-net"></i>Client↔edge wire (<code>cleanup-platform-net</code>)</span>
+    </div>
+    <p class="foot" style="margin-top:14px">p50 values. The overhead isn't pure network — <b>the bigger non-Mercury chunk is the edge function doing org-context fallback lookups back into Supabase REST.</b> That work would cost the same on Amplify <i>unless</i> trimmed — and the web <code>title</code> route already dropped it (saved ~7 Supabase round-trips).</p>
+  </div>
+
+  <h3>Stream dictation, end to end (ms)</h3>
+  <div class="scroll">
+  <table>
+    <tr><th>Stage</th><th>p50</th><th>p90</th><th>p95</th><th>Notes</th></tr>
+    <tr><td>Total felt</td><td class="num">3,594</td><td class="num">5,034</td><td class="num">6,180</td><td>whole gesture</td></tr>
+    <tr><td>whisper-transcribe (local)</td><td class="num">1,531</td><td class="num">2,569</td><td class="num">3,111</td><td>on-device, not movable</td></tr>
+    <tr><td>ai-cleanup (client-observed)</td><td class="num">1,750</td><td class="num">2,413</td><td class="num">2,697</td><td>the cleanup roundtrip</td></tr>
+    <tr><td>&nbsp;&nbsp;↳ Mercury (server)</td><td class="num">581</td><td class="num">898</td><td class="num">958</td><td>real model time</td></tr>
+    <tr><td>&nbsp;&nbsp;↳ edge non-Mercury</td><td class="num">~530</td><td class="num">~560</td><td class="num">~636</td><td>org-ctx + assembly</td></tr>
+    <tr><td>&nbsp;&nbsp;↳ wire (platform-net)</td><td class="num">289</td><td class="num">362</td><td class="num">496</td><td>client↔edge</td></tr>
+    <tr><td>paste</td><td class="num">179</td><td class="num">186</td><td class="num">191</td><td>OS insert</td></tr>
+  </table>
+  </div>
+
+  <h3>Raw wire latency to each origin (from this machine)</h3>
+  <div class="scroll">
+  <table>
+    <tr><th>Origin</th><th>Warm TTFB</th><th>Cold TTFB</th><th>Edge / served by</th></tr>
+    <tr><td>Supabase edge (<code>ai-process</code>)</td><td class="num">~300 ms</td><td class="num">~520 ms</td><td>Cloudflare · supabase-edge-runtime</td></tr>
+    <tr><td>Amplify web (<code>/api/ai/*</code>)</td><td class="num"><span class="check">~160 ms</span></td><td class="num"><span class="warn">~2,835 ms</span></td><td>CloudFront → Lambda</td></tr>
+  </table>
+  </div>
+  <p class="foot">Both resolve to the same local PoP (<code>CCU</code>). <b>Warm Amplify is ~2× faster on the wire than the edge</b> — the edge is not buying the latency advantage its design implies. The catch is Amplify's <span class="warn">cold-start (~2.8s)</span>; the edge degrades far more gracefully when idle.</p>
+
+  <h2>Two clean end-states</h2>
+  <div class="two">
+    <div class="card">
+      <h3>A · Everything on Amplify <span class="pill p-keep">recommended</span></h3>
+      <p>Retire <code>ai-process</code>; stream cleanup calls a web route like the Scribble paths.</p>
+      <p><b>Gains</b></p>
+      <ul>
+        <li>One key, one Mercury client, one prompt source — kills the dual-key bug & the duplication</li>
+        <li>Warm wire is faster (160 vs 300 ms)</li>
+        <li>Scribble decision (the keeper) becomes the <i>only</i> pattern</li>
+      </ul>
+      <p><b>Costs / risks</b></p>
+      <ul>
+        <li><span class="warn">Lambda cold-start ~2.8s</span> — mitigated by existing prewarm + provisioned concurrency</li>
+        <li>Lose edge global distribution (unrealized today anyway)</li>
+        <li>Must port org-context logic (or drop it for stream, as title did)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>B · Everything on the edge</h3>
+      <p>Move Scribble format/title onto <code>ai-process</code> too.</p>
+      <p><b>Gains</b></p>
+      <ul>
+        <li>One key/codebase; keeps edge distribution & graceful idle</li>
+      </ul>
+      <p><b>Costs / risks</b></p>
+      <ul>
+        <li>Reverses the deliberate <code>b8fdb6d</code> decision</li>
+        <li>Web Scribble streaming gets awkward through edge</li>
+        <li>Web app's AI now depends on Supabase CLI deploys — <b>decoupled from Amplify releases</b>, a coordination wrinkle</li>
+        <li>Slower warm wire than Amplify</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="rec">
+    <h3>Recommendation</h3>
+    <p style="margin-bottom:10px">Go with <b>A — consolidate onto Amplify web routes</b>, retire the edge <code>ai-process</code> AI path. The Scribble→web decision is the keeper; make it the single pattern. It's latency-neutral-to-better warm, and removes both the dual-key footgun and the duplicated Mercury client.</p>
+    <p style="margin-bottom:0">Sequence, lowest-risk first:</p>
+    <ul style="margin-bottom:0">
+      <li><b>1 · Stop the bleeding now</b> — set <code>MERCURY_API_KEY</code> in Amplify (unblocks titles + format today). Independent of any consolidation.</li>
+      <li><b>2 · Add a <code>stream-cleanup</code> web route</b> mirroring <code>ai-process</code>'s cleanup prompt; point the desktop pill at it behind a flag.</li>
+      <li><b>3 · A/B the latency</b> on real devices via perf.jsonl (warm-path win vs cold-start tail) before flipping the default.</li>
+      <li><b>4 · Decide org-context for stream</b> — port it or drop it (title already dropped it cleanly).</li>
+      <li><b>5 · Retire <code>ai-process</code>'s Mercury path</b> once the web route is proven; one key, one client.</li>
+    </ul>
+  </div>
+
+  <h2>Caveats on this analysis</h2>
+  <ul>
+    <li><b>Scribble flow is uninstrumented</b> — all 1,163 records are <code>stream-dictation</code>. The Amplify-side latency numbers are raw wire probes, not real Scribble-pipeline timings. Step 3 would close that gap.</li>
+    <li>Wire probes are from <b>one machine / one region</b> (CCU PoP). A user far from the Amplify region would see a worse cold-start story; the edge's distribution matters more for them.</li>
+    <li>Cold-start risk is <b>real but bounded</b> — depends on Amplify keeping the AI Lambda warm under actual traffic; the existing <code>ai-process</code> prewarm pattern is portable.</li>
+  </ul>
+
+  <p class="src" style="margin-top:36px">Sources: <code>packages/web/lib/server/mercury.ts:42</code> · <code>packages/desktop/supabase/functions/ai-process/index.ts:794</code> · commit <code>b8fdb6d</code> · <code>~/Library/Application Support/com.souvikdeb.oscar/perf.jsonl</code></p>
+
+</div>
+</body>
+</html>

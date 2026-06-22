@@ -23,7 +23,7 @@ oscar/
 └── CLAUDE.md       # This file
 ```
 
-**Version:** 0.4.0 | **Node:** v22 (`.nvmrc`) | **Package manager:** pnpm 9
+**Version:** 0.7.30 (workspace-wide; latest shipped release v0.8.2 — releases are tag-driven, CI injects the version from the `v*` tag and does **not** bump these files) | **Node:** v22 (`.nvmrc`) | **Package manager:** pnpm 9
 
 ---
 
@@ -38,7 +38,7 @@ oscar/
 | Auth & DB | Supabase (PostgreSQL + Auth) | — |
 | AI | Mercury 2 (Inception Labs) for Scribble format/title/transform/email/translate/publish + doc ingestion; Google Gemini 2.5 Flash for Minutes (meeting enhance) + embeddings only | whisper-rs (local Whisper) + Mercury 2 (dictation cleanup via `ai-process` Edge Function) + Google Gemini 2.5 Flash (meeting enhance) |
 | Payments | Razorpay | — |
-| STT | ONNX Runtime Web + speech-to-speech | whisper-rs (CUDA/Vulkan) |
+| STT | Browser **Web Speech API** (`SpeechRecognition`), wrapped by `speech-to-speech@0.1.5` for transcript continuity + VAD. ONNX Runtime Web (CDN-pinned, SRI) powers the wrapper's VAD model — **not** transcription (Piper TTS is bundled but unused). | whisper-rs (Metal on macOS; **CPU-only on Windows/Linux** — see GPU note below) |
 | Animation | motion, tsparticles | — |
 
 ---
@@ -148,8 +148,10 @@ ui/             # shadcn primitives + custom: sparkles, dotted-glow-background, 
 
 Rust backend + Vite/React frontend, shares UI components with web package.
 
-- STT: **whisper-rs** (local model, GPU-accelerated via CUDA on Windows, Vulkan on Linux)
+- STT: **whisper-rs** (local model). **GPU reality:** only macOS is GPU-accelerated (Metal, always on). Windows/Linux **release builds ship CPU-only** — `release.yml` compiles them with `extra_cargo_args: ""`, so the `cuda`/`vulkan` Cargo features are NOT enabled and `GpuBackend::detect()` returns `None` there. Vulkan was deliberately reverted; CUDA is unintentionally unshipped (enabling it needs runner toolchain + DLL distribution — a separate task). Do **not** rely on the `gpu && ram >= 8` recommendation tier on Windows/Linux.
 - Audio pipeline: Symphonia (codec) → Rubato (resampling) → Opus (encoding)
+- **Speech-model pipeline (Rust-owned, variant-addressed):** the webview references models only by `WhisperModelVariant` — no URL or filesystem path crosses IPC as input. Commands: `model_status` / `list_model_statuses`, `download_model(variant)` (resumable, checksum-always, per-variant in-flight lock, disk-space preflight, cancellable), `ensure_model_loaded(role, variant)`, `unload_whisper_model`, `delete_model(variant)`, `cancel_model_downloads`, `clear_local_models`. The single resident context is tagged `{variant, path}` behind an `RwLock`; `transcribe_audio` / `transcribe_meeting_segment_bytes` take an `expected_variant` and return a `model-mismatch` error on a tag mismatch (the FE re-ensures + retries once). Model load / warmup / audio decode run via `spawn_blocking` (never the main thread). A startup janitor sweeps the legacy phi files + stale (>14-day) `.partial`s. Clear-local-data order: `cancel_model_downloads` → `unload_whisper_model` → `clear_local_models` → `clear_perf_log` → sign out → clear store + localStorage → reload (refused while any pipeline is busy). Onboarding (`SetupScreen`) has a language selector so the first download is the correct model for the chosen language. Explicit presets (Fast/Balanced/Best) always converge to their recommended variant (an installed model serves as an interim until the target downloads, then swaps at idle); only Auto reuses an installed substitute.
+- **Model catalog** ([models.rs](./packages/desktop/src-tauri/src/models.rs), all GGML, served from CloudFront `djpsaiqyvjjg7.cloudfront.net`, SHA256-checked): generic Whisper `Tiny`/`Base`/`Small`/`Medium`/`LargeV3TurboQ5`/`LargeV3Turbo`, plus two **Oriserve Whisper-Hindi2Hinglish** fine-tunes that emit romanized Hinglish (Latin, not Devanagari): `Hindi2HinglishApex` (0.8B distilled, ~574 MB, Q5 — fast dictation) and `Hindi2HinglishPrime` (1.55B large-v3, ~1.08 GB, Q5 — high-accuracy Minutes). The Oriserve models are selected **only** when transcription language is `hi-en` (language-gated; never ranked against the generic accuracy ladder).
 - System: WASAPI (Windows), global shortcuts, deep links, auto-updater
 - Tauri plugins: `global-shortcut`, `deep-link`, `updater`, `store`, `process`, `opener`
 
@@ -157,8 +159,8 @@ Rust backend + Vite/React frontend, shares UI components with web package.
 
 Always-visible edge-handle overlay docked flush to the bottom of the screen — the entry point for the desktop stream/dictation feature (not used for Scribbles or Minutes).
 
-- Rust window setup: [packages/desktop/src-tauri/src/pill.rs](./packages/desktop/src-tauri/src/pill.rs). Transparent, decoration-free `NSPanel` (macOS) / always-on-top floating window (Windows). 360px wide; height resizes between 56 px (rest), 200 px (expanded/recording/processing/inserted/error) and 380 px (settings open) so clicks pass through to apps below outside the active surface. macOS NSPanel level 1000 is re-applied after every resize so the pill stays above the Dock and fullscreen Spaces.
-- UI: [packages/desktop/public/pill.html](./packages/desktop/public/pill.html) — vanilla JS/CSS, Figtree font, Paper-pill tokens (white gradient, cyan-400 accent, cyan-500 toast). State machine: `rest → ready → expanded → recording → processing → inserted → rest` plus `error`.
+- Rust window setup: [packages/desktop/src-tauri/src/pill.rs](./packages/desktop/src-tauri/src/pill.rs). Transparent, decoration-free `NSPanel` (macOS) / always-on-top floating window (Windows). Window resizes per phase via `set_size` (`PILL_W`/`PILL_H` constants): **140×16 px** at rest/ready (handle ~96px + hover buffer), **280×200 px** when expanded (recording/processing/inserted/copied/error/auth), **280×380 px** when settings open — so clicks pass through to apps below outside the active surface. Bottom edge stays flush with the primary monitor on every resize. macOS NSPanel level 1000 is re-applied after every resize so the pill stays above the Dock and fullscreen Spaces.
+- UI: [packages/desktop/public/pill.html](./packages/desktop/public/pill.html) — vanilla JS/CSS, Figtree font, Paper-pill tokens (white→`#F8FAFC` gradient, **terracotta-500 `#B8623D` accent**, terracotta toast). State machine: `rest → ready → expanded → recording → processing → inserted → rest` plus `error`, `copied`, `auth` (terracotta "Sign in to enable AI", not error-red), and `downloading` (shown when the hotkey/hover fires while the dictation model isn't ready yet — caption + live %, no audio captured; auto-collapses ~2.5s after progress stops). The host feeds it via the `pill-download-progress` event for the dictation role.
 - Triggers: hover the bottom 56 px hit zone (180 ms hold → expand → click to record), or press the global hotkey `Ctrl+Space` (`hotkey.rs`). Both paths capture frontmost-app context so paste lands on the correct OS app.
 - Tauri commands: `show_recording_pill`, `hide_recording_pill`, `set_pill_phase`, `set_pill_listening`, `set_pill_processing`, `pill_push_settings`, `pill_request_record_start`, `pill_request_record_stop` (registered in [src-tauri/src/lib.rs](./packages/desktop/src-tauri/src/lib.rs)). Linux falls back to a tray-icon tooltip — secondary webview windows crash tao's event loop.
 - Settings popover (chevron button on the pill) wires Polish / Prompt Engineer / Email Reply / Auto-apply / Language to the same persisted settings the Settings tab uses (`tonePreset`, `transcriptionLanguage`, `autoPaste`). The pill emits `pill-settings-update` events; [packages/desktop/src/App.tsx](./packages/desktop/src/App.tsx) listens, updates state, and calls `saveSetting`. On startup the pill emits `pill-ready` and the host pushes current values back via `pill_push_settings`.
@@ -267,22 +269,23 @@ For UI, UX, styling, layout, navigation, motion, or shared component work:
    - favor strong hierarchy over lots of components
    - avoid generic SaaS card grids unless cards are the interaction
    - one dominant idea per section or screen
-   - preserve OSCAR's cyan editorial identity
+   - preserve OSCAR's terracotta-and-cream editorial identity
    - mobile layout and first-screen clarity intentional
    - motion sparse and purposeful (150-300ms transitions)
 
 **Typography (actually loaded in code):**
 - Headlines (`h1/h2/h3`, `font-serif`): **EB Garamond** — weights 400/500/600/700, loaded via `next/font/google` in [packages/web/app/layout.tsx](./packages/web/app/layout.tsx). Auto-applied via [globals.css](./packages/web/app/globals.css).
 - Body / UI / sans default (`font-sans`, `<body>`): **Figtree** — weights 400/500/600/700, also via `next/font/google`.
-- Mono (`font-mono`): system stack only — `ui-monospace, monospace` (Tailwind). Desktop CSS uses `SF Mono, Fira Code, Consolas`.
-- Desktop app mirrors the web fonts via Google Fonts `@import` in [packages/desktop/src/styles/app-base.css](./packages/desktop/src/styles/app-base.css).
-- DESIGN.md still references **Inter** (body) and **JetBrains Mono** — these are aspirational spec only; neither is loaded anywhere in code. Treat Figtree as the body font and the system mono stack as the mono font when shipping changes.
+- Mono (`font-mono`): **IBM Plex Mono** — loaded via `next/font/google` (`--font-ibm-plex-mono` / `--font-mono`) in [layout.tsx](./packages/web/app/layout.tsx); desktop mirrors it.
+- Desktop app mirrors the web fonts (EB Garamond + Figtree + IBM Plex Mono) via a Google Fonts `@import` in [packages/desktop/src/styles/app-base.css](./packages/desktop/src/styles/app-base.css).
+- DESIGN.md still names **Inter** (body) and **JetBrains Mono** in its font table — stale spec only; neither is loaded. The real stack is **EB Garamond** (serif/headlines), **Figtree** (body/sans), **IBM Plex Mono** (mono).
 
-**Colors (actually in code):**
-- **Brand cyan** ramp ([packages/web/tailwind.config.js](./packages/web/tailwind.config.js)): `#22D3EE` (400), `#06B6D4` (500, primary), `#0891B2` (600), `#0E7490` (700). `#A5F3FC` (cyan-200) used for `::selection`.
-- **App surface:** dark by default — `<body>` uses `bg-slate-950` (Tailwind default `#020617`). shadcn HSL theme tokens (`--background`, `--foreground`, etc.) defined for both `:root` (light) and `.dark` in [globals.css](./packages/web/app/globals.css); neutral grayscale.
-- **PWA theme color:** `#06B6D4` ([layout.tsx:85](./packages/web/app/layout.tsx)).
-- **Aspirational, not yet in code:** `#FCFBF2` cream and `#BDADFF` lavender appear in [DESIGN.md](./DESIGN.md) but are not referenced anywhere in `packages/`. Do not assume they're applied — check the file you're editing.
+**Colors (actually in code — v2 cream/ink/terracotta palette):**
+- **Brand terracotta** ([packages/web/tailwind.config.js](./packages/web/tailwind.config.js)): `#b8623d` (DEFAULT/500, primary), `#f7e6dd` (50), `#e8c9b8` (100), `#a25234` (600). This is the brand/CTA/accent color on both web and the desktop pill.
+- **App surface is a light CREAM theme, not dark.** `<body>` is `bg-cream text-ink` ([layout.tsx](./packages/web/app/layout.tsx)). `cream` ramp `#faf8f3`→`#d8d2c4` (DEFAULT `#f7f4ee`); `ink` text `#1a1816` (soft `#5a5852`, faint `#8b8780`, night `#0f0d0a`). shadcn HSL theme tokens in [globals.css](./packages/web/app/globals.css) are mapped onto cream/ink (e.g. `--background: 40 36% 95%` = cream).
+- **`::selection`:** `#e8c9b8` (terracotta-100) on `#1a1816` ink.
+- **PWA theme color:** `#f7f4ee` (cream) ([layout.tsx](./packages/web/app/layout.tsx)).
+- **Not in code:** `#BDADFF` lavender and the `#22D3EE`/`#06B6D4` cyan ramp (an older identity) are **not** referenced anywhere in `packages/`. The product shipped on terracotta+cream — do not reintroduce cyan or slate-950 surfaces.
 
 **Spacing:** 4px base unit (`xs=4`, `sm=8`, `md=16`, `lg=24`, `xl=32`, `2xl=48`, `3xl=64`)
 

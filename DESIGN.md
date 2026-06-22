@@ -1,6 +1,6 @@
 # Oscar Design System
 > Inspired by Wispr Flow editorial approach, with Oscar terracotta identity
-> Version 1.1 — May 2026
+> Version 1.2 — Jun 2026 (font table + pill geometry reconciled to shipped code)
 
 ---
 
@@ -69,11 +69,13 @@
 
 | Element | Font | Weight | Size |
 |---------|------|--------|------|
-| **Headlines** | Figtree (serif) → Inter (fallback) | 500-600 | 32-64px |
-| **Body** | Inter | 400 | 16px |
-| **UI/Labels** | Inter | 500 | 14px |
-| **Mono/Code** | JetBrains Mono | 400 | 14px |
-| **Caption** | Inter | 400 | 12px |
+| **Headlines** | EB Garamond (serif) | 400-700 | 32-64px |
+| **Body** | Figtree | 400 | 16px |
+| **UI/Labels** | Figtree | 500 | 14px |
+| **Mono/Code** | IBM Plex Mono | 400 | 14px |
+| **Caption** | Figtree | 400 | 12px |
+
+> Loaded via `next/font/google` in [packages/web/app/layout.tsx](./packages/web/app/layout.tsx) (`--font-eb-garamond`, `--font-figtree`, `--font-ibm-plex-mono`); desktop mirrors them via a Google Fonts `@import` in [app-base.css](./packages/desktop/src/styles/app-base.css). Earlier drafts of this doc named Inter + JetBrains Mono — those were never shipped.
 
 ### Type Scale
 
@@ -87,8 +89,9 @@ Caption: 12px / 1.4 / 400 — Labels, metadata
 ```
 
 ### Typography Principles
-- **Figtree** for headlines — editorial warmth (load from Google Fonts)
-- **Inter** for body/UI — clean, functional
+- **EB Garamond** (serif) for headlines — editorial warmth (loaded from Google Fonts)
+- **Figtree** for body/UI — clean, functional
+- **IBM Plex Mono** for code/metadata
 - Comfortable line-heights (1.5-1.6 body)
 - Generous letter-spacing on headlines
 
@@ -172,7 +175,7 @@ Always-visible overlay docked flush to the bottom edge of the screen. Used only 
 
 **Settings popover**: 260 px wide, radius 14 px, padded `6px`, white surface. Items at `13px / .02em`. Transform list uses the same hover/select style; selected row shows a terracotta-500 check. Toggle: 32 × 18 px pill with 14 × 14 px knob; on state uses `#B8623D`. Language opens a sub-page within the popover with a "Back" affordance.
 
-**Window heights** (Tauri `set_size` per phase): 56 px (rest / ready), 200 px (recording / processing / inserted / error), 380 px (settings open). Bottom edge stays flush with the primary monitor's bottom on every resize. macOS NSPanel level 1000 is re-applied after each resize so the pill floats above the Dock and fullscreen Spaces.
+**Window size** (Tauri `set_size` per phase, `PILL_W`/`PILL_H` in [pill.rs](./packages/desktop/src-tauri/src/pill.rs)): **140×16 px** (rest / ready — handle + hover buffer), **280×200 px** (recording / processing / downloading / inserted / copied / error / auth), **280×380 px** (settings open). Bottom edge stays flush with the primary monitor's bottom on every resize. macOS NSPanel level 1000 is re-applied after each resize so the pill floats above the Dock and fullscreen Spaces.
 
 ### Navigation
 
@@ -449,7 +452,7 @@ Review checks:
   - Editorial aesthetic
   - "Voice in Motion" concept
   - Warm cream backgrounds
-  - Figtree + Inter typography
+  - EB Garamond + Figtree typography
   - Pill-shaped everything
   
 - **Oscar's Identity**

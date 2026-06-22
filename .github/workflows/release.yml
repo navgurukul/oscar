@@ -7,6 +7,14 @@ on:
 
 jobs:
   # Create the GitHub release once, before the parallel matrix builds start.
+  #
+  # STAGED RELEASES: a v* tag builds into a PRERELEASE, not the latest release.
+  # Prereleases are excluded from /releases/latest (the Tauri updater endpoint),
+  # so pushing a tag NO LONGER auto-updates users — it stages artifacts for
+  # validation. To ship: verify the build, then flip prerelease=false (GitHub UI
+  # or API) to promote it to latest and begin the auto-update rollout. This is
+  # the safety gate that prevents an unvalidated build reaching every user the
+  # moment a tag lands.
   create-release:
     permissions:
       contents: write
@@ -27,7 +35,7 @@ jobs:
 
       # Full history + tags so git-cliff can diff this tag against the previous one.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -72,15 +80,22 @@ jobs:
               -d @- "https://api.github.com/repos/$REPO/releases/$RELEASE_ID" >/dev/null
             echo "Patched existing release body with generated notes."
           else
+            # Created as PRERELEASE (staged), NOT as the latest release. A
+            # prerelease is excluded from /releases/latest, which is the updater
+            # endpoint (tauri.conf.json) — so building a tag NO LONGER auto-ships
+            # to users. Validate the artifacts, then flip prerelease=false in the
+            # GitHub UI (or via API) to promote it to latest and start the rollout.
+            # Escape hatch for an immediate ship: pre-create the release WITH a
+            # body on GitHub (the manual-override above keeps it untouched).
             RELEASE_ID=$(jq -n \
               --arg tag "$TAG" --arg name "OSCAR $TAG" --arg body "$NOTES" \
-              '{tag_name: $tag, name: $name, body: $body, draft: false, prerelease: false}' \
+              '{tag_name: $tag, name: $name, body: $body, draft: false, prerelease: true}' \
               | curl -sL -X POST \
                   -H "Authorization: Bearer $GITHUB_TOKEN" \
                   -H "Content-Type: application/json" \
                   -d @- "https://api.github.com/repos/$REPO/releases" \
               | jq -r '.id')
-            echo "Created release with generated notes."
+            echo "Created PRERELEASE with generated notes — promote to latest to ship to users."
           fi
 
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
@@ -115,19 +130,18 @@ jobs:
             bundles: "app"
             extra_cargo_args: ""
           # ── Windows ──
-          # Vulkan compute backend was reverted in v0.5.26: whisper.cpp's
-          # ggml-vulkan uses CMake ExternalProject_Add to build the
-          # vulkan-shaders-gen helper, and that sub-build does not inherit
-          # cl.exe / INCLUDE / LIB from the parent cargo build regardless of
-          # job-scope MSVC env activation. Tracked separately; CPU + CUDA
-          # paths still work on Windows.
+          # Vulkan compute backend (re-enabled). The v0.5.26 revert blocker was
+          # ggml-vulkan's `vulkan-shaders-gen` CMake ExternalProject sub-build not
+          # inheriting cl.exe / INCLUDE / LIB. Fix: force the Ninja generator (see
+          # the Windows-only setup steps below) so the sub-build inherits the
+          # ambient MSVC env. Validated in CI by vulkan-build-test.yml.
           - target: x86_64-pc-windows-msvc
             label: windows-x64
             os: windows-latest
             cflags: ""
             macosx_deployment_target: ""
             bundles: "nsis"
-            extra_cargo_args: ""
+            extra_cargo_args: "--features vulkan"
           # ── Linux ──
           - target: x86_64-unknown-linux-gnu
             label: linux-x64
@@ -141,7 +155,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Inject version from tag
         shell: bash
@@ -193,12 +207,10 @@ jobs:
           fi
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: "pnpm"
@@ -227,6 +239,54 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      # ── Windows Vulkan toolchain ──
+      # The Windows row builds whisper-rs with `--features vulkan`. ggml-vulkan
+      # compiles a `vulkan-shaders-gen` helper via CMake ExternalProject_Add; that
+      # sub-build only inherits cl.exe / INCLUDE / LIB when the **Ninja** generator
+      # is forced (the VS generator re-runs toolchain detection and loses the
+      # ambient MSVC env — the v0.5.26 blocker). msvc-dev-cmd puts cl.exe on PATH,
+      # the Vulkan SDK provides vulkan.h + glslc/shaderc, and CMAKE_GENERATOR=Ninja
+      # makes the sub-build inherit them. Recipe validated by vulkan-build-test.yml.
+      - name: Setup MSVC dev environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      - name: Install Vulkan SDK (Windows)
+        if: runner.os == 'Windows'
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          vulkan_version: 1.3.290.0
+          install_runtime: true
+          cache: true
+
+      # Windows-only build env, scoped via GITHUB_ENV so macOS/Linux are untouched.
+      #   - CMAKE_GENERATOR=Ninja — ggml-vulkan's vulkan-shaders-gen ExternalProject
+      #     inherits the ambient MSVC env (the v0.5.26 blocker). [vulkan-build-test]
+      #   - CARGO_TARGET_DIR=C:/t — the DEFAULT target path is ~290 chars > 260
+      #     MAX_PATH → vulkan-shaders-gen TryCompile dies with cl.exe C1083. A short
+      #     root fixes it. The Windows sign + upload steps below are repointed to
+      #     C:/t to match (they no longer read src-tauri/target on Windows).
+      #
+      # DELIBERATELY DYNAMIC CRT (do NOT add `RUSTFLAGS=-C target-feature=+crt-static`).
+      # Static CRT *compiled* fine (vulkan-crtstatic-test was green) but CRASHES at
+      # RUNTIME: the app exits right after model load because ggml's statically-linked
+      # CRT heap collides with the dynamic-CRT vulkan-1.dll / GPU-driver ICDs on the
+      # first GPU allocation. The byte-identical dynamic-CRT build runs fine (~40x on
+      # AMD). The CT2 engine (which needs static CRT) must therefore NOT share this
+      # binary — solve that coexistence separately if/when CT2 ships on Windows.
+      - name: Configure Windows build env (Ninja + short target)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "CMAKE_GENERATOR=Ninja" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=C:/t" >> "$GITHUB_ENV"
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -451,7 +511,9 @@ jobs:
         shell: pwsh
         run: |
           $TAURI_BIN = "../../node_modules/.bin/tauri"
-          $BASE = "src-tauri/target/$env:TARGET/release/bundle/nsis"
+          # CARGO_TARGET_DIR=C:/t (set above for MAX_PATH) → bundles land here, not
+          # under src-tauri/target.
+          $BASE = "C:/t/$env:TARGET/release/bundle/nsis"
 
           # Tauri v2 does not always auto-generate the .nsis.zip updater artifact.
           # Create it manually from the .exe if it doesn't exist.
@@ -494,7 +556,13 @@ jobs:
           }
 
           shopt -s nullglob
-          BASE="packages/desktop/src-tauri/target/$TARGET/release/bundle"
+          # Windows builds into CARGO_TARGET_DIR=C:/t (MAX_PATH fix); every other
+          # platform uses the default in-tree target dir.
+          if [[ "$TARGET" == *windows* ]]; then
+            BASE="C:/t/$TARGET/release/bundle"
+          else
+            BASE="packages/desktop/src-tauri/target/$TARGET/release/bundle"
+          fi
 
           # ── macOS ──
           if [[ "$TARGET" == *apple-darwin* ]]; then

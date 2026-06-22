@@ -8,11 +8,12 @@ import {
   type ModelRecommendation,
 } from "../../lib/whisper-models";
 import {
-  cleanupLegacyModels,
   downloadModel,
   resolveModelForRole,
 } from "../../lib/whisper-model-manager";
 import type { DownloadProgress, DownloadRetry } from "../../lib/app-types";
+import { LANGUAGES } from "../../lib/languages";
+import { saveSetting } from "../../lib/store";
 import { CoverShowcase } from "./CoverShowcase";
 import { StepIndicator } from "./StepIndicator";
 
@@ -23,6 +24,9 @@ interface SetupScreenProps {
   // here instead of fetching a general model and then re-downloading the
   // language-specific one on first launch.
   transcriptionLanguage: string;
+  // Persist + propagate a language picked during onboarding so the rest of the
+  // app (state + refs) uses the same model the user just downloaded (WS-E).
+  onLanguageChange?: (lang: string) => void;
 }
 
 type Phase = "detecting" | "ready" | "downloading" | "error";
@@ -30,6 +34,7 @@ type Phase = "detecting" | "ready" | "downloading" | "error";
 export function SetupScreen({
   onComplete,
   transcriptionLanguage,
+  onLanguageChange,
 }: SetupScreenProps) {
   const [phase, setPhase] = useState<Phase>("detecting");
   const [error, setError] = useState("");
@@ -38,6 +43,9 @@ export function SetupScreen({
   const [hardware, setHardware] = useState<HardwareProfile | null>(null);
   const [recommendation, setRecommendation] =
     useState<ModelRecommendation | null>(null);
+  // Language the user picks in the ready phase (defaults to the current
+  // setting). Drives which model the Download button fetches (WS-E).
+  const [selectedLang, setSelectedLang] = useState(transcriptionLanguage);
 
   // Always read the *latest* onComplete via a ref. Keeping it in the
   // detection effect's dep array would re-run the effect every time the
@@ -88,13 +96,36 @@ export function SetupScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design; see onCompleteRef above
   }, []);
 
+  // Re-resolve the recommended model when the user picks a different language
+  // in the ready phase, so the Download button fetches the right model the
+  // first time — no wrong-model download then a second fetch on launch (WS-E).
+  const handleLangChange = async (lang: string) => {
+    setSelectedLang(lang);
+    setError("");
+    try {
+      const { recommendation: rec } = await resolveModelForRole(
+        "dictation",
+        "auto",
+        lang,
+      );
+      setRecommendation(rec);
+    } catch (e) {
+      setError(`Couldn't resolve a model for that language: ${e}`);
+    }
+  };
+
   const downloadAndComplete = async () => {
     if (!recommendation || downloadingRef.current) return;
     downloadingRef.current = true;
     setPhase("downloading");
     setError("");
     setRetry(null);
-    setProgress({ downloaded: 0, total: recommendation.spec.sizeBytes, percentage: 0 });
+    setProgress({
+      variant: recommendation.spec.variant,
+      downloaded: 0,
+      total: recommendation.spec.sizeBytes,
+      percentage: 0,
+    });
 
     const unlistenProgress = await listen<DownloadProgress>(
       "download-progress",
@@ -114,8 +145,14 @@ export function SetupScreen({
 
     try {
       await downloadModel(recommendation.spec, recommendation.spec.sha256);
-      // Opportunistic — never block setup on cleanup.
-      void cleanupLegacyModels([recommendation.spec.variant]);
+      // Persist + propagate the chosen language so the app loads the model we
+      // just downloaded instead of re-resolving to the old default (WS-E).
+      try {
+        await saveSetting("transcriptionLanguage", selectedLang);
+      } catch (e) {
+        console.warn("[setup] persist language failed:", e);
+      }
+      onLanguageChange?.(selectedLang);
       await onCompleteRef.current();
     } catch (downloadError) {
       setError(`Download failed: ${downloadError}`);
@@ -206,11 +243,40 @@ export function SetupScreen({
             style={{ marginTop: 8, opacity: 0.7, fontSize: "0.85rem" }}
           >
             Detected: {hardware.ramGb} GB RAM · {hardware.cpuCores} CPU cores
-            {hardware.gpuBackend !== "none" &&
-              ` · ${hardware.gpuBackend.toUpperCase()} acceleration`}
           </p>
         )}
         {error && <p className="setup-error">{error}</p>}
+        <label
+          style={{
+            display: "block",
+            marginTop: 16,
+            fontSize: "0.85rem",
+            opacity: 0.85,
+          }}
+        >
+          <span style={{ display: "block", marginBottom: 6 }}>
+            Transcription language
+          </span>
+          <select
+            value={selectedLang}
+            onChange={(e) => void handleLangChange(e.target.value)}
+            disabled={!recommendation}
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "1px solid rgba(0,0,0,0.15)",
+              background: "#fff",
+              fontSize: "0.9rem",
+            }}
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.flag} {l.name} · {l.native}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           className="perm-continue-btn-modern active"

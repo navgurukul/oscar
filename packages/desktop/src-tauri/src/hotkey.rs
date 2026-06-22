@@ -2,12 +2,58 @@
 //! and the press/release handler that captures frontmost-app context and
 //! emits `hotkey-recording-{start,stop}` events.
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 use crate::events::OscarEvent;
-use crate::frontmost::get_frontmost_context_payload;
 use crate::state::HotkeyState;
+
+/// Monotonic dictation-session counter. Each press (hotkey or pill) takes the
+/// next id; the async context-enrichment event carries it so the frontend can
+/// drop a late result whose dictation has already been superseded.
+static DICTATION_SESSION: AtomicU64 = AtomicU64::new(1);
+
+/// Capture only the fast, subprocess-free app identity, dispatch the
+/// recording-start event immediately (so the pill arms without waiting), then —
+/// on macOS — run the slow AppleScript window/site capture on a background
+/// thread and deliver it via a session-tagged `hotkey-context-enrich` event.
+/// Shared by the global hotkey and the pill-click record path.
+pub(crate) fn dispatch_recording_start<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let session_id = DICTATION_SESSION.fetch_add(1, Ordering::SeqCst);
+    let payload = crate::frontmost::get_frontmost_identity_payload(session_id);
+    let app_id = payload.app_id.clone();
+    log::info!(
+        "[hotkey] start session={} app='{}'",
+        session_id,
+        payload.app_name
+    );
+    OscarEvent::HotkeyRecordingStart(payload).dispatch(app);
+
+    // Defer the AppleScript-derived context off the press path. It is only
+    // needed later (cleanup-time routing + pill label), so it can land a few ms
+    // after recording has already started.
+    #[cfg(target_os = "macos")]
+    {
+        let enrich_app = app.clone();
+        std::thread::spawn(move || {
+            let (window_title, site_host, site_title) =
+                crate::frontmost::get_frontmost_enrichment(app_id.as_deref());
+            if window_title.is_some() || site_host.is_some() || site_title.is_some() {
+                OscarEvent::HotkeyContextEnrich(crate::events::HotkeyContextEnrichment {
+                    session_id,
+                    window_title,
+                    site_host,
+                    site_title,
+                })
+                .dispatch(&enrich_app);
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app_id;
+    }
+}
 
 pub(crate) fn recording_shortcut() -> Shortcut {
     Shortcut::new(
@@ -55,7 +101,10 @@ pub(crate) fn register_recording_hotkey<R: tauri::Runtime>(
                     return;
                 }
                 if !is_rec.swap(true, Ordering::SeqCst) {
-                    log::info!("[hotkey] Ctrl+Space PRESSED — capturing frontmost context");
+                    log::info!("[hotkey] Ctrl+Space PRESSED");
+                    // Fast OS focus capture for paste targeting — these are
+                    // cheap (Win32 call / one xdotool spawn) and must stay
+                    // synchronous so the correct window is recorded at press.
                     #[cfg(target_os = "windows")]
                     {
                         use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
@@ -83,14 +132,8 @@ pub(crate) fn register_recording_hotkey<R: tauri::Runtime>(
                         }
                     }
 
-                    let frontmost_context = get_frontmost_context_payload();
-                    log::info!(
-                        "[hotkey] frontmost app='{}' site_host={:?} window_title={:?}",
-                        frontmost_context.app_name,
-                        frontmost_context.site_host.as_deref(),
-                        frontmost_context.window_title.as_deref()
-                    );
-                    OscarEvent::HotkeyRecordingStart(frontmost_context).dispatch(&app_handle);
+                    // Identity-only dispatch + deferred AppleScript enrichment.
+                    dispatch_recording_start(&app_handle);
                 }
             }
             ShortcutState::Released => {

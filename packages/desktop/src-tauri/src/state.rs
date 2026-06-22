@@ -7,13 +7,15 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{
     atomic::AtomicBool,
-    Arc, Mutex,
+    Arc, Mutex, RwLock,
 };
 #[cfg(target_os = "windows")]
 use std::sync::atomic::AtomicUsize;
 #[cfg(target_os = "linux")]
 use std::sync::{atomic::AtomicU64, OnceLock};
 use whisper_rs::WhisperContext;
+
+use crate::models::WhisperModelVariant;
 
 // ── Deep Link / Focus / Tray Statics ─────────────────────────────────────────
 
@@ -47,13 +49,52 @@ pub fn set_pending_deep_link(url: String) {
     }
 }
 
+// ── Whisper runtime ───────────────────────────────────────────────────────────
+
+/// The single resident Whisper model, tagged with the variant + path it was
+/// loaded from. The tag is the source of truth for invariant I2: every
+/// transcription call declares the variant it expects, and a mismatch against
+/// this tag is a typed error rather than a silently wrong-model transcript.
+pub(crate) struct LoadedModel {
+    pub variant: WhisperModelVariant,
+    pub path: String,
+    /// Held as `Arc` so a transcription can grab a cheap handle and run
+    /// inference under a read guard without blocking unrelated commands.
+    pub context: Arc<WhisperContext>,
+}
+
+/// Per-variant download cancellation flag. Presence of the key in the registry
+/// means "a download for this variant is in flight"; flipping the flag asks the
+/// chunk loop to stop, delete its `.partial`, and return the cancelled token.
+pub(crate) type DownloadFlag = Arc<AtomicBool>;
+
+/// Whisper model lifecycle state, managed separately from [`AppState`] so a
+/// multi-second inference holding a read guard never contends with the
+/// `AppState` mutex used by the meeting capture buffers.
+///
+/// Invariant I3 ("no swap while busy") is enforced here: `transcribe` takes a
+/// read guard on `model`, while `ensure_model_loaded` / `unload` take a write
+/// guard — so a load can never tear the context out from under an in-flight
+/// transcription, and vice versa.
+pub(crate) struct WhisperRuntime {
+    pub(crate) model: RwLock<Option<LoadedModel>>,
+    /// In-flight downloads keyed by variant → cancel flag. Lock is only ever
+    /// held for brief insert/remove/check, never across an `.await`.
+    pub(crate) downloads: Mutex<HashMap<WhisperModelVariant, DownloadFlag>>,
+}
+
+impl WhisperRuntime {
+    pub(crate) fn new() -> Self {
+        Self {
+            model: RwLock::new(None),
+            downloads: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
 // ── App State ────────────────────────────────────────────────────────────────
 
 pub(crate) struct AppState {
-    /// Held as `Arc` so transcription can grab a cheap handle, drop the
-    /// AppState mutex, and run inference without blocking other commands.
-    pub(crate) whisper_context: Option<Arc<WhisperContext>>,
-    pub(crate) loaded_model_path: Option<String>,
     /// System-audio PCM captured per meeting segment, keyed by
     /// `(session_id, segment_index)`. The session dimension prevents a slow
     /// rotation task from an abandoned meeting from colliding with a freshly
@@ -131,4 +172,9 @@ pub(crate) struct FrontmostContextPayload {
     pub(crate) site_host: Option<String>,
     pub(crate) site_title: Option<String>,
     pub(crate) target_app_name: Option<String>,
+    /// Monotonic id stamped at hotkey/pill press. Lets the frontend ignore a
+    /// late async context-enrichment event whose session no longer matches the
+    /// active dictation. 0 for non-press callers (paste/tray) that don't enrich.
+    #[serde(default)]
+    pub(crate) session_id: u64,
 }
