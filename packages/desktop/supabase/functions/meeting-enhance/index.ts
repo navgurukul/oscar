@@ -808,7 +808,6 @@ async function reduceTranscriptBatches(
     "You reduce long meeting transcript batches into citation-preserving fact bullets. " +
     "Return only markdown bullets. Every bullet must end with exactly one citation token in the form [[seg:SEGMENT_ID]]. " +
     "Each bullet must capture one concrete fact, blocker, decision, open question, action item, or follow-up. " +
-    "The transcript is noisy ASR that may mix English, Hindi, and Hinglish: reconstruct what was actually meant and never echo broken fragments. Ignore greetings, small talk, call logistics, side jokes, and process friction ('can you hear me', 'let me share my screen', 'my screen froze') — these are never bullets. " +
     "Preserve verbatim: people's names, product names, tool names, file names, URLs, project IDs, numbers, durations, dates, error strings, and exact technical terms. " +
     "Attribute claims using speaker source and the named host/attendees in the context block: 'microphone' segments come from the named host; 'speaker' segments come from the other named attendees. Use the host's name (not 'Me' or 'the host') and the attendee's name (not 'Them' or 'the speaker') in bullet text whenever the named person is identifiable from context. If multiple 'speaker' attendees are plausible for a claim and you cannot disambiguate, list both names rather than dropping attribution. " +
     "BANNED phrasing: 'the user', 'the conversation', 'it was discussed', 'discussion around', 'they talked about', 'the meeting covered'. Write the substance directly instead. " +
@@ -1107,13 +1106,12 @@ async function generateUncitedFallbackMarkdown(
 ): Promise<FinalMarkdownResult> {
   const sections = expectedSections.orderedHeadings;
   const systemPrompt =
-    "You are recovering useful meeting notes from a noisy ASR transcript that may mix English, Hindi, Hinglish, and speech-recognition errors. " +
+    "You are recovering useful meeting notes from a noisy transcript. " +
     "Output only markdown. Use the required section headings exactly as given; do not rename, reorder, add, or omit headings. " +
     "Use markdown bullets under every heading. Do not use citation tokens. " +
-    "Reconstruct what was actually meant from garbled speech when several nearby words support it; ignore greetings, small talk, call logistics, and process friction; and write the output in clear, professional English, translating Hindi/Hinglish. " +
     "Use context pack terms as correction hints, not proof. Put unsupported cause, payload/API, and performance claims under Needs verification when that section exists. " +
     "Prefer concrete action items, technical details, decisions, open questions, numeric values, branch names, testing needs, and design follow-ups only when they appear in the transcript or manual notes. " +
-    "Never invent tasks, owners, decisions, dates, or numbers, and never import details from examples or prior meetings. " +
+    "The transcript may mix English, Hindi, Hinglish, and speech-recognition errors. Recover likely meaning when several nearby words support it, but never import details from examples or prior meetings. " +
     "Never write blank sections. If a section truly has no evidence, write one bullet: None captured. " +
     "For Action items, use '- [ ] <action> — <Owner>' with the owner if identifiable, or 'Owner: unassigned'. " +
     "For a Purpose section, write 1-3 plain bullets summarizing why the session happened and what was being attempted or discussed. " +
@@ -1206,11 +1204,7 @@ async function generateFinalMarkdown(
   );
 
   const systemPrompt =
-    "You are an expert meeting-notes assistant generating high-signal notes that capture substance, not narration. " +
-    "RECONSTRUCT INTENT, DON'T ECHO NOISE: the transcript is ASR output and is often garbled — misheard words, broken grammar, half-finished sentences, repeated fragments, phonetic nonsense, and code-switching between English, Hindi, and Hinglish within a single sentence. Read through the noise, infer what the speakers actually meant, and write that. Normalize obvious transcription errors for known technical concepts and product names (e.g. edge function, Supabase, migration, Gemini, Mercury 2). Never copy obviously broken fragments verbatim. " +
-    "NEVER INVENT: if a task, owner, decision, date, or number is not clearly supported by the transcript, leave it out. Omitting an item is always better than hallucinating one. Do not guess deadlines or outcomes. " +
-    "SEPARATE SIGNAL FROM CHATTER: ignore greetings, small talk, scheduling-the-call logistics, side jokes, and off-topic personal conversation ('can you hear me', 'let me share my screen', chit-chat about rent/food). Connectivity issues and process friction ('my screen froze', 'let me restart the build') are never deliverables unless they describe a real follow-up task. " +
-    "LANGUAGE: write the entire output in clear, professional English regardless of the transcript's language mix; translate and normalize Hindi/Hinglish into natural English. " +
+    "You are generating high-signal meeting notes that capture substance, not narration. " +
     "First reason internally into: action items, decisions, confirmed facts, suspected facts, needs verification, open questions, and evidence. Then render only the required visible sections. " +
     "Output only markdown. Use the required section headings exactly as given; do not rename, reorder, add, or omit headings. " +
     "Under each heading, use markdown bullets only. No prose paragraphs, code fences, preamble, or visible timestamps. " +
@@ -1219,7 +1213,7 @@ async function generateFinalMarkdown(
     "CONTEXT PACK: use high-confidence context to correct obvious ASR errors, medium-confidence context as hints, and low-confidence context only to avoid overclaiming. Context pack terms are not evidence by themselves. A singleton low-confidence unknown term must never become a confirmed product/feature fact. " +
     "EVIDENCE LEVELS: Confirmed issues require direct transcript evidence of a reproducible behavior or observed failure. Suspected issues are plausible but incomplete. Needs verification is for cause, payload/API claims, performance timing, or ownership that lacks network/debug/console evidence. Do not assign root cause to AI, server, network, or code unless the transcript provides concrete evidence. " +
     "BANNED phrasing — never write: 'the user', 'the conversation', 'it was discussed', 'discussion around', 'they talked about', 'the meeting covered', 'the speaker', 'the participant'. State the substance directly. " +
-    "ANTI-ECHO: do not echo malformed, garbled, or low-coherence transcript fragments as bullets. A bullet must represent a complete, coherent claim, question, or action. If a candidate bullet would read as garbled, surreal, self-referential, a one-off unverified feature/name, or a Whisper-style closing ('thanks for watching', 'subscribe'), omit it. When omitting leaves a section empty, write 'None captured'. " +
+    "ANTI-ECHO: do not echo malformed, garbled, or low-coherence transcript fragments as bullets. A bullet must represent a complete, coherent claim, question, or action. If a candidate bullet would read as garbled, surreal, self-referential, a one-off unverified feature/name, or a Whisper-style closing, omit it. When omitting leaves a section empty, write 'None captured'. " +
     "PRESERVE VERBATIM: people's names, product/feature names from transcript or context pack, tool names, file names, URLs, project IDs, numbers, durations, dates, error messages, and exact technical terms. Never paraphrase a named entity. " +
     "ACTION ITEMS section (when present): format each bullet as '- [ ] <action> — <Owner>' with the owner's name when identifiable, or 'Owner: unassigned' otherwise. Include a deadline only if explicitly stated. " +
     "PURPOSE section (when present): 1-3 plain bullets that state why this meeting or session happened, what was being attempted, evaluated, or discussed, and any framing or setup context (e.g., a test run started a few minutes early, a planning sync, a demo, an evaluation of a tool's output). Summarize intent and framing as a short briefing; do not use checkboxes here and do not duplicate action items or decisions. " +
