@@ -320,9 +320,9 @@ export function V2MarketingHeader({
     { label: "SIGN IN", href: "/auth" },
   ];
   return (
-    <header className="flex items-center justify-between px-6 md:px-14 py-7">
+    <header className="flex items-center justify-between px-6 md:px-14 py-5 md:py-6">
       <V2Wordmark />
-      <nav className="hidden md:flex items-center gap-9">
+      <nav className="hidden md:flex items-center gap-5 lg:gap-6">
         {items.map((item) => {
           const isActive = active === item.label;
           return (

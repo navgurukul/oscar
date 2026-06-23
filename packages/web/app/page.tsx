@@ -472,14 +472,14 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
     <main style={{ background: v2.cream, color: v2.ink, fontFamily: "var(--font-figtree), system-ui" }}>
       <V2MarketingHeader active="PRODUCT" />
 
-      <section className="px-6 md:px-14 pt-10 md:pt-14 pb-20 md:pb-24 text-center">
-        <V2Caps>VOICE-FIRST WRITING · FOR PEOPLE WHO TYPE TOO MUCH</V2Caps>
+      <section className="px-6 md:px-14 pt-6 md:pt-10 pb-20 md:pb-24 text-center">
+        <V2Caps className="block">VOICE-FIRST WRITING · FOR PEOPLE WHO TYPE TOO MUCH</V2Caps>
         <h1
-          className="mt-0 mx-auto"
+          className="mt-1 mx-auto"
           style={{
             fontFamily: v2Serif,
             fontSize: "clamp(56px, 11vw, 132px)",
-            lineHeight: 0.93,
+            lineHeight: 0.88,
             letterSpacing: "-0.035em",
             fontWeight: 500,
             maxWidth: 1100,
@@ -490,11 +490,11 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
           shapes it,<br />
           hands it back.
         </h1>
-        <p className="mt-4 mx-auto max-w-xl text-[17px] leading-relaxed" style={{ color: v2.inkSoft }}>
+        <p className="mt-3 mx-auto max-w-xl text-[17px] leading-relaxed" style={{ color: v2.inkSoft }}>
           A dictation tool that knows what app you&rsquo;re in and writes the way that app deserves. Slack
           reads like Slack. Code reads like code. Letters read like letters.
         </p>
-        <div className="mt-5 flex items-center justify-center gap-5 flex-wrap">
+        <div className="mt-4 flex items-center justify-center gap-4 flex-wrap">
           <button
             onClick={onStart}
             className="inline-flex items-center gap-3 rounded-full px-6 py-3 text-[14px] font-medium"
@@ -537,7 +537,7 @@ function MarketingLanding({ onStart }: { onStart: () => void }) {
         </div>
 
         <div
-          className="mt-8 md:mt-10 inline-flex items-center gap-3 rounded-full"
+          className="mt-6 md:mt-8 inline-flex items-center gap-3 rounded-full"
           style={{
             background: v2.ink,
             color: v2.cream,
