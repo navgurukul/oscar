@@ -48,7 +48,11 @@ export function useScribbles(enabled = true) {
       );
       return filtered;
     },
-    enabled: enabled && !!activeOrg,
+    // Wait for the active-org lookup to settle, but never require it truthy:
+    // a user with no org resolves activeOrg to null, and gating on !!activeOrg
+    // would disable the query and blank the list. The filter above already
+    // keeps personal items (organization_id null) when there is no active org.
+    enabled: enabled && activeOrg !== undefined,
     refetchOnMount: "always",
   });
 }
@@ -69,7 +73,11 @@ export function useTrashedScribbles(enabled = true) {
       );
       return filtered;
     },
-    enabled: enabled && !!activeOrg,
+    // Wait for the active-org lookup to settle, but never require it truthy:
+    // a user with no org resolves activeOrg to null, and gating on !!activeOrg
+    // would disable the query and blank the list. The filter above already
+    // keeps personal items (organization_id null) when there is no active org.
+    enabled: enabled && activeOrg !== undefined,
     refetchOnMount: "always",
   });
 }
@@ -103,7 +111,7 @@ export function useUpdateScribble() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: (updated) => {
+    onSuccess: () => {
       // Invalidate all scribble query variations
       qc.invalidateQueries({ queryKey: [queryKeys.scribbles] });
       qc.invalidateQueries({ queryKey: queryKeys.folders });
@@ -119,7 +127,7 @@ export function useDeleteScribble() {
       if (error) throw error;
       return id;
     },
-    onSuccess: (id) => {
+    onSuccess: () => {
       // Invalidate all scribble query variations
       qc.invalidateQueries({ queryKey: [queryKeys.scribbles] });
       qc.invalidateQueries({ queryKey: queryKeys.trashedScribbles });

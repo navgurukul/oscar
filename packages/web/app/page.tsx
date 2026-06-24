@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
-import { scribblesService } from "@/lib/services/scribbles.service";
-import { meetingsService } from "@/lib/services/meetings.service";
 import { useScribbles } from "@/lib/hooks/queries/useScribbles";
 import { useMeetings } from "@/lib/hooks/queries/useMeetings";
 import type { DBScribble } from "@/lib/types/scribble.types";

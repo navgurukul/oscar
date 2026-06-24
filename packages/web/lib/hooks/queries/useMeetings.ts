@@ -44,7 +44,11 @@ export function useMeetings(enabled = true) {
       );
       return filtered;
     },
-    enabled: enabled && !!activeOrg,
+    // Wait for the active-org lookup to settle, but never require it truthy:
+    // a user with no org resolves activeOrg to null, and gating on !!activeOrg
+    // would disable the query and blank the list. The filter above already
+    // keeps personal meetings (organizationId null) when there is no active org.
+    enabled: enabled && activeOrg !== undefined,
     // Meetings are distilled on the desktop app and written to Supabase out of
     // band, so the web list goes stale silently. Refetch when the window
     // regains focus (overrides the global default) so a freshly distilled
@@ -81,7 +85,7 @@ export function useDeleteMeeting() {
       if (error) throw error;
       return id;
     },
-    onSuccess: (id) => {
+    onSuccess: () => {
       // Invalidate all meeting query variations
       qc.invalidateQueries({ queryKey: [queryKeys.meetings] });
     },
