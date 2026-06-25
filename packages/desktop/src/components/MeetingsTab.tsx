@@ -1388,11 +1388,28 @@ export function MeetingsTab({
           <section className="px-9 pt-6 pb-4">
             <V2SectionCap
               right={
-                <V2Caps>
-                  {googleCalendarToken
-                    ? "GOOGLE CALENDAR · SYNCED"
-                    : "CALENDAR NOT CONNECTED"}
-                </V2Caps>
+                <span className="flex items-center gap-2.5">
+                  <V2Caps>
+                    {googleCalendarToken
+                      ? "GOOGLE CALENDAR · SYNCED"
+                      : "CALENDAR NOT CONNECTED"}
+                  </V2Caps>
+                  {googleCalendarToken && (
+                    <button
+                      type="button"
+                      onClick={() => fetchCalendarEvents({ force: true })}
+                      disabled={calendarLoading}
+                      className="inline-flex items-center justify-center text-ink-faint transition-colors hover:text-terracotta disabled:cursor-default disabled:opacity-60"
+                      title="Refresh calendar events"
+                      aria-label="Refresh calendar events"
+                    >
+                      <RefreshCw
+                        size={12}
+                        className={cn(calendarLoading && "animate-spin")}
+                      />
+                    </button>
+                  )}
+                </span>
               }
             >
               COMING UP
