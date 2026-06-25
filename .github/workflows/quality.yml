@@ -27,11 +27,35 @@ jobs:
           node-version: "20"
           cache: "pnpm"
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Run format regressions
         run: pnpm test:format-regressions
+
+      - name: Run Edge Function unit tests
+        run: pnpm test:edge-functions
+
+      - name: Run live Mercury format regressions
+        if: github.event_name != 'pull_request'
+        env:
+          MERCURY_API_KEY: ${{ secrets.MERCURY_API_KEY }}
+          RUN_LIVE_AI_REGRESSIONS: ${{ vars.RUN_LIVE_AI_REGRESSIONS }}
+        run: |
+          if [ "${RUN_LIVE_AI_REGRESSIONS:-}" != "1" ]; then
+            echo "Skipping live Mercury regressions: set RUN_LIVE_AI_REGRESSIONS=1 to enable."
+            exit 0
+          fi
+          if [ -z "${MERCURY_API_KEY:-}" ]; then
+            echo "Skipping live Mercury regressions: MERCURY_API_KEY secret not configured."
+            exit 0
+          fi
+          pnpm test:format-regressions:live
 
       - name: Typecheck shared
         run: pnpm --filter @oscar/shared typecheck
