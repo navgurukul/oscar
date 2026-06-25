@@ -4,4 +4,5 @@ export const queryKeys = {
   trashedScribbles: ["scribbles", "trashed"] as const,
   scribble: (id: string) => ["scribbles", id] as const,
   folders: ["folders"] as const,
+  activeOrg: ["org", "active"] as const,
 };

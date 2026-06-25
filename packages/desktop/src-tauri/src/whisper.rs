@@ -1112,6 +1112,56 @@ fn is_hallucination_segment(
     false
 }
 
+
+fn collapse_repeated_phrases(text: &str) -> String {
+    const MAX_LOOP_PHRASE_WORDS: usize = 6;
+    const MIN_LOOP_REPEATS: usize = 3;
+
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let n = words.len();
+    if n < MIN_LOOP_REPEATS {
+        return text.to_string();
+    }
+
+    let norm: Vec<String> = words
+        .iter()
+        .map(|w| {
+            w.chars()
+                .filter(|c| !c.is_ascii_punctuation())
+                .flat_map(|c| c.to_lowercase())
+                .collect::<String>()
+        })
+        .collect();
+
+    let mut out: Vec<&str> = Vec::with_capacity(n);
+    let mut i = 0;
+    while i < n {
+        let mut collapsed = false;
+       let max_k = MAX_LOOP_PHRASE_WORDS.min((n - i) / MIN_LOOP_REPEATS);
+        for k in 1..=max_k {
+            // Count how many times words[i..i+k] repeats back-to-back.
+            let mut reps = 1;
+            let mut j = i + k;
+            while j + k <= n && norm[i..i + k] == norm[j..j + k] {
+                reps += 1;
+                j += k;
+            }
+            if reps >= MIN_LOOP_REPEATS {
+                out.extend_from_slice(&words[i..i + k]);
+                i = j;
+                collapsed = true;
+                break;
+            }
+        }
+        if !collapsed {
+            out.push(words[i]);
+            i += 1;
+        }
+    }
+
+    out.join(" ")
+}
+
 /// Frame-level VAD pre-filter. Returns a speech-only audio buffer with
 /// interior silence stripped, plus a flag indicating whether any speech
 /// survived. Replaces the old whole-clip energy gate — interior gaps no
@@ -1279,6 +1329,7 @@ pub(crate) fn transcribe_audio_inner(
     // per-source (transcribe_audio_inner handles one source per call), so the
     // repeats ARE adjacent here and a normalized equality check collapses them.
     let mut dropped_repetition = 0usize;
+    let mut collapsed_loops = 0usize;
     let mut last_kept_norm: Option<String> = None;
 
     // Tightened from whisper.cpp default 0.6 → 0.5 to cut hallucinations on
@@ -1338,10 +1389,25 @@ pub(crate) fn transcribe_audio_inner(
                     continue;
                 }
 
+                 let cleaned_owned = collapse_repeated_phrases(trimmed);
+                let cleaned = cleaned_owned.trim();
+                if cleaned.is_empty() {
+                    continue;
+                }
+                if cleaned != trimmed {
+                    collapsed_loops += 1;
+                    log::debug!(
+                        "[whisper] Collapsed intra-segment loop in segment {}: {:?} -> {:?}",
+                        i,
+                        trimmed,
+                        cleaned
+                    );
+                }
+
                 // Collapse a run of identical adjacent segments to one. Compare
                 // on a normalized form (lowercased, punctuation stripped) so
                 // "PR marks." and "pr marks" count as the same loop iteration.
-                let normalized: String = trimmed
+                let normalized: String = cleaned
                     .to_lowercase()
                     .chars()
                     .filter(|c| c.is_alphanumeric() || c.is_whitespace())
@@ -1362,12 +1428,12 @@ pub(crate) fn transcribe_audio_inner(
                 }
                 last_kept_norm = Some(normalized);
 
-                full_text.push_str(trimmed);
+                full_text.push_str(cleaned);
                 full_text.push(' ');
 
                 if let Some(segment_source) = source {
                     structured_segments.push(TranscriptSegmentResult {
-                        text: trimmed.to_string(),
+                        text: cleaned.to_string(),
                         start_ms: segment.start_timestamp() * 10,
                         end_ms: segment.end_timestamp() * 10,
                         speaker: TranscriptSpeaker {
@@ -1388,6 +1454,13 @@ pub(crate) fn transcribe_audio_inner(
         // Fold into the hallucination tally so perf/telemetry reflects total
         // junk removed without a schema change across the Rust/TS boundary.
         dropped_hallucination += dropped_repetition;
+    }
+    if collapsed_loops > 0 {
+        log::info!(
+            "[whisper] Collapsed intra-segment repetition loop in {} segment(s)",
+            collapsed_loops
+        );
+        dropped_hallucination += collapsed_loops;
     }
     if dropped_no_speech > 0 {
         log::info!(
@@ -1671,6 +1744,52 @@ mod tests {
         assert!(!partial_is_stale(STALE_PARTIAL_AGE));
         assert!(partial_is_stale(STALE_PARTIAL_AGE + Duration::from_secs(1)));
         assert!(partial_is_stale(Duration::from_secs(30 * 24 * 60 * 60)));
+    }
+
+    #[test]
+    fn collapse_squashes_single_word_loops() {
+        // The "A A A A …" tail from the reported meeting transcript.
+        assert_eq!(collapse_repeated_phrases("A A A A A A A"), "A");
+        assert_eq!(collapse_repeated_phrases("good good good good"), "good");
+    }
+
+    #[test]
+    fn collapse_squashes_phrase_loops() {
+        assert_eq!(
+            collapse_repeated_phrases(
+                "pieces and pieces and pieces and pieces and pieces and"
+            ),
+            "pieces and"
+        );
+    }
+
+    #[test]
+    fn collapse_handles_mixed_content_and_keeps_order() {
+        assert_eq!(
+            collapse_repeated_phrases(
+                "lighter neural good good good good care care smaller A A A A A"
+            ),
+            "lighter neural good care care smaller A"
+        );
+    }
+
+    #[test]
+    fn collapse_normalizes_case_and_punctuation() {
+        assert_eq!(
+            collapse_repeated_phrases("Good, good. good!"),
+            "Good,"
+        );
+    }
+
+    #[test]
+    fn collapse_preserves_ordinary_speech() {
+        assert_eq!(collapse_repeated_phrases("no no"), "no no");
+        assert_eq!(
+            collapse_repeated_phrases("the quick brown fox jumps"),
+            "the quick brown fox jumps"
+        );
+        assert_eq!(collapse_repeated_phrases(""), "");
+        assert_eq!(collapse_repeated_phrases("hello"), "hello");
     }
 
     #[test]

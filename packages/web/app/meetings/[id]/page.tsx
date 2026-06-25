@@ -218,6 +218,25 @@ export default function MeetingDetailPage() {
 
   const meeting = useMemo(() => meetings.find((m) => m.id === id) ?? null, [meetings, id]);
 
+  const canEditMeeting = Boolean(
+    user && meeting?.userId && meeting.userId === user.id
+  );
+
+  const guardMeetingEdit = useCallback(
+    (action: () => void) => {
+      if (!canEditMeeting) {
+        toast({
+          title: "Can't edit this meeting",
+          description:
+            "Members can't update meetings recorded by someone else. Only the person who recorded it can make changes.",
+        });
+        return;
+      }
+      action();
+    },
+    [canEditMeeting, toast]
+  );
+
   const [tab, setTab] = useState<Tab>("notes");
   const [editingMetadata, setEditingMetadata] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
@@ -238,32 +257,67 @@ export default function MeetingDetailPage() {
       attendeesFull: MeetingAttendee[];
       meetingTypeHint: MeetingTypeHint;
     }) => {
-      if (!meeting) return;
-      await updateMutation.mutateAsync({ id: meeting.id, updates: data });
-      setEditingMetadata(false);
-      toast({ title: "Saved", description: "Meeting details updated." });
+      if (!meeting || !canEditMeeting) return;
+      try {
+        await updateMutation.mutateAsync({ id: meeting.id, updates: data });
+        // Refetch meetings to ensure UI reflects the update
+        await queryClient.invalidateQueries({ queryKey: [queryKeys.meetings] });
+        setEditingMetadata(false);
+        toast({ title: "Saved", description: "Meeting details updated." });
+      } catch (error) {
+        console.error("Failed to save meeting metadata:", error);
+        toast({ 
+          title: "Save failed", 
+          description: "Could not update meeting details.", 
+          variant: "destructive" 
+        });
+      }
     },
-    [meeting, updateMutation, toast]
+    [meeting, canEditMeeting, updateMutation, toast, queryClient]
   );
 
   const handleSaveNotes = useCallback(
     async (value: string) => {
-      if (!meeting) return;
-      await updateMutation.mutateAsync({ id: meeting.id, updates: { notesMarkdown: value } });
-      setEditingNotes(false);
-      toast({ title: "Saved", description: "Meeting notes updated." });
+      if (!meeting || !canEditMeeting) return;
+      try {
+        await updateMutation.mutateAsync({ id: meeting.id, updates: { notesMarkdown: value } });
+        // Refetch meetings to ensure UI reflects the update
+        await queryClient.invalidateQueries({ queryKey: [queryKeys.meetings] });
+        setEditingNotes(false);
+        toast({ title: "Saved", description: "Meeting notes updated." });
+      } catch (error) {
+        console.error("Failed to save meeting notes:", error);
+        const message = error instanceof Error ? error.message : JSON.stringify(error);
+        toast({ 
+          title: "Save failed", 
+          description: message && message !== "{}" ? message : "Could not update meeting notes.", 
+          variant: "destructive" 
+        });
+      }
     },
-    [meeting, updateMutation, toast]
+    [meeting, canEditMeeting, updateMutation, toast, queryClient]
   );
 
   const handleSaveRough = useCallback(
     async (value: string) => {
-      if (!meeting) return;
-      await updateMutation.mutateAsync({ id: meeting.id, updates: { myNotesMarkdown: value } });
-      setEditingRough(false);
-      toast({ title: "Saved", description: "Personal notes updated." });
+      if (!meeting || !canEditMeeting) return;
+      try {
+        await updateMutation.mutateAsync({ id: meeting.id, updates: { myNotesMarkdown: value } });
+        // Refetch meetings to ensure UI reflects the update
+        await queryClient.invalidateQueries({ queryKey: [queryKeys.meetings] });
+        setEditingRough(false);
+        toast({ title: "Saved", description: "Personal notes updated." });
+      } catch (error) {
+        console.error("Failed to save personal notes:", error);
+        const message = error instanceof Error ? error.message : JSON.stringify(error);
+        toast({ 
+          title: "Save failed", 
+          description: message && message !== "{}" ? message : "Could not update personal notes.", 
+          variant: "destructive" 
+        });
+      }
     },
-    [meeting, updateMutation, toast]
+    [meeting, canEditMeeting, updateMutation, toast, queryClient]
   );
 
   const handleDelete = useCallback(async () => {
@@ -442,7 +496,7 @@ export default function MeetingDetailPage() {
           </h1>
           <button
             type="button"
-            onClick={() => setEditingMetadata(true)}
+            onClick={() => guardMeetingEdit(() => setEditingMetadata(true))}
             className="inline-flex items-center gap-1.5 text-[12px]"
             style={{ color: v2.inkFaint }}
           >
@@ -524,14 +578,16 @@ export default function MeetingDetailPage() {
           >
             <Mail size={12} /> Email notes
           </button>
-          <button
-            type="button"
-            onClick={() => setDeleteOpen(true)}
-            className="text-[12px] rounded-full px-3.5 py-1.5 inline-flex items-center gap-1.5 ml-auto"
-            style={{ color: v2.accent, border: `1px solid ${v2.rule}` }}
-          >
-            <Trash2 size={12} /> Delete
-          </button>
+          {canEditMeeting && (
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              className="text-[12px] rounded-full px-3.5 py-1.5 inline-flex items-center gap-1.5 ml-auto"
+              style={{ color: v2.accent, border: `1px solid ${v2.rule}` }}
+            >
+              <Trash2 size={12} /> Delete
+            </button>
+          )}
         </div>
 
         {/* Tabs */}
@@ -567,7 +623,7 @@ export default function MeetingDetailPage() {
       </section>
 
       {/* Metadata editor */}
-      {editingMetadata && (
+      {editingMetadata && canEditMeeting && (
         <section className="px-6 md:px-14 py-6" style={{ borderBottom: `1px solid ${v2.rule}` }}>
           <MeetingMetadataEditor
             title={meeting.meetingTitle}
@@ -585,7 +641,8 @@ export default function MeetingDetailPage() {
           sections={sections}
           shareUrl={shareUrl}
           editing={editingNotes}
-          onEditStart={() => setEditingNotes(true)}
+          canEdit={canEditMeeting}
+          onEditStart={() => guardMeetingEdit(() => setEditingNotes(true))}
           onEditCancel={() => setEditingNotes(false)}
           onSave={handleSaveNotes}
         />
@@ -608,7 +665,8 @@ export default function MeetingDetailPage() {
         <RoughTab
           meeting={meeting}
           editing={editingRough}
-          onEditStart={() => setEditingRough(true)}
+          canEdit={canEditMeeting}
+          onEditStart={() => guardMeetingEdit(() => setEditingRough(true))}
           onEditCancel={() => setEditingRough(false)}
           onSave={handleSaveRough}
         />
@@ -635,6 +693,7 @@ function NotesTab({
   sections,
   shareUrl,
   editing,
+  canEdit,
   onEditStart,
   onEditCancel,
   onSave,
@@ -643,13 +702,14 @@ function NotesTab({
   sections: ParsedSections;
   shareUrl: string | null;
   editing: boolean;
+  canEdit: boolean;
   onEditStart: () => void;
   onEditCancel: () => void;
   onSave: (value: string) => Promise<void>;
 }) {
   const cleaned = stripCitations(meeting.notesMarkdown || "");
 
-  if (editing) {
+  if (editing && canEdit) {
     return (
       <section className="px-6 md:px-14 py-10">
         <MeetingNotesEditor value={cleaned} onSave={onSave} onCancel={onEditCancel} />
@@ -1100,17 +1160,19 @@ function TranscriptTab({
 function RoughTab({
   meeting,
   editing,
+  canEdit,
   onEditStart,
   onEditCancel,
   onSave,
 }: {
   meeting: SavedMeetingRecord;
   editing: boolean;
+  canEdit: boolean;
   onEditStart: () => void;
   onEditCancel: () => void;
   onSave: (value: string) => Promise<void>;
 }) {
-  if (editing) {
+  if (editing && canEdit) {
     return (
       <section className="px-6 md:px-14 py-10">
         <MeetingNotesEditor
