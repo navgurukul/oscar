@@ -26,12 +26,15 @@ export type DesktopAIMode =
 type AIProcessPromptProfile = "stream";
 
 // Route dictation cleanup through the web app's /api/ai/dictation-cleanup
-// (Amplify Mercury) instead of the Supabase ai-process edge function. Off by
-// default — flipping it on consolidates onto the same Mercury route Scribble
-// uses, killing the dual-key footgun (see ai-backend-consolidation.html). Only
-// the transcribe_cleanup path moves; meeting-fallback modes stay on the edge.
+// (Amplify Mercury) instead of the Supabase ai-process edge function. ON by
+// default as of the consolidation cutover — this is now the primary path,
+// using the same Mercury route + key Scribble uses (kills the dual-key
+// footgun; see ai-backend-consolidation.html). Set VITE_STREAM_CLEANUP_VIA_WEB
+// to "false" to revert to the edge path (escape hatch during QA). Only the
+// transcribe_cleanup path moves; meeting-fallback modes stay on the edge.
+// The flag is removed and this hard-coded once the edge path is retired.
 const STREAM_CLEANUP_VIA_WEB =
-  import.meta.env.VITE_STREAM_CLEANUP_VIA_WEB === "true";
+  import.meta.env.VITE_STREAM_CLEANUP_VIA_WEB !== "false";
 
 /** Server-side latency split returned by ai-process on the Mercury success
  *  path. Mirrors `AIProcessServerTiming` in the edge function. */
