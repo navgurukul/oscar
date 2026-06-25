@@ -5,6 +5,11 @@ export const API_CONFIG = {
   TITLE_ENDPOINT: "/api/ai/title",
   TRANSLATE_ENDPOINT: "/api/ai/translate",
   TRANSFORM_ENDPOINT: "/api/ai/transform",
+  // Stream/dictation cleanup. Web mirror of the desktop ai-process edge
+  // function's transcribe_cleanup path, so desktop dictation can run on the
+  // same Amplify Mercury route as Scribble (one key, one client). Gated on the
+  // desktop by VITE_STREAM_CLEANUP_VIA_WEB; off = legacy edge path.
+  DICTATION_CLEANUP_ENDPOINT: "/api/ai/dictation-cleanup",
 
   // External APIs (Google Gemini, native API)
   GEMINI_API_BASE_URL: "https://generativelanguage.googleapis.com/v1beta",

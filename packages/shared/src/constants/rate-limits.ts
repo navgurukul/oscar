@@ -20,6 +20,13 @@ export const RATE_LIMITS = {
     windowMs: 60 * 1000,
     message: "Too many translation requests. Please wait a moment.",
   },
+  AI_DICTATION_CLEANUP: {
+    // Dictation fires once per utterance and can come in quick bursts; keep
+    // this generous so back-to-back dictations are never throttled.
+    maxRequests: 40,
+    windowMs: 60 * 1000,
+    message: "Too many dictation requests. Please wait a moment.",
+  },
   PAYMENT_CREATE_SUBSCRIPTION: {
     maxRequests: 5,
     windowMs: 15 * 60 * 1000,

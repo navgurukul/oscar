@@ -25,6 +25,14 @@ export type DesktopAIMode =
   | "meeting_notes";
 type AIProcessPromptProfile = "stream";
 
+// Route dictation cleanup through the web app's /api/ai/dictation-cleanup
+// (Amplify Mercury) instead of the Supabase ai-process edge function. Off by
+// default — flipping it on consolidates onto the same Mercury route Scribble
+// uses, killing the dual-key footgun (see ai-backend-consolidation.html). Only
+// the transcribe_cleanup path moves; meeting-fallback modes stay on the edge.
+const STREAM_CLEANUP_VIA_WEB =
+  import.meta.env.VITE_STREAM_CLEANUP_VIA_WEB === "true";
+
 /** Server-side latency split returned by ai-process on the Mercury success
  *  path. Mirrors `AIProcessServerTiming` in the edge function. */
 export interface AIProcessServerTiming {
@@ -635,6 +643,57 @@ async function invokeAIProcess(
   return processedText;
 }
 
+// Web mirror of invokeAIProcess for the transcribe_cleanup path. Calls the
+// Amplify /api/ai/dictation-cleanup route (Bearer JWT) instead of the Supabase
+// edge function, with the same timing instrumentation, abort signal, and
+// empty-on-silence contract. Gated by STREAM_CLEANUP_VIA_WEB.
+async function invokeWebDictationCleanup(
+  accessToken: string,
+  request: AIProcessRequest,
+  onTiming?: (timing: AIProcessTiming) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  const endpoint = API_CONFIG.DICTATION_CLEANUP_ENDPOINT;
+  const tStart = performance.now();
+  const tBeforeInvoke = performance.now();
+  const response = await fetch(`${WEB_APP_URL}${endpoint}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(request),
+    ...(signal ? { signal } : {}),
+  });
+  const tAfterInvoke = performance.now();
+
+  if (!response.ok) {
+    throw new Error(await extractWebRouteError(response));
+  }
+
+  const data = (await response.json()) as AIProcessResponse;
+
+  if (onTiming) {
+    try {
+      const timing = buildAIProcessTiming(
+        tStart,
+        tBeforeInvoke,
+        tAfterInvoke,
+        endpoint,
+      );
+      if (data.timing) timing.server = data.timing;
+      onTiming(timing);
+    } catch (timingErr) {
+      console.warn("[ai] failed to build web-cleanup timing:", timingErr);
+    }
+  }
+
+  const processedText = data.text?.trim() ?? "";
+  // transcribe_cleanup legitimately returns empty on silence / hallucination —
+  // surface it so the caller skips the paste rather than throwing.
+  return applyTranscriptPostProcessing(processedText);
+}
+
 async function invokeMeetingEnhance(
   accessToken: string,
   request: EnhancedMeetingNoteRequest,
@@ -775,6 +834,21 @@ export const aiService = {
   async warmUp(signal?: AbortSignal): Promise<void> {
     try {
       const accessToken = await getSessionAccessToken();
+      // Warm whichever backend the cleanup will actually hit. The web route has
+      // the costlier cold-start (Lambda ~2.8s), so prewarming it matters more
+      // once the flag is on.
+      if (STREAM_CLEANUP_VIA_WEB) {
+        await fetch(`${WEB_APP_URL}${API_CONFIG.DICTATION_CLEANUP_ENDPOINT}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ warmup: true }),
+          ...(signal ? { signal } : {}),
+        });
+        return;
+      }
       await supabase.functions.invoke<AIProcessResponse>("ai-process", {
         headers: { Authorization: `Bearer ${accessToken}` },
         body: { warmup: true },
@@ -833,18 +907,29 @@ export const aiService = {
       // not on the signal.)
       signal: options?.signal,
     });
+    const request: AIProcessRequest = {
+      text,
+      mode,
+      context: options?.context,
+      routing: options?.routing,
+      promptProfile: options?.promptProfile,
+      stylePreset: options?.stylePreset,
+      orgContextBlock: orgContext.block || undefined,
+      language: options?.language,
+    };
+    // Dictation cleanup can run on the web route (Amplify Mercury); everything
+    // else stays on the edge function. The flag is off by default.
+    if (STREAM_CLEANUP_VIA_WEB && mode === "transcribe_cleanup") {
+      return invokeWebDictationCleanup(
+        accessToken,
+        request,
+        options?.onTiming,
+        options?.signal,
+      );
+    }
     return invokeAIProcess(
       accessToken,
-      {
-        text,
-        mode,
-        context: options?.context,
-        routing: options?.routing,
-        promptProfile: options?.promptProfile,
-        stylePreset: options?.stylePreset,
-        orgContextBlock: orgContext.block || undefined,
-        language: options?.language,
-      },
+      request,
       options?.onTiming,
       options?.signal,
     );
