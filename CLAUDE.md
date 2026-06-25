@@ -6,7 +6,7 @@ Reference for AI assistants in Oscar codebase.
 
 ## Project Overview
 
-Oscar = AI voice note app. Users record audio → transcribed (Whisper on desktop, browser STT on web) → formatted + titled by Google Gemini AI agents.
+Oscar = AI voice note app. Users record audio → transcribed (Whisper on desktop, browser STT on web) → formatted + titled by Mercury 2 AI agents. Gemini remains for Minutes + embeddings only.
 
 **Monorepo layout (pnpm workspaces):**
 
@@ -23,7 +23,7 @@ oscar/
 └── CLAUDE.md       # This file
 ```
 
-**Version:** 0.7.30 (workspace-wide; latest shipped release v0.8.2 — releases are tag-driven, CI injects the version from the `v*` tag and does **not** bump these files) | **Node:** v22 (`.nvmrc`) | **Package manager:** pnpm 9
+**Version:** 0.7.30 (workspace-wide; latest shipped release v0.10.1 — releases are tag-driven, CI injects the version from the `v*` tag and does **not** bump these files) | **Node:** v22 (`.nvmrc`) | **Package manager:** pnpm 9
 
 ---
 
@@ -59,6 +59,7 @@ pnpm dev:desktop      # launches native window
 **Required environment variables** (create `packages/web/.env.local`):
 
 ```
+MERCURY_API_KEY=
 GEMINI_API_KEY=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
@@ -66,6 +67,14 @@ NEXT_PUBLIC_WEB_APP_URL=
 ```
 
 See `packages/web/.env.example` for full list.
+
+**Quality checks:**
+
+```bash
+pnpm test:format-regressions
+pnpm test:edge-functions
+MERCURY_API_KEY=... pnpm test:format-regressions:live
+```
 
 ---
 
@@ -104,7 +113,7 @@ app/
 ```
 
 **Services** (`lib/services/`):
-- `ai.service.ts` — Gemini API calls (formatting, title, streaming)
+- `ai.service.ts` — Client wrapper for Mercury-backed Scribble routes and Gemini-backed Minutes/embedding routes
 - `stt.service.ts` — Browser STT pipeline
 - `scribbles.service.ts` — Scribble CRUD (Supabase)
 - `subscription.service.ts` — Subscription state & checks

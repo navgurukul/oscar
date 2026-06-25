@@ -21,6 +21,29 @@ pnpm dev:web
 pnpm dev:desktop
 ```
 
+## Environment
+
+Copy the relevant example and fill secrets locally:
+
+- `packages/web/.env.example` -> `packages/web/.env.local`
+- `packages/desktop/.env.example` -> `packages/desktop/.env`
+- `packages/desktop/supabase/functions/.env.example` for local Supabase Edge Functions
+
+AI provider split:
+
+- `MERCURY_API_KEY`: Scribble format/title/transform/email/translate/publish and Stream cleanup
+- `GEMINI_API_KEY`: Minutes meeting enhancement and embeddings only
+
+## Quality Checks
+
+```bash
+pnpm test:format-regressions
+pnpm test:edge-functions
+
+# Optional live model check
+MERCURY_API_KEY=... pnpm test:format-regressions:live
+```
+
 ## Structure
 
 ```
