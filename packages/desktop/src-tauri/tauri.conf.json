@@ -42,7 +42,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://www.googleapis.com https://oauth2.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob:; script-src 'self'; frame-src 'none'; object-src 'none'"
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://www.googleapis.com https://oauth2.googleapis.com https://oscar.samyarth.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob:; script-src 'self'; frame-src 'none'; object-src 'none'"
     }
   },
   "bundle": {
