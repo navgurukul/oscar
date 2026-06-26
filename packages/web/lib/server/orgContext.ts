@@ -83,7 +83,6 @@ export interface BuildOrgContextOptions {
 }
 
 const STREAM_CONTEXT_CHAR_BUDGET = 2400;
-const STREAM_DOCUMENT_CHAR_BUDGET = 1800;
 
 function cleanDocumentExcerpt(text: string, maxChars: number): string {
   const cleaned = text
@@ -632,18 +631,17 @@ export const ContextCompiler = {
       );
     }
 
-    if (params.profile === "stream" || matchedChunks.length === 0) {
-      const fallbackChunks = await fetchRecentDocumentChunks(
+    // Non-stream profiles fall back to recent chunks when semantic retrieval
+    // came back empty. Stream takes NO document chunks at all — dictation cleanup
+    // uses the people/term name list (matched above), not doc excerpts, so we
+    // skip this read to keep the paste-blocking context call cheap.
+    if (params.profile !== "stream" && matchedChunks.length === 0) {
+      matchedChunks = await fetchRecentDocumentChunks(
         supabase,
         orgId,
         params.profile === "minutes" ? 5 : 3,
-        params.profile === "stream" ? STREAM_DOCUMENT_CHAR_BUDGET : 1800
+        1800
       );
-      if (params.profile === "stream") {
-        matchedChunks = fallbackChunks;
-      } else if (matchedChunks.length === 0) {
-        matchedChunks = fallbackChunks;
-      }
     }
 
     let block = "";
