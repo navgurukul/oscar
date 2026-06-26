@@ -5,7 +5,9 @@
   "scripts": {
     "dev:web": "cd packages/web && pnpm dev",
     "dev:desktop": "cd packages/desktop && pnpm dev",
-    "test:format-regressions": "pnpm --filter @oscar/shared test:format-regressions"
+    "test:format-regressions": "pnpm --filter @oscar/shared test:format-regressions",
+    "test:format-regressions:live": "pnpm --filter @oscar/shared test:format-regressions:live",
+    "test:edge-functions": "cd packages/desktop/supabase/functions && deno test ai-process/cleanup-style.test.ts"
   },
   "packageManager": "pnpm@9.0.0",
   "dependencies": {

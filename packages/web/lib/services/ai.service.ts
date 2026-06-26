@@ -304,7 +304,11 @@ export const aiService = {
         } else if (response.status === 429) {
           friendlyError = "Too many translation requests. Please wait a moment.";
         } else if (response.status === 500) {
-          if (serverError?.includes("Server missing GEMINI_API_KEY")) {
+          if (
+            serverError?.includes("AI provider API key") ||
+            serverError?.includes("MERCURY_API_KEY") ||
+            serverError?.includes("GEMINI_API_KEY")
+          ) {
             friendlyError = "Server configuration issue: translation API key is missing.";
           } else {
             friendlyError = ERROR_MESSAGES.AI_REQUEST_FAILED;
@@ -344,7 +348,7 @@ export const aiService = {
 
     // No client-side retry here: the title route already retries internally
     // (ai-route generateText, RETRY_MAX=2). Wrapping that in another retry
-    // compounded to ~9 Gemini attempts and a long tail. One attempt, then
+    // compounded to ~9 provider attempts and a long tail. One attempt, then
     // fall back to the instant local heuristic — titles are non-critical and
     // this keeps the parallel format+title path bounded.
     try {

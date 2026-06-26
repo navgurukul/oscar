@@ -410,5 +410,5 @@ For issues with AI agents:
 
 1. Check error messages in browser console
 2. Review API logs in terminal
-3. Verify `GEMINI_API_KEY` set correctly
+3. Verify `MERCURY_API_KEY` is set for Scribble/Stream agents and `GEMINI_API_KEY` is set for Minutes/embeddings
 4. Test with fallback mechanisms disabled to isolate issues

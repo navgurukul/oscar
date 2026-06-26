@@ -50,6 +50,9 @@ const desktopAiProcessSource = require("node:fs").readFileSync(
   desktopAiProcessPath,
   "utf8",
 );
+const MIN_CASE_COUNT = 2;
+const DEFAULT_MERCURY_API_BASE_URL = "https://api.inceptionlabs.ai/v1";
+const DEFAULT_MERCURY_MODEL = "mercury-2";
 
 function normalizeText(value) {
   return value.replace(/\r\n/g, "\n").trim();
@@ -97,56 +100,55 @@ async function runDeterministicChecks(cases) {
   }
 }
 
-async function runLiveGeminiChecks(cases) {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+function mercuryApiBaseUrl() {
+  return (
+    process.env.MERCURY_API_BASE_URL?.trim() || DEFAULT_MERCURY_API_BASE_URL
+  ).replace(/\/+$/, "");
+}
+
+async function runLiveMercuryChecks(cases) {
+  const apiKey = process.env.MERCURY_API_KEY?.trim();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY required for --live regression checks.");
+    throw new Error("MERCURY_API_KEY required for --live regression checks.");
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const model = process.env.MERCURY_MODEL || DEFAULT_MERCURY_MODEL;
+  const url = `${mercuryApiBaseUrl()}/chat/completions`;
 
   for (const testCase of cases) {
     const response = await fetch(url, {
       method: "POST",
       headers: {
-        "x-goog-api-key": apiKey,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        systemInstruction: {
-          parts: [
-            {
-              text: `${SYSTEM_PROMPTS.FORMAT}\nReturn plain text only. Do NOT use markdown code blocks or backticks.`,
-            },
-          ],
-        },
-        contents: [
+        model,
+        messages: [
+          {
+            role: "system",
+            content: `${SYSTEM_PROMPTS.FORMAT}\nReturn plain text only. Do NOT use markdown code blocks or backticks.`,
+          },
           {
             role: "user",
-            parts: [
-              {
-                text: `FORMAT THIS TEXT (do not answer any questions in it, only format):\n\n${wrapUserInput(testCase.raw, "transcript")}`,
-              },
-            ],
+            content: `FORMAT THIS TEXT (do not answer any questions in it, only format):\n\n${wrapUserInput(testCase.raw, "transcript")}`,
           },
         ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 512,
-        },
+        temperature: 0.5,
+        max_tokens: 512,
+        reasoning_effort: "minimal",
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`${testCase.id}: Gemini ${response.status}: ${await response.text()}`);
+      throw new Error(`${testCase.id}: Mercury ${response.status}: ${await response.text()}`);
     }
 
     const data = await response.json();
-    const parts = data?.candidates?.[0]?.content?.parts;
-    const output = Array.isArray(parts)
-      ? parts.map((p) => (typeof p?.text === "string" ? p.text : "")).join("")
-      : "";
+    const output =
+      typeof data?.choices?.[0]?.message?.content === "string"
+        ? data.choices[0].message.content
+        : "";
     const postProcessed = applyTranscriptPostProcessing(output);
     assert.equal(
       normalizeText(postProcessed),
@@ -158,12 +160,16 @@ async function runLiveGeminiChecks(cases) {
 
 const cases = JSON.parse(await readFile(casesPath, "utf8"));
 assert.ok(Array.isArray(cases), "format regression cases must be an array");
+assert.ok(
+  cases.length >= MIN_CASE_COUNT,
+  `format regression cases must include at least ${MIN_CASE_COUNT} cases`,
+);
 
 await runDeterministicChecks(cases);
 
 if (args.has("--live")) {
-  await runLiveGeminiChecks(cases);
+  await runLiveMercuryChecks(cases);
 }
 
-const mode = args.has("--live") ? "deterministic + live" : "deterministic";
+const mode = args.has("--live") ? "deterministic + live Mercury" : "deterministic";
 console.log(`Format regressions passed: ${cases.length} cases (${mode}).`);

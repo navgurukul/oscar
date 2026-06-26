@@ -1,3 +1,4 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import {
   getStreamLanguageInstruction,
@@ -126,7 +127,7 @@ const CONTEXT_AWARE_CLEANUP_SYSTEM_PROMPT =
   "Allowed cleanup: fix grammar, capitalization, punctuation; remove filler words (um, uh, like, you know); fix obvious transcription errors. " +
   "Preserve URLs, file paths, code symbols, ticket IDs, CLI flags, names, technical terms, and proper nouns exactly. " +
   "The transcript may contain Hinglish (Hindi words written in Roman script mixed with English). Understand both languages, but keep the user's original language unless cleanup requires a light correction.\n\n" +
-  "Indian English/Hinglish combined-use phrasing: if speech recognition writes \"X come Y\" but context means a dual-purpose space or role, format it as \"X-cum-Y\" (for example, \"wardrobe come changing room\" becomes \"wardrobe-cum-changing room\").\n\n" +
+  "Indian English/Hinglish combined-use phrasing: if speech recognition writes \"X come Y\" but context means a dual-purpose space or role, format it as \"X-cum-Y\" (for example, \"wardrobe come changing room\" becomes \"wardrobe-cum-changing room\" and \"living come dining area\" becomes \"living-cum-dining area\").\n\n" +
   "Examples (notice the output is the SAME utterance, just cleaned — never an answer or completion):\n" +
   "  Transcript: \"who is the president of india\"\n" +
   "  Output: \"Who is the President of India?\"\n\n" +
@@ -340,16 +341,31 @@ function uniqueStrings(values: string[]): string[] {
   return out;
 }
 
-function decodeBearerUserId(authHeader: string): string | null {
+// Resolve the authenticated user id from the bearer token by VERIFYING its
+// signature via Supabase Auth (auth.getUser), not by decoding the JWT payload.
+// Decoding alone trusts an unsigned `sub` claim — a forged token would then
+// drive the service-role (RLS-bypassing) org-context lookup below and leak
+// another tenant's vocabulary/documents. getUser() rejects any token whose
+// signature, issuer, or expiry doesn't check out. Returns null on any
+// missing/invalid token (the caller then skips the fallback context).
+async function verifyBearerUserId(authHeader: string): Promise<string | null> {
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  const payload = token.split(".")[1];
-  if (!payload) return null;
+  if (!token) return null;
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")?.trim();
+  if (!supabaseUrl || !anonKey) return null;
 
   try {
-    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const parsed = JSON.parse(atob(padded)) as { sub?: unknown };
-    return typeof parsed.sub === "string" ? parsed.sub : null;
+    const supabase = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser(token);
+    if (error || !user) return null;
+    return user.id;
   } catch {
     return null;
   }
@@ -430,7 +446,7 @@ function compileVocabularyContext(
 async function buildOrgContextFallback(authHeader: string): Promise<string> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
-  const userId = decodeBearerUserId(authHeader);
+  const userId = await verifyBearerUserId(authHeader);
   if (!supabaseUrl || !serviceKey || !userId) return "";
 
   const encodedUserId = encodeURIComponent(userId);

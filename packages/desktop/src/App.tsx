@@ -26,6 +26,7 @@ import { AuthScreen } from "./components/onboarding/AuthScreen";
 import { PermissionsScreen } from "./components/onboarding/PermissionsScreen";
 import { SetupScreen } from "./components/onboarding/SetupScreen";
 import { isAuthSessionError, revalidateSession } from "./lib/auth-session";
+import { isAuthCallbackTrusted, clearAuthFlow } from "./lib/auth-flow";
 import {
   isContextAwarePlatform,
   routeDictationContext,
@@ -750,6 +751,9 @@ function App() {
         let accessToken = urlObj.searchParams.get("access_token");
         let refreshToken = urlObj.searchParams.get("refresh_token");
         let expiresIn = urlObj.searchParams.get("expires_in");
+        // Single-use nonce minted by beginAuthFlow() and round-tripped through
+        // the web callback as `&state=`. Used below to reject session injection.
+        let stateParam = urlObj.searchParams.get("state");
 
         // Also check fragment (after #) for tokens
         if (urlObj.hash) {
@@ -757,6 +761,7 @@ function App() {
           accessToken = accessToken || fragmentParams.get("access_token");
           refreshToken = refreshToken || fragmentParams.get("refresh_token");
           expiresIn = expiresIn || fragmentParams.get("expires_in");
+          stateParam = stateParam || fragmentParams.get("state");
         }
 
         if (error) {
@@ -765,6 +770,23 @@ function App() {
         }
 
         if (accessToken && refreshToken) {
+          // Reject session injection. Accept the tokens ONLY when this callback
+          // matches a sign-in THIS app started (the single-use nonce in the
+          // `state` param matches the in-flight flow). Fails closed: a missing,
+          // expired, or mismatched nonce — i.e. an unsolicited deep link fired
+          // by any other local process or web page — is dropped here, so an
+          // attacker cannot silently switch the app into their own account.
+          if (!isAuthCallbackTrusted(stateParam)) {
+            console.warn(
+              "[deep-link] Rejected auth callback: untrusted or missing state nonce",
+            );
+            calendarOAuthInProgressRef.current = false;
+            return;
+          }
+          // The nonce is single-use — consume it the moment we accept the
+          // callback so the same deep link cannot be replayed.
+          clearAuthFlow();
+
           // Set the session using the tokens from the web app
           const { data, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
