@@ -616,7 +616,12 @@ export const ContextCompiler = {
     }
 
     let matchedChunks: ChunkRow[] = [];
-    if (query.trim() && isEmbeddingsEnabled()) {
+    // Stream/dictation skips semantic doc retrieval. The embedding is a Gemini
+    // round-trip on the paste-blocking hot path, and for stream its result is
+    // DISCARDED below anyway — the recent-chunk fallback overwrites matchedChunks
+    // for stream unconditionally. So skipping it is output-neutral for stream and
+    // drops the round-trip. People/term (name) matching above is unaffected.
+    if (query.trim() && isEmbeddingsEnabled() && params.profile !== "stream") {
       // Best-effort: bounded so a slow embed/RPC can't stall formatting. On
       // timeout we fall through with [] and let the recency heuristic below
       // supply doc context for this one request.
