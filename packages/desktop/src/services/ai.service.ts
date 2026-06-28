@@ -535,8 +535,8 @@ async function extractInvokeError(error: unknown): Promise<string> {
 // and throws a typed AuthSessionError when the session is unrecoverable, so the
 // dictation flow can prompt re-auth instead of silently pasting the raw
 // transcript. See lib/auth-session.ts.
-async function getSessionAccessToken(): Promise<string> {
-  return getValidAccessToken();
+async function getSessionAccessToken(signal?: AbortSignal): Promise<string> {
+  return getValidAccessToken({ signal });
 }
 
 // ── Web AI route client ────────────────────────────────────────────────────
@@ -901,7 +901,12 @@ export const aiService = {
       throw new Error("No text provided for AI processing.");
     }
 
-    const accessToken = await getSessionAccessToken();
+    // Bound token acquisition by the caller's deadline (the dictation cleanup
+    // path passes its cleanup AbortSignal). supabase-js can otherwise block here
+    // indefinitely on a stalled refresh after idle/sleep — before the cleanup
+    // fetch's own deadline ever applies — freezing the pill. On abort this throws
+    // and the dictation flow falls back to pasting the raw transcript.
+    const accessToken = await getSessionAccessToken(options?.signal);
 
     // Dictation cleanup runs on the Amplify web route (same Mercury client/key
     // as Scribble); every other mode stays on the Supabase edge function.
