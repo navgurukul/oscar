@@ -14,6 +14,7 @@ import {
   parseJsonBody,
 } from "@/lib/server/ai-route";
 import { getMercuryApiKey, mercuryGenerateText } from "@/lib/server/mercury";
+import { ContextCompiler } from "@/lib/server/orgContext";
 import {
   applyOrgRewriteRules,
   applyStreamPolish,
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
     routing?: DictationRoutingResult;
     stylePreset?: unknown;
     orgContextBlock?: unknown;
+    resolveOrgContext?: unknown;
     language?: unknown;
     warmup?: unknown;
   }>(req);
@@ -146,6 +148,37 @@ export async function POST(req: NextRequest) {
       ? bodyResult.data.orgContextBlock.trim()
       : "";
 
+  // Org-context block resolution. Two client contracts coexist:
+  //   - Legacy: the desktop precomputes the block via a separate POST to
+  //     /api/ai/context and ships it as `orgContextBlock`. We use it as-is and
+  //     do NOT compile — so for every shipped client this route is byte-for-byte
+  //     unchanged.
+  //   - Folded: newer clients OMIT the block and set `resolveOrgContext: true`,
+  //     letting us compile it here in-process. That collapses the formerly
+  //     separate client → /api/ai/context round-trip into this one request
+  //     (the latency win). `text` IS the same raw transcript getBlock matched
+  //     against, and ContextCompiler.compile is deterministic, so the resolved
+  //     block is identical to what the context route would have returned.
+  // Compile failure degrades to an empty block exactly like the client getBlock
+  // did (swallow-and-continue), so a context error never blocks the cleanup.
+  let orgBlock = suppliedOrgContext;
+  if (!orgBlock && bodyResult.data.resolveOrgContext === true) {
+    try {
+      const compiled = await ContextCompiler.compile({
+        userId: user.id,
+        rawTranscript: text,
+        profile: "stream",
+      });
+      orgBlock = compiled.block;
+    } catch (err) {
+      console.warn(
+        "[dictation-cleanup] org-context compile failed; cleaning without it",
+        err,
+      );
+      orgBlock = "";
+    }
+  }
+
   const rewrite = isRewriteStyle(stylePreset);
   const { system: baseSystem, user: prompt } = buildStreamCleanupPrompt(
     text,
@@ -156,8 +189,8 @@ export async function POST(req: NextRequest) {
   // Append the org-context block AFTER the base prompt (the cleanup prompt
   // refers to "the Organization Context block ... below") — matches the edge
   // function's ordering exactly, NOT joinSystemPrompt's context-first layout.
-  const system = suppliedOrgContext
-    ? `${baseSystem}\n\n---\n\n${suppliedOrgContext}`
+  const system = orgBlock
+    ? `${baseSystem}\n\n---\n\n${orgBlock}`
     : baseSystem;
 
   try {
@@ -179,8 +212,8 @@ export async function POST(req: NextRequest) {
     const tMercuryDone = performance.now();
 
     const polished = applyStreamPolish(raw);
-    const corrected = suppliedOrgContext
-      ? applyOrgRewriteRules(polished, suppliedOrgContext).trim()
+    const corrected = orgBlock
+      ? applyOrgRewriteRules(polished, orgBlock).trim()
       : polished;
 
     const timing: DictationServerTiming = {
