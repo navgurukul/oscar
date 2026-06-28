@@ -87,6 +87,10 @@ pub(crate) fn restore_main_window(app_handle: &tauri::AppHandle) {
             {
                 use tauri::TitleBarStyle;
                 let _ = main_window.set_title_bar_style(TitleBarStyle::Overlay);
+                // Overlay style toggles titlebar transparency only; it does NOT
+                // hide the native title text, which would draw "OSCAR" on top of
+                // the custom in-app Header. Clear it so only our chrome renders.
+                let _ = main_window.set_title("");
             }
             #[cfg(target_os = "windows")]
             {
@@ -250,6 +254,10 @@ pub fn run() {
                 if let Some(main_window) = app.get_webview_window("main") {
                     use tauri::TitleBarStyle;
                     let _ = main_window.set_title_bar_style(TitleBarStyle::Overlay);
+                    // Overlay style toggles titlebar transparency only; it does
+                    // NOT hide the native title text, which would draw "OSCAR"
+                    // over the custom in-app Header. Clear it.
+                    let _ = main_window.set_title("");
                     log::info!("[setup] macOS overlay titlebar set");
                 }
             }
