@@ -85,6 +85,18 @@ const STREAM_TAIL_BUFFER_MS = 200;
 // fetch and the raw Whisper transcript is pasted, so the pill never freezes.
 const STREAM_CLEANUP_DEADLINE_MS = 7000;
 
+// Stall watchdog for the dictation flow. The per-dictation perf.jsonl record is
+// only written in processAudio's `finally`, which a truly hung `await` (dead
+// socket, stale GPU context, wedged paste) never reaches — so hangs leave NO
+// trace and the log looks clean. This independent timer fires while the flow is
+// stuck and writes a one-shot `kind:"stall"` breadcrumb naming the stage we were
+// in. LOG-ONLY: it must never abort the work (a legitimately slow transcription
+// on a low-end CPU must finish), so a slow-but-completing run emits both a stall
+// and a normal record sharing `dictationId`; a real hang emits only the stall.
+// Set well above any healthy run (cleanup is bounded to 7s; the longest stage is
+// transcription) so it flags genuine wedges, not slow-but-progressing work.
+const STREAM_STALL_WATCHDOG_MS = 25000;
+
 // Local "already-clean" fast-path. Returns true only when the raw Whisper text
 // already reads as a clean, complete, short English utterance that "faithful"
 // cleanup would leave essentially unchanged — letting the dictation paste it
@@ -2037,6 +2049,56 @@ function App() {
     const timings: Record<string, number> = {};
     const metrics: Record<string, string | number> = {};
     let hadError = false;
+    // Error class+message captured from the catch so perf.jsonl records WHY a
+    // run failed, not just that it did. Our own error strings (e.g.
+    // "model-mismatch", network failures) are not PII, so they log regardless of
+    // the transcript opt-in.
+    let errorInfo: string | null = null;
+
+    // ── Stall watchdog + stage breadcrumb ────────────────────────────────────
+    // `currentStage` names the unbounded await we're currently sitting on; the
+    // watchdog reads it if the flow wedges. `dictationId` ties a stall record to
+    // its eventual completion record when the run was merely slow. See
+    // STREAM_STALL_WATCHDOG_MS for the log-only rationale.
+    const dictationId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${tStart}`;
+    let currentStage = "init";
+    let stageStartedAt = tStart;
+    let stallLogged = false;
+    const enterStage = (stage: string) => {
+      currentStage = stage;
+      stageStartedAt = performance.now();
+    };
+    const stallWatchdog = setTimeout(() => {
+      stallLogged = true;
+      const elapsedMs = Math.round(performance.now() - tStart);
+      const stageMs = Math.round(performance.now() - stageStartedAt);
+      console.warn(
+        `[stream-timing] STALL stage=${currentStage} elapsed=${elapsedMs}ms`,
+      );
+      try {
+        invoke("append_perf_log", {
+          jsonLine: JSON.stringify({
+            ts: new Date().toISOString(),
+            flow: "stream-dictation",
+            kind: "stall",
+            dictationId,
+            platform: navigator.platform,
+            online: navigator.onLine,
+            stalledStage: currentStage,
+            elapsedMs,
+            stageMs,
+            timings,
+            metrics,
+          }),
+        }).catch((e) => console.warn("[perf] stall append failed:", e));
+      } catch (e) {
+        console.warn("[perf] failed to build stall record:", e);
+      }
+    }, STREAM_STALL_WATCHDOG_MS);
+
     // ── Transcript capture for offline quality analysis ──────────────────────
     // Hoisted out of the try-block so the `finally` can persist them to
     // perf.jsonl regardless of which exit path the handler takes. These are raw
@@ -2056,6 +2118,7 @@ function App() {
     // through one place that clears the processing flag, sets the status, and
     // collapses the pill — keeping every exit path consistent.
     const endProcessingEarly = (statusMessage: string) => {
+      clearTimeout(stallWatchdog);
       setIsProcessing(false);
       setStatus(statusMessage);
       invoke("hide_recording_pill").catch(console.warn);
@@ -2100,6 +2163,7 @@ function App() {
     // meeting-segment decoder and returns 16 kHz mono f32 directly — no mixdown.
     let audioData: Float32Array;
     try {
+      enterStage("decode");
       const blobBytes = Array.from(new Uint8Array(await audioBlob.arrayBuffer()));
       const ext = mimeType.includes("mp4") ? "mp4" : "webm";
       const pcm = await invoke<number[]>("decode_audio_blob", {
@@ -2164,6 +2228,7 @@ function App() {
       // bug we'd get from reading `dictationModel.activeVariant` here
       // (React doesn't re-render between the setState in prepareWhisperModel
       // and this line within the same handler).
+      enterStage("model-load");
       const ensured = await ensureWhisperModelLoaded("dictation");
       timings["whisper-load"] = Math.round(performance.now() - tWhisperLoad0);
       metrics["cold-load"] = wasModelWarm ? "0" : "1";
@@ -2177,6 +2242,7 @@ function App() {
       const audioDataForIpc = Array.from(audioData);
       timings["audio-array"] = Math.round(performance.now() - tAudioArray0);
 
+      enterStage("transcribe");
       const tWhisper0 = performance.now();
       const result = await transcribeWithVariant("dictation", activeVariant, {
         audioData: audioDataForIpc,
@@ -2288,6 +2354,7 @@ function App() {
       // This now runs BEFORE paste so the AI-cleaned output is what gets pasted.
       if (aiCleanupEnabled && !cleanupFastPath) {
         setStatus("Improving with AI...");
+        enterStage("ai-cleanup");
         const tAi0 = performance.now();
         // Deadline so a hung/slow Mercury cleanup never freezes the pill. When
         // it fires, the abort cancels the in-flight fetch and the catch below
@@ -2447,6 +2514,7 @@ function App() {
       // Now that AI cleanup is complete, paste the improved text to the target app.
       if (shouldPaste) {
         const isMac = navigator.platform.toLowerCase().includes("mac");
+        enterStage("paste");
         const tPaste0 = performance.now();
         try {
           // Pass targetApp so the Rust command can re-activate it via
@@ -2512,6 +2580,7 @@ function App() {
         }
       }
 
+      enterStage("persist");
       const tPersist0 = performance.now();
       setTranscript((prev) => (prev ? prev + "\n\n" + finalText : finalText));
 
@@ -2557,6 +2626,8 @@ function App() {
       }
     } catch (e) {
       hadError = true;
+      errorInfo =
+        e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       setStatus(`❌ Error: ${e}`);
       // Surface an error glyph on the pill briefly, then collapse to rest.
       invoke("set_pill_phase", { phase: "error" }).catch(console.warn);
@@ -2564,6 +2635,9 @@ function App() {
         invoke("hide_recording_pill").catch(console.warn);
       }, 1500);
     } finally {
+      // Flow reached a terminal state — disarm the stall watchdog so it can't
+      // emit a false stall after a slow-but-completing run.
+      clearTimeout(stallWatchdog);
       setIsProcessing(false);
       // Clear the pill's context label as the flow ends; the next record-start
       // re-emits a fresh one. The "Inserted into document" outcome toast below
@@ -2618,12 +2692,31 @@ function App() {
         const finalWords = finalCleanedText
           ? finalCleanedText.trim().split(/\s+/).filter(Boolean).length
           : 0;
+        // Coarse outcome bucket for at-a-glance filtering; the nuanced cases
+        // (cleanup-skipped fast-path, cleanup-empty, no-speech) are already
+        // distinguishable from `metrics`. `errorInfo` carries the failure class.
+        const outcome = hadError
+          ? "error"
+          : aiAuthFailed
+            ? "auth-degraded"
+            : pasteHappened
+              ? "pasted"
+              : "copied-or-saved";
         const record = {
           ts: new Date().toISOString(),
           flow: "stream-dictation",
+          kind: "complete",
+          dictationId,
           platform: navigator.platform,
           userAgent: navigator.userAgent,
+          online: navigator.onLine,
           hadError,
+          errorInfo,
+          outcome,
+          // True when the stall watchdog already emitted a `kind:"stall"` record
+          // for this id — i.e. a stage overran the budget but the run still
+          // finished (slow, not hung). Pair the two records by `dictationId`.
+          stalledThenRecovered: stallLogged,
           totalMs,
           timings,
           metrics,
