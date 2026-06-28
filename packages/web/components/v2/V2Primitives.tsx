@@ -214,7 +214,7 @@ export function V2AppHeader({
           <V2Wordmark />
           {hasTeam && <LazyOrgSwitcher />}
         </div>
-        <nav className="hidden md:flex items-center gap-7 lg:gap-9" style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>
+        <nav className="hidden md:flex items-center gap-7 lg:gap-9" style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
           {tabs.map((tab) => {
             const isActive = tab.label === activeLabel;
             if (isActive) {
