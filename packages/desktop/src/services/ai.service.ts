@@ -64,6 +64,11 @@ interface AIProcessRequest {
   // Workspace context (active-org vocabulary + reference docs) packaged by
   // orgContextService. Appended to the Mercury system prompt when present.
   orgContextBlock?: string;
+  // Web cleanup path only: when true (and orgContextBlock is omitted), the
+  // /api/ai/dictation-cleanup route resolves the org-context block in-process,
+  // letting us skip the separate client → /api/ai/context round-trip. The edge
+  // function has no in-process resolver and still relies on orgContextBlock.
+  resolveOrgContext?: boolean;
   // User-selected transcription language code (e.g. "hi", "hi-en", "en", "auto").
   // Tells Mercury 2 cleanup to preserve Devanagari for "hi", apply Hinglish
   // spelling rules for "hi-en", or standard English cleanup for "en".
@@ -897,19 +902,27 @@ export const aiService = {
     }
 
     const accessToken = await getSessionAccessToken();
-    // Best-effort org context — failure here must not block paste, so the
-    // service swallows errors and returns an empty block when anything goes
-    // wrong (no active workspace, RLS denial, network blip, ...).
+
+    // Dictation cleanup runs on the Amplify web route (same Mercury client/key
+    // as Scribble); every other mode stays on the Supabase edge function.
+    const viaWeb = STREAM_CLEANUP_VIA_WEB && mode === "transcribe_cleanup";
+
+    // Org context (active-org vocabulary + reference terms). On the web cleanup
+    // path the route resolves the block in-process (resolveOrgContext), so we
+    // skip the separate client -> /api/ai/context round-trip entirely — that
+    // serial leg was ~537ms p50 of paste-blocking latency. The edge function
+    // has no in-process resolver, so it still needs the precomputed block.
+    // Failure here must never block paste, so getBlock swallows errors and
+    // returns an empty block; the shared deadline still bounds the web fetch.
     const profile = mode === "transcribe_cleanup" ? "stream" : "scribble";
-    const orgContext = await orgContextService.getBlock({
-      rawTranscript: text,
-      profile,
-      // Share the caller's deadline so a hung context fetch is aborted by the
-      // same timer that bounds the Mercury call — both network legs of cleanup
-      // are covered. (Token retrieval runs first and is local/cached, so it is
-      // not on the signal.)
-      signal: options?.signal,
-    });
+    const orgContext = viaWeb
+      ? null
+      : await orgContextService.getBlock({
+          rawTranscript: text,
+          profile,
+          signal: options?.signal,
+        });
+
     const request: AIProcessRequest = {
       text,
       mode,
@@ -917,12 +930,12 @@ export const aiService = {
       routing: options?.routing,
       promptProfile: options?.promptProfile,
       stylePreset: options?.stylePreset,
-      orgContextBlock: orgContext.block || undefined,
+      orgContextBlock: orgContext?.block || undefined,
+      resolveOrgContext: viaWeb ? true : undefined,
       language: options?.language,
     };
-    // Dictation cleanup can run on the web route (Amplify Mercury); everything
-    // else stays on the edge function. The flag is off by default.
-    if (STREAM_CLEANUP_VIA_WEB && mode === "transcribe_cleanup") {
+
+    if (viaWeb) {
       return invokeWebDictationCleanup(
         accessToken,
         request,
