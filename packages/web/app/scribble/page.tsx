@@ -121,7 +121,7 @@ export default function ScribblePage() {
 
   // Apply an optimistic/authoritative update to the shared ["scribbles"] cache.
   const patchScribblesCache = (updater: (prev: DBScribble[]) => DBScribble[]) =>
-    qc.setQueryData<DBScribble[]>(queryKeys.scribbles, (prev) => updater(prev ?? []));
+    qc.setQueriesData<DBScribble[]>({ queryKey: queryKeys.scribbles }, (prev) => updater(prev ?? []));
 
   const folderCounts = useMemo(() => {
     const counts = new Map<string, number>();
