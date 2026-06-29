@@ -14,7 +14,9 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      * - api routes (handled separately)
+     * - ingest (PostHog reverse-proxy beacons — must not pay an auth round-trip
+     *   or get cookies mutated on every analytics/error event)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api|auth/desktop-callback).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api|ingest|auth/desktop-callback).*)",
   ],
 };

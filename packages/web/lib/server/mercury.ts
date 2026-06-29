@@ -27,6 +27,11 @@ const RETRY_BASE_MS = 1000;
 
 export type MercuryReasoningEffort = "minimal" | "low" | "medium" | "high";
 
+export interface MercuryUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
 export interface MercuryCallParams {
   apiKey: string;
   messages: AIMessage[];
@@ -36,6 +41,12 @@ export interface MercuryCallParams {
   model?: string;
   reasoningEffort?: MercuryReasoningEffort;
   timeoutMs: number;
+  /**
+   * Optional, non-breaking hook for observability: invoked with the OpenAI-style
+   * `usage` block when present. Existing callers ignore it; telemetry callers
+   * pass it to record real token counts. Never affects the returned text.
+   */
+  onUsage?: (usage: MercuryUsage) => void;
 }
 
 export function getMercuryApiKey(): string {
@@ -131,6 +142,12 @@ export async function mercuryGenerateText(params: MercuryCallParams): Promise<st
     const content = data?.choices?.[0]?.message?.content;
     const text = typeof content === "string" ? content.trim() : "";
     if (!text) throw new Error(ERROR_MESSAGES.INVALID_AI_RESPONSE);
+    if (params.onUsage && data?.usage) {
+      params.onUsage({
+        inputTokens: data.usage.prompt_tokens,
+        outputTokens: data.usage.completion_tokens,
+      });
+    }
     return stripMarkdownCodeFences(text);
   }
 

@@ -12,6 +12,7 @@ import { V2Footer } from "@/components/v2/V2Primitives";
 import { AuthProvider, useAuth } from "@/lib/contexts/AuthContext";
 import { SubscriptionProvider } from "@/lib/contexts/SubscriptionContext";
 import { QueryProvider } from "@/lib/providers/QueryProvider";
+import { PostHogProvider } from "@/components/providers/PostHogProvider";
 import "./globals.css";
 
 const figtree = Figtree({
@@ -108,13 +109,15 @@ export default function RootLayout({
         </Script>
       </head>
       <body className="bg-cream text-ink antialiased font-sans" suppressHydrationWarning>
-        <QueryProvider>
-          <AuthProvider>
-            <SubscriptionProvider>
-              <LayoutContent>{children}</LayoutContent>
-            </SubscriptionProvider>
-          </AuthProvider>
-        </QueryProvider>
+        <PostHogProvider>
+          <QueryProvider>
+            <AuthProvider>
+              <SubscriptionProvider>
+                <LayoutContent>{children}</LayoutContent>
+              </SubscriptionProvider>
+            </AuthProvider>
+          </QueryProvider>
+        </PostHogProvider>
       </body>
     </html>
   );

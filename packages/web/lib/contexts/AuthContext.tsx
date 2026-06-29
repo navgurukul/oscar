@@ -8,6 +8,7 @@ import {
   useCallback,
   useMemo,
 } from "react";
+import posthog from "posthog-js";
 import { createClient } from "@/lib/supabase/client";
 import { storageService } from "@/lib/services/storage.service";
 import type { User, Session } from "@supabase/supabase-js";
@@ -37,6 +38,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
+      // Associate analytics with the Supabase user id (email only, no content).
+      if (session?.user) {
+        try {
+          posthog.identify(session.user.id, { email: session.user.email });
+        } catch {
+          /* analytics must never break auth */
+        }
+      }
     });
 
     // Listen for auth changes
@@ -46,6 +55,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
+
+      try {
+        if (_event === "SIGNED_IN" && session?.user) {
+          posthog.identify(session.user.id, { email: session.user.email });
+        } else if (_event === "SIGNED_OUT") {
+          posthog.reset();
+        }
+      } catch {
+        /* analytics must never break auth */
+      }
 
       // Clear any scribble-related sessionStorage on sign-out to prevent cross-user carryover
       if (_event === "SIGNED_OUT") {

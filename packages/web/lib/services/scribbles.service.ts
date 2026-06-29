@@ -1,4 +1,5 @@
 import { createClient, ensureFreshSession } from "@/lib/supabase/client";
+import { ANALYTICS_EVENTS, track } from "@/lib/analytics/events";
 import type {
   DBScribble,
   DBScribbleInsert,
@@ -63,6 +64,7 @@ export const scribblesService = {
     // Happy path: the row was written and returned.
     const created = data?.[0] ?? null;
     if (created) {
+      track(ANALYTICS_EVENTS.SCRIBBLE_SAVED);
       return { data: created, error: null };
     }
 
@@ -75,6 +77,7 @@ export const scribblesService = {
       .maybeSingle();
 
     if (recovered) {
+      track(ANALYTICS_EVENTS.SCRIBBLE_SAVED);
       return { data: recovered, error: null };
     }
 

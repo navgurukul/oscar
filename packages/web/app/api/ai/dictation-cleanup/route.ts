@@ -13,7 +13,12 @@ import {
   MAX_AI_INPUT_CHARS,
   parseJsonBody,
 } from "@/lib/server/ai-route";
-import { getMercuryApiKey, mercuryGenerateText } from "@/lib/server/mercury";
+import {
+  getMercuryApiKey,
+  mercuryGenerateText,
+  type MercuryUsage,
+} from "@/lib/server/mercury";
+import { captureLLM } from "@/lib/server/observability";
 import { ContextCompiler } from "@/lib/server/orgContext";
 import {
   applyOrgRewriteRules,
@@ -193,6 +198,7 @@ export async function POST(req: NextRequest) {
     ? `${baseSystem}\n\n---\n\n${orgBlock}`
     : baseSystem;
 
+  let usage: MercuryUsage = {};
   try {
     const tMercury0 = performance.now();
     const raw = await mercuryGenerateText({
@@ -208,6 +214,7 @@ export async function POST(req: NextRequest) {
       reasoningEffort: rewrite ? "low" : "minimal",
       temperature: rewrite ? 0.6 : 0.5,
       timeoutMs: REQUEST_TIMEOUT_MS,
+      onUsage: (u) => { usage = u; },
     });
     const tMercuryDone = performance.now();
 
@@ -223,6 +230,17 @@ export async function POST(req: NextRequest) {
       cacheHitPct: 0,
     };
 
+    await captureLLM({
+      userId: user.id,
+      route: "dictation-cleanup",
+      provider: "mercury",
+      latencyMs: timing.mercuryMs,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      inputChars: text.length,
+      outputChars: corrected.length,
+    });
+
     // Empty or chatty-refusal output is the silence path — paste nothing.
     if (!corrected || looksLikeRefusal(corrected)) {
       return emptyResponse(timing);
@@ -231,6 +249,15 @@ export async function POST(req: NextRequest) {
     return applyCors(NextResponse.json({ text: corrected, timing }));
   } catch (err: unknown) {
     const error = err as Error;
+    await captureLLM({
+      userId: user.id,
+      route: "dictation-cleanup",
+      provider: "mercury",
+      latencyMs: Math.round(performance.now() - tStart),
+      inputChars: text.length,
+      isError: true,
+      error: err,
+    });
     return applyCors(
       NextResponse.json(
         { error: ERROR_MESSAGES.AI_REQUEST_FAILED, details: error?.message || String(err) },

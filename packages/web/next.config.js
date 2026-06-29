@@ -14,7 +14,7 @@ const cspReportOnly = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com",
   "font-src 'self' data:",
-  `connect-src 'self' ${supabaseUrl} ${supabaseWs} https://api.razorpay.com https://lumberjack.razorpay.com https://cdn.jsdelivr.net`,
+  `connect-src 'self' ${supabaseUrl} ${supabaseWs} https://api.razorpay.com https://lumberjack.razorpay.com https://cdn.jsdelivr.net https://us.i.posthog.com https://us-assets.i.posthog.com`,
   "frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com",
   "worker-src 'self' blob:",
   "object-src 'none'",
@@ -39,6 +39,24 @@ const nextConfig = {
   reactStrictMode: false,
   transpilePackages: ["@oscar/shared"],
   outputFileTracingRoot: path.join(__dirname, "../../"),
+  // PostHog ingestion is reverse-proxied through a same-origin /ingest path so
+  // ad-blockers can't drop analytics/error events. US region hosts. The PostHog
+  // API breaks under Next's automatic trailing-slash redirect; this flag is
+  // APP-WIDE (Next has no per-path option), which is safe here — the app has no
+  // routes that rely on trailing-slash redirect behaviour.
+  skipTrailingSlashRedirect: true,
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/static/:path*",
+        destination: "https://us-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://us.i.posthog.com/:path*",
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {
