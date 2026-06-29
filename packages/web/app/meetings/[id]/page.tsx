@@ -19,6 +19,7 @@ import {
   useDeleteMeeting,
 } from "@/lib/hooks/queries/useMeetings";
 import { queryKeys } from "@/lib/hooks/queries/keys";
+import { useHasTeam } from "@/lib/hooks/queries/useActiveOrg";
 import { Spinner } from "@/components/ui/spinner";
 import { MarkdownView } from "@/components/meetings/MarkdownView";
 import { CopyShareLinkButton } from "@/components/meetings/CopyShareLinkButton";
@@ -203,6 +204,7 @@ export default function MeetingDetailPage() {
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
+  const hasTeam = useHasTeam();
 
   useEffect(() => {
     if (!authLoading && !user) router.push(`/auth?redirectTo=/meetings/${id}`);
@@ -545,6 +547,7 @@ export default function MeetingDetailPage() {
               meeting.visibility ?? (meeting.sharedWithOrg ? "org" : "private")
             }
             publicShareToken={meeting.publicShareToken ?? null}
+            allowOrgShare={hasTeam}
             onChange={(next) => {
               queryClient.setQueryData<SavedMeetingRecord[]>(
                 queryKeys.meetings,

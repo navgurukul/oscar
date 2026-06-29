@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, LogOut, Settings as SettingsIcon, Sparkles } from "lucide-react";
+import { ChevronDown, LogOut, Plus, Settings as SettingsIcon, Sparkles } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { ROUTES } from "@/lib/constants";
 import { v2, v2Serif, V2Mono } from "@/components/v2/V2Primitives";
+import { useHasTeam } from "@/lib/hooks/queries/useActiveOrg";
 
 function initialsFrom(name: string | null | undefined, email: string | null | undefined) {
   const source = (name || email || "").trim();
@@ -29,6 +30,10 @@ export function V2AccountMenu() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
+  // Solo users get exactly ONE deliberate opt-in to start a team. Once they
+  // belong to a real team the workspace switcher owns "create workspace", so
+  // this entry hides to avoid duplication.
+  const hasTeam = useHasTeam();
 
   const handleSignOut = useCallback(async () => {
     if (signingOut) return;
@@ -107,6 +112,17 @@ export function V2AccountMenu() {
             <span style={{ fontSize: 13, color: v2.ink }}>What&rsquo;s new</span>
           </Link>
         </DropdownMenuItem>
+        {!hasTeam && (
+          <DropdownMenuItem asChild className="cursor-pointer">
+            <Link
+              href={`${ROUTES.ORG_SETTINGS}?create=1`}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" style={{ color: v2.inkSoft }} />
+              <span style={{ fontSize: 13, color: v2.ink }}>Create a team</span>
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator style={{ background: v2.rule }} />
         <DropdownMenuItem
           onClick={() => void handleSignOut()}

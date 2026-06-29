@@ -71,10 +71,45 @@ function isExpiringSoon(expiresAt: number | undefined): boolean {
  * one is missing or (near-)expired. Throws {@link AuthSessionError} only when the
  * session is genuinely unrecoverable (dead/rotated refresh token).
  */
-export async function getValidAccessToken(): Promise<string> {
+export async function getValidAccessToken(
+  opts: { signal?: AbortSignal } = {},
+): Promise<string> {
+  const { signal } = opts;
+
+  // supabase-js exposes NO timeout/abort on getSession()/refreshSession(), and
+  // its internal fetch has none either. A refresh issued on a dead socket
+  // (auto-refresh timer paused across a sleep, network change) therefore blocks
+  // until the OS TCP timeout — minutes. On the dictation cleanup path the caller
+  // passes its deadline signal so a stalled token fetch is bounded exactly like
+  // the cleanup fetch is, and the flow falls back to pasting the raw transcript
+  // instead of freezing the pill. The losing promise keeps running detached
+  // (harmless): a refresh that lands late just heals the stored session for the
+  // next call. No signal → original (unbounded) behaviour, unchanged.
+  const withDeadline = <T>(p: Promise<T>): Promise<T> => {
+    if (!signal) return p;
+    if (signal.aborted) {
+      return Promise.reject(new DOMException("Aborted", "AbortError"));
+    }
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () =>
+        reject(new DOMException("Aborted", "AbortError"));
+      signal.addEventListener("abort", onAbort, { once: true });
+      p.then(
+        (v) => {
+          signal.removeEventListener("abort", onAbort);
+          resolve(v);
+        },
+        (e) => {
+          signal.removeEventListener("abort", onAbort);
+          reject(e);
+        },
+      );
+    });
+  };
+
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await withDeadline(supabase.auth.getSession());
 
   if (session?.access_token && !isExpiringSoon(session.expires_at)) {
     return session.access_token;
@@ -82,7 +117,7 @@ export async function getValidAccessToken(): Promise<string> {
 
   // Missing or near-expiry → attempt a single refresh. supabase-js dedupes
   // concurrent refreshes internally, so this is safe alongside revalidate.
-  const { data, error } = await supabase.auth.refreshSession();
+  const { data, error } = await withDeadline(supabase.auth.refreshSession());
   if (error || !data.session?.access_token) {
     // A transient/offline failure must not be mistaken for a dead session:
     // throwing AuthSessionError would force the re-auth screen. Surface a plain

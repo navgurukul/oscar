@@ -2,7 +2,9 @@
 
 import { Suspense, useCallback, useEffect, useState, type ReactElement } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import { queryKeys } from "@/lib/hooks/queries/keys";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 import { CreateOrgForm } from "@/components/org/CreateOrgForm";
@@ -12,7 +14,7 @@ import { InvitePanel } from "@/components/org/InvitePanel";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
 import type { ActiveOrganization } from "@oscar/shared/types";
-import { v2 } from "@/components/v2/V2Primitives";
+import { v2, V2AppHeader } from "@/components/v2/V2Primitives";
 import {
   createOrgSettingsSections,
   V2OrgSettingsShell,
@@ -27,6 +29,7 @@ function isOrgSettingsTab(value: string | null): value is Tab {
 function OrgSettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { user, isLoading: authLoading } = useAuth();
   const [active, setActive] = useState<ActiveOrganization | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +63,30 @@ function OrgSettingsContent() {
     setActiveTab(initialTab);
   }, [initialTab]);
 
+  // Bounce a solo user (no real team) away from org settings — UNLESS they are
+  // in the deliberate ?create=1 flow. Gated on !loading so it never fires on the
+  // stale pre-refetch value: right after creating a team, onCreated clears
+  // ?create=1 and calls load(); without the !loading guard the still-stale
+  // personal `active` would wrongly bounce the brand-new team owner to /settings.
+  useEffect(() => {
+    if (!loading && active && !active.hasTeam && !showCreate) {
+      router.replace(ROUTES.SETTINGS);
+    }
+  }, [loading, active, showCreate, router]);
+
+  const handleOrgCreated = useCallback(() => {
+    // Solo → team: drop the cached hasTeam=false so the header switcher /
+    // TEAM tab / workspace settings appear immediately, drop the create flag,
+    // and refetch so this page lands on the brand-new team's settings.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.activeOrg });
+    router.replace(ROUTES.ORG_SETTINGS);
+    void load();
+  }, [queryClient, router, load]);
+
+  if (!loading && active && !active.hasTeam && !showCreate) {
+    return null;
+  }
+
   if (authLoading || loading || !user) {
     return (
       <main
@@ -67,6 +94,28 @@ function OrgSettingsContent() {
         style={{ background: v2.cream }}
       >
         <Spinner />
+      </main>
+    );
+  }
+
+  // Solo user (no real team) in the deliberate create flow: render ONLY the
+  // create form — never the personal org's Details/Members/Invites chrome or
+  // the org-settings sidebar (which would leak workspace management to someone
+  // who has no team yet).
+  if (showCreate && (!active || !active.hasTeam)) {
+    return (
+      <main
+        style={{
+          background: v2.cream,
+          color: v2.ink,
+          minHeight: "100vh",
+          fontFamily: "var(--font-figtree), system-ui",
+        }}
+      >
+        <V2AppHeader active="SETTINGS" />
+        <div className="px-6 md:px-14 py-10 md:py-16 max-w-2xl">
+          <CreateOrgForm onCreated={handleOrgCreated} />
+        </div>
       </main>
     );
   }
@@ -162,14 +211,7 @@ function OrgSettingsContent() {
           </div>
         )}
 
-        {showCreate && (
-          <CreateOrgForm
-            onCreated={() => {
-              router.replace(ROUTES.ORG_SETTINGS);
-              void load();
-            }}
-          />
-        )}
+        {showCreate && <CreateOrgForm onCreated={handleOrgCreated} />}
       </div>
     </V2OrgSettingsShell>
   );

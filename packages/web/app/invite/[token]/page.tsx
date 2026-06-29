@@ -2,11 +2,13 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
+import { queryKeys } from "@/lib/hooks/queries/keys";
 import {
   v2,
   v2Serif,
@@ -23,6 +25,7 @@ export default function InviteAcceptPage({
 }) {
   const { token } = use(params);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, isLoading: authLoading, signInWithGoogle } = useAuth();
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState<string>("");
@@ -34,6 +37,9 @@ export default function InviteAcceptPage({
     setStatus("accepting");
     try {
       const { organization_id } = await organizationService.acceptInvite(token);
+      // Joining a team flips hasTeam → true; drop the cached active-org so the
+      // org chrome (switcher, TEAM tab) is present when they land.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activeOrg });
       setStatus("ok");
       setTimeout(() => {
         router.push(`${ROUTES.SCRIBBLE}?org=${organization_id}`);
@@ -43,7 +49,7 @@ export default function InviteAcceptPage({
       setStatus("error");
       setMessage(err instanceof Error ? err.message : "Could not accept this invite.");
     }
-  }, [router, token]);
+  }, [router, token, queryClient]);
 
   useEffect(() => {
     if (authLoading) return;

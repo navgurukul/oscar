@@ -32,6 +32,13 @@ export interface Organization {
    * Null = feature off for this org. See migration 016.
    */
   auto_join_email_domain: string | null;
+  /**
+   * True for the auto-created single-user personal org (an invisible container
+   * so a solo user is never forced through the org flow). False for real team
+   * orgs — created explicitly or joined. The UI hides ALL org/collaboration
+   * chrome while the active org is personal. See migration 019.
+   */
+  is_personal: boolean;
 }
 
 export interface OrganizationMember {
@@ -76,4 +83,11 @@ export interface UserActiveOrg {
 export interface ActiveOrganization {
   organization: Organization;
   role: OrganizationRole;
+  /**
+   * True when the user belongs to at least one real (non-personal) team org.
+   * Drives whether org/collaboration chrome (switcher, TEAM tab, workspace
+   * settings, share-to-workspace) is shown anywhere in the app. False for a
+   * solo user whose only membership is their auto-created personal org.
+   */
+  hasTeam: boolean;
 }

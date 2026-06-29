@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
 import type { CSSProperties, ReactNode } from "react";
 import { useAuth } from "@/lib/contexts/AuthContext";
+import { useHasTeam } from "@/lib/hooks/queries/useActiveOrg";
 
 const LazyOrgSwitcher = dynamic(
   () => import("@/components/org/OrgSwitcher").then((m) => m.OrgSwitcher),
@@ -197,16 +198,24 @@ export function V2AppHeader({
 }) {
   const pathname = usePathname();
   const activeLabel = active ?? deriveActiveTab(pathname);
+  // Solo users (only their invisible personal org) see no org chrome at all:
+  // the workspace switcher and the TEAM tab are hidden until they belong to a
+  // real team. Hidden while the lookup is loading — chrome appears only once we
+  // KNOW there's a team, never optimistically.
+  const hasTeam = useHasTeam();
+  const tabs = hasTeam
+    ? APP_HEADER_TABS
+    : APP_HEADER_TABS.filter((tab) => tab.label !== "TEAM");
 
   return (
     <header style={{ borderBottom: `1px solid ${v2.rule}` }}>
       <div className="flex items-center justify-between px-6 md:px-14 py-6">
         <div className="flex items-center gap-3 md:gap-4">
           <V2Wordmark />
-          <LazyOrgSwitcher />
+          {hasTeam && <LazyOrgSwitcher />}
         </div>
         <nav className="hidden md:flex items-center gap-7 lg:gap-9">
-          {APP_HEADER_TABS.map((tab) => {
+          {tabs.map((tab) => {
             const isActive = tab.label === activeLabel;
             if (isActive) {
               return (
