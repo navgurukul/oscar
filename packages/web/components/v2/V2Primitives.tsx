@@ -18,7 +18,7 @@ const LazyAccountMenu = dynamic(
   { ssr: false }
 );
 
-// ─── Token palette (terracotta direction from the v2 design exploration) ─── .
+// ─── Token palette (terracotta direction from the v2 design exploration) ───
 export const v2 = {
   cream: "#f7f4ee",
   cream2: "#efeae0",
