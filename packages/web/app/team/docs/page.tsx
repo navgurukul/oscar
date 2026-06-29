@@ -8,8 +8,9 @@ import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 import { DocumentUploader } from "@/components/documents/DocumentUploader";
 import { documentsService } from "@/lib/services/documents.service";
+import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
-import type { OrgDocument, Organization } from "@oscar/shared/types";
+import type { ActiveOrganization, OrgDocument, Organization } from "@oscar/shared/types";
 import {
   v2,
   v2Serif,
@@ -40,6 +41,7 @@ export default function DocsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [docs, setDocs] = useState<OrgDocument[]>([]);
   const [organization, setOrganization] = useState<Organization | null>(null);
+  const [active, setActive] = useState<ActiveOrganization | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -65,7 +67,14 @@ export default function DocsPage() {
       return;
     }
     void load();
+    void organizationService.current().then(setActive).catch(() => {});
   }, [authLoading, user, router, load]);
+
+  useEffect(() => {
+    if (active && !active.hasTeam) {
+      router.replace(ROUTES.HOME);
+    }
+  }, [active, router]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 300);
@@ -101,6 +110,10 @@ export default function DocsPage() {
         <Spinner />
       </main>
     );
+  }
+
+  if (active && !active.hasTeam) {
+    return null;
   }
 
   return (

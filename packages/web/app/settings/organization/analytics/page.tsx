@@ -76,6 +76,12 @@ export default function AnalyticsPage() {
     void load();
   }, [authLoading, user, router, load]);
 
+  useEffect(() => {
+    if (active && !active.hasTeam) {
+      router.replace(ROUTES.SETTINGS);
+    }
+  }, [active, router]);
+
   const maxMonthlyRecordings = useMemo(() => {
     if (!data?.monthly_recordings.length) return 0;
     return Math.max(...data.monthly_recordings.map((m) => m.count), 1);
@@ -133,6 +139,10 @@ export default function AnalyticsPage() {
         <Spinner />
       </main>
     );
+  }
+
+  if (active && !active.hasTeam) {
+    return null;
   }
 
   if (active && active.role !== "owner" && active.role !== "admin") {

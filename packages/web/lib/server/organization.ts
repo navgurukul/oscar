@@ -87,6 +87,34 @@ export async function listMemberships(userId: string): Promise<
     );
 }
 
+/**
+ * True when the user belongs to at least one real (non-personal) team org.
+ * The single signal that drives whether ANY org chrome shows in the UI.
+ */
+async function userHasTeam(userId: string): Promise<boolean> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("organization_members")
+    .select("organizations(is_personal)")
+    .eq("user_id", userId);
+  if (error) {
+    // Never silently downgrade a real team member to solo-mode (which would
+    // hide their switcher / TEAM tab / share-to-workspace) on a transient
+    // query failure — log so the chrome-loss is diagnosable.
+    console.error("[org] userHasTeam failed", error);
+  }
+  const rows = (data ?? []) as Array<{
+    organizations:
+      | { is_personal: boolean }
+      | { is_personal: boolean }[]
+      | null;
+  }>;
+  return rows.some((r) => {
+    const o = Array.isArray(r.organizations) ? r.organizations[0] : r.organizations;
+    return o ? o.is_personal === false : false;
+  });
+}
+
 export async function getActiveOrg(
   userId: string
 ): Promise<ActiveOrganization | null> {
@@ -117,6 +145,21 @@ export async function getActiveOrg(
     }
   }
 
+  // Lazy-heal: a user with no org at all (e.g. a desktop-first / Bearer-only
+  // user who never hit the web OAuth callback, or a signup the auth.users
+  // trigger somehow missed) gets their personal org provisioned on the spot,
+  // so every quota/billing/UI path downstream sees a real org instead of
+  // hard-failing. ensure_default_org is idempotent, so this is safe to call.
+  if (!orgId) {
+    const { data: userData } = await supabase.auth.admin.getUserById(userId);
+    const email = userData?.user?.email ?? "";
+    const displayName =
+      (userData?.user?.user_metadata?.full_name as string | undefined) ??
+      (userData?.user?.user_metadata?.name as string | undefined) ??
+      null;
+    orgId = await getOrCreateDefaultOrg(userId, email, displayName);
+  }
+
   if (!orgId) return null;
 
   const { data: row } = await supabase
@@ -132,6 +175,10 @@ export async function getActiveOrg(
   return {
     organization: org,
     role: joined.role,
+    // If the active org is itself a real team, hasTeam is true with no second
+    // query (and can't disagree with the org row we just loaded). Only when the
+    // active org is personal do we scan memberships for another team.
+    hasTeam: org.is_personal === false ? true : await userHasTeam(userId),
   };
 }
 
@@ -242,6 +289,8 @@ export async function createOrganization(
     name,
     slug: candidate,
     created_by: ownerId,
+    // Explicit team creation — never a personal org, so org chrome shows.
+    is_personal: false,
   };
   if (autoJoinEmailDomain) {
     insertPayload.auto_join_email_domain = autoJoinEmailDomain;

@@ -220,7 +220,7 @@ export function Navigation({
 
       <div className="px-6 flex-1 flex flex-col gap-7 overflow-y-auto">
         <div>
-          <CapsLabel>WORKSPACE</CapsLabel>
+          <CapsLabel>MENU</CapsLabel>
           <div className="mt-3 space-y-0.5">
             {workspaceItems.map((item) => (
               <NavRow

@@ -32,6 +32,12 @@ interface Props {
   visibility: Visibility | null;
   publicShareToken: string | null;
   organizationName?: string | null;
+  /**
+   * Whether to offer the "Workspace" (org) visibility option. False for solo
+   * users with no real team — they see only Private / Public link. Defaults to
+   * false so the collaboration option never leaks unless explicitly enabled.
+   */
+  allowOrgShare?: boolean;
   onChange?: (next: {
     visibility: Visibility;
     public_share_token: string | null;
@@ -72,6 +78,7 @@ export function ShareDialog({
   visibility,
   publicShareToken,
   organizationName,
+  allowOrgShare = false,
   onChange,
 }: Props) {
   const { toast } = useToast();
@@ -149,6 +156,16 @@ export function ShareDialog({
   const ActiveIcon =
     current === "public" ? Globe : current === "org" ? Users : Lock;
 
+  // Solo users (no real team) never see the "Workspace" option. Still shown if
+  // the item is somehow already org-shared, so its current state stays editable.
+  const visibleOptions = useMemo(
+    () =>
+      allowOrgShare || current === "org"
+        ? OPTIONS
+        : OPTIONS.filter((o) => o.value !== "org"),
+    [allowOrgShare, current]
+  );
+
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
@@ -189,7 +206,7 @@ export function ShareDialog({
         </AlertDialogHeader>
 
         <ul className="space-y-2">
-          {OPTIONS.map(({ value, label, description, Icon }) => {
+          {visibleOptions.map(({ value, label, description, Icon }) => {
             const selected = current === value;
             return (
               <li key={value}>

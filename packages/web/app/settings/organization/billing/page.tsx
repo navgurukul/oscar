@@ -60,6 +60,12 @@ export default function OrgBillingPage() {
     void load();
   }, [authLoading, user, router, load]);
 
+  useEffect(() => {
+    if (active && !active.hasTeam) {
+      router.replace(ROUTES.SETTINGS);
+    }
+  }, [active, router]);
+
   const cancel = useCallback(async () => {
     setCancelling(true);
     try {
@@ -94,6 +100,10 @@ export default function OrgBillingPage() {
         <Spinner />
       </main>
     );
+  }
+
+  if (active && !active.hasTeam) {
+    return null;
   }
 
   if (!active) {

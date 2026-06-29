@@ -10,21 +10,8 @@ import type {
   DBScribble,
   DBScribbleUpdate,
 } from "@/lib/types/scribble.types";
-import type { ActiveOrganization } from "@oscar/shared/types";
 import { queryKeys } from "./keys";
-
-function useActiveOrg(enabled = true) {
-  return useQuery<ActiveOrganization | null>({
-    queryKey: queryKeys.activeOrg,
-    queryFn: async () => {
-      const response = await fetch("/api/org/current");
-      if (!response.ok) return null;
-      return response.json();
-    },
-    enabled,
-    staleTime: Infinity, // Active org rarely changes
-  });
-}
+import { useActiveOrg } from "./useActiveOrg";
 
 // refetchOnMount: "always" — the provider sets staleTime 30s + refetchOnWindowFocus
 // false, so without this a client-side <Link> back into the library would serve the
