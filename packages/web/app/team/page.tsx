@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
+import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
-import type { Organization } from "@oscar/shared/types";
+import type { ActiveOrganization, Organization } from "@oscar/shared/types";
 import {
   v2,
   v2Serif,
@@ -42,6 +43,7 @@ export default function TeamFeedPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const [organization, setOrganization] = useState<Organization | null>(null);
+  const [active, setActive] = useState<ActiveOrganization | null>(null);
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [kindFilter, setKindFilter] = useState<FeedKind | "all">("all");
@@ -51,6 +53,8 @@ export default function TeamFeedPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const current = await organizationService.current();
+      setActive(current);
       const res = await fetch("/api/team/feed", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load feed");
       const json = (await res.json()) as { items: FeedItem[]; organization: Organization | null };
@@ -71,6 +75,12 @@ export default function TeamFeedPage() {
     }
     void load();
   }, [authLoading, user, router, load]);
+
+  useEffect(() => {
+    if (active && !active.hasTeam) {
+      router.replace(ROUTES.HOME);
+    }
+  }, [active, router]);
 
   const authors = useMemo(() => {
     const map = new Map<string, string>();
@@ -103,6 +113,10 @@ export default function TeamFeedPage() {
         <Spinner />
       </main>
     );
+  }
+
+  if (active && !active.hasTeam) {
+    return null;
   }
 
   return (

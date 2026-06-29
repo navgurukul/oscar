@@ -236,7 +236,7 @@ function SettingsContent() {
             })}
           </nav>
 
-          {activeOrg && (
+          {activeOrg?.hasTeam && (
             <>
               <div className="mt-10 pt-7" style={{ borderTop: `1px solid ${v2.rule}` }}>
                 <V2Caps>

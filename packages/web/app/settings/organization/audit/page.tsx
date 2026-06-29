@@ -102,6 +102,12 @@ export default function AuditLogPage() {
     void load();
   }, [authLoading, user, router, load]);
 
+  useEffect(() => {
+    if (active && !active.hasTeam) {
+      router.replace(ROUTES.SETTINGS);
+    }
+  }, [active, router]);
+
   const filtered = useMemo(() => {
     if (filter === "all") return rows;
     if (filter === "shared" || filter === "unshared") {
@@ -129,6 +135,10 @@ export default function AuditLogPage() {
         <Spinner />
       </main>
     );
+  }
+
+  if (active && !active.hasTeam) {
+    return null;
   }
 
   if (active && active.role !== "owner" && active.role !== "admin") {

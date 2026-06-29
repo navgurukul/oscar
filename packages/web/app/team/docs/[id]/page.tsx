@@ -21,8 +21,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { documentsService } from "@/lib/services/documents.service";
+import { organizationService } from "@/lib/services/organization.service";
 import { ROUTES } from "@/lib/constants";
-import type { OrgDocumentWithDownload } from "@oscar/shared/types";
+import type { ActiveOrganization, OrgDocumentWithDownload } from "@oscar/shared/types";
 import {
   v2,
   v2Serif,
@@ -52,6 +53,7 @@ export default function DocumentViewerPage({
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
   const [doc, setDoc] = useState<OrgDocumentWithDownload | null>(null);
+  const [active, setActive] = useState<ActiveOrganization | null>(null);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
   const [tagsInput, setTagsInput] = useState("");
@@ -83,7 +85,14 @@ export default function DocumentViewerPage({
       return;
     }
     void load();
+    void organizationService.current().then(setActive).catch(() => {});
   }, [authLoading, user, router, load, id]);
+
+  useEffect(() => {
+    if (active && !active.hasTeam) {
+      router.replace(ROUTES.HOME);
+    }
+  }, [active, router]);
 
   const saveMeta = useCallback(async () => {
     if (!doc) return;
@@ -134,6 +143,10 @@ export default function DocumentViewerPage({
         <Spinner />
       </main>
     );
+  }
+
+  if (active && !active.hasTeam) {
+    return null;
   }
 
   if (!doc) {

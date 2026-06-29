@@ -31,9 +31,8 @@ export function ShareToggle({ kind, id, shared, organizationName, onChange, clas
   useEffect(() => setLocalShared(shared), [shared]);
 
   useEffect(() => {
-    if (organizationName) return;
     organizationService.current().then(setActive).catch(() => setActive(null));
-  }, [organizationName]);
+  }, []);
 
   const orgLabel = organizationName ?? active?.organization.name ?? "your workspace";
 
@@ -72,6 +71,10 @@ export function ShareToggle({ kind, id, shared, organizationName, onChange, clas
   }, [busy, id, kind, localShared, onChange, orgLabel, toast]);
 
   const Icon = localShared ? Users : Lock;
+
+  // Sharing-with-workspace is collaboration: never show it to a solo user (no
+  // real team). Hidden once we know the active org isn't a team.
+  if (active && !active.hasTeam) return null;
 
   return (
     <TooltipProvider>

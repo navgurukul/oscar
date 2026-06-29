@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { scribblesService } from "@/lib/services/scribbles.service";
 import { queryKeys } from "@/lib/hooks/queries/keys";
+import { useHasTeam } from "@/lib/hooks/queries/useActiveOrg";
 import { feedbackService } from "@/lib/services/feedback.service";
 import { storageService } from "@/lib/services/storage.service";
 import { aiService } from "@/lib/services/ai.service";
@@ -72,6 +73,7 @@ export default function ScribbleDetailPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const hasTeam = useHasTeam();
 
   // Reconcile the library's React Query cache so edits/stars made here are
   // reflected in /scribble without a hard refresh.
@@ -420,6 +422,7 @@ export default function ScribbleDetailPage() {
             id={scribble.id}
             visibility={scribble.visibility ?? (scribble.shared_with_org ? "org" : "private")}
             publicShareToken={scribble.public_share_token ?? null}
+            allowOrgShare={hasTeam}
             onChange={(next) =>
               setScribble((prev) =>
                 prev
@@ -433,7 +436,7 @@ export default function ScribbleDetailPage() {
               )
             }
           />
-          {scribble.shared_with_org && (
+          {scribble.shared_with_org && hasTeam && (
             <PublishDialog
               scribbleId={scribble.id}
               scribbleTitle={scribble.title || "Scribble"}

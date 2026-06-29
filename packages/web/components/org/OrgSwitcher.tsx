@@ -72,23 +72,11 @@ export function OrgSwitcher() {
 
   if (loading) return null;
 
-  if (!active) {
-    return (
-      <button
-        onClick={() => router.push(`${ROUTES.ORG_SETTINGS}?create=1`)}
-        className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[12px] font-medium transition-opacity hover:opacity-80"
-        style={{
-          background: v2.cream2,
-          border: `1px solid ${v2.rule}`,
-          color: v2.inkSoft,
-          fontFamily: "var(--font-figtree), system-ui",
-        }}
-      >
-        <Plus className="h-3.5 w-3.5" style={{ color: v2.accent }} />
-        Create workspace
-      </button>
-    );
-  }
+  // Belt-and-suspenders: never render the switcher for a solo user (only a
+  // personal org). The header already gates the mount on hasTeam; this guards
+  // any other call-site. After lazy-heal there is always an active org, so the
+  // old "no active org → Create workspace" branch is dead and intentionally gone.
+  if (!active || !active.hasTeam) return null;
 
   return (
     <DropdownMenu>

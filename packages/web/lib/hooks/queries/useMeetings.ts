@@ -9,22 +9,13 @@ import { meetingsService } from "@/lib/services/meetings.service";
 import type {
   MeetingUpdate,
   SavedMeetingRecord,
-  ActiveOrganization,
 } from "@oscar/shared/types";
 import { queryKeys } from "./keys";
-
-export function useActiveOrg(enabled = true) {
-  return useQuery<ActiveOrganization | null>({
-    queryKey: queryKeys.activeOrg,
-    queryFn: async () => {
-      const response = await fetch("/api/org/current");
-      if (!response.ok) return null;
-      return response.json();
-    },
-    enabled,
-    staleTime: Infinity, // Active org rarely changes
-  });
-}
+// Single shared implementation lives in ./useActiveOrg. Imported for internal
+// use here AND re-exported so the many existing
+// `import { useActiveOrg } from ".../useMeetings"` call-sites keep working.
+import { useActiveOrg } from "./useActiveOrg";
+export { useActiveOrg };
 
 export function useMeetings(enabled = true) {
   const { data: activeOrg } = useActiveOrg(enabled);
