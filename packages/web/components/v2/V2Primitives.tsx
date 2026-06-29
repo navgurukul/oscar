@@ -208,13 +208,13 @@ export function V2AppHeader({
     : APP_HEADER_TABS.filter((tab) => tab.label !== "TEAM");
 
   return (
-    <header className="relative" style={{ borderBottom: `1px solid ${v2.rule}` }}>
-      <div className="flex items-center px-6 md:px-14 py-6">
+    <header style={{ borderBottom: `1px solid ${v2.rule}` }}>
+      <div className="relative flex items-center px-6 md:px-14 py-6">
         <div className="flex items-center gap-3 md:gap-4 flex-1">
           <V2Wordmark />
           {hasTeam && <LazyOrgSwitcher />}
         </div>
-        <nav className="hidden md:flex items-center gap-7 lg:gap-9" style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
+        <nav className="hidden md:flex items-center gap-7 lg:gap-9" style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>
           {tabs.map((tab) => {
             const isActive = tab.label === activeLabel;
             if (isActive) {
