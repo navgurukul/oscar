@@ -157,6 +157,10 @@ function SettingsContent() {
     recordingsLimit,
     scribblesCount,
     scribblesLimit,
+    meetingsCount,
+    meetingsLimit,
+    streamsCount,
+    streamsLimit,
     isProUser,
     isLoading: subscriptionLoading,
     refetch,
@@ -308,6 +312,10 @@ function SettingsContent() {
                 recordingsLimit={recordingsLimit}
                 scribblesCount={scribblesCount}
                 scribblesLimit={scribblesLimit}
+                meetingsCount={meetingsCount}
+                meetingsLimit={meetingsLimit}
+                streamsCount={streamsCount}
+                streamsLimit={streamsLimit}
                 isProUser={isProUser}
                 isLoading={subscriptionLoading}
                 onRefetch={refetch}

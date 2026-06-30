@@ -174,6 +174,38 @@ export const usageService = {
   },
 
   /**
+   * Get total meetings (minutes) count for a user
+   */
+  async getUserMeetingsCount(userId: string): Promise<number> {
+    const supabase = getSupabaseAdmin();
+    const { count, error } = await supabase
+      .from("meetings")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId);
+    if (error) {
+      console.error("Error fetching meetings count:", error);
+      return 0;
+    }
+    return count || 0;
+  },
+
+  /**
+   * Get total streams count for a user
+   */
+  async getUserStreamsCount(userId: string): Promise<number> {
+    const supabase = getSupabaseAdmin();
+    const { count, error } = await supabase
+      .from("streams")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId);
+    if (error) {
+      console.error("Error fetching streams count:", error);
+      return 0;
+    }
+    return count || 0;
+  },
+
+  /**
    * Check if user can create a new scribble
    */
   async canUserCreateScribble(
@@ -208,6 +240,10 @@ export const usageService = {
     recordingsLimit: number | null;
     scribblesCount: number;
     scribblesLimit: number | null;
+    meetingsCount: number;
+    meetingsLimit: number | null;
+    streamsCount: number;
+    streamsLimit: number | null;
     isProUser: boolean;
     canRecord: boolean;
     canCreateScribble: boolean;
@@ -218,11 +254,15 @@ export const usageService = {
       ? await this.getOrgMonthlyUsage(orgId)
       : 0;
     const scribblesCount = await this.getUserScribbleCount(userId);
+    const meetingsCount = await this.getUserMeetingsCount(userId);
+    const streamsCount = await this.getUserStreamsCount(userId);
 
     const recordingsLimit = isProUser
       ? null
       : SUBSCRIPTION_CONFIG.FREE_ORG_MONTHLY_RECORDINGS;
     const scribblesLimit = isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES;
+    const meetingsLimit = isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_MEETINGS;
+    const streamsLimit = isProUser ? null : SUBSCRIPTION_CONFIG.FREE_MAX_STREAMS;
 
     const canRecord = isProUser
       ? true
@@ -236,6 +276,10 @@ export const usageService = {
       recordingsLimit,
       scribblesCount,
       scribblesLimit,
+      meetingsCount,
+      meetingsLimit,
+      streamsCount,
+      streamsLimit,
       isProUser,
       canRecord,
       canCreateScribble,

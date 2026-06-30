@@ -12,6 +12,8 @@ export const SUBSCRIPTION_CONFIG = {
   // Notes "Scribbles" now, so both names point at the same cap.
   FREE_MAX_NOTES: 20,
   FREE_MAX_VOCABULARY: 5,
+  FREE_MAX_MEETINGS: 25,
+  FREE_MAX_STREAMS: 50,
 } as const;
 
 export const PRICING = {

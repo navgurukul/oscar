@@ -143,6 +143,10 @@ export interface UsageStatsResponse {
   recordingsLimit: number | null;
   scribblesCount: number;
   scribblesLimit: number | null;
+  meetingsCount: number;
+  meetingsLimit: number | null;
+  streamsCount: number;
+  streamsLimit: number | null;
   isProUser: boolean;
   canRecord: boolean;
   canCreateScribble: boolean;
@@ -286,7 +290,7 @@ export interface UpgradePromptProps {
  * Props for UsageIndicator component
  */
 export interface UsageIndicatorProps {
-  type: "recordings" | "scribbles" | "vocabulary";
+  type: "recordings" | "scribbles" | "vocabulary" | "meetings";
   current: number;
   limit: number | null;
   variant?: "compact" | "full";
