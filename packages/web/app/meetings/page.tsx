@@ -175,11 +175,11 @@ export default function MeetingsPage() {
 
   if (authLoading || meetingsLoading) {
     return (
-      <main
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: v2.cream }}
-      >
-        <Spinner />
+      <main className="min-h-screen" style={{ background: v2.cream }}>
+        <V2WebHeader active="MINUTES" />
+        <div className="flex items-center justify-center" style={{ minHeight: "calc(100vh - 80px)" }}>
+          <Spinner />
+        </div>
       </main>
     );
   }

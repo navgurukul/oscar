@@ -21,7 +21,7 @@ export function useScribbles(enabled = true) {
   const { data: activeOrg } = useActiveOrg(enabled);
 
   return useQuery<DBScribble[]>({
-    queryKey: [queryKeys.scribbles, activeOrg?.organization.id] as const,
+    queryKey: [...queryKeys.scribbles, activeOrg?.organization.id] as const,
     queryFn: async () => {
       const { data, error } = await scribblesService.getScribbles();
       if (error) throw error;
@@ -48,7 +48,7 @@ export function useTrashedScribbles(enabled = true) {
   const { data: activeOrg } = useActiveOrg(enabled);
 
   return useQuery<DBScribble[]>({
-    queryKey: [queryKeys.trashedScribbles, activeOrg?.organization.id] as const,
+    queryKey: [...queryKeys.trashedScribbles, activeOrg?.organization.id] as const,
     queryFn: async () => {
       const { data, error } = await scribblesService.getTrashedScribbles();
       if (error) throw error;
@@ -73,7 +73,7 @@ export function useFolders(enabled = true) {
   const { data: activeOrg } = useActiveOrg(enabled);
 
   return useQuery<string[]>({
-    queryKey: [queryKeys.folders, activeOrg?.organization.id] as const,
+    queryKey: [...queryKeys.folders, activeOrg?.organization.id] as const,
     queryFn: async () => {
       const { data, error } = await scribblesService.getFolders();
       if (error) throw error;
@@ -100,7 +100,7 @@ export function useUpdateScribble() {
     },
     onSuccess: () => {
       // Invalidate all scribble query variations
-      qc.invalidateQueries({ queryKey: [queryKeys.scribbles] });
+      qc.invalidateQueries({ queryKey: queryKeys.scribbles });
       qc.invalidateQueries({ queryKey: queryKeys.folders });
     },
   });
@@ -116,7 +116,7 @@ export function useDeleteScribble() {
     },
     onSuccess: () => {
       // Invalidate all scribble query variations
-      qc.invalidateQueries({ queryKey: [queryKeys.scribbles] });
+      qc.invalidateQueries({ queryKey: queryKeys.scribbles });
       qc.invalidateQueries({ queryKey: queryKeys.trashedScribbles });
     },
   });

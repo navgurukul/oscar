@@ -12,7 +12,12 @@ import {
   parseJsonBody,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
-import { getMercuryApiKey, mercuryGenerateText } from "@/lib/server/mercury";
+import {
+  getMercuryApiKey,
+  mercuryGenerateText,
+  type MercuryUsage,
+} from "@/lib/server/mercury";
+import { captureLLM } from "@/lib/server/observability";
 
 const REQUEST_TIMEOUT_MS = 12000;
 
@@ -52,6 +57,8 @@ export async function POST(req: NextRequest) {
   // an empty list — the spelling-hint branch below was dead, yet it cost ~7
   // Supabase round-trips on the (serial) title path. Titles don't need org
   // vocabulary; drop the call entirely.
+  const t0 = performance.now();
+  let usage: MercuryUsage = {};
   try {
     const title = await mercuryGenerateText({
       apiKey,
@@ -63,10 +70,28 @@ export async function POST(req: NextRequest) {
       topP: API_CONFIG.TITLE_TOP_P,
       maxTokens: API_CONFIG.TITLE_MAX_TOKENS,
       timeoutMs: REQUEST_TIMEOUT_MS,
+      onUsage: (u) => { usage = u; },
+    });
+    await captureLLM({
+      userId: user.id,
+      route: "title",
+      provider: "mercury",
+      latencyMs: performance.now() - t0,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      outputChars: title.length,
     });
     return applyCors(NextResponse.json({ title }));
   } catch (err: unknown) {
     const error = err as Error;
+    await captureLLM({
+      userId: user.id,
+      route: "title",
+      provider: "mercury",
+      latencyMs: performance.now() - t0,
+      isError: true,
+      error: err,
+    });
     return applyCors(
       NextResponse.json(
         { error: ERROR_MESSAGES.AI_REQUEST_FAILED, details: error?.message || String(err) },

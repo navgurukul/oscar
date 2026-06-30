@@ -49,6 +49,52 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "v0.11.4",
+    date: "30 JUN 2026",
+    tag: "TEAMS",
+    title: "A cleaner solo workspace & snappier dictation",
+    lede: "Solo users lose the organization chrome they never needed, dictation warms up the instant you start recording so the first insert after a pause feels faster, and team navigation gets a couple of fixes.",
+    changes: [
+      { kind: "new", area: "TEAMS", text: "If you're not on a team, Oscar no longer shows workspace or organization controls — a cleaner solo experience." },
+      { kind: "improved", area: "STREAM", text: "Dictation cleanup now starts warming up the moment you begin recording, so the first dictation after a pause feels faster." },
+      { kind: "fixed", area: "WEB", text: "Centered the navigation bar on team pages and made starring a note update instantly." },
+    ],
+  },
+  {
+    version: "v0.11.3",
+    date: "29 JUN 2026",
+    tag: "STREAM",
+    title: "Steadier dictation",
+    lede: "A rare dictation freeze after the app sat idle is fixed, and slowdowns now leave a trace so they are easier to track down.",
+    changes: [
+      { kind: "fixed", area: "STREAM", text: "Fixed a rare dictation freeze that could happen after the app had been idle for a while." },
+      { kind: "improved", area: "STREAM", text: "Added behind-the-scenes timing so any dictation slowdown leaves a trace we can act on." },
+    ],
+  },
+  {
+    version: "v0.11.2",
+    date: "28 JUN 2026",
+    tag: "STREAM",
+    title: "Faster dictation cleanup",
+    lede: "Trimming redundant context work from the hot path roughly halves the wait for polished dictation, plus a macOS title-bar fix.",
+    changes: [
+      { kind: "improved", area: "STREAM", text: "Cut the wait for polished dictation roughly in half by dropping redundant context lookups from the hot path." },
+      { kind: "fixed", area: "DESKTOP", text: "Fixed the native macOS title bar overlapping the in-app header." },
+    ],
+  },
+  {
+    version: "v0.11.1",
+    date: "26 JUN 2026",
+    tag: "STREAM",
+    title: "Dictation cleanup, unified",
+    lede: "Desktop dictation cleanup moves onto the same fast path as Scribble and reliably polishes inserts again, with sign-in and AI-request hardening.",
+    changes: [
+      { kind: "improved", area: "STREAM", text: "Streamlined how desktop dictation is cleaned up, for faster and more consistent results." },
+      { kind: "fixed", area: "STREAM", text: "Fixed desktop dictation so AI cleanup reliably applies to every insert." },
+      { kind: "fixed", area: "DESKTOP", text: "Hardened sign-in and AI-request authentication." },
+    ],
+  },
+  {
     version: "v0.10.1",
     date: "24 JUN 2026",
     tag: "MINUTES",
