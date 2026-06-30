@@ -36,7 +36,7 @@ oscar/
 | Styling | Tailwind CSS 3.3, CVA | Tailwind CSS |
 | UI primitives | Radix UI + shadcn/ui (New York style) | Radix UI + shadcn/ui |
 | Auth & DB | Supabase (PostgreSQL + Auth) | — |
-| AI | Mercury 2 (Inception Labs) for Scribble format/title/transform/email/translate/publish + doc ingestion; Google Gemini 2.5 Flash for Minutes (meeting enhance) + embeddings only | whisper-rs (local Whisper) + Mercury 2 (dictation cleanup via `ai-process` Edge Function) + Google Gemini 2.5 Flash (meeting enhance) |
+| AI | Mercury 2 (Inception Labs) for Scribble format/title/transform/email/translate/publish + doc ingestion; Google Gemini 2.5 Flash for Minutes (meeting enhance) + embeddings only | whisper-rs (local Whisper) + Mercury 2 (dictation cleanup via the Amplify web route `/api/ai/dictation-cleanup` since the v0.11.0 cutover — `ai-process` Edge Function retired from the dictation path, kept for Scribble-transform + meeting-fallback modes) + Google Gemini 2.5 Flash (meeting enhance) |
 | Payments | Razorpay | — |
 | STT | Browser **Web Speech API** (`SpeechRecognition`), wrapped by `speech-to-speech@0.1.5` for transcript continuity + VAD. ONNX Runtime Web (CDN-pinned, SRI) powers the wrapper's VAD model — **not** transcription (Piper TTS is bundled but unused). | whisper-rs (Metal on macOS; **CPU-only on Windows/Linux** — see GPU note below) |
 | Animation | motion, tsparticles | — |

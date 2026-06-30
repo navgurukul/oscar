@@ -9,6 +9,33 @@ Product ideas, planned features. Not prioritized — ordering loose.
 - **VAD for hands-free dictation**: Partly shipped. Whisper now has a VAD pre-filter to strip silence before inference, and Stream has a 200 ms release tail buffer. Hands-free auto-arm / auto-finalize is still planned.
 - **Littlebird.ai-style work memory clone**: Added below as a product-flow bet. Scope should stay Oscar-native: voice-first, explicit privacy controls, no invisible capture by default.
 - **Observability**: Planned. No error tracking, no analytics, no AI-quality telemetry wired today. Production runs blind. Detail below.
+- **Dictation latency & AI-backend consolidation**: In progress. Dictation cleanup cut over to the Amplify web route (v0.11.0); a record-start prewarm shipped to mask the Lambda cold-start (now measuring). Remaining latency levers parked below: scheduled keep-warm ping, deadline tuning, and retiring the edge `ai-process` cleanup path + flag. Detail below.
+
+---
+
+## Dictation Latency & AI-Backend Consolidation
+
+**Status**: In progress (cold-start fix shipped; measuring before further levers).
+
+**Background**: "Plan A" consolidation moved desktop dictation cleanup (`transcribe_cleanup`) off the Supabase `ai-process` Edge Function onto the Amplify web route `/api/ai/dictation-cleanup` (commit `1f7ee1a`, default-on since **v0.11.0**; one Mercury key, one client). Warm-path latency improved (cleanup roundtrip p50 ~1413ms → ~664ms). But on-device `perf.jsonl` (2026-06-30) showed the cutover's tail risk materializing: of 98 dictation runs, ~17% were degraded by Amplify **Lambda cold-starts** — 7 cold (`cleanup-platform-net` ~2.5s) + 10 that blew past `STREAM_CLEANUP_DEADLINE_MS` (7s) and pasted the **raw, unpolished** transcript. The cold-start lands in `cleanup-platform-net` because it's outside the handler's self-timed window.
+
+**Shipped**:
+
+- **Record-start prewarm** (this work): moved the fire-and-forget `aiService.warmUp()` ping from processing-start (`processAudio`, ~1.3s of lead) to record-start (`startHotkeyRecording`, the single shared dictation entry → full recording + transcribe window of lead). Masks the ~2.8s boot for normal-length dictations. The ping is a server-side no-op (returns before any Mercury/quota work).
+
+**Decisions** (2026-06-30):
+
+- **Keep the `ai-process` Edge Function** — it is NOT dictation-only. It still serves desktop Scribble transforms (`cleanup`/`summary`/`bullets`/`email`) and the meeting-enhance fallback (`meeting_notes`/`bullets`). Only `transcribe_cleanup` moved to Amplify. Deleting the function would break those paths.
+- **Keep the `VITE_STREAM_CLEANUP_VIA_WEB` flag for now** — it is the only fast rollback lever from Amplify back to the edge path. Retire it only after the cold-start fix is proven stable in the field; removing it mid-regression would strand us with no fallback.
+- **Fix cold-start with the prewarm first, then measure** — before reaching for heavier levers (provisioned concurrency, scheduled pings).
+
+**Planned latency levers** (parked here to revisit after measurement):
+
+- **Measure the prewarm's impact** — watch `perf.jsonl` `cleanup-platform-net` spikes + the 7s-timeout (`raw==final`, `charDelta=0`) rate drop. Bucket runs by `cleanup-mercury-headers` (`0` ⇒ Amplify, `>0` ⇒ edge); the `cleanup-edge*`/`platform-net` key names are legacy and do NOT indicate the backend. `perf.jsonl` is local-only (never committed).
+- **Scheduled keep-warm ping** — the complete idle-case fix (record-start prewarm only helps while the user is actively recording; a short first dictation after hours-idle can still partly eat the boot). Needs a pre-auth `warmup` short-circuit on the route so an unauthenticated cron can hit it — keep the `warmup === true` guard strict so real requests still authenticate.
+- **Retire the edge `ai-process` cleanup path + remove the flag** — once Amplify is proven stable: delete the now-dead `transcribe_cleanup` case + stream-only helpers (`applyStreamPolish`, `cleanup-style.ts`, its Deno test, the `test:edge-functions` wiring) from the edge function, and hardcode the web route in `processText`/`warmUp`. Needs a manual Supabase deploy. **Keep the edge function itself** (non-dictation modes).
+- **Tune `STREAM_CLEANUP_DEADLINE_MS`** (currently 7000) — a band-aid: raising it trades a longer pill-freeze risk for fewer raw-paste fallbacks. Only meaningful if cold-starts persist.
+- **Provisioned concurrency** — likely NOT exposable on Amplify-managed Next.js SSR Lambdas without ejecting; investigate before committing.
 
 ---
 

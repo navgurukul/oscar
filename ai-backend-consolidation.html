@@ -66,6 +66,13 @@
   <p class="sub">Why Scribble runs on Amplify and Stream runs on Supabase — and whether to consolidate.</p>
   <p class="meta">Design memo · 2026-06-22 · data: 1,163 perf.jsonl records (May 27 – Jun 22), 200 with server-side timing split</p>
 
+  <div class="card" style="border-left:4px solid var(--green)">
+    <p style="margin:0 0 8px"><b>STATUS UPDATE · 2026-06-30 — recommendation shipped, with a caveat.</b></p>
+    <p style="margin:0 0 8px">Plan A executed: dictation cleanup cut over to the Amplify web route <code>/api/ai/dictation-cleanup</code> (commit <code>1f7ee1a</code>, default-on since <b>v0.11.0</b>). Warm-path latency improved as predicted (cleanup roundtrip p50 ~1413ms → ~664ms).</p>
+    <p style="margin:0 0 8px">The flagged cold-start risk <b>materialized</b>: on-device <code>perf.jsonl</code> (Jun 30) showed ~17% of dictations degraded by Amplify Lambda cold-starts — some past the 7s deadline, pasting raw unpolished text. Mitigation shipped: the <code>warmUp()</code> prewarm now fires at <b>record-start</b> (was processing-start) for far more lead time. Measuring before heavier levers.</p>
+    <p style="margin:0">Decisions: <b>keep</b> the <code>ai-process</code> Edge Function (still serves Scribble transforms + meeting fallback — only <code>transcribe_cleanup</code> moved); <b>keep</b> the <code>VITE_STREAM_CLEANUP_VIA_WEB</code> flag as the rollback lever until cold-start is proven stable. Live status + remaining levers (scheduled keep-warm ping, deadline tuning, edge cleanup-path retirement) tracked in <code>ROADMAP.md</code> → &ldquo;Dictation Latency &amp; AI-Backend Consolidation&rdquo;.</p>
+  </div>
+
   <div class="card tldr">
     <p style="margin:0 0 8px"><b>TL;DR</b></p>
     <p style="margin:0 0 8px">The split is <b>half deliberate, half accreted</b>. Scribble→Amplify is a sound, intentional decision (single prompt + rate-limit + quota source of truth, shared web/desktop). Stream→Supabase-edge is the older path that grew on its own — it carries the dual-key footgun (the bug you just hit) and a duplicated Mercury client.</p>

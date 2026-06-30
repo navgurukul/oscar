@@ -1997,6 +1997,20 @@ function App() {
     isRecordingRef.current = true;
     setIsRecording(true);
     setStatus("Recording... Release to stop");
+
+    // Prewarm the dictation-cleanup backend NOW, at record-start, so its
+    // ~2.8s Amplify Lambda cold-start is paid during the (usually multi-second)
+    // recording + decode + transcribe window instead of serially before paste.
+    // Firing here rather than at processing-start gives the boot far more lead
+    // time: perf.jsonl showed cold-starts landing on the critical path
+    // (cleanup-platform-net ~2.5s, some past the 7s deadline → raw transcript
+    // pasted) because the post-record window alone was too short to hide a cold
+    // boot. Fire-and-forget and a server-side no-op (returns before any Mercury/
+    // quota work), so a wasted ping on a silent take is harmless. Gated on
+    // cleanup being enabled at all.
+    if (aiImprovementEnabledRef.current) {
+      void aiService.warmUp();
+    }
   };
 
   const stopHotkeyRecording = () => {
@@ -2143,17 +2157,9 @@ function App() {
       return;
     }
 
-    // Prewarm the cleanup edge function NOW, at the very start of the ~1.5s
-    // decode+load+transcribe window, so Supabase isolate cold-start + the
-    // FE↔edge connection are paid in parallel with Whisper instead of serially
-    // before Mercury. perf data shows the cleanup roundtrip (~1.8s) is ~69%
-    // platform/network overhead and only ~31% Mercury generation; this hides a
-    // chunk of that overhead. Fire-and-forget, gated on cleanup being enabled
-    // at all — a wasted ping when the fast-path later skips cleanup is harmless.
-    if (aiImprovementEnabledRef.current) {
-      void aiService.warmUp();
-    }
-
+    // (Cleanup-backend prewarm now fires at record-start in startHotkeyRecording
+    // — far more lead time to absorb the Amplify Lambda cold-start than this
+    // post-record window offered.)
     setStatus(`Decoding ${(audioBlob.size / 1024).toFixed(0)}KB audio...`);
     const tDecode0 = performance.now();
     // Decode in Rust (symphonia), NOT WebAudio. WKWebView on macOS 26/27 throws
