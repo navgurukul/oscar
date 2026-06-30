@@ -833,11 +833,13 @@ async function buildFallbackMeetingMarkdown(
 
 export const aiService = {
   /**
-   * Fire-and-forget prewarm of the ai-process edge function. Called at
-   * record-stop so the Supabase isolate cold-start + FE↔edge connection are
-   * paid during the ~1.5s Whisper window instead of on the cleanup critical
-   * path. Best-effort: any failure (no session, offline, abort) is swallowed —
-   * a cold cleanup call still works, it's just slower. Never throws.
+   * Fire-and-forget prewarm of the dictation-cleanup backend. Called at
+   * record-start (startHotkeyRecording) so the Amplify Lambda cold-start (~2.8s)
+   * is paid during the recording + Whisper window instead of on the cleanup
+   * critical path. (Pre-cutover this warmed the Supabase ai-process isolate; the
+   * Amplify web route is the default now — see the branch below.) Best-effort:
+   * any failure (no session, offline, abort) is swallowed — a cold cleanup call
+   * still works, it's just slower. Never throws.
    */
   async warmUp(signal?: AbortSignal): Promise<void> {
     try {

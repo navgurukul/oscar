@@ -6,7 +6,7 @@ Overview of AI agents and services in OSCAR.
 
 OSCAR uses AI agents to transform voice recordings into clean formatted text. **Two providers, split by feature:**
 
-- **Mercury 2 (Inception Labs)** — all Scribble + Stream/dictation text agents: format, title, transform, format-email, translate, publish, and desktop dictation cleanup. Endpoint is OpenAI-compatible (`https://api.inceptionlabs.ai/v1`, model `mercury-2`). Requires `MERCURY_API_KEY` (web `.env` + Supabase secret for the `ai-process` Edge Function).
+- **Mercury 2 (Inception Labs)** — all Scribble + Stream/dictation text agents: format, title, transform, format-email, translate, publish, and desktop dictation cleanup. Endpoint is OpenAI-compatible (`https://api.inceptionlabs.ai/v1`, model `mercury-2`). Requires `MERCURY_API_KEY` in **two** homes: the web `.env` (Amplify — serves every Scribble route **and**, since the v0.11.0 cutover, desktop dictation cleanup via `/api/ai/dictation-cleanup`) and a Supabase edge secret (the `ai-process` Edge Function, which now serves **only** the non-dictation Mercury modes — desktop Scribble transforms + meeting fallback).
 - **Google Gemini 2.5 Flash** — Minutes (meeting enhance, via the `meeting-enhance` Edge Function) and embeddings (`text-embedding-004`) **only**. Requires `GEMINI_API_KEY`.
 
 > Migrated to Mercury 2 for Scribble in v0.7.30 (this doc previously described an all-Gemini pipeline). Gemini now powers Minutes + embeddings exclusively.
@@ -62,7 +62,7 @@ Beyond format + title, the same Mercury 2 backend powers:
 - [`packages/web/app/api/ai/format-email/route.ts`](./packages/web/app/api/ai/format-email/route.ts) — email-shaped formatting, streaming
 - [`packages/web/app/api/ai/translate/route.ts`](./packages/web/app/api/ai/translate/route.ts) — EN/Hi translation
 - [`packages/web/app/api/ai/publish/route.ts`](./packages/web/app/api/ai/publish/route.ts) — publish-ready rewrite
-- Desktop dictation cleanup — `transcribe_cleanup` mode via the `ai-process` Edge Function (see Desktop Stream Pill below)
+- [`packages/web/app/api/ai/dictation-cleanup/route.ts`](./packages/web/app/api/ai/dictation-cleanup/route.ts) — desktop dictation cleanup (`transcribe_cleanup`), on Amplify since the v0.11.0 cutover (was the `ai-process` Edge Function; see Desktop Stream Pill below)
 
 ### 2. Title Generation Agent
 
@@ -160,14 +160,14 @@ MERCURY_MODEL        = "mercury-2"
 
 Gemini config (Minutes + embeddings only) lives in [`packages/shared/src/constants/api.ts`](./packages/shared/src/constants/api.ts) (`gemini-2.5-flash`) and `packages/web/lib/server/embeddings.ts` (`text-embedding-004`).
 
-Desktop dictation cleanup (the `ai-process` Edge Function, used by the Stream pill) also calls Mercury 2 via the OpenAI-compatible endpoint and requires `MERCURY_API_KEY` set as a Supabase secret.
+Desktop dictation cleanup (the Stream pill) calls Mercury 2 via the Amplify web route `/api/ai/dictation-cleanup` — the v0.11.0 consolidation cutover, sharing the same Mercury client/key as the Scribble routes. The `ai-process` Edge Function still calls Mercury 2 for the non-dictation modes (desktop Scribble transforms + meeting fallback), so it still requires `MERCURY_API_KEY` set as a Supabase secret.
 
 ### Environment Variables
 
 Required:
 
 ```
-MERCURY_API_KEY=your_inception_labs_key   # Scribble + Stream agents (web + ai-process Edge Function)
+MERCURY_API_KEY=your_inception_labs_key   # Scribble + Stream agents — set in BOTH homes: web .env (Amplify; serves Scribble + dictation cleanup) AND Supabase edge secret (ai-process; non-dictation modes only)
 GEMINI_API_KEY=your_google_key            # Minutes (meeting-enhance) + embeddings only
 ```
 
@@ -209,13 +209,15 @@ Pill click / Ctrl+Space
   → capture frontmost app  (frontmost.rs)
   → MediaRecorder (mp4 / webm, 100 ms chunks)
   → whisper-rs transcription  (whisper.rs, local model)
-  → aiService.processText(text, "transcribe_cleanup")  — micro Mercury 2 prompt (ai-process Edge Function)
+  → aiService.processText(text, "transcribe_cleanup")  — micro Mercury 2 prompt (Amplify /api/ai/dictation-cleanup)
   → paste_transcription  (clipboard + synthetic Cmd/Ctrl+V via paste.rs)
   → pill shows "Inserted into document" toast (1500 ms)
   → pill collapses back to the edge handle
 ```
 
-The AI cleanup uses the `transcribe_cleanup` mode in [`packages/desktop/src/services/ai.service.ts`](./packages/desktop/src/services/ai.service.ts) — a smaller, faster prompt than the Scribble formatter because stream inserts go directly into the user's focused field. The upstream model is Mercury 2 (Inception Labs) via the `ai-process` Edge Function; reasoning is disabled (`reasoning_effort: "minimal"`) and temperature is pinned to 0.5 so the tight stream-cleanup token budget reaches the output. The Title Agent is **not** invoked for stream inserts (there is no scribble to title).
+The AI cleanup uses the `transcribe_cleanup` mode in [`packages/desktop/src/services/ai.service.ts`](./packages/desktop/src/services/ai.service.ts) — a smaller, faster prompt than the Scribble formatter because stream inserts go directly into the user's focused field. The upstream model is Mercury 2 (Inception Labs) via the Amplify web route `/api/ai/dictation-cleanup` (the v0.11.0 cutover off the `ai-process` Edge Function); reasoning is disabled (`reasoning_effort: "minimal"`) and temperature is pinned to 0.5 so the tight stream-cleanup token budget reaches the output. The Title Agent is **not** invoked for stream inserts (there is no scribble to title).
+
+To hide the Amplify Lambda cold-start (~2.8s), `startHotkeyRecording` fires a best-effort `aiService.warmUp()` ping at **record-start** (not record-stop), so the boot is paid in parallel with the recording + transcribe window rather than serially before paste. The ping is a server-side no-op (returns before any Mercury/quota work). Cold-starts that still slip through are bounded by `STREAM_CLEANUP_DEADLINE_MS` (7 s): on timeout the raw transcript is pasted unpolished rather than hanging the pill.
 
 **Pill state machine** (driven by `set_pill_phase` Tauri command + `pill-set-phase` event in [`packages/desktop/public/pill.html`](./packages/desktop/public/pill.html)):
 
