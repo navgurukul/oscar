@@ -13,7 +13,12 @@ import {
   parseJsonBody,
   validateAndWrapInput,
 } from "@/lib/server/ai-route";
-import { getMercuryApiKey, mercuryGenerateText } from "@/lib/server/mercury";
+import {
+  getMercuryApiKey,
+  mercuryGenerateText,
+  type MercuryUsage,
+} from "@/lib/server/mercury";
+import { captureLLM } from "@/lib/server/observability";
 
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -73,6 +78,8 @@ export async function POST(req: NextRequest) {
 
   const languageLabel = targetLanguage === "hi" ? "Hindi" : "English";
 
+  const t0 = performance.now();
+  let usage: MercuryUsage = {};
   try {
     const translatedText = await mercuryGenerateText({
       apiKey,
@@ -83,10 +90,29 @@ export async function POST(req: NextRequest) {
       temperature: API_CONFIG.TRANSLATE_TEMPERATURE,
       maxTokens: API_CONFIG.TRANSLATE_MAX_TOKENS,
       timeoutMs: REQUEST_TIMEOUT_MS,
+      onUsage: (u) => { usage = u; },
+    });
+    await captureLLM({
+      userId: user.id,
+      route: "translate",
+      provider: "mercury",
+      latencyMs: performance.now() - t0,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      inputChars: inputResult.text.length,
+      outputChars: translatedText.length,
     });
     return applyCors(NextResponse.json({ translatedText }));
   } catch (err: unknown) {
     const error = err as Error;
+    await captureLLM({
+      userId: user.id,
+      route: "translate",
+      provider: "mercury",
+      latencyMs: performance.now() - t0,
+      isError: true,
+      error: err,
+    });
     return applyCors(
       NextResponse.json(
         { error: ERROR_MESSAGES.AI_REQUEST_FAILED, details: error?.message || String(err) },

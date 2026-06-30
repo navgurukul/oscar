@@ -5,6 +5,7 @@ import { STTService } from "../services/stt.service";
 import { permissionService } from "../services/permission.service";
 import { RecordingState } from "../types/recording.types";
 import { ERROR_MESSAGES, PERMISSION_CONFIG } from "../constants";
+import { ANALYTICS_EVENTS, track } from "../analytics/events";
 
 export function useRecording() {
   const [state, setState] = useState<RecordingState>(RecordingState.IDLE);
@@ -128,6 +129,7 @@ export function useRecording() {
 
       setError(null);
       setState(RecordingState.RECORDING);
+      track(ANALYTICS_EVENTS.RECORDING_STARTED);
 
       try {
         await sttServiceRef.current.startRecording(seedTranscript);
@@ -152,6 +154,10 @@ export function useRecording() {
     try {
       const finalTranscript = await sttServiceRef.current.stopRecording();
       setState(RecordingState.READY);
+      // Length only — never the transcript content (metadata-only policy).
+      track(ANALYTICS_EVENTS.TRANSCRIPTION_COMPLETED, {
+        transcript_length: finalTranscript.length,
+      });
       return finalTranscript;
     } catch (error: unknown) {
       const err = error as Error;
