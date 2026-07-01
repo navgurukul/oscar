@@ -3,7 +3,7 @@
 import { v2 } from "@/components/v2/V2Primitives";
 
 interface UsageIndicatorProps {
-  type: "recordings" | "scribbles" | "vocabulary";
+  type: "recordings" | "scribbles" | "vocabulary" | "meetings" | "streams";
   current: number;
   limit: number | null;
   variant?: "compact" | "full";
@@ -13,12 +13,16 @@ const LABEL = {
   recordings: "Scribble recordings",
   scribbles: "Scribbles",
   vocabulary: "vocabulary entries",
+  meetings: "Meetings",
+  streams: "Streams",
 } as const;
 
 const FULL_HEADING = {
   recordings: "Scribble recordings this month",
   scribbles: "Total Scribbles",
   vocabulary: "Vocabulary entries",
+  meetings: "Total Meetings (Minutes)",
+  streams: "Total Streams",
 } as const;
 
 const WARN = v2.accent;

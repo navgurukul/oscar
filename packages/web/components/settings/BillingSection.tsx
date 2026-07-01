@@ -21,6 +21,10 @@ interface BillingSectionProps {
   recordingsLimit: number | null;
   scribblesCount: number;
   scribblesLimit: number | null;
+  meetingsCount: number;
+  meetingsLimit: number | null;
+  streamsCount: number;
+  streamsLimit: number | null;
   isProUser: boolean;
   isLoading: boolean;
   onRefetch: () => void;
@@ -34,6 +38,10 @@ export function BillingSection({
   recordingsLimit,
   scribblesCount,
   scribblesLimit,
+  meetingsCount,
+  meetingsLimit,
+  streamsCount,
+  streamsLimit,
   isProUser,
   isLoading,
   onRefetch,
@@ -117,6 +125,12 @@ export function BillingSection({
             style={{ background: v2.cream2, border: `1px solid ${v2.rule}` }}
           >
             <UsageIndicator
+              type="streams"
+              current={streamsCount}
+              limit={streamsLimit}
+              variant="full"
+            />
+            <UsageIndicator
               type="recordings"
               current={recordingsThisMonth}
               limit={recordingsLimit}
@@ -126,6 +140,12 @@ export function BillingSection({
               type="scribbles"
               current={scribblesCount}
               limit={scribblesLimit}
+              variant="full"
+            />
+            <UsageIndicator
+              type="meetings"
+              current={meetingsCount}
+              limit={meetingsLimit}
               variant="full"
             />
             <UsageIndicator

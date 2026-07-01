@@ -27,6 +27,10 @@ interface SubscriptionContextType {
   recordingsLimit: number | null;
   scribblesCount: number;
   scribblesLimit: number | null;
+  meetingsCount: number;
+  meetingsLimit: number | null;
+  streamsCount: number;
+  streamsLimit: number | null;
 
   // Computed values
   isProUser: boolean;
@@ -71,6 +75,14 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
   const [scribblesLimit, setScribblesLimit] = useState<number | null>(
     SUBSCRIPTION_CONFIG.FREE_MAX_SCRIBBLES
   );
+  const [meetingsCount, setMeetingsCount] = useState(0);
+  const [meetingsLimit, setMeetingsLimit] = useState<number | null>(
+    SUBSCRIPTION_CONFIG.FREE_MAX_MEETINGS
+  );
+  const [streamsCount, setStreamsCount] = useState(0);
+  const [streamsLimit, setStreamsLimit] = useState<number | null>(
+    SUBSCRIPTION_CONFIG.FREE_MAX_STREAMS
+  );
 
   const [isProUser, setIsProUser] = useState(false);
   const [canRecord, setCanRecord] = useState(true);
@@ -112,6 +124,10 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
       setRecordingsLimit(data.recordingsLimit);
       setScribblesCount(data.scribblesCount);
       setScribblesLimit(data.scribblesLimit);
+      setMeetingsCount(data.meetingsCount ?? 0);
+      setMeetingsLimit(data.meetingsLimit ?? null);
+      setStreamsCount(data.streamsCount ?? 0);
+      setStreamsLimit(data.streamsLimit ?? null);
       setIsProUser(data.isProUser);
       setCanRecord(data.canRecord);
       setCanCreateScribble(data.canCreateScribble);
@@ -176,6 +192,10 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
     recordingsLimit,
     scribblesCount,
     scribblesLimit,
+    meetingsCount,
+    meetingsLimit,
+    streamsCount,
+    streamsLimit,
     isProUser,
     canRecord,
     canCreateScribble,
