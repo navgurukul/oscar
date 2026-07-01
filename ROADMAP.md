@@ -10,6 +10,7 @@ Product ideas, planned features. Not prioritized — ordering loose.
 - **Littlebird.ai-style work memory clone**: Added below as a product-flow bet. Scope should stay Oscar-native: voice-first, explicit privacy controls, no invisible capture by default.
 - **Observability**: Planned. No error tracking, no analytics, no AI-quality telemetry wired today. Production runs blind. Detail below.
 - **Dictation latency & AI-backend consolidation**: In progress. Dictation cleanup cut over to the Amplify web route (v0.11.0); a record-start prewarm shipped to mask the Lambda cold-start (now measuring). Remaining latency levers parked below: scheduled keep-warm ping, deadline tuning, and retiring the edge `ai-process` cleanup path + flag. Detail below.
+- **Competitive intel — FluidVoice (local cleanup + streaming CTC STT)**: Not started (research note). A macOS dictation competitor that (1) runs AI cleanup fully on-device, (2) defaults to streaming CTC/TDT STT (Parakeet/Nemotron), (3) exposes model choice — dodging exactly the cold-start + batch-Whisper latency Oscar has spent v0.11.x patching. Captured as a "what to steal" note below, not a committed plan.
 
 ---
 
@@ -36,6 +37,37 @@ Product ideas, planned features. Not prioritized — ordering loose.
 - **Retire the edge `ai-process` cleanup path + remove the flag** — once Amplify is proven stable: delete the now-dead `transcribe_cleanup` case + stream-only helpers (`applyStreamPolish`, `cleanup-style.ts`, its Deno test, the `test:edge-functions` wiring) from the edge function, and hardcode the web route in `processText`/`warmUp`. Needs a manual Supabase deploy. **Keep the edge function itself** (non-dictation modes).
 - **Tune `STREAM_CLEANUP_DEADLINE_MS`** (currently 7000) — a band-aid: raising it trades a longer pill-freeze risk for fewer raw-paste fallbacks. Only meaningful if cold-starts persist.
 - **Provisioned concurrency** — likely NOT exposable on Amplify-managed Next.js SSR Lambdas without ejecting; investigate before committing.
+
+---
+
+## Competitive Intel — FluidVoice
+
+**Status**: Research note (not started). Captured 2026-07-01 from a repo review of [github.com/altic-dev/FluidVoice](https://github.com/altic-dev/FluidVoice). This is a "what they do better + what to steal" note, not a committed plan.
+
+**What FluidVoice is**: macOS-only voice-to-text app. Swift/SwiftUI, GPLv3 (Apache-2.0 before 2026-02-23). Two modes: **Write Mode** (dictation → text insertion via Accessibility "Smart Typing") and **Command Mode** (voice → Mac automation). Global hotkey, real-time transcription overlay, notch-aware, per-app config, optional local audio history, anonymous opt-in analytics.
+
+**Where they beat Oscar** — and it's exactly the axis Oscar has been patching for 4 releases (dictation latency + reliability), via a different tech choice that dodges the whole fight:
+
+1. **On-device AI cleanup ("Fluid Intelligence")** — smart formatting, context-aware capitalization, post-processing all run locally; cloud (OpenAI/Groq) is optional, not required. Oscar's cleanup is a cloud Mercury round-trip via the Amplify web route → the entire v0.11.x cold-start saga (Lambda cold-starts, 7s deadline → raw paste). A local small-model cleanup would kill that class of bug permanently.
+2. **Streaming CTC/TDT STT, not batch Whisper** — defaults to Parakeet/Nemotron/Cohere (NVIDIA CTC/TDT families); "pretty much zero delay between speaking and words on screen" (v1.6.0 rebuilt Parakeet). Words stream in as you talk. Oscar = whisper-rs batch: record → stop → transcribe → paste, so the user waits. (Oscar's own Whissle eval already measured CTC ~4× faster than Whisper — see the STT-eval memory — but rejected Whissle on Hinglish quality; Parakeet TDT v3 (25 lang) was never evaluated.)
+3. **User-selectable STT model** — 6 families exposing the latency/accuracy/size tradeoff (Parakeet Flash ~250 MB lowest-latency → Cohere ~1.4 GB high-accuracy → Apple Speech zero-download → Whisper 99-lang). Oscar auto-routes by preset; less user control.
+
+Also notable: **Command Mode** (voice automation, beyond dictation) and **per-app context prompts** (Oscar has global tone presets only — cf. our Context-Aware Dictation section, which is the same idea but routing-based, not a free-text per-app prompt).
+
+**Where Oscar still leads / differs** (don't over-rotate):
+
+- **Cross-platform** — Oscar ships Windows + Linux + web today; FluidVoice is macOS-only (Win/iOS/Linux "planned").
+- **Hinglish** — Oscar's Oriserve romanized-Hindi fine-tunes (Apex/Prime) are a real edge for our users; FluidVoice is multilingual but has no Hinglish romanization.
+- **Product scope** — Oscar = Scribbles + Minutes + teams + web app; FluidVoice is a dictation-only utility.
+- **Cleanup model power** — cloud Mercury 2 (diffusion) beats a small local model on hard formatting/transform. Local = fast but dumber. Argues for a hybrid split, not wholesale local.
+
+**What to steal (candidate follow-ups, unprioritized)**:
+
+1. **Hybrid cleanup: local for the common case, cloud for hard transforms.** Small on-device model polishes routine dictation with zero network; route only heavy transforms (email, prompt-engineer, translate) to Mercury. Permanently removes the cold-start dependency for the hot path. NOTE: this contradicts the current "Plan A" all-Amplify consolidation — would need an explicit decision to reverse.
+2. **Re-eval Parakeet TDT v3 for a low-latency streaming lane** (not Whissle — that failed on Hinglish quality). Target the English/multilingual dictation path; keep Oriserve for `hi-en`. Reuse the whissle-vs-oscar harness (`~/Desktop/whissle-vs-oscar/score.py`) for WER/latency.
+3. **Real-time transcription overlay** — stream partial hypotheses into the pill as the user speaks, instead of post-hoc batch transcribe. Big perceived-latency win even before cleanup runs. Depends on a streaming-capable STT (see #2).
+
+**Cross-refs**: Dictation Latency & AI-Backend Consolidation (above), Context-Aware Dictation (below), and the STT-eval / AI-backend-consolidation memories.
 
 ---
 
