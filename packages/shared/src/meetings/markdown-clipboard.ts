@@ -29,7 +29,7 @@ function escapeHtml(text: string): string {
 function stripCitations(markdown: string): string {
   return markdown
     .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/\s*\[\[[^\]\n]+\]\]/g, "")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
 }

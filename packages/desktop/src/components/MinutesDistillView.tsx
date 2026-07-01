@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import {
   MarkdownNotesView,
   renderInlineMarkdown,
+  stripActionOwnerSuffix,
   stripEvidenceComments,
 } from "./MarkdownNotesView";
 
@@ -48,7 +49,9 @@ function detectSection(heading: string): Section {
 }
 
 function parseActionItem(raw: string): ActionItem {
-  const trimmed = raw.trim();
+  // Drop any legacy "<action> — <Owner>" trailing owner tag before parsing so
+  // the owner name no longer shows inline in the action text.
+  const trimmed = stripActionOwnerSuffix(raw.trim());
   // Patterns: "**Mira**: task" or "**Mira** — task" or "Mira: task" or "Mira — task" or "task (Mira)"
   const bold = trimmed.match(/^\*\*([^*]+)\*\*\s*[:\-—–]\s*(.+)$/);
   if (bold) return { owner: bold[1].trim(), task: bold[2].trim() };

@@ -15,10 +15,20 @@ export function renderInlineMarkdown(text: string): ReactNode {
   });
 }
 
+export function stripActionOwnerSuffix(text: string): string {
+  return text
+    .replace(/\s+[—–-]\s+Owner:.*$/i, "")
+    .replace(
+      /\s+[—–-]\s+[A-Z][\w.'&/-]*(?:[,\s]+(?:and\s+)?[A-Z][\w.'&/-]*){0,3}\s*$/,
+      "",
+    )
+    .trim();
+}
+
 export function stripEvidenceComments(markdown: string): string {
   return markdown
     .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/\s*\[\[[^\]\n]+\]\]/g, "")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
 }
@@ -127,7 +137,7 @@ export function MarkdownNotesView({
       const taskMatch = body.match(/^\[([ xX])\]\s+(.+)$/);
       if (taskMatch) {
         listItems.push({
-          text: taskMatch[2].trim(),
+          text: stripActionOwnerSuffix(taskMatch[2].trim()),
           task: taskMatch[1].toLowerCase() === "x" ? "done" : "open",
         });
       } else {
