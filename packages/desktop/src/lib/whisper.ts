@@ -1,9 +1,10 @@
 import type { WhisperModelRole } from "./app-types";
 
 const HINGLISH_HINT =
-  "acha, theek hai, haan, nahi, kya, kaise, kab, kyun, lekin, aur, " +
-  "matlab, samajh, baat, kaam, kal, aaj, abhi, sab, log, dekho, " +
-  "bolo, suno, chalo, pehle, baad mein, zaroor, bilkul, thoda, bahut";
+  "Yeh ek casual Hinglish baatcheet hai jisme Hindi aur English dono mix hote " +
+  "hain. English ke words, technical terms aur company ke naam English mein hi " +
+  "rehte hain, jaise: value provide karti hai, wheelbase aur boot space, " +
+  "company ke against compare karna, basis par, 4.6 meters.";
 
 export function buildInitialPrompt(
   transcriptionLanguage: string,
@@ -24,20 +25,15 @@ export function getWhisperLanguage(
   _role: WhisperModelRole,
 ) {
   if (transcriptionLanguage === "auto") return undefined;
-  if (transcriptionLanguage === "hi-en") {
-    // Hinglish is Hindi-dominant code-switching. Forcing "en" makes Whisper
-    // mangle the Hindi portions into nonsense English ("C salary big pigs"
-    // out of actual Hindi speech); "hi" decodes the Hindi acoustically and
-    // still transcribes the embedded English words. This holds for both the
-    // general model and the Oriserve Hindi2Hinglish model that the backend now
-    // routes "hi-en" to (it is fine-tuned from large-v3, so the "hi" language
-    // token still primes Hindi acoustics).
-    //
-    // Output script: the Oriserve model emits romanized Latin Hinglish directly.
-    // On hardware too small for it, the general-model fallback emits Devanagari,
-    // which the downstream Mercury/Gemini cleanup romanizes via the language
-    // hint — so user-facing notes stay readable on every tier.
-    return "hi";
-  }
+  // Pass "hi-en" through to the backend UNMAPPED. Whisper has no "hi-en" token,
+  // so the right ISO token depends on which model is actually resident — and
+  // only the Rust side knows that:
+  //   • Oriserve Hindi2Hinglish fine-tune → decoded with "en" (the token its
+  //     model card specifies for romanized Hinglish output). Forcing "hi" here
+  //     drove it off-spec and produced garbled, looping transcripts.
+  //   • general-model fallback (box too small for Oriserve) → decoded with "hi"
+  //     (Devanagari, which downstream Mercury/Gemini cleanup romanizes).
+  // `transcribe_audio_inner` performs this variant-aware mapping from the
+  // declared `expected_variant`, so the FE must not pre-collapse the code.
   return transcriptionLanguage;
 }

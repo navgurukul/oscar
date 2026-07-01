@@ -49,6 +49,10 @@ impl WhisperModelVariant {
         ]
     }
 
+    pub fn is_hinglish(&self) -> bool {
+        matches!(self, Self::Hindi2HinglishApex | Self::Hindi2HinglishPrime)
+    }
+
     pub fn spec(&self) -> ModelSpec {
         use WhisperModelVariant::*;
         match self {

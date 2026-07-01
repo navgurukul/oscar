@@ -1252,9 +1252,31 @@ pub(crate) fn transcribe_audio_inner(
     }
     let context = &loaded.context;
 
-    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-    // "auto" or None → let Whisper auto-detect the language from the audio
-    let lang = language.filter(|l| *l != "auto" && !l.is_empty());
+    
+    let is_hinglish = expected_variant.is_hinglish();
+
+    
+    let strategy = if is_hinglish {
+        SamplingStrategy::BeamSearch {
+            beam_size: 5,
+            patience: -1.0,
+        }
+    } else {
+        SamplingStrategy::Greedy { best_of: 1 }
+    };
+    let mut params = FullParams::new(strategy);
+    // "auto"/empty/None → let Whisper auto-detect the language from the audio.
+    let lang = match language {
+        Some("auto") | Some("") | None => None,
+        Some("hi-en") => {
+            if expected_variant.is_hinglish() {
+                Some("en")
+            } else {
+                Some("hi")
+            }
+        }
+        Some(other) => Some(other),
+    };
     params.set_language(lang);
     params.set_print_special(false);
     params.set_print_progress(false);
@@ -1291,6 +1313,14 @@ pub(crate) fn transcribe_audio_inner(
     params.set_entropy_thold(2.4);
     params.set_logprob_thold(-1.0);
     params.set_no_speech_thold(0.6);
+
+    // ── Hinglish accuracy overrides ────────────────────────────────────────
+    if is_hinglish {
+        // Keep each internal 30s window conditioned on the previous window
+        params.set_no_context(false);
+        // Hinglish code-switching is inherently higher-entropy than monolingual
+        params.set_entropy_thold(2.8);
+    }
 
     // Inject personal dictionary words as Whisper initial prompt
     if let Some(prompt) = initial_prompt {
@@ -1337,7 +1367,7 @@ pub(crate) fn transcribe_audio_inner(
     // per-segment estimate is noisy on tiny segments, so single-word
     // utterances get a relaxed threshold — VAD upstream already vouched
     // that speech is present.
-    const NO_SPEECH_THRESHOLD: f32 = 0.5;
+    let no_speech_threshold: f32 = if is_hinglish { 0.6 } else { 0.5 };
     const SHORT_SEGMENT_NO_SPEECH_THRESHOLD: f32 = 0.8;
     let effective_language = lang.unwrap_or("");
 
@@ -1352,7 +1382,7 @@ pub(crate) fn transcribe_audio_inner(
             {
                 SHORT_SEGMENT_NO_SPEECH_THRESHOLD
             } else {
-                NO_SPEECH_THRESHOLD
+                no_speech_threshold
             };
             if no_speech_prob > no_speech_ceiling {
                 dropped_no_speech += 1;
@@ -1466,7 +1496,7 @@ pub(crate) fn transcribe_audio_inner(
         log::info!(
             "[whisper] Dropped {} segment(s) above no_speech threshold {:.2}",
             dropped_no_speech,
-            NO_SPEECH_THRESHOLD
+            no_speech_threshold
         );
     }
     if dropped_hallucination > 0 {
