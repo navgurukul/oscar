@@ -16,6 +16,8 @@ import {
   V2TeamHeader,
 } from "@/components/v2/V2Primitives";
 
+const FEED_PER_PAGE = 8;
+
 type FeedKind = "scribble" | "meeting";
 
 interface FeedItem {
@@ -49,6 +51,7 @@ export default function TeamFeedPage() {
   const [kindFilter, setKindFilter] = useState<FeedKind | "all">("all");
   const [authorFilter, setAuthorFilter] = useState<string | "all">("all");
   const [query, setQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,6 +106,20 @@ export default function TeamFeedPage() {
       return true;
     });
   }, [items, kindFilter, authorFilter, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / FEED_PER_PAGE));
+  const pagedItems = useMemo(
+    () => filtered.slice((currentPage - 1) * FEED_PER_PAGE, currentPage * FEED_PER_PAGE),
+    [filtered, currentPage]
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [kindFilter, authorFilter, query]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   if (authLoading || loading) {
     return (
@@ -258,7 +275,7 @@ export default function TeamFeedPage() {
             </div>
           ) : (
             <div className="mt-10">
-              {filtered.map((item) => {
+              {pagedItems.map((item) => {
                 const href =
                   item.kind === "scribble"
                     ? `${ROUTES.SCRIBBLE}/${item.id}`
@@ -323,6 +340,32 @@ export default function TeamFeedPage() {
                 );
               })}
             </div>
+            {totalPages > 1 && (
+              <div
+                className="mt-10 flex items-center justify-between gap-4 pt-6"
+                style={{ borderTop: `1px solid ${v2.rule}` }}
+              >
+                <button
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-full px-3 py-1.5 text-[12px] disabled:opacity-40"
+                  style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                >
+                  ← Previous
+                </button>
+                <V2Mono style={{ fontSize: 11, color: v2.inkFaint, letterSpacing: "0.1em" }}>
+                  PAGE {currentPage} / {totalPages}
+                </V2Mono>
+                <button
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={currentPage === totalPages}
+                  className="rounded-full px-3 py-1.5 text-[12px] disabled:opacity-40"
+                  style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           )}
         </main>
       </div>

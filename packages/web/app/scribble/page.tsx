@@ -34,6 +34,13 @@ import {
   V2WebHeader,
   V2Avatar,
 } from "@/components/v2/V2Primitives";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 type SortOption = "updated" | "created" | "length" | "title";
 type SavedViewKey = "all" | "recent" | "starred" | "unfoldered" | `folder:${string}`;
@@ -229,6 +236,10 @@ export default function ScribblePage() {
     () => filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
     [filtered, currentPage]
   );
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const selectedCount = selectedIds.size;
   const pageSelectionState = useMemo(() => {
@@ -778,30 +789,39 @@ export default function ScribblePage() {
                 })}
 
                 {totalPages > 1 && (
-                  <div
-                    className="mt-10 pt-6 flex items-center justify-between"
-                    style={{ borderTop: `1px solid ${v2.rule}` }}
-                  >
-                    <button
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className="rounded-full px-3 py-1.5 text-[12px] disabled:opacity-40"
-                      style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
-                    >
-                      ← Previous
-                    </button>
-                    <V2Mono style={{ fontSize: 11, color: v2.inkFaint, letterSpacing: "0.1em" }}>
-                      PAGE {currentPage} / {totalPages}
-                    </V2Mono>
-                    <button
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      className="rounded-full px-3 py-1.5 text-[12px] disabled:opacity-40"
-                      style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
-                    >
-                      Next →
-                    </button>
-                  </div>
+                  <Pagination className="mt-10 pt-6" style={{ borderTop: `1px solid ${v2.rule}` }}>
+                    <PaginationContent className="w-full justify-between">
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCurrentPage((page) => Math.max(1, page - 1));
+                          }}
+                          className="rounded-full px-3 py-1.5 text-[12px] disabled:opacity-40"
+                          style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                          aria-disabled={currentPage === 1}
+                        />
+                      </PaginationItem>
+                      <PaginationItem>
+                        <V2Mono style={{ fontSize: 11, color: v2.inkFaint, letterSpacing: "0.1em" }}>
+                          PAGE {currentPage} / {totalPages}
+                        </V2Mono>
+                      </PaginationItem>
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCurrentPage((page) => Math.min(totalPages, page + 1));
+                          }}
+                          className="rounded-full px-3 py-1.5 text-[12px] disabled:opacity-40"
+                          style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                          aria-disabled={currentPage === totalPages}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
                 )}
               </div>
             )}
