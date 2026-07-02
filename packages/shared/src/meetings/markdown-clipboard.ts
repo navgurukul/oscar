@@ -25,11 +25,20 @@ const HTML_ESCAPE: Record<string, string> = {
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (ch) => HTML_ESCAPE[ch]);
 }
+function stripActionOwnerSuffix(text: string): string {
+  return text
+    .replace(/\s+[—–-]\s+Owner:.*$/i, "")
+    .replace(
+      /\s+[—–-]\s+[A-Z][\w.'&/-]*(?:[,\s]+(?:and\s+)?[A-Z][\w.'&/-]*){0,3}\s*$/,
+      "",
+    )
+    .trim();
+}
 
 function stripCitations(markdown: string): string {
   return markdown
     .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/\s*\[\[[^\]\n]+\]\]/g, "")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
 }
@@ -141,7 +150,7 @@ export function markdownToHtml(markdown: string): string {
       const checked = taskMatch[1].toLowerCase() === "x";
       const box = checked ? "☑" : "☐";
       list.items.push(
-        `<li>${box} ${renderInlineHtml(taskMatch[2].trim())}</li>`,
+        `<li>${box} ${renderInlineHtml(stripActionOwnerSuffix(taskMatch[2].trim()))}</li>`,
       );
       continue;
     }
@@ -204,7 +213,7 @@ export function markdownToPlainText(markdown: string): string {
       if (task) {
         const indent = task[1] ?? "";
         const box = task[2].toLowerCase() === "x" ? "☑" : "☐";
-        return `${indent}${box} ${renderInlinePlain(task[3].trim())}`;
+        return `${indent}${box} ${renderInlinePlain(stripActionOwnerSuffix(task[3].trim()))}`;
       }
 
       const bullet = line.match(/^(\s*)[-*]\s+(.+)$/);

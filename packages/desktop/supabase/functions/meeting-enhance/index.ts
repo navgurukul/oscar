@@ -203,7 +203,7 @@ function uniqueStrings(values: string[]): string[] {
 
 function stripCitationToken(value: string): string {
   return value
-    .replace(/\s*\[\[seg:[A-Za-z0-9._:-]+\]\]/g, "")
+    .replace(/\s*\[\[[^\]\n]+\]\]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -1059,7 +1059,7 @@ function buildFinalMarkdown(
         continue;
       }
 
-      const citationMatch = rawBullet.match(/\[\[seg:([A-Za-z0-9._:-]+)\]\]/);
+      const citationMatch = rawBullet.match(/\[\[(?:seg:)?([A-Za-z0-9._:-]+)\]\]/);
       const visibleBullet = stripCitationToken(rawBullet);
       const normalizedVisible = normalizeText(visibleBullet);
       if (!visibleBullet) continue;
@@ -1113,7 +1113,7 @@ async function generateUncitedFallbackMarkdown(
     "Prefer concrete action items, technical details, decisions, open questions, numeric values, branch names, testing needs, and design follow-ups only when they appear in the transcript or manual notes. " +
     "The transcript may mix English, Hindi, Hinglish, and speech-recognition errors. Recover likely meaning when several nearby words support it, but never import details from examples or prior meetings. " +
     "Never write blank sections. If a section truly has no evidence, write one bullet: None captured. " +
-    "For Action items, use '- [ ] <action> — <Owner>' with the owner if identifiable, or 'Owner: unassigned'. " +
+    "For Action items, use '- [ ] <action>' without appending an owner name or 'Owner:' suffix. " +
     "For a Purpose section, write 1-3 plain bullets summarizing why the session happened and what was being attempted or discussed. " +
     "For a Test content section, summarize the substance of the material that was presented or tested and its key points, grouping related points under a bold inline label prefix when helpful.";
 
@@ -1209,13 +1209,13 @@ async function generateFinalMarkdown(
     "Output only markdown. Use the required section headings exactly as given; do not rename, reorder, add, or omit headings. " +
     "Under each heading, use markdown bullets only. No prose paragraphs, code fences, preamble, or visible timestamps. " +
     "Every bullet derived from transcript content must end with exactly one citation token in the form [[seg:SEGMENT_ID]]. " +
-    "ATTRIBUTION: 'microphone' segments come from the meeting host (named in the context block). 'speaker' segments come from the other named attendees. Always use the host's name and attendee names (not 'Me', 'Them', 'the host', or 'the speaker') in bullet text. When assigning action items, the host name owns microphone-attributed asks and the matching attendee owns speaker-attributed asks. If two or more attendees share the 'speaker' source and you cannot disambiguate, list both names ('Alima, Apeksha') rather than 'unassigned'. Only write 'Owner: unassigned' when no attendee is plausibly the owner from context. " +
+    "ATTRIBUTION: 'microphone' segments come from the meeting host (named in the context block). 'speaker' segments come from the other named attendees. Always use the host's name and attendee names (not 'Me', 'Them', 'the host', or 'the speaker') within the substance of a bullet when the wording names who did or will do something. Do not append a trailing owner tag to action items. " +
     "CONTEXT PACK: use high-confidence context to correct obvious ASR errors, medium-confidence context as hints, and low-confidence context only to avoid overclaiming. Context pack terms are not evidence by themselves. A singleton low-confidence unknown term must never become a confirmed product/feature fact. " +
     "EVIDENCE LEVELS: Confirmed issues require direct transcript evidence of a reproducible behavior or observed failure. Suspected issues are plausible but incomplete. Needs verification is for cause, payload/API claims, performance timing, or ownership that lacks network/debug/console evidence. Do not assign root cause to AI, server, network, or code unless the transcript provides concrete evidence. " +
     "BANNED phrasing — never write: 'the user', 'the conversation', 'it was discussed', 'discussion around', 'they talked about', 'the meeting covered', 'the speaker', 'the participant'. State the substance directly. " +
     "ANTI-ECHO: do not echo malformed, garbled, or low-coherence transcript fragments as bullets. A bullet must represent a complete, coherent claim, question, or action. If a candidate bullet would read as garbled, surreal, self-referential, a one-off unverified feature/name, or a Whisper-style closing, omit it. When omitting leaves a section empty, write 'None captured'. " +
     "PRESERVE VERBATIM: people's names, product/feature names from transcript or context pack, tool names, file names, URLs, project IDs, numbers, durations, dates, error messages, and exact technical terms. Never paraphrase a named entity. " +
-    "ACTION ITEMS section (when present): format each bullet as '- [ ] <action> — <Owner>' with the owner's name when identifiable, or 'Owner: unassigned' otherwise. Include a deadline only if explicitly stated. " +
+    "ACTION ITEMS section (when present): format each bullet as '- [ ] <action>'. Do not append an owner name, an em-dash owner suffix, or an 'Owner:' label to the bullet; keep any naming inside the action's own wording only. Include a deadline only if explicitly stated. " +
     "PURPOSE section (when present): 1-3 plain bullets that state why this meeting or session happened, what was being attempted, evaluated, or discussed, and any framing or setup context (e.g., a test run started a few minutes early, a planning sync, a demo, an evaluation of a tool's output). Summarize intent and framing as a short briefing; do not use checkboxes here and do not duplicate action items or decisions. " +
     "TEST CONTENT section (when present): summarize the substance of the material that was presented, tested, demonstrated, or used as a sample — the topic and its key points — not merely the fact that something was shared. When 2 or more related points share a theme, group them under a bold inline label prefix ('- **Sample speech:** <bullet>', '- **Key points:** <bullet>'). Aim for 2-5 bullets. " +
     "CONFIRMED ISSUES / SUSPECTED ISSUES / NEEDS VERIFICATION sections (when present): place facts by evidence level, not importance. Keep cause claims in Needs verification unless backed by timing, logs, or explicit transcript evidence. " +
