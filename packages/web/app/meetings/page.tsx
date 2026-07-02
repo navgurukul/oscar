@@ -35,6 +35,8 @@ import {
 import { ROUTES } from "@/lib/constants";
 import { stripCitations } from "@/lib/meetings/markdown";
 
+const MEETINGS_PER_PAGE = 5;
+
 function formatDateCap(iso: string): string {
   const d = new Date(iso);
   const wd = d.toLocaleDateString(undefined, { weekday: "short" }).toUpperCase();
@@ -138,6 +140,7 @@ export default function MeetingsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearch = useDeferredValue(searchQuery);
   const [typeFilter, setTypeFilter] = useState<MeetingTypeHint | "all">("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<SavedMeetingRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -160,6 +163,24 @@ export default function MeetingsPage() {
     }
     return result;
   }, [meetings, typeFilter, deferredSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMeetings.length / MEETINGS_PER_PAGE));
+  const pagedMeetings = useMemo(
+    () =>
+      filteredMeetings.slice(
+        (currentPage - 1) * MEETINGS_PER_PAGE,
+        currentPage * MEETINGS_PER_PAGE
+      ),
+    [filteredMeetings, currentPage]
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [typeFilter, deferredSearch]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -276,13 +297,39 @@ export default function MeetingsPage() {
               </div>
             ) : (
               <div>
-                {filteredMeetings.map((m) => (
+                {pagedMeetings.map((m) => (
                   <MeetingRow
                     key={m.id}
                     meeting={m}
                     onRequestDelete={() => setDeleteTarget(m)}
                   />
                 ))}
+                {totalPages > 1 && (
+                  <div
+                    className="mt-8 flex items-center justify-between gap-4 pt-6"
+                    style={{ borderTop: `1px solid ${v2.rule}` }}
+                  >
+                    <button
+                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                      disabled={currentPage === 1}
+                      className="rounded-full px-3 py-1.5 text-[12px] disabled:opacity-40"
+                      style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                    >
+                      ← Previous
+                    </button>
+                    <V2Mono style={{ fontSize: 11, color: v2.inkFaint, letterSpacing: "0.1em" }}>
+                      PAGE {currentPage} / {totalPages}
+                    </V2Mono>
+                    <button
+                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                      disabled={currentPage === totalPages}
+                      className="rounded-full px-3 py-1.5 text-[12px] disabled:opacity-40"
+                      style={{ border: `1px solid ${v2.rule}`, color: v2.inkSoft }}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </>

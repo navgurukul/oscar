@@ -40,14 +40,14 @@ export async function GET() {
       .eq("shared_with_org", true)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(500),
     supabase
       .from("meetings")
       .select("id, meeting_title, notes_markdown, started_at, created_at, user_id")
       .eq("organization_id", orgId)
       .eq("shared_with_org", true)
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(500),
   ]);
 
   // meetings table may not exist on web-only Supabase envs — degrade gracefully.
